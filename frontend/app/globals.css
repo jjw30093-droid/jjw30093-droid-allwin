@@ -1,0 +1,74 @@
+:root {
+  /* gold */
+  --gold-hi: #fff1c6;
+  --gold-100: #f1ce78;
+  --gold-300: #edc163;
+  --gold-500: #d49e33;
+  --gold-700: #b77f20;
+  --gold-900: #875a13;
+  --gold-grad: linear-gradient(
+    150deg,
+    #fff1c6 0%,
+    #f1ce78 24%,
+    #d49e33 50%,
+    #edc163 63%,
+    #b77f20 82%,
+    #875a13 100%
+  );
+  /* warm-black surfaces */
+  --bg: #0a0806;
+  --bg-2: #100b07;
+  --surface: #14100a;
+  --surface-2: #1a140c;
+  --border: #241c11;
+  --border-strong: #2e2413;
+  /* warm neutrals */
+  --ink: #f3ecdc;
+  --ink-2: #a79c87;
+  --ink-3: #948a75;
+  /* semantic */
+  --win: #4e9a5b;
+  --loss: #c05437;
+  --draw: #8a8069;
+  /* league qualification (real FotMob qual_color) */
+  --q-ucl: #2ad572;
+  --q-uel: #0046a7;
+  --q-uecl: #02ccf0;
+  --q-releg: #ff4646;
+  /* rating color scale */
+  --rate-elite: #edc163;
+  --rate-good: #3a331f;
+  --rate-mid: #1a140c;
+  --rate-low: #2a2519;
+  /* radius */
+  --r-card: 16px;
+  --r-control: 10px;
+  --r-pill: 999px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-cn), "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.num {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: inherit;
+}
