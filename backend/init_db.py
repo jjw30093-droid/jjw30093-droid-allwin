@@ -14,6 +14,13 @@ from schema import (
     MATCH_EVENTS_CORE_COLUMNS,
     MATCH_LINEUP_CORE_COLUMNS,
     SEASON_PLAYER_STATS_CORE_COLUMNS,
+    DIM_TEAM_I18N_COLUMNS,
+    DIM_PLAYER_I18N_COLUMNS,
+    SILVER_TEAM_SEASON_STATS_COLUMNS,
+    SILVER_LEAGUE_SEASON_SUMMARY_COLUMNS,
+    SILVER_OVER_UNDER_THRESHOLDS_COLUMNS,
+    SILVER_SCORE_DISTRIBUTION_COLUMNS,
+    SILVER_GOAL_MINUTE_BUCKETS_COLUMNS,
     _quote,
 )
 
@@ -94,6 +101,39 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_fact_season_player_stats_season "
             "ON fact_season_player_stats (League_ID, Season, stat_name)"
+        )
+
+        _create_table(conn, "dim_team_i18n", DIM_TEAM_I18N_COLUMNS)
+        _create_table(conn, "dim_player_i18n", DIM_PLAYER_I18N_COLUMNS)
+
+        _create_table(conn, "silver_team_season_stats", SILVER_TEAM_SEASON_STATS_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_team_season_stats_season "
+            "ON silver_team_season_stats (League_ID, Season)"
+        )
+
+        _create_table(conn, "silver_league_season_summary", SILVER_LEAGUE_SEASON_SUMMARY_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_league_season_summary_season "
+            "ON silver_league_season_summary (League_ID, Season)"
+        )
+
+        _create_table(conn, "silver_over_under_thresholds", SILVER_OVER_UNDER_THRESHOLDS_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_over_under_thresholds_season "
+            "ON silver_over_under_thresholds (League_ID, Season)"
+        )
+
+        _create_table(conn, "silver_score_distribution", SILVER_SCORE_DISTRIBUTION_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_score_distribution_season "
+            "ON silver_score_distribution (League_ID, Season)"
+        )
+
+        _create_table(conn, "silver_goal_minute_buckets", SILVER_GOAL_MINUTE_BUCKETS_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_goal_minute_buckets_season "
+            "ON silver_goal_minute_buckets (League_ID, Season)"
         )
 
         conn.commit()

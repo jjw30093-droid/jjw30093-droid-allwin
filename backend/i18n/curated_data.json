@@ -1,0 +1,791 @@
+{
+ "teamVerified": [
+  {
+   "team_id": 8678,
+   "name_en": "AFC Bournemouth",
+   "name_zh": "伯恩茅斯",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9825,
+   "name_en": "Arsenal",
+   "name_zh": "阿森纳",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 10252,
+   "name_en": "Aston Villa",
+   "name_zh": "阿斯顿维拉",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9937,
+   "name_en": "Brentford",
+   "name_zh": "布伦特福德",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 10204,
+   "name_en": "Brighton & Hove Albion",
+   "name_zh": "布莱顿",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无。\"布莱顿\"是中文体育媒体对 Brighton & Hove Albion 最通用、最标准的简称译名，新华社、央视、腾讯体育、懂球帝等主流媒体日常报道均采用此译名。",
+     "suggested_fix": "无需修改。如需在正式/完整语境（如俱乐部全称介绍）中使用，可补充全称\"布莱顿霍夫阿尔比恩\"，但作为球队标准中文名/常用简称，\"布莱顿\"完全符合惯例。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8191,
+   "name_en": "Burnley",
+   "name_zh": "伯恩利",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8455,
+   "name_en": "Chelsea",
+   "name_zh": "切尔西",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9826,
+   "name_en": "Crystal Palace",
+   "name_zh": "水晶宫",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无。\"水晶宫\"是中文体育媒体（新华社、央视、腾讯体育、虎扑等）对 Crystal Palace F.C. 的标准通用译名，采用的是意译（Crystal=水晶，Palace=宫），并非音译，与俱乐部名称含义直接对应，多年来在英超报道中高度统一，未见其他竞争性译名（如音译版本）在主流媒体中使用。",
+     "suggested_fix": "无需修改，\"水晶宫\"即为标准译名。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8668,
+   "name_en": "Everton",
+   "name_zh": "埃弗顿",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9879,
+   "name_en": "Fulham",
+   "name_zh": "富勒姆",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9902,
+   "name_en": "Ipswich Town",
+   "name_zh": "伊普斯维奇",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8463,
+   "name_en": "Leeds United",
+   "name_zh": "利兹联",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8197,
+   "name_en": "Leicester City",
+   "name_zh": "莱斯特城",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8650,
+   "name_en": "Liverpool",
+   "name_zh": "利物浦",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8346,
+   "name_en": "Luton Town",
+   "name_zh": "卢顿",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8456,
+   "name_en": "Manchester City",
+   "name_zh": "曼城",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"曼城\"是中文体育媒体（新华社、央视、腾讯体育、虎扑等）对 Manchester City 的通用标准译名，与\"曼联\"(Manchester United)相对应，长期稳定使用，无歧义或混淆问题。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 10260,
+   "name_en": "Manchester United",
+   "name_zh": "曼联",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 10261,
+   "name_en": "Newcastle United",
+   "name_zh": "纽卡斯尔联",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"纽卡斯尔联\"是中文体育媒体（新华社、央视、腾讯体育、虎扑等）对 Newcastle United 的标准通用译名，口语/简称场合也常写作\"纽卡斯尔联队\"或俗称\"纽卡\"，但正式全称译名就是\"纽卡斯尔联\"，与给出的译名一致，无需修改。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9850,
+   "name_en": "Norwich City",
+   "name_zh": "诺维奇",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 10203,
+   "name_en": "Nottingham Forest",
+   "name_zh": "诺丁汉森林",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"诺丁汉森林\"是中文体育媒体（新华社、央视、腾讯体育、虎扑等）对 Nottingham Forest 的标准通用译名，沿用多年，无需更改。（注：球队官方中文有时也简称\"诺丁汉森林FC\"或口语化\"森林队\"，但正式译名就是\"诺丁汉森林\"。）"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8657,
+   "name_en": "Sheffield United",
+   "name_zh": "谢菲尔德联",
+   "verify_agree": 0,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": false,
+     "issue": "中文体育媒体（新浪体育、腾讯体育、CCTV5、懂球帝等）对 Sheffield United 的通用标准译名是\"谢菲尔德联\"没有问题吗——需要澄清：实际上\"谢菲尔德联\"确实是常见译法之一，但更主流、更普遍使用的简称是\"谢菲尔德联队\"或更常用的\"谢联\"作为简称，而全称各大媒体基本统一为\"谢菲尔德联\"。经核查，\"谢菲尔德联\"本身是被广泛采用的标准全称，但需注意与同城球队 Sheffield Wednesday（谢菲尔德星期三，简称\"谢周三\"）区分，避免混淆。综合来看，\"谢菲尔德联\"这一译名本身没有错误，是中文媒体的标准惯例译法。",
+     "suggested_fix": "无需修改。\"谢菲尔德联\"（简称\"谢联\"）是中文体育媒体对 Sheffield United 的标准通用译名，与 Sheffield Wednesday（谢菲尔德星期三/谢周三）明确区分，未见误译问题。"
+    },
+    {
+     "correct": false,
+     "issue": "\"谢菲尔德联\"不是中文体育媒体最通用的标准译名。该队英文全称 Sheffield United 对应的标准全译名是\"谢菲尔德联合\"，而中文媒体（包括解说、体育网站、懂球帝、虎扑等）日常最常用的简称是\"谢菲联\"。\"谢菲尔德联\"是二者之间的变体写法，虽然偶尔在个别报道中出现，但不是主流通用标准译名。",
+     "suggested_fix": "标准全称使用\"谢菲尔德联合\"，日常/通用简称使用\"谢菲联\"（这是中文媒体报道英超及英冠时最常见的叫法）。"
+    },
+    {
+     "correct": false,
+     "issue": "\"谢菲尔德联\"不是中文体育媒体最常用的标准译名。中文媒体（新浪体育、腾讯体育、懂球帝、央视等）对 Sheffield United 通常使用两种规范形式：正式全称\"谢菲尔德联队\"（带\"队\"字）或最广泛使用的简称\"谢菲联\"。而\"谢菲尔德联\"（保留城市全名但省略\"队\"字）这种中间形态并不是媒体报道和标题中的惯用写法，日常出现频率明显低于\"谢菲联\"。",
+     "suggested_fix": "建议使用\"谢菲联\"（最常用简称，媒体报道/标题标准用法），或如需完整队名可用\"谢菲尔德联队\"。"
+    }
+   ]
+  },
+  {
+   "team_id": 8466,
+   "name_en": "Southampton",
+   "name_zh": "南安普顿",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8472,
+   "name_en": "Sunderland",
+   "name_zh": "桑德兰",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8586,
+   "name_en": "Tottenham Hotspur",
+   "name_zh": "热刺",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无（\"热刺\"是\"托特纳姆热刺\"的标准通用简称，中文体育媒体一致采用此译名，无需更改）"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"热刺\"是中文体育媒体对 Tottenham Hotspur（托特纳姆热刺）的标准通用简称，新华社、央视体育、腾讯体育、虎扑等主流媒体均统一使用\"热刺\"作为简称，正式全称为\"托特纳姆热刺\"。该译名符合惯例，无需修改。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 9817,
+   "name_en": "Watford",
+   "name_zh": "沃特福德",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8659,
+   "name_en": "West Bromwich Albion",
+   "name_zh": "西布罗姆维奇",
+   "verify_agree": 2,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"西布罗姆维奇\"是中文体育媒体对West Bromwich Albion的标准全称译名，新浪体育、腾讯体育、央视等主流媒体均采用此译名，常用简称为\"西布朗\"。"
+    },
+    {
+     "correct": true,
+     "issue": "无。\"西布罗姆维奇\"是 West Bromwich Albion 的标准全称音译，中文体育媒体（新华社、维基百科等）广泛采用此译名；口语/简称场合也常用\"西布朗\"，但这不代表\"西布罗姆维奇\"不规范，二者并行不悖，全称场景下用\"西布罗姆维奇\"完全符合惯例。",
+     "suggested_fix": "无需修改。如需简称可备注\"西布朗\"作为俗称/简称，但正式译名\"西布罗姆维奇\"保留即可。"
+    },
+    {
+     "correct": false,
+     "issue": "\"西布罗姆维奇\"不是中文体育媒体最常用的标准译名。该队英文全称 West Bromwich Albion 中,\"West Bromwich\"是英格兰西米德兰兹郡的地名,中文体育媒体(新华社、央视、腾讯体育、懂球帝等)通常将其音译为\"西布朗维奇\",简称\"西布朗\",而非\"西布罗姆维奇\"。\"西布罗姆维奇\"读起来更像是逐字硬译 Bromwich 的每个音节,但不符合约定俗成的简化译法。",
+     "suggested_fix": "应译为\"西布朗维奇\"(常用全称),媒体和球迷更常用简称\"西布朗\"。标准写法为:西布朗维奇(西布朗)。"
+    }
+   ]
+  },
+  {
+   "team_id": 8654,
+   "name_en": "West Ham United",
+   "name_zh": "西汉姆联",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"西汉姆联\"是中文体育媒体（新华社、央视体育、腾讯体育、新浪体育、懂球帝等）对 West Ham United 的通用标准译名，部分媒体也简称\"西汉姆\"，但\"西汉姆联\"是最正式、最常见的全称译名，符合惯例。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无。\"西汉姆联\"是中文体育媒体（如新华社、央视体育、腾讯体育、虎扑等）对 West Ham United 的通用标准译名，与\"西汉姆联队\"\"西汉姆联足球俱乐部\"简称一致，无需修改。"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  },
+  {
+   "team_id": 8602,
+   "name_en": "Wolverhampton Wanderers",
+   "name_zh": "狼队",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "verify_details": [
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    },
+    {
+     "correct": true,
+     "issue": "无",
+     "suggested_fix": "无"
+    }
+   ]
+  }
+ ],
+ "eastAsianVerified": [
+  {
+   "player_id": "935728",
+   "name_en": "Ao Tanaka",
+   "name_zh": "田中碧",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,J联赛/英超知名中场"
+  },
+  {
+   "player_id": "621515",
+   "name_en": "Daichi Kamada",
+   "name_zh": "镰田大地",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,法兰克福/水晶宫知名球员"
+  },
+  {
+   "player_id": "878296",
+   "name_en": "Daiki Hashioka",
+   "name_zh": "桥冈大树",
+   "verify_agree": 2,
+   "verify_total": 3,
+   "note": "较确认,莱斯特城球员"
+  },
+  {
+   "player_id": "862608",
+   "name_en": "Kaoru Mitoma",
+   "name_zh": "三笘薫",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,布莱顿知名球星,日文汉字本身即此"
+  },
+  {
+   "player_id": "1308600",
+   "name_en": "Kota Takai",
+   "name_zh": "高井幸大",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "联网核实(百度百科等来源确认)"
+  },
+  {
+   "player_id": "664444",
+   "name_en": "Takehiro Tomiyasu",
+   "name_zh": "富安健洋",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,阿森纳知名球员"
+  },
+  {
+   "player_id": "408943",
+   "name_en": "Takumi Minamino",
+   "name_zh": "南野拓实",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,利物浦/摩纳哥知名球员"
+  },
+  {
+   "player_id": "202643",
+   "name_en": "Wataru Endo",
+   "name_zh": "远藤航",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,利物浦知名球员"
+  },
+  {
+   "player_id": "924610",
+   "name_en": "Yukinari Sugawara",
+   "name_zh": "菅原由势",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "联网核实(日文汉字 菅原由勢 简体对应)"
+  },
+  {
+   "player_id": "620026",
+   "name_en": "Hee-Chan Hwang",
+   "name_zh": "黄喜灿",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,狼队知名球员"
+  },
+  {
+   "player_id": "212867",
+   "name_en": "Heung-Min Son",
+   "name_zh": "孙兴慜",
+   "verify_agree": 3,
+   "verify_total": 3,
+   "note": "确认,热刺队长,全球知名"
+  },
+  {
+   "player_id": "1341538",
+   "name_en": "Ji-Soo Kim",
+   "name_zh": "金志洙",
+   "verify_agree": 0,
+   "verify_total": 3,
+   "note": "未查到中文媒体已确立译名,布伦特福德年轻球员,此为音译猜测,需人工核实"
+  },
+  {
+   "player_id": "1609329",
+   "name_en": "Min-Hyeok Yang",
+   "name_zh": "梁玟爀",
+   "verify_agree": 0,
+   "verify_total": 3,
+   "note": "未查到中文媒体已确立译名,热刺年轻球员(2006年生),此为音译猜测,需人工核实"
+  },
+  {
+   "player_id": "1656881",
+   "name_en": "Seung-Soo Park",
+   "name_zh": "朴承洙",
+   "verify_agree": 0,
+   "verify_total": 3,
+   "note": "未查到中文媒体已确立译名,纽卡斯尔青训球员(2007年生),此为音译猜测,需人工核实"
+  }
+ ],
+ "starVerified": []
+}

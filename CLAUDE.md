@@ -37,7 +37,7 @@ FotMob scraper → Bronze → Silver → Gold → FastAPI serving → Next.js
 - **Bronze/raw**(FotMob 原始落库,当前已有 9 张表):
   `dim_match` / `dim_player` / `fact_shotmap` / `fact_player_match_stats` / `fact_team_match_stats` / `fact_match_events` / `fact_match_lineup` / `fact_league_table` / `fact_season_player_stats`
 - **i18n 中文映射维度**(新建,数据层护城河):新建映射表(如 `dim_team_i18n` / `dim_player_i18n`,或在现有 dim 表加中文列)+ 术语词典。把 FotMob 的 team_id / player_id 映射到中文名。**它是数据层的事,不依赖上层;一旦建好,Silver 聚合和前端展示自动带中文。**
-- **Silver/聚合**(新建):联赛·球队·球员榜 + FootyStats 式统计(over/under、比分分布、分钟桶、BTTS、clean sheet、主场优势)。**全部从 Bronze 计算,不额外爬、不买数据。** 独立聚合脚本 + 持久化派生表,不是"现算 SQL"。
+- **Silver/聚合**(新建):联赛·球队·球员榜 + FootyStats 式统计(over/under、比分分布、分钟桶、BTTS、clean sheet、主场优势)（描述性统计，非盘口/赔率产品）。**全部从 Bronze 计算,不额外爬、不买数据。** 独立聚合脚本 + 持久化派生表,不是"现算 SQL"。
 - **Gold/model**(新建):WDL 概率卡,用 5 赛季 xG 训练 + 按联赛校准。
 - **Serving**(新建):FastAPI 读 Silver/Gold。**前端只读 API,不直连 DB。**
 
@@ -47,9 +47,30 @@ FotMob scraper → Bronze → Silver → Gold → FastAPI serving → Next.js
 
 ## 3. 🔒 免费 / 付费边界(同时决定变现和合规)
 
-- **免费公开**(SEO 引擎,server components,必须可索引):排名 / 赛程 / 结果 / xG·xGOT 数据榜 / 球员榜
-- **付费会员**(登录后 gate):over/under · 比分分布 · 分钟级进球(FootyStats 式)+ WDL 概率卡 + 研报
-- 依据:博彩相邻内容既是最值钱付费点,又是要挡在公开 SEO 外的合规敏感内容。门禁一步同时解决变现 + 合规。
+分级原则:不按"数据高不高级",按"投注相关性"。FotMob 免费就有的看球基础数据 → 公开引流;FootyStats 式的投注相关聚合 → 付费;模型概率 → 付费核心。
+
+### 免费公开(SEO 引擎,server components,必须可索引)
+- 排名 / 赛程 / 结果
+- 球队场均:射门(total_shots)、射正(ShotsOnTarget)、控球(BallPossesion)、xG/xGOT
+- 球员榜:进球、助攻、xG、xGOT、评分
+- 联赛基础:场均总进球、主胜/平/客胜占比
+- 理由:FotMob 免费就有,大众,是流量入口。
+
+### 付费会员(登录后 gate,服务端校验)
+- 投注相关聚合(FootyStats 锁的就是这些):
+  - 大小球各档占比(silver_over_under_thresholds 整表)
+  - 精确比分分布(silver_score_distribution 整表)
+  - 进球时间分布(silver_goal_minute_buckets 整表)
+  - 角球分布、红黄牌分布(silver_team_season_stats 的 corners / yellow_cards / red_cards 字段)
+  - BTTS 明细、零封率(silver_team_season_stats 的 BTTS/零封字段、silver_league_season_summary 的 BTTS%/零封%)
+- 模型概率(Gold 层,付费核心):WDL 概率卡、预期比分。
+- 理由:投注相关内容既是最值钱付费点,又是要挡在公开 SEO 外的合规敏感内容;模型概率是真正稀缺的差异化。
+
+### 字段级分级的落地位置
+- 切分在 serving 层 + auth 做,不在 Silver。Silver 存全量数据不分级。
+- silver_team_season_stats 是混合表:射门/射正/控球/xG 字段免费,角球/红黄牌/BTTS/零封字段付费——serving 层按字段返回,不是整表一刀切。
+
+依据:博彩相邻内容既是最值钱付费点,又是要挡在公开 SEO 外的合规敏感内容。门禁一步同时解决变现 + 合规。
 
 ---
 
@@ -111,7 +132,7 @@ allwin/
 - 付费墙骨架(登录 + entitlement 检查,付费内容后填)
 
 **不做(后续阶段,别提前建)**:
-- 赔率 tab / 真实赔率采集 / 多联赛 / OU·波胆·AH / AI 问答 / 研报
+- 赔率 tab / 真实赔率采集 / 多联赛 / OU·波胆·AH（指盘口产品/赔率对比，Phase 2） / AI 问答 / 研报
 
 ---
 

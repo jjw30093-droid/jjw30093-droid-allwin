@@ -246,3 +246,134 @@ SEASON_PLAYER_STATS_CORE_COLUMNS = [
     ("rank", "INTEGER"),
     ("value", "REAL"),
 ]
+
+# ── dim_team_i18n / dim_player_i18n: 中文映射维度(CLAUDE.md §2) ──
+# 独立于 Bronze 原表，不改 dim_match/dim_player 的英文列。i18n 是数据层的
+# 派生维度，一旦建好，Silver 聚合和前端展示按 Team_ID/Player_ID 关联即可
+# 自动带中文，不依赖上层，也不需要 Silver/前端跟着改。
+#
+# 球员译名策略(生成脚本见 backend/i18n/):
+#   - 东亚球员(国籍 CHN/JPN/KOR/PRK):name_zh 是真实汉字/对应全名，
+#     name_zh_short 与 name_zh 相同——不做姓氏简称(“孙兴慜”不能简写成“孙”，
+#     这是东亚人名结构和西方人名结构的本质区别，不是同一套规则)。
+#   - 其余球员:Qwen-MT 翻译得到带“·”分隔的全名音译存进 name_zh；
+#     name_zh_short 取“·”后最后一段，即中文体育媒体日常只用姓氏的简称
+#     (如“马库斯·拉什福德”→“拉什福德”)。
+#   - source 记录来源(manual_seed / qwen-mt-plus)，confidence 仅 LLM 翻译
+#     有意义(0~1)，manual_seed 固定 1.0；needs_review 标记待人工复核的条目。
+DIM_TEAM_I18N_COLUMNS = [
+    ("Team_ID", "INTEGER PRIMARY KEY"),
+    ("name_en", "TEXT"),
+    ("name_zh", "TEXT"),
+    ("source", "TEXT"),
+    ("updated_at", "TEXT"),
+]
+
+DIM_PLAYER_I18N_COLUMNS = [
+    ("Player_ID", "TEXT PRIMARY KEY"),
+    ("name_en", "TEXT"),
+    ("name_zh", "TEXT"),
+    ("name_zh_short", "TEXT"),
+    ("source", "TEXT"),
+    ("model", "TEXT"),
+    ("confidence", "REAL"),
+    ("needs_review", "INTEGER"),
+    ("updated_at", "TEXT"),
+]
+
+
+# ── Silver 聚合层(ROADMAP.md Phase 1.2)──────────────────────────────
+# 只从 Bronze(dim_match / fact_team_match_stats / fact_match_events)算出来，
+# 幂等落库，不是"实时 SQL 视图"；也不重复 FotMob 自己已经预聚合好的
+# fact_league_table / fact_season_player_stats。只存 ID + 数字，不存中文名——
+# 中文名在 Serving 层按 Team_ID/Player_ID 关联 dim_team_i18n/dim_player_i18n。
+# 聚合脚本:backend/silver/build_silver.py。
+#
+# 口径说明(和字段体检结论对齐，见 build_silver.py 顶部注释)：
+#   - 只聚合 dim_match.status = 'Finish' 的场次(目前 2280/2280 全部满足，
+#     但代码仍要显式过滤，防止未来数据出现未完赛/取消的场次)。
+#   - 大小球/比分分布/进球时间分布全部由 dim_match 的最终比分/由
+#     fact_match_events 的 event_type='Goal' 算，不依赖 extra_json。
+#   - touches_opp_box(禁区触球次数)只有 2024/2025、2025/2026 两个赛季
+#     覆盖率 100%，更早的赛季覆盖率 73%~87%，是 FotMob 历史采集限制
+#     （随赛季分布，不是随机缺失，也不是本项目的 bug）——所以本项目只在
+#     这两个赛季计算 avg_touches_opp_box，其余赛季该列显式存 NULL，
+#     不做插补/不用低覆盖率赛季的数字滥竽充数。
+
+SILVER_TEAM_SEASON_STATS_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("Team_ID", "INTEGER"),
+    ("matches_played", "INTEGER"),
+    ("avg_total_shots", "REAL"),
+    ("avg_shots_on_target", "REAL"),
+    ("avg_possession", "REAL"),
+    ("avg_corners", "REAL"),
+    ("avg_fouls", "REAL"),
+    ("avg_yellow_cards", "REAL"),
+    ("avg_red_cards", "REAL"),
+    ("avg_expected_goals", "REAL"),
+    ("avg_expected_goals_non_penalty", "REAL"),
+    ("avg_expected_goals_open_play", "REAL"),
+    ("avg_expected_goals_set_play", "REAL"),
+    ("avg_expected_goals_on_target", "REAL"),
+    # touches_opp_box 仅 2024/2025、2025/2026 有数据，其余赛季固定 NULL
+    # （FotMob 历史采集限制，非 bug，见本文件顶部口径说明）。
+    ("avg_touches_opp_box", "REAL"),
+    ("clean_sheets", "INTEGER"),
+    ("btts_matches", "INTEGER"),
+    ("btts_pct", "REAL"),
+    ("updated_at", "TEXT"),
+]
+
+SILVER_LEAGUE_SEASON_SUMMARY_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("total_matches", "INTEGER"),
+    ("home_win_pct", "REAL"),
+    ("draw_pct", "REAL"),
+    ("away_win_pct", "REAL"),
+    ("btts_pct", "REAL"),
+    ("clean_sheet_pct", "REAL"),
+    ("avg_total_goals", "REAL"),
+    # 主场场均进球 - 客场场均进球，纯粹由 dim_match 比分算，不依赖任何模型。
+    ("home_away_goal_diff", "REAL"),
+    ("updated_at", "TEXT"),
+]
+
+# 长表格式：每个(League_ID, Season, threshold)一行，threshold 固定取
+# [0.5, 1.5, 2.5, 3.5, 4.5, 5.5] 六档，覆盖常见大小球盘口线。
+SILVER_OVER_UNDER_THRESHOLDS_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("threshold", "REAL"),
+    ("over_count", "INTEGER"),
+    ("under_count", "INTEGER"),
+    ("over_pct", "REAL"),
+    ("under_pct", "REAL"),
+    ("updated_at", "TEXT"),
+]
+
+# 保留方向(主客场不对称)：1-2 和 2-1 是两行不同的记录。
+SILVER_SCORE_DISTRIBUTION_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("home_score", "INTEGER"),
+    ("away_score", "INTEGER"),
+    ("match_count", "INTEGER"),
+    ("pct", "REAL"),
+    ("updated_at", "TEXT"),
+]
+
+# bucket 直接按 fact_match_events.minute 原始值分桶(0-15/16-30/31-45/
+# 46-60/61-75/76-90)，不用加 overload_time——字段体检已确认补时进球的
+# minute 恒为 45 或 90，overload_time 只在这两个 minute 上出现，原始分桶
+# 已经能把补时进球算进正确的那一段，不需要额外处理。
+SILVER_GOAL_MINUTE_BUCKETS_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("bucket", "TEXT"),
+    ("goal_count", "INTEGER"),
+    ("pct", "REAL"),
+    ("updated_at", "TEXT"),
+]
