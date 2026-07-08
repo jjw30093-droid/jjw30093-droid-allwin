@@ -19,7 +19,9 @@ fotmob_client.py — 无浏览器 FotMob 数据抓取客户端
 
 import os
 import json
+import queue
 import re
+import threading
 import time
 import random
 import logging
@@ -91,6 +93,57 @@ def _build_stat_lookup(stats_sections: list) -> dict:
     return lookup
 
 
+def _iso_to_ymd(value: Any) -> Optional[str]:
+    """
+    从 ISO-8601 字符串（如 "2026-05-19T18:30:00.000Z"）提取 "YYYY-MM-DD"。
+    通过下标 4/7 是否为 '-' 判断是否真的是 ISO 格式，
+    避免把人类可读字符串（如 "Tue, May 19, 2026, 18:30 UTC"）误判为 ISO 后截断出垃圾。
+    """
+    if not isinstance(value, str) or len(value) < 10:
+        return None
+    if value[4] == "-" and value[7] == "-":
+        return value[:10]
+    return None
+
+
+def _extract_iso_date(general: dict, content: dict) -> Optional[str]:
+    """
+    提取比赛日期，按优先级尝试多个来源：
+      1. general.matchTimeUTCDate（新版 API 的标准 ISO 字段）
+      2. content.matchFacts.infoBox["Match Date"].utcTime（备选 ISO 字段）
+      3. general.matchTimeUTC（旧版可能是 ISO，也可能是人类可读串，仅在确认是 ISO 时采用）
+      4. 兜底：直接截取 matchTimeUTC 前 10 个字符（可能不准确，仅作最后手段）
+    """
+    d = _iso_to_ymd(general.get("matchTimeUTCDate"))
+    if d:
+        return d
+
+    info_box = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
+    match_date = info_box.get("Match Date")
+    if isinstance(match_date, dict):
+        d = _iso_to_ymd(match_date.get("utcTime"))
+        if d:
+            return d
+
+    legacy = general.get("matchTimeUTC", "")
+    d = _iso_to_ymd(legacy)
+    if d:
+        return d
+
+    return legacy[:10] if legacy else None
+
+
+def _split_scores_str(value: Any) -> "tuple[Optional[int], Optional[int]]":
+    """把 "71-27" 形式的比分字符串拆成 (进球, 失球)，解析失败返回 (None, None)。"""
+    if not isinstance(value, str) or "-" not in value:
+        return None, None
+    try:
+        a, b = value.split("-", 1)
+        return int(a.strip()), int(b.strip())
+    except Exception:
+        return None, None
+
+
 def _get_stat_value(stats_data: Any, *keys: str) -> Optional[Any]:
     """
     从多种 FotMob stat 格式中提取数值。
@@ -149,37 +202,69 @@ class FotMobClient:
     def _get(self, url: str, headers: Optional[dict] = None) -> cffi_requests.Response:
         hdrs = {**DEFAULT_HEADERS, **(headers or {})}
         last_err = None
+        # 硬性墙钟超时：thordata 代理隧道偶发"连接建立但代理无响应"的挂起，
+        # curl_cffi 自身的 timeout 参数在这种场景下不会触发（实测挂起过 15+ 分钟）。
+        # 用 daemon 线程 + 墙钟超时兜底，到点强制放弃本次尝试、进入下一次重试。
+        hard_timeout = self.timeout + 10
+
         for attempt in range(1, self.max_retries + 1):
-            try:
-                r = cffi_requests.get(
-                    url,
-                    headers=hdrs,
-                    proxies=self.proxies,
-                    impersonate=self.impersonate,
-                    timeout=self.timeout,
-                )
-                if r.status_code == 200:
-                    return r
-                if r.status_code == 403:
-                    log.warning(
-                        "[FotMob] 403 on %s (attempt %d/%d) — %s",
-                        url, attempt, self.max_retries, r.text[:120],
+            result_q: "queue.Queue" = queue.Queue(maxsize=1)
+
+            def _do_request():
+                try:
+                    resp = cffi_requests.get(
+                        url,
+                        headers=hdrs,
+                        proxies=self.proxies,
+                        impersonate=self.impersonate,
+                        timeout=self.timeout,
                     )
-                else:
-                    log.warning(
-                        "[FotMob] HTTP %d on %s (attempt %d/%d)",
-                        r.status_code, url, attempt, self.max_retries,
-                    )
-                last_err = Exception(f"HTTP {r.status_code}: {r.text[:200]}")
-            except Exception as e:
+                    result_q.put(("ok", resp))
+                except Exception as exc:
+                    result_q.put(("err", exc))
+
+            t = threading.Thread(target=_do_request, daemon=True)
+            t.start()
+            t.join(hard_timeout)
+
+            if t.is_alive():
+                # 线程仍未返回：硬性墙钟超时命中，放弃本次尝试（线程作为 daemon 泄漏，
+                # 不阻塞进程退出，底层连接最终会自行断开或随进程退出回收）
                 log.warning(
-                    "[FotMob] Request error on %s (attempt %d/%d): %s",
-                    url, attempt, self.max_retries, e,
+                    "[FotMob] 硬性墙钟超时(%ds) on %s (attempt %d/%d)：放弃本次尝试",
+                    hard_timeout, url, attempt, self.max_retries,
                 )
-                last_err = e
+                last_err = TimeoutError(f"hard wall-clock timeout after {hard_timeout}s: {url}")
+            else:
+                status, payload = result_q.get()
+                if status == "ok":
+                    r = payload
+                    if r.status_code == 200:
+                        return r
+                    if r.status_code == 403:
+                        log.warning(
+                            "[FotMob] 403 on %s (attempt %d/%d) — %s",
+                            url, attempt, self.max_retries, r.text[:120],
+                        )
+                    else:
+                        log.warning(
+                            "[FotMob] HTTP %d on %s (attempt %d/%d)",
+                            r.status_code, url, attempt, self.max_retries,
+                        )
+                    last_err = Exception(f"HTTP {r.status_code}: {r.text[:200]}")
+                else:
+                    e = payload
+                    log.warning(
+                        "[FotMob] Request error on %s (attempt %d/%d): %s",
+                        url, attempt, self.max_retries, e,
+                    )
+                    last_err = e
 
             if attempt < self.max_retries:
-                sleep = self.retry_delay + random.uniform(0.5, 1.5)
+                # 指数退避：第 N 次重试基础延迟翻倍，代理池持续抖动时不再用同一节奏
+                # 反复空砸；轮换会话下换一次连接大概率就是换一个出口 IP，多等一拍
+                # 更可能等到健康节点。
+                sleep = self.retry_delay * (2 ** (attempt - 1)) + random.uniform(0.5, 1.5)
                 time.sleep(sleep)
 
         raise last_err or Exception(f"Failed after {self.max_retries} retries: {url}")
@@ -311,6 +396,9 @@ class FotMobClient:
         away_name = away_team.get("name")
 
         # ── 比分 ────────────────────────────────────────────────────────
+        # 注意：解析失败时不能兜底成 0-0——那和"真实 0-0 平局"在库里完全无法区分。
+        # 老赛季 scoreStr 格式若有出入、且 team 对象里也真没有 score 字段，
+        # 应该让 home_score/away_score 落成 NULL（"未知"），而不是伪造出一个比分。
         status_obj = header.get("status", {})
         score_str  = status_obj.get("scoreStr", "")
         try:
@@ -318,13 +406,12 @@ class FotMobClient:
             h_score  = int(parts[0].strip())
             a_score  = int(parts[1].strip())
         except Exception:
-            h_score = home_team.get("score", 0)
-            a_score = away_team.get("score", 0)
+            raw_h, raw_a = home_team.get("score"), away_team.get("score")
             try:
-                h_score = int(h_score or 0)
-                a_score = int(a_score or 0)
-            except Exception:
-                h_score = a_score = 0
+                h_score = int(raw_h) if raw_h is not None else None
+                a_score = int(raw_a) if raw_a is not None else None
+            except (TypeError, ValueError):
+                h_score = a_score = None
 
         # ── 比赛状态 ─────────────────────────────────────────────────────
         match_status = "Finish" if status_obj.get("finished") else status_obj.get("reason", {}).get("short", "Unknown")
@@ -333,9 +420,7 @@ class FotMobClient:
         if league_id is None:
             league_id = general.get("leagueId") or general.get("parentLeagueId")
         if date is None:
-            # general.matchTimeUTC 格式如 "2026-04-11T14:00:00.000Z"
-            utc_time = general.get("matchTimeUTC", "")
-            date = utc_time.split("T")[0] if "T" in utc_time else utc_time[:10]
+            date = _extract_iso_date(general, content)
 
         # ── 裁判 ────────────────────────────────────────────────────────
         referee = None
@@ -351,6 +436,14 @@ class FotMobClient:
                 referee = ref_content.get("name") or ref_content.get("text")
             elif isinstance(ref_content, str):
                 referee = ref_content
+        # 备选：content.matchFacts.infoBox.Referee（新版 API 位置）
+        if not referee:
+            info_box = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
+            ref_ib = info_box.get("Referee")
+            if isinstance(ref_ib, dict):
+                referee = ref_ib.get("text") or ref_ib.get("name")
+            elif isinstance(ref_ib, str):
+                referee = ref_ib
 
         # ── 轮次 ────────────────────────────────────────────────────────
         match_round = (
@@ -473,6 +566,8 @@ class FotMobClient:
         hid = home_team.get("id")
         aid = away_team.get("id")
 
+        # 同 parse_match_dim：解析失败且 team 对象也无 score 字段时留 None，
+        # 不伪造 0-0（老赛季 scoreStr 格式有出入时尤其要避免这种静默错填）。
         status_obj = header.get("status", {})
         score_str  = status_obj.get("scoreStr", "")
         try:
@@ -480,8 +575,12 @@ class FotMobClient:
             h_score = int(parts[0].strip())
             a_score = int(parts[1].strip())
         except Exception:
-            h_score = int(home_team.get("score", 0) or 0)
-            a_score = int(away_team.get("score", 0) or 0)
+            raw_h, raw_a = home_team.get("score"), away_team.get("score")
+            try:
+                h_score = int(raw_h) if raw_h is not None else None
+                a_score = int(raw_a) if raw_a is not None else None
+            except (TypeError, ValueError):
+                h_score = a_score = None
 
         # ── 分段统计 ─────────────────────────────────────────────────────
         # stats.Periods: {"All": {...}, "FirstHalf": {...}, "SecondHalf": {...}}
@@ -495,13 +594,13 @@ class FotMobClient:
                 "Match_ID": int(match_id),
                 "Team_ID":  hid,
                 "Period":   period_name,
-                "Goals":    h_score if period_name == "All" else home_team.get("score", 0),
+                "Goals":    h_score if period_name == "All" else home_team.get("score"),
             }
             as_: Dict[str, Any] = {
                 "Match_ID": int(match_id),
                 "Team_ID":  aid,
                 "Period":   period_name,
-                "Goals":    a_score if period_name == "All" else away_team.get("score", 0),
+                "Goals":    a_score if period_name == "All" else away_team.get("score"),
             }
 
             for cat in p_data.get("stats", []):
@@ -654,81 +753,90 @@ class FotMobClient:
                 "minutes_played":       int(minutes_played),
                 "player_name":          player_name,
 
+                # 以下别名列表统一「真实 raw key 优先，旧驼峰猜测殿后」——
+                # 实测比对发现 FotMob 原始 stat.key 本身就是下划线格式（与目标列名
+                # 几乎一致），旧代码只写了驼峰猜测，导致这批字段无论哪个赛季全是
+                # NULL（不是老赛季数据缺失，是键名从未对上）。驼峰猜测继续保留
+                # 作为兜底别名，防止未来某个赛季/端点真的换回驼峰格式。
+
                 # ── 进攻 ──────────────────────────────────────────────
                 "goals":                          g("goals"),
                 "assists":                        g("assists"),
-                "expected_goals":                 g("expectedGoals"),
-                "expected_assists":               g("expectedAssists"),
-                "xg_and_xa":                      g("xgAndXa", "xg_and_xa"),
-                "expected_goals_on_target_variant": g("expectedGoalsOnTarget"),
-                "expected_goals_non_penalty":     g("expectedGoalsNonPenalty"),
-                "ShotsOnTarget":                  g("shotsOnTarget", "onTarget"),
-                "ShotsOffTarget":                 g("shotsOffTarget", "offTarget"),
-                "shot_accuracy":                  g("shotAccuracy"),
-                "blocked_shots":                  g("blockedShots"),
-                "big_chance_missed_title":        g("bigChanceMissed"),
-                "shots_woodwork":                 g("shotsWoodwork", "hitWoodwork"),
-                "missed_penalty":                 g("missedPenalty"),
+                "expected_goals":                 g("expected_goals", "expectedGoals"),
+                "expected_assists":               g("expected_assists", "expectedAssists"),
+                "xg_and_xa":                      g("xg_and_xa", "xgAndXa"),
+                "expected_goals_on_target_variant": g("expected_goals_on_target_variant", "expectedGoalsOnTarget"),
+                "expected_goals_non_penalty":     g("expected_goals_non_penalty", "expectedGoalsNonPenalty"),
+                "ShotsOnTarget":                  g("ShotsOnTarget", "shotsOnTarget", "onTarget"),
+                "ShotsOffTarget":                 g("ShotsOffTarget", "shotsOffTarget", "offTarget"),
+                "shot_accuracy":                  g("shot_accuracy", "shotAccuracy"),
+                "blocked_shots":                  g("blocked_shots", "blockedShots"),
+                "big_chance_missed_title":        g("big_chance_missed_title", "bigChanceMissed"),
+                "shots_woodwork":                 g("shots_woodwork", "shotsWoodwork", "hitWoodwork"),
+                "missed_penalty":                 g("missed_penalty", "missedPenalty"),
                 "shotmap":                        g("shotmap", "shots"),
 
                 # ── 传球 / 创机 ────────────────────────────────────────
-                "accurate_passes":                g("accuratePasses"),
-                "chances_created":                g("chancesCreated"),
-                "big_chance_created_team_title":  g("bigChanceCreated", "bigChanceCreatedTeamTitle"),
-                "passes_into_final_third":        g("passesIntoFinalThird"),
-                "accurate_crosses":               g("accurateCrosses"),
-                "long_balls_accurate":            g("longBallsAccurate"),
+                "accurate_passes":                g("accurate_passes", "accuratePasses"),
+                "chances_created":                g("chances_created", "chancesCreated"),
+                "big_chance_created_team_title":  g("big_chance_created_team_title", "bigChanceCreated", "bigChanceCreatedTeamTitle"),
+                "passes_into_final_third":        g("passes_into_final_third", "passesIntoFinalThird"),
+                "accurate_crosses":               g("accurate_crosses", "accurateCrosses"),
+                "long_balls_accurate":            g("long_balls_accurate", "longBallsAccurate"),
 
                 # ── 持球 ──────────────────────────────────────────────
                 "touches":                        g("touches"),
-                "touches_opp_box":                g("touchesOppBox"),
+                "touches_opp_box":                g("touches_opp_box", "touchesOppBox"),
                 "dispossessed":                   g("dispossessed"),
-                "dribbles_succeeded":             g("dribbles", "dribbleSucceeded", "dribbleWon"),
+                "dribbles_succeeded":             g("dribbles_succeeded", "dribbles", "dribbleSucceeded", "dribbleWon"),
 
                 # ── 防守 ──────────────────────────────────────────────
-                "matchstats.headers.tackles":     g("tackles"),
-                "shot_blocks":                    g("shotBlocks"),
+                "matchstats.headers.tackles":     g("matchstats.headers.tackles", "tackles"),
+                "shot_blocks":                    g("shot_blocks", "shotBlocks"),
                 "clearances":                     g("clearances"),
-                "headed_clearance":               g("headedClearance"),
+                "headed_clearance":               g("headed_clearance", "headedClearance"),
                 "interceptions":                  g("interceptions"),
                 "recoveries":                     g("recoveries"),
-                "dribbled_past":                  g("dribbledPast"),
-                "ground_duels_won":               g("groundDuelsWon"),
-                "aerials_won":                    g("aerialsWon"),
-                "defensive_actions":              g("defensiveActions"),
-                "last_man_tackle":                g("lastManTackle"),
-                "clearance_off_the_line":         g("clearanceOffTheLine"),
+                "dribbled_past":                  g("dribbled_past", "dribbledPast"),
+                "ground_duels_won":               g("ground_duels_won", "groundDuelsWon"),
+                "aerials_won":                    g("aerials_won", "aerialsWon"),
+                "defensive_actions":              g("defensive_actions", "defensiveActions"),
+                "last_man_tackle":                g("last_man_tackle", "lastManTackle"),
+                "clearance_off_the_line":         g("clearance_off_the_line", "clearanceOffTheLine"),
 
                 # ── 对抗 / 犯规 ────────────────────────────────────────
-                "duel_won":                       g("duelWon"),
-                "duel_lost":                      g("duelLost"),
+                "duel_won":                       g("duel_won", "duelWon"),
+                "duel_lost":                      g("duel_lost", "duelLost"),
                 "fouls":                          g("fouls"),
-                "was_fouled":                     g("wasFouled"),
-                "penalties_won":                  g("penaltiesWon"),
-                "conceded_penalties":             g("concededPenalties"),
-                "errors_led_to_goal":             g("errorsLedToGoal"),
+                "was_fouled":                     g("was_fouled", "wasFouled"),
+                "penalties_won":                  g("penalties_won", "penaltiesWon"),
+                "conceded_penalties":             g("conceded_penalties", "concededPenalties"),
+                "errors_led_to_goal":             g("errors_led_to_goal", "errorsLedToGoal"),
 
                 # ── 其他 ──────────────────────────────────────────────
                 "corners":                        g("corners"),
-                "Offsides":                       g("offsides", "Offsides"),
-                "owngoal":                        g("ownGoal", "owngoal"),
-                "fantasy_points":                 g("fantasyPoints"),
+                "Offsides":                       g("Offsides", "offsides"),
+                "owngoal":                        g("owngoal", "ownGoal"),
+                "fantasy_points":                 g("fantasy_points", "fantasyPoints"),
 
                 # ── 门将 ──────────────────────────────────────────────
                 "saves":                          g("saves"),
-                "goals_conceded":                 g("goalsConceded"),
-                "expected_goals_on_target_faced": g("expectedGoalsOnTargetFaced"),
-                "goals_prevented":                g("goalsPrevented"),
-                "keeper_diving_save":             g("keeperDivingSave"),
-                "saves_inside_box":               g("savesInsideBox"),
-                "keeper_sweeper":                 g("keeperSweeper"),
+                "goals_conceded":                 g("goals_conceded", "goalsConceded"),
+                "expected_goals_on_target_faced": g("expected_goals_on_target_faced", "expectedGoalsOnTargetFaced"),
+                "goals_prevented":                g("goals_prevented", "goalsPrevented"),
+                "keeper_diving_save":             g("keeper_diving_save", "keeperDivingSave"),
+                "saves_inside_box":               g("saves_inside_box", "savesInsideBox"),
+                "keeper_sweeper":                 g("keeper_sweeper", "keeperSweeper"),
                 "punches":                        g("punches"),
-                "player_throws":                  g("playerThrows"),
-                "keeper_high_claim":              g("keeperHighClaim"),
-                "saved_penalties":                g("savedPenalties"),
-                "saved_penalties_in_shootout":    g("savedPenaltiesInShootout"),
+                "player_throws":                  g("player_throws", "playerThrows"),
+                "keeper_high_claim":              g("keeper_high_claim", "keeperHighClaim"),
+                "saved_penalties":                g("saved_penalties", "savedPenalties"),
+                "saved_penalties_in_shootout":    g("saved_penalties_in_shootout", "savedPenaltiesInShootout"),
 
                 # ── 体能 ──────────────────────────────────────────────
+                # 实测未在样本比赛中出现（不确定是本字段全站未采集还是仅该场
+                # 无数据），驼峰猜测暂保留，未额外加下划线别名——避免在没有
+                # 真实证据支撑的情况下臆造新的错误映射。
                 "physical_metrics_topspeed":          g("topSpeed"),
                 "physical_metrics_distance_covered":  g("distanceCovered"),
                 "physical_metrics_walking":           g("walking"),
@@ -741,6 +849,270 @@ class FotMobClient:
 
         if records:
             log.info("[PlayerStats] 解析到 %d 名球员", len(records))
+        return records
+
+    def parse_match_events(
+        self,
+        page_props: dict,
+        match_id: Union[int, str],
+    ) -> List[dict]:
+        """
+        从 pageProps 中提取 fact_match_events 表所需的所有字段（比赛事件时间线）。
+
+        来源: content.matchFacts.events.events[]（按数组顺序，一行一事件）
+        event_type ∈ {Goal, Card, Substitution, AddedTime, Half}，不同类型只有
+        各自相关字段有值，其余为 None。每条记录附带 "extra" 字典（调用方决定是否
+        序列化进 extra_json），保留 shotmapEvent 等未建核心列的嵌套细节。
+        """
+        content = page_props.get("content", {})
+        events_raw = (content.get("matchFacts", {}) or {}).get("events", {}) or {}
+        events_list = events_raw.get("events", []) or []
+
+        # 已显式映射到核心列的原始 key，其余原样进 extra
+        mapped_keys = {
+            "type", "time", "overloadTime", "isHome", "homeScore", "awayScore",
+            "newScore", "playerId", "player", "nameStr", "fullName", "card",
+            "assistPlayerId", "assistInput", "swap", "minutesAddedInput", "eventId",
+        }
+
+        records = []
+        for idx, ev in enumerate(events_list):
+            player = ev.get("player") or {}
+            player_id = ev.get("playerId") or player.get("id")
+            player_name = ev.get("nameStr") or ev.get("fullName") or player.get("name")
+
+            # 换人：swap = [进场球员, 出场球员]
+            sub_in_id = sub_in_name = sub_out_id = sub_out_name = None
+            swap = ev.get("swap")
+            if isinstance(swap, list) and len(swap) == 2:
+                sub_in_id, sub_in_name = swap[0].get("id"), swap[0].get("name")
+                sub_out_id, sub_out_name = swap[1].get("id"), swap[1].get("name")
+
+            # 比分：Goal 事件的 homeScore/awayScore 是"进球发生前"的比分（FotMob
+            # 自身的字段语义如此，非解析错误），真正的"进球后"比分在 newScore
+            # 字段里（[home, away]）。非 Goal 事件没有 newScore（此时也不需要，
+            # 因为没有进球发生，homeScore/awayScore 本来就是当前比分）。
+            new_score = ev.get("newScore")
+            if isinstance(new_score, list) and len(new_score) == 2:
+                home_score, away_score = new_score[0], new_score[1]
+            else:
+                home_score, away_score = ev.get("homeScore"), ev.get("awayScore")
+
+            extra = {k: v for k, v in ev.items() if k not in mapped_keys}
+
+            records.append({
+                "Match_ID":            int(match_id),
+                "event_index":         idx,
+                "event_type":          ev.get("type"),
+                "minute":              ev.get("time"),
+                "overload_time":       ev.get("overloadTime"),
+                "is_home":             (1 if ev.get("isHome") else 0) if "isHome" in ev else None,
+                "home_score":          home_score,
+                "away_score":          away_score,
+                "player_id":           str(player_id) if player_id else None,
+                "player_name":         player_name,
+                "card_type":           ev.get("card"),
+                "assist_player_id":    str(ev.get("assistPlayerId")) if ev.get("assistPlayerId") else None,
+                "assist_player_name":  ev.get("assistInput"),
+                "sub_in_player_id":    str(sub_in_id) if sub_in_id else None,
+                "sub_in_player_name":  sub_in_name,
+                "sub_out_player_id":   str(sub_out_id) if sub_out_id else None,
+                "sub_out_player_name": sub_out_name,
+                "minutes_added":       ev.get("minutesAddedInput"),
+                "event_id":            str(ev.get("eventId")) if ev.get("eventId") else None,
+                "extra":               extra,
+            })
+
+        return records
+
+    def parse_lineup_records(
+        self,
+        page_props: dict,
+        match_id: Union[int, str],
+    ) -> List[dict]:
+        """
+        从 pageProps 中提取 fact_match_lineup 表所需的所有字段（阵容与阵型）。
+
+        来源: content.lineup.{homeTeam,awayTeam}.{formation,starters[],subs[]}
+        只含出场名单（首发 starters + 替补 subs），不含教练/伤停名单
+        （content.lineup.{home,away}Team.{coach,unavailable} 不解析）。
+        每条记录附带 "extra" 字典（调用方决定是否序列化进 extra_json）。
+        """
+        content = page_props.get("content", {})
+        lineup = content.get("lineup", {}) or {}
+
+        mapped_keys = {
+            "id", "name", "positionId", "usualPlayingPositionId",
+            "shirtNumber", "countryCode", "marketValue", "performance",
+            "isCaptain",
+        }
+
+        records = []
+        for is_home, side_key in ((True, "homeTeam"), (False, "awayTeam")):
+            side = lineup.get(side_key) or {}
+            team_id = side.get("id")
+            formation = side.get("formation")
+
+            for group, is_starter in (("starters", 1), ("subs", 0)):
+                for p in side.get(group, []) or []:
+                    perf = p.get("performance") or {}
+                    sub_in_time = sub_out_time = None
+                    for sub_ev in perf.get("substitutionEvents", []) or []:
+                        if sub_ev.get("type") == "subIn":
+                            sub_in_time = sub_ev.get("time")
+                        elif sub_ev.get("type") == "subOut":
+                            sub_out_time = sub_ev.get("time")
+
+                    extra = {k: v for k, v in p.items() if k not in mapped_keys}
+                    extra["performance"] = perf
+
+                    records.append({
+                        "Match_ID":          int(match_id),
+                        "Team_ID":           team_id,
+                        "is_home":           1 if is_home else 0,
+                        "formation":         formation,
+                        "Player_ID":         str(p.get("id")),
+                        "player_name":       p.get("name"),
+                        "shirt_number":      p.get("shirtNumber"),
+                        "position_id":       p.get("positionId"),
+                        "usual_position_id": p.get("usualPlayingPositionId"),
+                        "is_starter":        is_starter,
+                        "is_captain":        1 if p.get("isCaptain") else 0,
+                        "country_code":      p.get("countryCode"),
+                        "market_value":      p.get("marketValue"),
+                        "rating":            perf.get("rating"),
+                        "sub_in_time":       sub_in_time,
+                        "sub_out_time":      sub_out_time,
+                        "extra":             extra,
+                    })
+
+        return records
+
+    def parse_league_table(
+        self,
+        league_data: dict,
+        league_id: Union[int, str],
+        season: str,
+    ) -> List[dict]:
+        """
+        从 league_matches() 返回的原始 JSON 提取 fact_league_table 表所需字段（联赛积分榜）。
+
+        来源: league_data.table[0].data.table.{all,home,away,form,xg}
+        每个分档(table_type)下是一份球队列表；xg 档额外含
+        xg/xg_conceded/x_points/x_position，其它档这四列为 None。
+        """
+        table_data = (
+            ((league_data.get("table") or [{}])[0].get("data", {}) or {})
+            .get("table", {})
+        ) or {}
+
+        mapped_keys = {
+            "name", "shortName", "id", "pageUrl", "deduction", "ongoing",
+            "played", "wins", "draws", "losses", "scoresStr", "goalConDiff",
+            "pts", "idx", "qualColor", "teamId", "teamName", "xg", "xgConceded",
+            "xPoints", "position", "xPosition", "goalsScored", "featuredInMatch",
+        }
+
+        records = []
+        for table_type, teams in table_data.items():
+            if not isinstance(teams, list):
+                continue
+            for t in teams:
+                team_id = t.get("id") or t.get("teamId")
+                goals_for, goals_against = _split_scores_str(t.get("scoresStr"))
+                extra = {k: v for k, v in t.items() if k not in mapped_keys}
+
+                records.append({
+                    "League_ID":     int(league_id),
+                    "Season":        season,
+                    "table_type":    table_type,
+                    "Team_ID":       team_id,
+                    "Team_Name":     t.get("name") or t.get("teamName"),
+                    "position":      t.get("idx") if t.get("idx") is not None else t.get("position"),
+                    "played":        t.get("played"),
+                    "wins":          t.get("wins"),
+                    "draws":         t.get("draws"),
+                    "losses":        t.get("losses"),
+                    "goals_for":     goals_for,
+                    "goals_against": goals_against,
+                    "goal_diff":     t.get("goalConDiff"),
+                    "points":        t.get("pts"),
+                    "deduction":     t.get("deduction"),
+                    "qual_color":    t.get("qualColor"),
+                    "xg":            t.get("xg"),
+                    "xg_conceded":   t.get("xgConceded"),
+                    "x_points":      t.get("xPoints"),
+                    "x_position":    t.get("xPosition"),
+                    "extra":         extra,
+                })
+
+        return records
+
+    def fetch_stat_leaderboard(self, url: str) -> dict:
+        """
+        抓取联赛某统计维度的全量球员榜单 JSON。
+        url 来自 league_matches() 返回的 stats.players[].fetchAllUrl，
+        域名为 data.fotmob.com，非 SSR 页面，直接 GET 即为 JSON。
+
+        实测返回结构:
+          {"TopLists": [{"StatName": "goals", "StatList": [
+              {"ParticipantName", "ParticiantId"(FotMob 原始拼写少一个 p),
+               "TeamId", "TeamName", "StatValue", "SubStatValue",
+               "MinutesPlayed", "MatchesPlayed", "StatValueCount", "Rank",
+               "ParticipantCountryCode", "Positions", "TeamColor"}, ...]}],
+           "LeagueName": "..."}
+        """
+        r = self._get(url, headers={"Accept": "application/json"})
+        return r.json()
+
+    def parse_season_player_stats(
+        self,
+        league_data: dict,
+        league_id: Union[int, str],
+        season: str,
+    ) -> List[dict]:
+        """
+        遍历 league_data.stats.players[] 里的每个统计维度，用其 fetchAllUrl 抓取
+        全量榜单（而非 topThree），提取 fact_season_player_stats 表所需字段。
+        单个维度抓取失败不影响其它维度（记录 warning 并跳过）。
+        """
+        stat_defs = (league_data.get("stats") or {}).get("players") or []
+
+        mapped_keys = {
+            "ParticipantName", "ParticiantId", "TeamId", "TeamName",
+            "StatValue", "Rank",
+        }
+
+        records = []
+        for stat_def in stat_defs:
+            url = stat_def.get("fetchAllUrl")
+            stat_name = stat_def.get("name")
+            if not url or not stat_name:
+                continue
+            try:
+                data = self.fetch_stat_leaderboard(url)
+            except Exception as e:
+                log.warning("[SeasonPlayerStats] 拉取 %s 失败: %s", stat_name, e)
+                continue
+
+            top_lists = data.get("TopLists") or []
+            stat_list = top_lists[0].get("StatList", []) if top_lists else []
+
+            for row in stat_list:
+                extra = {k: v for k, v in row.items() if k not in mapped_keys}
+                records.append({
+                    "League_ID":   int(league_id),
+                    "Season":      season,
+                    "stat_name":   stat_name,
+                    "Player_ID":   str(row.get("ParticiantId")),
+                    "Player_Name": row.get("ParticipantName"),
+                    "Team_ID":     row.get("TeamId"),
+                    "Team_Name":   row.get("TeamName"),
+                    "rank":        row.get("Rank"),
+                    "value":       row.get("StatValue"),
+                    "extra":       extra,
+                })
+
         return records
 
 

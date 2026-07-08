@@ -10,6 +10,10 @@ from schema import (
     SHOTMAP_COLUMNS,
     PLAYER_STATS_COLUMNS,
     TEAM_STATS_CORE_COLUMNS,
+    LEAGUE_TABLE_CORE_COLUMNS,
+    MATCH_EVENTS_CORE_COLUMNS,
+    MATCH_LINEUP_CORE_COLUMNS,
+    SEASON_PLAYER_STATS_CORE_COLUMNS,
     _quote,
 )
 
@@ -47,6 +51,51 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_fact_team_match_stats_match "
             "ON fact_team_match_stats (Match_ID)"
         )
+
+        _create_table(
+            conn,
+            "fact_league_table",
+            LEAGUE_TABLE_CORE_COLUMNS,
+            extra_sql="extra_json TEXT",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fact_league_table_season "
+            "ON fact_league_table (League_ID, Season, table_type)"
+        )
+
+        _create_table(
+            conn,
+            "fact_match_events",
+            MATCH_EVENTS_CORE_COLUMNS,
+            extra_sql="extra_json TEXT",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fact_match_events_match "
+            "ON fact_match_events (Match_ID)"
+        )
+
+        _create_table(
+            conn,
+            "fact_match_lineup",
+            MATCH_LINEUP_CORE_COLUMNS,
+            extra_sql="extra_json TEXT",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fact_match_lineup_match "
+            "ON fact_match_lineup (Match_ID)"
+        )
+
+        _create_table(
+            conn,
+            "fact_season_player_stats",
+            SEASON_PLAYER_STATS_CORE_COLUMNS,
+            extra_sql="extra_json TEXT",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fact_season_player_stats_season "
+            "ON fact_season_player_stats (League_ID, Season, stat_name)"
+        )
+
         conn.commit()
     finally:
         conn.close()

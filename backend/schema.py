@@ -97,6 +97,13 @@ PLAYER_STATS_COLUMNS = [
 #     其余动态字段整体存进 extra_json(TEXT,JSON 编码),不丢数据,需要时用 SQLite 的
 #     json_extract(extra_json, '$.key') 取值,以后发现某个字段稳定出现且高频查询,
 #     再单独提升为真列。
+#
+# 已确认的数据源限制(2020/21~2025/26 全量核对过,非解析 bug):
+#   老赛季 content.stats.Periods 里只有 "All"，没有 "FirstHalf"/"SecondHalf"——
+#   FotMob 从大约 2022/23 赛季中段才开始提供半场拆分统计。受影响场次(每队仅 1 行
+#   即 Period='All'，而非完整的 3 个 Period × 2 队 = 6 行):
+#   2020/2021 373/380、2021/2022 377/380、2022/2023 214/380；2023/2024 及以后
+#   全部有完整半场拆分。查询半场数据前先确认赛季/场次是否落在此范围内。
 TEAM_STATS_CORE_COLUMNS = [
     ("Match_ID", "INTEGER"),
     ("Team_ID", "INTEGER"),
@@ -147,3 +154,95 @@ SHOTMAP_COLUMNS = [
 def _quote(col: str) -> str:
     """带点号的列名(如 matchstats.headers.tackles)需要用双引号包裹。"""
     return f'"{col}"'
+
+
+# ── fact_league_table: parse_league_table() 返回，联赛积分榜(all/home/away/form/xg 五档) ──
+# 自然键 (League_ID, Season, table_type, Team_ID)，不强制唯一约束，落库前按
+# (League_ID, Season) 先删后插。核心列覆盖 all/home/away/form 四档共有字段；
+# xg 档独有的 xg/xg_conceded/x_points/x_position 在其它档为 NULL；
+# 其余字段(goalsScored 冗余、xgDiff 等派生量、pageUrl 等)进 extra_json。
+LEAGUE_TABLE_CORE_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("table_type", "TEXT"),
+    ("Team_ID", "INTEGER"),
+    ("Team_Name", "TEXT"),
+    ("position", "INTEGER"),
+    ("played", "INTEGER"),
+    ("wins", "INTEGER"),
+    ("draws", "INTEGER"),
+    ("losses", "INTEGER"),
+    ("goals_for", "INTEGER"),
+    ("goals_against", "INTEGER"),
+    ("goal_diff", "INTEGER"),
+    ("points", "INTEGER"),
+    ("deduction", "INTEGER"),
+    ("qual_color", "TEXT"),
+    ("xg", "REAL"),
+    ("xg_conceded", "REAL"),
+    ("x_points", "REAL"),
+    ("x_position", "INTEGER"),
+]
+
+# ── fact_match_events: parse_match_events() 返回，比赛事件时间线(按数组顺序一行一事件) ──
+# 无稳定行 id，按 Match_ID 先删后插。event_type ∈ {Goal, Card, Substitution, AddedTime, Half}，
+# 不同类型只填各自相关字段，其余为 NULL；shotmapEvent 等嵌套细节进 extra_json。
+MATCH_EVENTS_CORE_COLUMNS = [
+    ("Match_ID", "INTEGER"),
+    ("event_index", "INTEGER"),
+    ("event_type", "TEXT"),
+    ("minute", "INTEGER"),
+    ("overload_time", "INTEGER"),
+    ("is_home", "INTEGER"),
+    ("home_score", "INTEGER"),
+    ("away_score", "INTEGER"),
+    ("player_id", "TEXT"),
+    ("player_name", "TEXT"),
+    ("card_type", "TEXT"),
+    ("assist_player_id", "TEXT"),
+    ("assist_player_name", "TEXT"),
+    ("sub_in_player_id", "TEXT"),
+    ("sub_in_player_name", "TEXT"),
+    ("sub_out_player_id", "TEXT"),
+    ("sub_out_player_name", "TEXT"),
+    ("minutes_added", "INTEGER"),
+    ("event_id", "TEXT"),
+]
+
+# ── fact_match_lineup: parse_lineup_records() 返回，阵容与阵型(每场每队每人一行) ──
+# 只含出场名单(首发 starters + 替补 subs)，不含教练/伤停名单。
+# 自然键 (Match_ID, Player_ID)，按 Match_ID 先删后插。
+MATCH_LINEUP_CORE_COLUMNS = [
+    ("Match_ID", "INTEGER"),
+    ("Team_ID", "INTEGER"),
+    ("is_home", "INTEGER"),
+    ("formation", "TEXT"),
+    ("Player_ID", "TEXT"),
+    ("player_name", "TEXT"),
+    ("shirt_number", "TEXT"),
+    ("position_id", "INTEGER"),
+    ("usual_position_id", "INTEGER"),
+    ("is_starter", "INTEGER"),
+    ("is_captain", "INTEGER"),
+    ("country_code", "TEXT"),
+    ("market_value", "INTEGER"),
+    ("rating", "REAL"),
+    ("sub_in_time", "INTEGER"),
+    ("sub_out_time", "INTEGER"),
+]
+
+# ── fact_season_player_stats: parse_season_player_stats() 返回，赛季球员榜单 ──
+# 每个统计维度(stat_name，如 goals/assists/rating 等)一份全量排名，来自联赛 API
+# stats.players[].fetchAllUrl 拉取的完整 JSON(不止 topThree)。
+# 自然键 (League_ID, Season, stat_name, Player_ID)，按 (League_ID, Season) 先删后插。
+SEASON_PLAYER_STATS_CORE_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("stat_name", "TEXT"),
+    ("Player_ID", "TEXT"),
+    ("Player_Name", "TEXT"),
+    ("Team_ID", "INTEGER"),
+    ("Team_Name", "TEXT"),
+    ("rank", "INTEGER"),
+    ("value", "REAL"),
+]

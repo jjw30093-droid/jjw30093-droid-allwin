@@ -14,7 +14,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # 手填 THORDATA_PROXY
 python backend/init_db.py
-python backend/ingest_match.py <match_id>
+python backend/ingest/ingest_match.py <match_id>
 ```
 
 详见 [CLAUDE.md](CLAUDE.md)。
