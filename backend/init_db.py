@@ -22,6 +22,7 @@ from schema import (
     SILVER_SCORE_DISTRIBUTION_COLUMNS,
     SILVER_GOAL_MINUTE_BUCKETS_COLUMNS,
     INT_MATCH_FEATURES_COLUMNS,
+    GOLD_WDL_PREDICTIONS_COLUMNS,
     _quote,
 )
 
@@ -141,6 +142,12 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_int_match_features_season "
             "ON int_match_features (league_id, season)"
+        )
+
+        _create_table(conn, "gold_wdl_predictions", GOLD_WDL_PREDICTIONS_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_gold_wdl_predictions_season "
+            "ON gold_wdl_predictions (league_id, season)"
         )
 
         conn.commit()

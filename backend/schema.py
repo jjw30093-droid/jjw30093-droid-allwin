@@ -442,3 +442,25 @@ INT_MATCH_FEATURES_COLUMNS += [
     ("updated_at", "TEXT"),
 ]
 del _side, _venue, _stat, _w
+
+
+# ── gold_wdl_predictions: WDL 概率卡(ROADMAP.md Phase 1.M.2,路线 1 baseline)──
+# Gold 层(CLAUDE.md §2),只存 test 段(walk-forward 的最近一个赛季)的预测结果，
+# 供 serving 层将来读。λ 由 rolling xG 估(进攻×防守×联赛基准的经典拆解)，
+# P(H/D/A) 由 Dixon-Coles 修正后的独立 Poisson 比分矩阵求得，再经 isotonic
+# 校准。calibrated 恒为 1(这张表只存校准后的最终概率，不存校准前的中间值，
+# 校准前后的对比数字是评估阶段的产物，不落表)。
+GOLD_WDL_PREDICTIONS_COLUMNS = [
+    ("match_id", "INTEGER PRIMARY KEY"),
+    ("league_id", "INTEGER"),
+    ("season", "TEXT"),
+    ("lambda_home", "REAL"),
+    ("lambda_away", "REAL"),
+    ("lambda_home_is_fallback", "INTEGER"),
+    ("lambda_away_is_fallback", "INTEGER"),
+    ("p_home", "REAL"),
+    ("p_draw", "REAL"),
+    ("p_away", "REAL"),
+    ("calibrated", "INTEGER"),
+    ("updated_at", "TEXT"),
+]
