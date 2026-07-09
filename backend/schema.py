@@ -377,3 +377,68 @@ SILVER_GOAL_MINUTE_BUCKETS_COLUMNS = [
     ("pct", "REAL"),
     ("updated_at", "TEXT"),
 ]
+
+
+# ── int_match_features: 逐场赛前特征表(ROADMAP.md Phase 1.M.1)────────
+# 供 Gold 层模型训练用(CLAUDE.md §8),不是 Silver(不做展示，只服务建模)。
+# 粒度：一行 = 一场比赛。主客两队各自的 rolling 近况在该场比赛"开赛前"就已
+# 确定，不含当场数据——这是防泄露的核心约束，实现方式是按 team 分组、按
+# 时间正序 shift(1) 之后再取滚动窗口，取到"上一场"为止，见
+# backend/models/features/build_match_features.py 的 _rolling_features()。
+#
+# 字段命名规则：
+#   {home|away}_{stat}_l{5|10}            —— 该队(不分主客场)近 N 场整体近况
+#   {home|away}_{stat}_{home|away}_l{5|10} —— 主队"主场"近况 / 客队"客场"近况
+#     (只算这个方向，没有"主队的客场近况"这类不常用的组合，够用即止)
+#   {home|away}_n_matches_l{5|10}(以及 venue 版本) —— 该 rolling 实际用了
+#     几场(赛季初不足 N 场时会 < N，供后续判断这行特征的可信度)
+#   {stat}_diff_l{5|10} —— 主队减客队的整体近况差值(只做 xg_for / goals_for)
+#
+# rolling 允许跨赛季取最近 N 场(不按赛季边界截断)——这是本表的一个明确
+# 简化选择，不是遗漏：跨赛季会让赛季第 1-2 轮的 rolling 用上一赛季末的比赛，
+# 而不是从 0 场/1 场算起。*_n_matches_* 字段就是留给下游判断"这行数据够不
+# 够可信"的信号，不需要额外的跨赛季标记列。
+#
+# sample_weight = exp(-0.0015 * days_from_latest)，latest 是整张表(不分
+# 联赛/赛季)里最新一场比赛的日期。
+FEATURE_ROLLING_STATS = [
+    "xg_for",
+    "xg_against",
+    "goals_for",
+    "goals_against",
+    "shots_for",
+    "shots_on_target_for",
+    "possession",
+]
+FEATURE_WINDOWS = [5, 10]
+
+INT_MATCH_FEATURES_COLUMNS = [
+    ("match_id", "INTEGER PRIMARY KEY"),
+    ("league_id", "INTEGER"),
+    ("season", "TEXT"),
+    ("match_date", "TEXT"),
+    ("home_team_id", "INTEGER"),
+    ("away_team_id", "INTEGER"),
+]
+for _side in ("home", "away"):
+    for _stat in FEATURE_ROLLING_STATS:
+        for _w in FEATURE_WINDOWS:
+            INT_MATCH_FEATURES_COLUMNS.append((f"{_side}_{_stat}_l{_w}", "REAL"))
+    for _w in FEATURE_WINDOWS:
+        INT_MATCH_FEATURES_COLUMNS.append((f"{_side}_n_matches_l{_w}", "INTEGER"))
+for _side, _venue in (("home", "home"), ("away", "away")):
+    for _stat in FEATURE_ROLLING_STATS:
+        for _w in FEATURE_WINDOWS:
+            INT_MATCH_FEATURES_COLUMNS.append((f"{_side}_{_stat}_{_venue}_l{_w}", "REAL"))
+    for _w in FEATURE_WINDOWS:
+        INT_MATCH_FEATURES_COLUMNS.append((f"{_side}_n_matches_{_venue}_l{_w}", "INTEGER"))
+for _stat in ("xg_for", "goals_for"):
+    for _w in FEATURE_WINDOWS:
+        INT_MATCH_FEATURES_COLUMNS.append((f"{_stat}_diff_l{_w}", "REAL"))
+INT_MATCH_FEATURES_COLUMNS += [
+    ("target_home_goals", "INTEGER"),
+    ("target_away_goals", "INTEGER"),
+    ("sample_weight", "REAL"),
+    ("updated_at", "TEXT"),
+]
+del _side, _venue, _stat, _w

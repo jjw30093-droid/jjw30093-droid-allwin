@@ -21,6 +21,7 @@ from schema import (
     SILVER_OVER_UNDER_THRESHOLDS_COLUMNS,
     SILVER_SCORE_DISTRIBUTION_COLUMNS,
     SILVER_GOAL_MINUTE_BUCKETS_COLUMNS,
+    INT_MATCH_FEATURES_COLUMNS,
     _quote,
 )
 
@@ -134,6 +135,12 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_silver_goal_minute_buckets_season "
             "ON silver_goal_minute_buckets (League_ID, Season)"
+        )
+
+        _create_table(conn, "int_match_features", INT_MATCH_FEATURES_COLUMNS)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_int_match_features_season "
+            "ON int_match_features (league_id, season)"
         )
 
         conn.commit()

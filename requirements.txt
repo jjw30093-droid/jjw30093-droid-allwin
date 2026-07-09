@@ -2,3 +2,5 @@ curl_cffi
 python-dotenv
 fastapi
 uvicorn
+pandas
+numpy
