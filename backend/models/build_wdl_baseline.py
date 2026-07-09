@@ -18,6 +18,7 @@ build_wdl_baseline.py — 极简 baseline WDL 概率卡(ROADMAP.md Phase 1.M.2,�
 """
 
 import os
+import pickle
 import sys
 
 import numpy as np
@@ -33,6 +34,31 @@ from db import get_connection
 from schema import GOLD_WDL_PREDICTIONS_COLUMNS, _quote
 
 TRAIN_SEASONS = ["2020/2021", "2021/2022", "2022/2023", "2023/2024", "2024/2025"]
+
+# 固化后的模型参数(ρ / isotonic 校准器 / 联赛基准)存这里,供 C2(对未来赛程
+# 出预测)加载复用,不重新拟合。模型文件不进 git(见 .gitignore 的 *.pkl)。
+ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
+ARTIFACTS_PATH = os.path.join(ARTIFACTS_DIR, "wdl_baseline_params.pkl")
+
+
+def save_artifacts(baselines: dict, rho: float, calibrators: dict) -> None:
+    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    with open(ARTIFACTS_PATH, "wb") as f:
+        pickle.dump(
+            {
+                "train_seasons": TRAIN_SEASONS,
+                "baselines": baselines,
+                "rho": rho,
+                "calibrators": calibrators,
+            },
+            f,
+        )
+    print(f"\n模型参数已固化: {ARTIFACTS_PATH}")
+
+
+def load_artifacts() -> dict:
+    with open(ARTIFACTS_PATH, "rb") as f:
+        return pickle.load(f)
 TEST_SEASON = "2025/2026"
 N_GOALS = 10  # 比分矩阵覆盖 0..10 球,数据集实际最大进球数为 9,足够
 RHO_BOUNDS = (-0.2, 0.1)
@@ -234,11 +260,15 @@ def write_predictions(conn, test_df: pd.DataFrame) -> int:
         ]
     ].copy()
     out["calibrated"] = 1
+    # confidence/reason 是 C2(未来赛程预测)才有的概念,test 段(已完赛的
+    # walk-forward 评估行)固定为 NULL。
+    out["confidence"] = None
+    out["reason"] = None
 
     col_names = [name for name, _ in GOLD_WDL_PREDICTIONS_COLUMNS if name != "updated_at"]
     out = out[col_names].astype(object).where(pd.notnull(out[col_names]), None)
 
-    conn.execute("DELETE FROM gold_wdl_predictions")
+    conn.execute("DELETE FROM gold_wdl_predictions WHERE season = ?", (TEST_SEASON,))
     placeholders = ", ".join("?" for _ in col_names)
     cols_sql = ", ".join(_quote(n) for n in col_names)
     conn.executemany(
@@ -290,6 +320,10 @@ def main() -> None:
         calibrators = fit_isotonic_calibrators(train_df)
         test_df = apply_calibration(test_df, calibrators)
         train_df = apply_calibration(train_df, calibrators)  # 仅用于对照展示,不参与拟合
+
+        # 固化本次拟合的参数(联赛基准 μ / rho / isotonic 校准器),供 C2
+        # (对未来赛程出预测)加载复用,不重新拟合。
+        save_artifacts(baselines, rho, calibrators)
 
         # Step 4: walk-forward 评估(全部在 test 段)
         test_actual = np.where(

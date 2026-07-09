@@ -13,3 +13,5 @@ node_modules/
 *.pth
 *.onnx
 *.bin
+*.pkl
+*.pickle

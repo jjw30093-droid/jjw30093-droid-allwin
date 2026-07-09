@@ -462,5 +462,12 @@ GOLD_WDL_PREDICTIONS_COLUMNS = [
     ("p_draw", "REAL"),
     ("p_away", "REAL"),
     ("calibrated", "INTEGER"),
+    # confidence/reason(ROADMAP.md Phase C2 新增)：给未来赛程的预测标注数据
+    # 可信度——升班马/新球队在 bronze 无历史(rolling 全 NULL，走 λ=μ 兜底)标
+    # 'low'/'promoted_no_history'；rolling 样本不足 5 场标 'low'/
+    # 'insufficient_history'；其余 'normal'/NULL。历史(test 段)行这两列固定
+    # 为 NULL,只有 C2 写入的未来赛程行会填。
+    ("confidence", "TEXT"),
+    ("reason", "TEXT"),
     ("updated_at", "TEXT"),
 ]
