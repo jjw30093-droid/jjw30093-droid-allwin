@@ -1,0 +1,307 @@
+.page {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.seasonChip {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+}
+
+.membershipNote {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 4px 0 24px;
+}
+
+.roundHeading {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  margin: 28px 0 10px;
+}
+
+.grid {
+  display: grid;
+  gap: 10px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.teamsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.teams {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.teamName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vs {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.meta {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.lowConfidence {
+  align-self: flex-start;
+  font-size: 11.5px;
+  color: var(--gold-300);
+  background: var(--surface-2);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+}
+
+/* ── 已付费:概率分布条(DESIGN.md 胜平负概率条,语义色) ── */
+.probBar {
+  display: flex;
+  height: 10px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.segHome {
+  background: var(--win);
+}
+
+.segDraw {
+  background: var(--draw);
+}
+
+.segAway {
+  background: var(--loss);
+}
+
+.probLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.probLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+
+.probLabel .num {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dotHome {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--win);
+  display: inline-block;
+}
+
+.dotDraw {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--draw);
+  display: inline-block;
+}
+
+.dotAway {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--loss);
+  display: inline-block;
+}
+
+/* ── 未付费:钩子 + 锁 ── */
+.lockedRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-2);
+  border-radius: var(--r-control);
+  padding: 10px 14px;
+}
+
+.tendencyHook {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.tendencyHook .num {
+  color: var(--gold-300);
+  font-weight: 700;
+}
+
+.lockCta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* ── 距开赛 >7 天(availability='upcoming'):中性提示,和"付费锁"刻意
+   区分开——没有锁图标、没有订阅 CTA、不用金色(金是付费转化色,这里不是
+   付费问题)。 ── */
+.upcomingRow {
+  display: flex;
+}
+
+.upcomingNote {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border-radius: var(--r-control);
+  padding: 8px 12px;
+}
+
+/* ── Opta 式顶部横条 ── */
+.topBar {
+  margin-bottom: 28px;
+}
+
+.topBarHeading {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  margin-bottom: 10px;
+}
+
+.topBarScroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.topBarCard {
+  flex: 0 0 auto;
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topBarTeams {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.topBarTeamName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topBarPlaceholder {
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 18px 20px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.compact {
+  font-size: 11.5px;
+}
+
+.compact .probBar {
+  height: 7px;
+}
+
+.compact.lockedRow {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.errorBox {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 32px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.errorTitle {
+  color: var(--loss);
+  font-weight: 700;
+  margin-bottom: 8px;
+}

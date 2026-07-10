@@ -83,9 +83,15 @@ def _insert_many(conn, table: str, columns: list, rows: list) -> None:
 
 
 def _seasons(conn) -> list:
+    """枚举 dim_match 里出现过的全部 (League_ID, Season)——不按 status='Finish'
+    过滤。如果这里只统计当前有完赛场次的赛季,一个赛季的完赛数从 >0 掉回 0
+    (比如 C3.2 模拟测试注入又回滚)时,这个赛季会直接从枚举结果里消失,
+    下面按 (League_ID, Season) 做的 DELETE 也就跟着不会执行,留下一批
+    对应不到任何真实完赛比赛的陈旧 Silver 行(已实测复现过这个问题)。
+    枚举时不按 status 筛,才能保证每个出现过的赛季始终会走一遍
+    DELETE(+ 该场次数为 0 时的空 INSERT),幂等性才站得住。"""
     rows = conn.execute(
-        "SELECT League_ID, Season, COUNT(*) FROM dim_match "
-        "WHERE status = 'Finish' GROUP BY League_ID, Season ORDER BY League_ID, Season"
+        "SELECT DISTINCT League_ID, Season FROM dim_match ORDER BY League_ID, Season"
     ).fetchall()
     return [(r[0], r[1]) for r in rows]
 
@@ -291,16 +297,21 @@ def build_silver() -> None:
             )
             _insert_many(conn, "silver_team_season_stats", SILVER_TEAM_SEASON_STATS_COLUMNS, team_rows)
 
-            summary_row = build_league_season_summary(league_id, season, matches)
+            # matches 为空(该赛季当前 0 场完赛,比如刚被模拟测试回滚)时,
+            # build_league_season_summary/build_over_under_thresholds 内部
+            # 都有对 total 场次做除法,不能传空列表进去——只 DELETE、不算
+            # 不插,让该赛季在这两张表里保持"没有行"这个正确状态。
+            summary_row = build_league_season_summary(league_id, season, matches) if matches else None
             conn.execute(
                 "DELETE FROM silver_league_season_summary WHERE League_ID = ? AND Season = ?",
                 (league_id, season),
             )
-            _insert_many(
-                conn, "silver_league_season_summary", SILVER_LEAGUE_SEASON_SUMMARY_COLUMNS, [summary_row]
-            )
+            if summary_row is not None:
+                _insert_many(
+                    conn, "silver_league_season_summary", SILVER_LEAGUE_SEASON_SUMMARY_COLUMNS, [summary_row]
+                )
 
-            ou_rows = build_over_under_thresholds(league_id, season, matches)
+            ou_rows = build_over_under_thresholds(league_id, season, matches) if matches else []
             conn.execute(
                 "DELETE FROM silver_over_under_thresholds WHERE League_ID = ? AND Season = ?",
                 (league_id, season),
