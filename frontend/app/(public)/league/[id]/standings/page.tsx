@@ -1,4 +1,5 @@
 import { fetchLeagueOverview, type StandingRow } from "@/lib/api";
+import { LeagueNav } from "@/components/LeagueNav";
 import styles from "./standings.module.css";
 
 const QUAL_LABELS: Record<string, string> = {
@@ -81,6 +82,7 @@ export default async function StandingsPage({
   } catch (err) {
     return (
       <main className={styles.page}>
+        <LeagueNav leagueId={id} active="standings" season={seasonParam} />
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
           <p>
@@ -101,6 +103,7 @@ export default async function StandingsPage({
 
   return (
     <main className={styles.page}>
+      <LeagueNav leagueId={id} active="standings" season={data.season} />
       <div className={styles.header}>
         <h1 className={styles.title}>英超 · 排名榜</h1>
         <span className={styles.seasonChip}>{data.season}</span>

@@ -1,4 +1,5 @@
 import { fetchWdlPredictions, type WdlMatch } from "@/lib/api";
+import { LeagueNav } from "@/components/LeagueNav";
 import styles from "./wdl-predictions.module.css";
 
 const TENDENCY_ZH: Record<string, string> = {
@@ -163,6 +164,7 @@ export default async function WdlPredictionsPage({
   } catch (err) {
     return (
       <main className={styles.page}>
+        <LeagueNav leagueId={id} active="wdl-predictions" season={sp.season} />
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
           <p>
@@ -188,6 +190,7 @@ export default async function WdlPredictionsPage({
 
   return (
     <main className={styles.page}>
+      <LeagueNav leagueId={id} active="wdl-predictions" season={data.season} />
       <div className={styles.header}>
         <h1 className={styles.title}>26/27 英超 · WDL 概率卡</h1>
         <span className={styles.seasonChip}>{data.season}</span>

@@ -16,10 +16,42 @@ export interface StandingRow {
   team_name_zh: string | null;
 }
 
+// 免费字段(CLAUDE.md §3):射门/射正/控球/xG/xGOT。角球/黄红牌/零封/BTTS
+// 是付费字段,不在 overview 里返回,这里也就没有对应的 TS 字段——不是漏写。
+export interface TeamStatsRow {
+  team_id: number;
+  team_name_zh: string | null;
+  matches_played: number;
+  avg_total_shots: number | null;
+  avg_shots_on_target: number | null;
+  avg_possession: number | null;
+  avg_expected_goals: number | null;
+  avg_expected_goals_on_target: number | null;
+}
+
+export interface PlayerLeaderboardEntry {
+  player_id: string;
+  Player_Name: string | null;
+  player_name_zh: string | null;
+  player_name_zh_short: string | null;
+  Team_ID: number | null;
+  Team_Name: string | null;
+  team_name_zh: string | null;
+  rank: number;
+  value: number;
+}
+
+export interface PlayerLeaderboard {
+  label_zh: string;
+  entries: PlayerLeaderboardEntry[];
+}
+
 export interface LeagueOverview {
   league_id: number;
   season: string;
   standings: StandingRow[];
+  team_stats: TeamStatsRow[];
+  player_leaderboards: Record<string, PlayerLeaderboard>;
 }
 
 export async function fetchLeagueOverview(
@@ -27,6 +59,42 @@ export async function fetchLeagueOverview(
   season?: string
 ): Promise<LeagueOverview> {
   const url = new URL(`/api/league/${leagueId}/overview`, API_BASE);
+  if (season) url.searchParams.set("season", season);
+
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`serving API ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
+// 赛程/结果(免费层)。只有对阵/比分/日期/轮次/status,不含任何概率字段
+// ——概率是付费概率卡页(wdl-predictions)的事,这里没有、也不该有。
+export interface MatchRow {
+  Match_ID: number;
+  Date: string;
+  home_score: number | null;
+  away_score: number | null;
+  status: string;
+  Match_Round: string;
+  home_team_id: number;
+  away_team_id: number;
+  home_team_name_zh: string | null;
+  away_team_name_zh: string | null;
+}
+
+export interface LeagueMatchesResponse {
+  league_id: number;
+  season: string;
+  matches: MatchRow[];
+}
+
+export async function fetchLeagueMatches(
+  leagueId: string,
+  season?: string
+): Promise<LeagueMatchesResponse> {
+  const url = new URL(`/api/league/${leagueId}/matches`, API_BASE);
   if (season) url.searchParams.set("season", season);
 
   const res = await fetch(url, { cache: "no-store" });
