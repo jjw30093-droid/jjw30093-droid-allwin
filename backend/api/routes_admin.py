@@ -1,0 +1,287 @@
+"""/api/v1/admin/*:用户/订阅/兑换码/审计日志(写操作全部过 CSRF + AuditLog)。
+
+预测发布/锁定、xref 审核、任务健康在各自阶段追加到本文件。
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+
+from backend.commands.redeem import create_redeem_codes
+from backend.commands.subscriptions import grant_subscription, revoke_subscription
+from backend.db.connections import tx
+from backend.db.util import utc_now_iso
+
+from .deps import (
+    NO_STORE,
+    AuthContext,
+    platform_ro,
+    platform_rw,
+    require_admin,
+    require_csrf,
+)
+
+router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+def require_admin_csrf(ctx: AuthContext = Depends(require_csrf)) -> AuthContext:
+    if ctx.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return ctx
+
+
+def _no_store(response: Response) -> None:
+    response.headers["Cache-Control"] = NO_STORE
+
+
+@router.get("/users")
+def list_users(
+    response: Response,
+    query: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    ctx: AuthContext = Depends(require_admin),
+    conn=Depends(platform_ro),
+):
+    _no_store(response)
+    limit = max(1, min(limit, 200))
+    now = utc_now_iso()
+    like = f"%{query}%"
+    rows = conn.execute(
+        """SELECT u.id, u.display_name, u.role, u.status, u.created_at, u.last_login_at,
+                  (SELECT s.plan_id FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+                   WHERE s.user_id=u.id AND s.status='active' AND s.starts_at<=? AND s.ends_at>?
+                   ORDER BY p.rank DESC, s.ends_at DESC LIMIT 1) AS plan_id,
+                  (SELECT MAX(s.ends_at) FROM subscriptions s
+                   WHERE s.user_id=u.id AND s.status='active' AND s.ends_at>?) AS plan_ends_at
+           FROM users u
+           WHERE (? = '' OR u.display_name LIKE ? OR u.id LIKE ?)
+           ORDER BY u.created_at DESC LIMIT ? OFFSET ?""",
+        (now, now, now, query, like, like, limit, offset),
+    ).fetchall()
+    total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    return {
+        "total": total,
+        "users": [dict(r) | {"plan_id": r["plan_id"] or "free"} for r in rows],
+    }
+
+
+class GrantBody(BaseModel):
+    plan_id: str
+    duration_days: int = Field(gt=0, le=3650)
+    notes: str = ""
+
+
+@router.post("/users/{user_id}/grant")
+def grant_user_subscription(
+    user_id: str,
+    body: GrantBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    _no_store(response)
+    try:
+        with tx(conn):
+            result = grant_subscription(
+                conn, user_id, body.plan_id, body.duration_days,
+                granted_by=ctx.user_id, notes=body.notes,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return result
+
+
+@router.post("/subscriptions/{subscription_id}/revoke")
+def revoke_user_subscription(
+    subscription_id: str,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    _no_store(response)
+    with tx(conn):
+        ok = revoke_subscription(conn, subscription_id, ctx.user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="订阅不存在或已撤销")
+    return {"status": "ok"}
+
+
+class CreateCodesBody(BaseModel):
+    plan_id: str
+    duration_days: int = Field(gt=0, le=3650)
+    count: int = Field(gt=0, le=500)
+    expires_at: str | None = None
+
+
+@router.post("/redeem-codes")
+def create_codes(
+    body: CreateCodesBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    """明文兑换码只在本响应展示一次,之后只有 hash。"""
+    _no_store(response)
+    try:
+        with tx(conn):
+            codes = create_redeem_codes(
+                conn, body.plan_id, body.duration_days, body.count,
+                created_by=ctx.user_id, expires_at=body.expires_at,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"codes": codes}
+
+
+@router.get("/redeem-codes")
+def list_codes(
+    response: Response,
+    batch_id: str = "",
+    limit: int = 100,
+    ctx: AuthContext = Depends(require_admin),
+    conn=Depends(platform_ro),
+):
+    _no_store(response)
+    limit = max(1, min(limit, 500))
+    rows = conn.execute(
+        """SELECT id, plan_id, duration_days, batch_id, status, created_at, expires_at, used_by, used_at
+           FROM redeem_codes WHERE (?='' OR batch_id=?)
+           ORDER BY created_at DESC LIMIT ?""",
+        (batch_id, batch_id, limit),
+    ).fetchall()
+    return {"codes": [dict(r) for r in rows]}
+
+
+# ── 预测登记簿管理(P0.5) ─────────────────────────────────
+
+@router.get("/predictions")
+def list_predictions(
+    response: Response,
+    status: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    ctx: AuthContext = Depends(require_admin),
+    conn=Depends(platform_ro),
+):
+    _no_store(response)
+    limit = max(1, min(limit, 500))
+    rows = conn.execute(
+        """SELECT id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at,
+                  locked_at, status, is_official, visibility, home_win, draw, away_win, confidence
+           FROM prediction_snapshots WHERE (?='' OR status=?)
+           ORDER BY kickoff_at_utc, match_id LIMIT ? OFFSET ?""",
+        (status, status, limit, offset),
+    ).fetchall()
+    counts = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM prediction_snapshots GROUP BY status"
+    ).fetchall()
+    return {"counts": {r["status"]: r["n"] for r in counts}, "predictions": [dict(r) for r in rows]}
+
+
+def _prediction_action(conn, action_fn, snapshot_id, actor, **kw):
+    from backend.commands.predictions import PredictionError
+
+    try:
+        with tx(conn):
+            action_fn(conn, snapshot_id, actor, **kw)
+    except PredictionError as e:
+        raise HTTPException(status_code=409, detail={"code": e.reason, "message": str(e)})
+
+
+@router.post("/predictions/{snapshot_id}/publish")
+def publish_prediction(
+    snapshot_id: str,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    from backend.commands.predictions import publish_snapshot
+
+    _no_store(response)
+    _prediction_action(conn, publish_snapshot, snapshot_id, ctx.user_id)
+    return {"status": "ok"}
+
+
+@router.post("/predictions/{snapshot_id}/lock")
+def lock_prediction(
+    snapshot_id: str,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    from backend.commands.predictions import lock_snapshot
+
+    _no_store(response)
+    _prediction_action(conn, lock_snapshot, snapshot_id, ctx.user_id)
+    return {"status": "ok"}
+
+
+class RetractBody(BaseModel):
+    reason: str = Field(min_length=2, max_length=500)
+
+
+@router.post("/predictions/{snapshot_id}/retract")
+def retract_prediction(
+    snapshot_id: str,
+    body: RetractBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    from backend.commands.predictions import retract_snapshot
+
+    _no_store(response)
+    _prediction_action(conn, retract_snapshot, snapshot_id, ctx.user_id, reason=body.reason)
+    return {"status": "ok"}
+
+
+class PublishUpcomingBody(BaseModel):
+    lock: bool = True
+
+
+@router.post("/predictions/publish-upcoming")
+def publish_upcoming(
+    body: PublishUpcomingBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    """批量:把所有开球前的 draft 发布(可选同时锁定)。逐条独立事务,失败不拖累其余。"""
+    from backend.commands.predictions import PredictionError, lock_snapshot, publish_snapshot
+
+    _no_store(response)
+    now = utc_now_iso()
+    ids = [
+        r[0]
+        for r in conn.execute(
+            "SELECT id FROM prediction_snapshots WHERE status='draft' AND kickoff_at_utc > ?",
+            (now,),
+        )
+    ]
+    done, failed = 0, []
+    for sid in ids:
+        try:
+            with tx(conn):
+                publish_snapshot(conn, sid, ctx.user_id)
+                if body.lock:
+                    lock_snapshot(conn, sid, ctx.user_id)
+            done += 1
+        except PredictionError as e:
+            failed.append({"id": sid, "reason": e.reason})
+    return {"published": done, "failed": failed}
+
+
+@router.get("/audit-logs")
+def list_audit_logs(
+    response: Response,
+    limit: int = 100,
+    offset: int = 0,
+    ctx: AuthContext = Depends(require_admin),
+    conn=Depends(platform_ro),
+):
+    _no_store(response)
+    limit = max(1, min(limit, 500))
+    rows = conn.execute(
+        "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
+    ).fetchall()
+    return {"logs": [dict(r) for r in rows]}

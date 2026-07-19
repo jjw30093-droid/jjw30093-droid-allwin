@@ -1,0 +1,28 @@
+# allwin 前端(Next.js,仅监听 127.0.0.1:3000,由 Nginx 反代)
+# 安装:cp 到 /etc/systemd/system/ → systemctl daemon-reload → systemctl enable --now allwin-web
+[Unit]
+Description=allwin frontend (next start on 127.0.0.1:3000)
+After=network.target
+
+[Service]
+Type=simple
+# 占位符:部署用户(useradd --system --create-home allwin),不得用 root 运行
+User=allwin
+Group=allwin
+# current 是指向 /opt/allwin/releases/<git-sha> 的软链,由 release.sh 切换
+WorkingDirectory=/opt/allwin/current/frontend
+# 共享 .env:NEXT_PUBLIC_API_BASE 等(release 之间共享,不进 git)
+EnvironmentFile=/opt/allwin/shared/.env
+Environment=NODE_ENV=production
+# 用 release 内的 next 可执行文件,显式绑定回环地址
+ExecStart=/opt/allwin/current/frontend/node_modules/.bin/next start -H 127.0.0.1 -p 3000
+Restart=on-failure
+RestartSec=3
+# 基础加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/current/frontend/.next
+
+[Install]
+WantedBy=multi-user.target

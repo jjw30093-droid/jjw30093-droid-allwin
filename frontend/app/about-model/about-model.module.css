@@ -1,0 +1,283 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.subtitle {
+  margin: 0 0 24px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  max-width: 640px;
+}
+
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 22px 24px;
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--gold-300);
+}
+
+.prose {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.prose:last-child {
+  margin-bottom: 0;
+}
+
+.prose strong {
+  color: var(--ink);
+}
+
+/* ── 模型版本卡(次卡层级)── */
+
+.versionCard {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.versionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.versionId {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.versionAlgo {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+
+.versionDesc {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.kvList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.kvList dt {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.kvList dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+.goldNum {
+  color: var(--gold-300);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.baselineNote {
+  margin-left: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.versionNote {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.footnote {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.footnote strong {
+  color: var(--ink-2);
+}
+
+/* ── 正式样本评估 ── */
+
+.officialGrid {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.officialItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.officialLabel {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.officialValue {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--gold-300);
+}
+
+.emptyText {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+/* ── 指标释义 ── */
+
+.metricDl {
+  margin: 0;
+}
+
+.metricDl dt {
+  color: var(--ink);
+  font-weight: 500;
+  margin-top: 12px;
+}
+
+.metricDl dt:first-child {
+  margin-top: 0;
+}
+
+.metricDl dd {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+/* ── 局限 ── */
+
+.limitList {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  display: grid;
+  gap: 10px;
+  line-height: 1.7;
+}
+
+.limitList strong {
+  color: var(--ink);
+}
+
+/* ── UNVERIFIED 标注 ── */
+
+.unverified {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.unverifiedBadge {
+  display: inline-block;
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  padding: 2px 10px;
+  margin-right: 8px;
+}
+
+/* ── 错误 / 骨架 ── */
+
+.errorBox {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 32px;
+  color: var(--ink-2);
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.errorTitle {
+  color: var(--loss);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.errorDetail {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.skeletonBlock {
+  height: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  margin-bottom: 16px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonBlock {
+    animation: none;
+  }
+}

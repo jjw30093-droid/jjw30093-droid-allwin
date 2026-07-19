@@ -4,6 +4,7 @@
 *.db-wal
 *.sqlite
 *.sqlite3
+data/
 .venv/
 __pycache__/
 *.pyc

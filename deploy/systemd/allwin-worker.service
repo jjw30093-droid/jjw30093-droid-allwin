@@ -1,0 +1,25 @@
+# allwin Worker 任务链(oneshot,由 allwin-worker.timer 每 15 分钟触发,不常驻)
+# 链内自带文件锁(data/locks/*.lock),上一轮未结束时本轮对应任务直接判 locked,不会叠跑。
+# 安装:cp allwin-worker.service allwin-worker.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-worker.timer
+# 手动跑一次:systemctl start allwin-worker.service
+[Unit]
+Description=allwin worker chain (schedule_sync -> ... -> metrics_rebuild)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.runner --chain
+# 整链兜底时长(各任务另有自己的 timeout_seconds)
+TimeoutStartSec=7200
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,322 @@
+/* 竖屏场景卡:按 1080 逻辑像素布局(预览时外层 scale,导出时按原尺寸截图)。
+   颜色全部取 globals.css 设计 token(DESIGN.md §2)。 */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #100b07 0%, #0a0806 100%);
+  color: var(--ink);
+  overflow: hidden;
+  font-family: var(--font-cn), "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ── 头部 ─────────────────────────────────────────────── */
+
+.head {
+  padding: 64px 72px 40px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 44px;
+}
+
+.brand {
+  font-size: 44px;
+  font-weight: 900;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brandLatin {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: var(--ink-3);
+}
+
+.sceneTag {
+  margin-left: auto;
+  font-size: 26px;
+  color: var(--gold-300);
+  border: 2px solid var(--gold-700);
+  border-radius: var(--r-pill);
+  padding: 8px 28px;
+}
+
+.matchRow {
+  display: flex;
+  align-items: baseline;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.teamName {
+  font-size: 58px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.vs {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--gold-500);
+}
+
+.metaRow {
+  margin-top: 20px;
+  font-size: 28px;
+  color: var(--ink-2);
+}
+
+/* ── 主体 ─────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  padding: 48px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  overflow: hidden;
+}
+
+.hookTitle {
+  font-size: 72px;
+  font-weight: 900;
+  line-height: 1.3;
+  text-wrap: balance;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hookText {
+  font-size: 44px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.sceneText {
+  font-size: 36px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.sceneTextMuted {
+  font-size: 32px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.emptyText {
+  font-size: 32px;
+  line-height: 1.6;
+  color: var(--ink-3);
+  margin: 0;
+  padding: 32px;
+  border: 2px dashed var(--border-strong);
+  border-radius: 20px;
+}
+
+/* 概率场景 */
+
+.probGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.probCell {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 24px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.probNum {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.probCell[data-tone="win"] .probNum {
+  color: var(--win);
+}
+
+.probCell[data-tone="draw"] .probNum {
+  color: var(--draw);
+}
+
+.probCell[data-tone="loss"] .probNum {
+  color: var(--loss);
+}
+
+.probLabel {
+  font-size: 30px;
+  color: var(--ink-2);
+  margin-top: 12px;
+}
+
+.probNumBig {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 110px;
+  font-weight: 700;
+  color: var(--gold-300);
+  line-height: 1.2;
+}
+
+.topOnly {
+  text-align: center;
+  padding: 60px 0;
+}
+
+.probBar {
+  display: flex;
+  height: 36px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  border: 2px solid var(--border);
+}
+
+.segWin {
+  background: var(--win);
+}
+
+.segDraw {
+  background: var(--draw);
+}
+
+.segLoss {
+  background: var(--loss);
+}
+
+.expGoals {
+  font-size: 32px;
+  color: var(--ink-2);
+}
+
+.probNote {
+  font-size: 26px;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+/* 证据 / 风险场景 */
+
+.subHeading {
+  font-size: 34px;
+  font-weight: 900;
+  color: var(--gold-300);
+}
+
+.evList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.evItem {
+  font-size: 36px;
+  line-height: 1.55;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-left-width: 10px;
+  border-radius: 0 20px 20px 0;
+  padding: 28px 32px;
+}
+
+.evItem[data-tone="gold"] {
+  border-left-color: var(--gold-500);
+}
+
+.evItem[data-tone="loss"] {
+  border-left-color: var(--loss);
+}
+
+.evItem[data-tone="draw"] {
+  border-left-color: var(--draw);
+}
+
+/* 图表场景 */
+
+.chartBlock {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 24px;
+  padding: 28px 32px;
+}
+
+.chartTitle {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--gold-300);
+  margin-bottom: 12px;
+}
+
+.chartBlock :global(.chart-summary) {
+  font-size: 24px;
+  color: var(--ink-3);
+  margin: 8px 0 0;
+}
+
+/* 收尾场景 */
+
+.noteList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.noteItem {
+  font-size: 28px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.disclaimer {
+  font-size: 30px;
+  line-height: 1.6;
+  color: var(--gold-300);
+  border: 2px solid var(--gold-900);
+  border-radius: 20px;
+  padding: 28px 32px;
+  margin: 0;
+}
+
+.hashLine {
+  font-size: 24px;
+  color: var(--ink-3);
+  margin: 0;
+  word-break: break-all;
+}
+
+/* ── 底部(每张卡都有:数据截止 + 模型版本) ───────────── */
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 36px 72px 56px;
+  border-top: 2px solid var(--border-strong);
+  font-size: 28px;
+  color: var(--ink-2);
+}

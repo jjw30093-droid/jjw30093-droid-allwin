@@ -1,0 +1,109 @@
+# allwin — Cloudflare → Nginx 单入口(P0.11)
+#
+# 拓扑:Cloudflare(TLS Full strict)→ 本机 Nginx :443 → 两个仅监听 localhost 的上游
+#   /api/*、/healthz、/readyz → FastAPI  127.0.0.1:8000(uvicorn,allwin-api.service)
+#   其余全部                  → Next.js  127.0.0.1:3000(next start,allwin-web.service)
+#
+# 使用:
+#   1. 把 ALLWIN_DOMAIN 全部替换为真实域名(如 allwin.example.com);
+#   2. 证书用 Cloudflare Origin Certificate(TLS 模式选 Full (strict));
+#   3. cp 到 /etc/nginx/conf.d/allwin.conf,nginx -t && systemctl reload nginx;
+#   4. 部署三必查:pm2/systemd 的 exec cwd、`nginx -T | grep proxy_pass`、curl 域名指纹
+#      三路必须指向同一 release 目录(CLAUDE.md §10)。
+
+# 上游只允许本机回环,绝不监听公网端口
+upstream allwin_api {
+    server 127.0.0.1:8000;
+    keepalive 32;
+}
+
+upstream allwin_web {
+    server 127.0.0.1:3000;
+    keepalive 32;
+}
+
+# 80 只做跳转(Cloudflare 已强制 HTTPS,这里兜底)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ALLWIN_DOMAIN;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ALLWIN_DOMAIN;
+
+    # Cloudflare Origin Certificate(只被 Cloudflare 信任,配合 TLS Full strict)
+    ssl_certificate     /etc/ssl/cloudflare/ALLWIN_DOMAIN.pem;
+    ssl_certificate_key /etc/ssl/cloudflare/ALLWIN_DOMAIN.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # 真实客户端 IP 由 Cloudflare 透传(限流/日志用;IP 段列表需定期同步
+    # https://www.cloudflare.com/ips/,或用 cloudflare real_ip 模块包)
+    # set_real_ip_from 173.245.48.0/20;  # ……逐段列出
+    # real_ip_header CF-Connecting-IP;
+
+    server_tokens off;
+    client_max_body_size 4m;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection "";
+
+    # ── 部署探针:直通 API,禁止任何缓存 ─────────────────────────────
+    location = /healthz {
+        proxy_pass http://allwin_api;
+        add_header Cache-Control "no-store" always;
+    }
+    location = /readyz {
+        proxy_pass http://allwin_api;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # ── API:/api/v1/*(以及旧兼容层 /api/league/*)→ FastAPI ─────────
+    #
+    # !!! 共享缓存 BYPASS(Cloudflare Cache Rules 必须同样配置)!!!
+    # 以下路径带 Cookie / Authorization / Set-Cookie,属于按用户返回的内容,
+    # 一旦进入共享缓存就是把 A 用户的会员数据发给 B 用户(灾难级事故):
+    #   /api/v1/auth/*      登录 / 会话 / 设备码
+    #   /api/v1/member/*    会员付费数据(服务端 entitlement 校验后才返回)
+    #   /api/v1/account/*   账户 / 订阅状态
+    #   /api/v1/admin/*     管理后台
+    #   /api/v1/studio/*    Studio 分析包 / 草稿
+    #   /api/v1/exports/*   导出产物(按用户)
+    # 规则:请求带 Cookie 或 Authorization → 不缓存;响应带 Set-Cookie → 不缓存。
+    # 本层统一 no-store 兜底;匿名可缓存的公开接口由 API 自身显式下发
+    # Cache-Control(s-maxage),不在 Nginx 层猜。
+    location /api/ {
+        proxy_pass http://allwin_api;
+        proxy_read_timeout 30s;
+        proxy_cache off;
+    }
+
+    # ── Next.js 静态产物:内容寻址文件名,immutable 长缓存 ────────────
+    location /_next/static/ {
+        proxy_pass http://allwin_web;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    # 品牌静态资源(frontend/public/brand/)
+    location /brand/ {
+        proxy_pass http://allwin_web;
+        add_header Cache-Control "public, max-age=86400" always;
+    }
+
+    # ── 其余全部 → Next.js ───────────────────────────────────────────
+    # 注意:前端的登录/会员/账户/admin/studio 页面路径(如 /login /member/*
+    # /account/* /admin/* /studio/*)同样必须在 Cloudflare Cache Rules 里 BYPASS
+    # ——它们是携带会话 Cookie 的 SSR 页面,不得进入共享缓存。
+    location / {
+        proxy_pass http://allwin_web;
+        proxy_read_timeout 30s;
+    }
+}

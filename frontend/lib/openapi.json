@@ -1,0 +1,3488 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "allwin API",
+  "version": "1.0.0"
+ },
+ "paths": {
+  "/api/v1/auth/wechat/oa/start": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Wechat Oa Start",
+    "description": "用户点击登录后进入(前端不得在页面加载时自动跳转到这里)。",
+    "operationId": "wechat_oa_start_api_v1_auth_wechat_oa_start_get",
+    "parameters": [
+     {
+      "name": "next",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "/",
+       "title": "Next"
+      }
+     },
+     {
+      "name": "device",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Device"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/wechat/oa/callback": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Wechat Oa Callback",
+    "operationId": "wechat_oa_callback_api_v1_auth_wechat_oa_callback_get",
+    "parameters": [
+     {
+      "name": "code",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Code"
+      }
+     },
+     {
+      "name": "state",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "State"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/wechat/device": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Create Device Login",
+    "operationId": "create_device_login_api_v1_auth_wechat_device_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/wechat/device/{request_id}/claim": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Claim Device Login",
+    "operationId": "claim_device_login_api_v1_auth_wechat_device__request_id__claim_post",
+    "parameters": [
+     {
+      "name": "request_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Request Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceClaimBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/password/login": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Password Login",
+    "operationId": "password_login_api_v1_auth_password_login_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PasswordLoginBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/logout": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Logout",
+    "operationId": "logout_api_v1_auth_logout_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/me": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Me",
+    "operationId": "me_api_v1_me_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/leagues": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "List Leagues",
+    "operationId": "list_leagues_api_v1_leagues_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/LeagueInfo"
+         },
+         "type": "array",
+         "title": "Response List Leagues Api V1 Leagues Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/leagues/{league_id}/standings": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "League Standings",
+    "operationId": "league_standings_api_v1_leagues__league_id__standings_get",
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/leagues/{league_id}/fixtures": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "League Fixtures",
+    "operationId": "league_fixtures_api_v1_leagues__league_id__fixtures_get",
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(upcoming|finished)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 400,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MatchListResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/matches": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "List Matches",
+    "description": "比赛列表:只返回请求者有权限的联赛(免费=英超)。",
+    "operationId": "list_matches_api_v1_matches_get",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date"
+      }
+     },
+     {
+      "name": "league_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(upcoming|finished)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 200,
+       "minimum": 1,
+       "default": 50,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MatchListResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/matches/{match_id}": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Detail",
+    "operationId": "match_detail_api_v1_matches__match_id__get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MatchDetailResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/matches/{match_id}/prediction": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Prediction",
+    "description": "免费/匿名:只有最高一项概率(受限字段物理不存在);Pro/Premium:完整 WDL。\n\n响应随 entitlement 变化 → 永远 private, no-store,禁止共享缓存。",
+    "operationId": "match_prediction_api_v1_matches__match_id__prediction_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PredictionResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/matches/{match_id}/analysis": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Analysis",
+    "description": "公开版 analysis_bundle:同一 bundle 按 entitlement 投影(与 Studio 共用生成逻辑)。\n\n- prediction_member / prob_bar 图表:仅 prediction:full_wdl;\n- odds_timeline:仅 odds:history_full;\n- cooccurring_events 明细:仅 report:deep(否则只给计数)。\n随 entitlement 变化 → private, no-store。",
+    "operationId": "match_analysis_api_v1_matches__match_id__analysis_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/matches/{match_id}/odds": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Odds",
+    "description": "free/pro:延迟摘要(每公司每市场最新一条,观察时间 ≥1 小时前);\npremium(odds:history_full):完整快照时间线。",
+    "operationId": "match_odds_api_v1_matches__match_id__odds_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/matches/{match_id}/cooccurrence": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Cooccurrence",
+    "description": "同期事件(时间共现,不声称因果)。匿名给计数,report:deep 给明细。",
+    "operationId": "match_cooccurrence_api_v1_matches__match_id__cooccurrence_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/track-record": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Track Record",
+    "description": "匿名公开:official + locked + pre-kickoff 全量样本(含撤回,透明),不挑选。",
+    "operationId": "track_record_api_v1_track_record_get",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 200,
+       "minimum": 1,
+       "default": 50,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TrackRecordResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/model/metrics": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Model Metrics",
+    "description": "模型版本与评估口径。研发期指标来自 walk-forward 回测;正式战绩指标只来自\nofficial 样本的离线评估。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。",
+    "operationId": "model_metrics_api_v1_model_metrics_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/products": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "List Products",
+    "description": "定价页数据源:plans + products 全部来自 DB,不在前端组件写死。",
+    "operationId": "list_products_api_v1_products_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/redeem": {
+   "post": {
+    "tags": [
+     "member"
+    ],
+    "summary": "Redeem",
+    "operationId": "redeem_api_v1_redeem_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RedeemBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/favorites": {
+   "get": {
+    "tags": [
+     "member"
+    ],
+    "summary": "List Favorites",
+    "operationId": "list_favorites_api_v1_favorites_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "member"
+    ],
+    "summary": "Add Favorite",
+    "operationId": "add_favorite_api_v1_favorites_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FavoriteBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/favorites/{match_id}": {
+   "delete": {
+    "tags": [
+     "member"
+    ],
+    "summary": "Remove Favorite",
+    "operationId": "remove_favorite_api_v1_favorites__match_id__delete",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/account": {
+   "get": {
+    "tags": [
+     "member"
+    ],
+    "summary": "Account",
+    "operationId": "account_api_v1_account_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/account/sessions/revoke": {
+   "post": {
+    "tags": [
+     "member"
+    ],
+    "summary": "Revoke Other Session",
+    "operationId": "revoke_other_session_api_v1_account_sessions_revoke_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RevokeSessionBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/users": {
+   "get": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "List Users",
+    "operationId": "list_users_api_v1_admin_users_get",
+    "parameters": [
+     {
+      "name": "query",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Query"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 50,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/users/{user_id}/grant": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Grant User Subscription",
+    "operationId": "grant_user_subscription_api_v1_admin_users__user_id__grant_post",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GrantBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/subscriptions/{subscription_id}/revoke": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Revoke User Subscription",
+    "operationId": "revoke_user_subscription_api_v1_admin_subscriptions__subscription_id__revoke_post",
+    "parameters": [
+     {
+      "name": "subscription_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Subscription Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/redeem-codes": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Create Codes",
+    "description": "明文兑换码只在本响应展示一次,之后只有 hash。",
+    "operationId": "create_codes_api_v1_admin_redeem_codes_post",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CreateCodesBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "List Codes",
+    "operationId": "list_codes_api_v1_admin_redeem_codes_get",
+    "parameters": [
+     {
+      "name": "batch_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Batch Id"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/predictions": {
+   "get": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "List Predictions",
+    "operationId": "list_predictions_api_v1_admin_predictions_get",
+    "parameters": [
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Status"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/predictions/{snapshot_id}/publish": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Publish Prediction",
+    "operationId": "publish_prediction_api_v1_admin_predictions__snapshot_id__publish_post",
+    "parameters": [
+     {
+      "name": "snapshot_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Snapshot Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/predictions/{snapshot_id}/lock": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Lock Prediction",
+    "operationId": "lock_prediction_api_v1_admin_predictions__snapshot_id__lock_post",
+    "parameters": [
+     {
+      "name": "snapshot_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Snapshot Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/predictions/{snapshot_id}/retract": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Retract Prediction",
+    "operationId": "retract_prediction_api_v1_admin_predictions__snapshot_id__retract_post",
+    "parameters": [
+     {
+      "name": "snapshot_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Snapshot Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RetractBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/predictions/publish-upcoming": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Publish Upcoming",
+    "description": "批量:把所有开球前的 draft 发布(可选同时锁定)。逐条独立事务,失败不拖累其余。",
+    "operationId": "publish_upcoming_api_v1_admin_predictions_publish_upcoming_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PublishUpcomingBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/audit-logs": {
+   "get": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "List Audit Logs",
+    "operationId": "list_audit_logs_api_v1_admin_audit_logs_get",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/xref": {
+   "get": {
+    "tags": [
+     "admin-xref"
+    ],
+    "summary": "List Xrefs",
+    "description": "映射列表。默认返回待处理(needs_review + auto_ok);?status= 精确过滤。",
+    "operationId": "list_xrefs_api_v1_admin_xref_get",
+    "parameters": [
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Status"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/xref/{xref_id}/confirm": {
+   "post": {
+    "tags": [
+     "admin-xref"
+    ],
+    "summary": "Confirm Xref",
+    "operationId": "confirm_xref_api_v1_admin_xref__xref_id__confirm_post",
+    "parameters": [
+     {
+      "name": "xref_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Xref Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/admin/xref/{xref_id}/reject": {
+   "post": {
+    "tags": [
+     "admin-xref"
+    ],
+    "summary": "Reject Xref",
+    "operationId": "reject_xref_api_v1_admin_xref__xref_id__reject_post",
+    "parameters": [
+     {
+      "name": "xref_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Xref Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/studio/matches/{match_id}/bundle": {
+   "get": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Match Bundle",
+    "operationId": "match_bundle_api_v1_studio_matches__match_id__bundle_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/studio/drafts": {
+   "get": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "List Drafts",
+    "operationId": "list_drafts_api_v1_studio_drafts_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Create Draft",
+    "description": "冻结当前 bundle 为草稿(选择数据快照 = 以此刻数据为准)。",
+    "operationId": "create_draft_api_v1_studio_drafts_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CreateDraftBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/studio/drafts/{draft_id}": {
+   "get": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Get Draft",
+    "operationId": "get_draft_api_v1_studio_drafts__draft_id__get",
+    "parameters": [
+     {
+      "name": "draft_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Draft Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Update Draft",
+    "operationId": "update_draft_api_v1_studio_drafts__draft_id__post",
+    "parameters": [
+     {
+      "name": "draft_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Draft Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UpdateDraftBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/studio/drafts/{draft_id}/status": {
+   "post": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Set Draft Status",
+    "operationId": "set_draft_status_api_v1_studio_drafts__draft_id__status_post",
+    "parameters": [
+     {
+      "name": "draft_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Draft Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DraftStatusBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/studio/drafts/{draft_id}/export": {
+   "post": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Export Draft",
+    "operationId": "export_draft_api_v1_studio_drafts__draft_id__export_post",
+    "parameters": [
+     {
+      "name": "draft_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Draft Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ExportBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/studio/exports/{job_id}/download": {
+   "get": {
+    "tags": [
+     "studio"
+    ],
+    "summary": "Download Export",
+    "operationId": "download_export_api_v1_studio_exports__job_id__download_get",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/analytics/events": {
+   "post": {
+    "tags": [
+     "analytics"
+    ],
+    "summary": "Record Event",
+    "operationId": "record_event_api_v1_analytics_events_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AnalyticsEventBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/league/{league_id}/overview": {
+   "get": {
+    "tags": [
+     "legacy-deprecated"
+    ],
+    "summary": "League Overview",
+    "operationId": "league_overview_api_league__league_id__overview_get",
+    "deprecated": true,
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/league/{league_id}/betting": {
+   "get": {
+    "tags": [
+     "legacy-deprecated"
+    ],
+    "summary": "League Betting",
+    "operationId": "league_betting_api_league__league_id__betting_get",
+    "deprecated": true,
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/league/{league_id}/matches": {
+   "get": {
+    "tags": [
+     "legacy-deprecated"
+    ],
+    "summary": "League Matches",
+    "operationId": "league_matches_api_league__league_id__matches_get",
+    "deprecated": true,
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/league/{league_id}/wdl-predictions": {
+   "get": {
+    "tags": [
+     "legacy-deprecated"
+    ],
+    "summary": "League Wdl Predictions",
+    "operationId": "league_wdl_predictions_api_league__league_id__wdl_predictions_get",
+    "deprecated": true,
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/healthz": {
+   "get": {
+    "summary": "Healthz",
+    "operationId": "healthz_healthz_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/readyz": {
+   "get": {
+    "summary": "Readyz",
+    "description": "三库可读 + migration 无 pending 才 ready。",
+    "operationId": "readyz_readyz_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "AnalyticsEventBody": {
+    "properties": {
+     "event": {
+      "type": "string",
+      "title": "Event"
+     },
+     "anon_id": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 64
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Anon Id"
+     },
+     "path": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 300
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Path"
+     },
+     "referrer": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 300
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Referrer"
+     },
+     "meta": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Meta"
+     }
+    },
+    "type": "object",
+    "required": [
+     "event"
+    ],
+    "title": "AnalyticsEventBody"
+   },
+   "CreateCodesBody": {
+    "properties": {
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "duration_days": {
+      "type": "integer",
+      "maximum": 3650.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Duration Days"
+     },
+     "count": {
+      "type": "integer",
+      "maximum": 500.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Count"
+     },
+     "expires_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expires At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "plan_id",
+     "duration_days",
+     "count"
+    ],
+    "title": "CreateCodesBody"
+   },
+   "CreateDraftBody": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id"
+    ],
+    "title": "CreateDraftBody"
+   },
+   "DeviceClaimBody": {
+    "properties": {
+     "secret": {
+      "type": "string",
+      "title": "Secret"
+     }
+    },
+    "type": "object",
+    "required": [
+     "secret"
+    ],
+    "title": "DeviceClaimBody"
+   },
+   "DraftStatusBody": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "pattern": "^(draft|reviewed|published)$",
+      "title": "Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status"
+    ],
+    "title": "DraftStatusBody"
+   },
+   "ExportBody": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind"
+    ],
+    "title": "ExportBody"
+   },
+   "FavoriteBody": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id"
+    ],
+    "title": "FavoriteBody"
+   },
+   "GrantBody": {
+    "properties": {
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "duration_days": {
+      "type": "integer",
+      "maximum": 3650.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Duration Days"
+     },
+     "notes": {
+      "type": "string",
+      "title": "Notes",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "required": [
+     "plan_id",
+     "duration_days"
+    ],
+    "title": "GrantBody"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "LeagueInfo": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "code": {
+      "type": "string",
+      "title": "Code"
+     },
+     "name_zh": {
+      "type": "string",
+      "title": "Name Zh"
+     },
+     "name_en": {
+      "type": "string",
+      "title": "Name En"
+     },
+     "entitlement": {
+      "type": "string",
+      "title": "Entitlement"
+     },
+     "accessible": {
+      "type": "boolean",
+      "title": "Accessible"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "code",
+     "name_zh",
+     "name_en",
+     "entitlement",
+     "accessible"
+    ],
+    "title": "LeagueInfo"
+   },
+   "MatchDetailResponse": {
+    "properties": {
+     "match": {
+      "$ref": "#/components/schemas/MatchSummary"
+     },
+     "data_updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Updated At"
+     },
+     "home_form": {
+      "items": {
+       "$ref": "#/components/schemas/TeamFormEntry"
+      },
+      "type": "array",
+      "title": "Home Form",
+      "default": []
+     },
+     "away_form": {
+      "items": {
+       "$ref": "#/components/schemas/TeamFormEntry"
+      },
+      "type": "array",
+      "title": "Away Form",
+      "default": []
+     }
+    },
+    "type": "object",
+    "required": [
+     "match"
+    ],
+    "title": "MatchDetailResponse"
+   },
+   "MatchListResponse": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "limit": {
+      "type": "integer",
+      "title": "Limit"
+     },
+     "offset": {
+      "type": "integer",
+      "title": "Offset"
+     },
+     "matches": {
+      "items": {
+       "$ref": "#/components/schemas/MatchSummary"
+      },
+      "type": "array",
+      "title": "Matches"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "limit",
+     "offset",
+     "matches"
+    ],
+    "title": "MatchListResponse"
+   },
+   "MatchSummary": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "type": "string",
+      "title": "Season"
+     },
+     "date_utc": {
+      "type": "string",
+      "title": "Date Utc"
+     },
+     "round": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Round"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "home": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "away": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "home_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Score"
+     },
+     "away_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Score"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "league_id",
+     "season",
+     "date_utc",
+     "status",
+     "home",
+     "away"
+    ],
+    "title": "MatchSummary"
+   },
+   "MeDTO": {
+    "properties": {
+     "authenticated": {
+      "type": "boolean",
+      "title": "Authenticated"
+     },
+     "user": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MeUser"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "plan": {
+      "type": "string",
+      "title": "Plan"
+     },
+     "entitlements": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Entitlements"
+     },
+     "session_expires_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Session Expires At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "authenticated",
+     "plan",
+     "entitlements"
+    ],
+    "title": "MeDTO"
+   },
+   "MeUser": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "display_name": {
+      "type": "string",
+      "title": "Display Name"
+     },
+     "role": {
+      "type": "string",
+      "title": "Role"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "display_name",
+     "role"
+    ],
+    "title": "MeUser"
+   },
+   "PasswordLoginBody": {
+    "properties": {
+     "username": {
+      "type": "string",
+      "title": "Username"
+     },
+     "password": {
+      "type": "string",
+      "title": "Password"
+     }
+    },
+    "type": "object",
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "PasswordLoginBody"
+   },
+   "PredictionFreeDTO": {
+    "properties": {
+     "tier": {
+      "type": "string",
+      "const": "free",
+      "title": "Tier",
+      "default": "free"
+     },
+     "top_outcome": {
+      "type": "string",
+      "enum": [
+       "home",
+       "draw",
+       "away"
+      ],
+      "title": "Top Outcome"
+     },
+     "top_probability": {
+      "type": "number",
+      "title": "Top Probability"
+     },
+     "meta": {
+      "$ref": "#/components/schemas/PredictionMeta"
+     }
+    },
+    "type": "object",
+    "required": [
+     "top_outcome",
+     "top_probability",
+     "meta"
+    ],
+    "title": "PredictionFreeDTO",
+    "description": "匿名/Free:只有最高一项。禁止出现另外两项概率的任何形式。"
+   },
+   "PredictionFullDTO": {
+    "properties": {
+     "tier": {
+      "type": "string",
+      "const": "full",
+      "title": "Tier",
+      "default": "full"
+     },
+     "top_outcome": {
+      "type": "string",
+      "enum": [
+       "home",
+       "draw",
+       "away"
+      ],
+      "title": "Top Outcome"
+     },
+     "home_probability": {
+      "type": "number",
+      "title": "Home Probability"
+     },
+     "draw_probability": {
+      "type": "number",
+      "title": "Draw Probability"
+     },
+     "away_probability": {
+      "type": "number",
+      "title": "Away Probability"
+     },
+     "expected_home_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Home Goals"
+     },
+     "expected_away_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Away Goals"
+     },
+     "prediction_hash": {
+      "type": "string",
+      "title": "Prediction Hash"
+     },
+     "meta": {
+      "$ref": "#/components/schemas/PredictionMeta"
+     }
+    },
+    "type": "object",
+    "required": [
+     "top_outcome",
+     "home_probability",
+     "draw_probability",
+     "away_probability",
+     "prediction_hash",
+     "meta"
+    ],
+    "title": "PredictionFullDTO",
+    "description": "Pro/Premium:完整 WDL。"
+   },
+   "PredictionMeta": {
+    "properties": {
+     "model_version_id": {
+      "type": "string",
+      "title": "Model Version Id"
+     },
+     "generated_at": {
+      "type": "string",
+      "title": "Generated At"
+     },
+     "published_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Published At"
+     },
+     "locked_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Locked At"
+     },
+     "input_cutoff_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Input Cutoff At"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "published",
+       "locked",
+       "retracted"
+      ],
+      "title": "Status"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     }
+    },
+    "type": "object",
+    "required": [
+     "model_version_id",
+     "generated_at",
+     "status"
+    ],
+    "title": "PredictionMeta"
+   },
+   "PredictionResponse": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "available": {
+      "type": "boolean",
+      "title": "Available"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "prediction": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PredictionFullDTO"
+       },
+       {
+        "$ref": "#/components/schemas/PredictionFreeDTO"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prediction"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "available"
+    ],
+    "title": "PredictionResponse"
+   },
+   "PublishUpcomingBody": {
+    "properties": {
+     "lock": {
+      "type": "boolean",
+      "title": "Lock",
+      "default": true
+     }
+    },
+    "type": "object",
+    "title": "PublishUpcomingBody"
+   },
+   "RedeemBody": {
+    "properties": {
+     "code": {
+      "type": "string",
+      "maxLength": 32,
+      "minLength": 6,
+      "title": "Code"
+     }
+    },
+    "type": "object",
+    "required": [
+     "code"
+    ],
+    "title": "RedeemBody"
+   },
+   "RetractBody": {
+    "properties": {
+     "reason": {
+      "type": "string",
+      "maxLength": 500,
+      "minLength": 2,
+      "title": "Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "reason"
+    ],
+    "title": "RetractBody"
+   },
+   "RevokeSessionBody": {
+    "properties": {
+     "session_id": {
+      "type": "string",
+      "title": "Session Id"
+     }
+    },
+    "type": "object",
+    "required": [
+     "session_id"
+    ],
+    "title": "RevokeSessionBody"
+   },
+   "TeamFormEntry": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "date_utc": {
+      "type": "string",
+      "title": "Date Utc"
+     },
+     "opponent": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "venue": {
+      "type": "string",
+      "enum": [
+       "home",
+       "away"
+      ],
+      "title": "Venue"
+     },
+     "goals_for": {
+      "type": "integer",
+      "title": "Goals For"
+     },
+     "goals_against": {
+      "type": "integer",
+      "title": "Goals Against"
+     },
+     "result": {
+      "type": "string",
+      "enum": [
+       "W",
+       "D",
+       "L"
+      ],
+      "title": "Result"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "date_utc",
+     "opponent",
+     "venue",
+     "goals_for",
+     "goals_against",
+     "result"
+    ],
+    "title": "TeamFormEntry"
+   },
+   "TeamRef": {
+    "properties": {
+     "team_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "name_en": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name En"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "title": "TeamRef"
+   },
+   "TrackRecordMetrics": {
+    "properties": {
+     "sample_size": {
+      "type": "integer",
+      "title": "Sample Size"
+     },
+     "accuracy": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accuracy"
+     },
+     "brier": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Brier"
+     },
+     "log_loss": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Log Loss"
+     },
+     "rps": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rps"
+     },
+     "evaluated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Evaluated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "sample_size"
+    ],
+    "title": "TrackRecordMetrics"
+   },
+   "TrackRecordResponse": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "retracted_count": {
+      "type": "integer",
+      "title": "Retracted Count"
+     },
+     "limit": {
+      "type": "integer",
+      "title": "Limit"
+     },
+     "offset": {
+      "type": "integer",
+      "title": "Offset"
+     },
+     "metrics": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TrackRecordMetrics"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "samples": {
+      "items": {
+       "$ref": "#/components/schemas/TrackRecordSample"
+      },
+      "type": "array",
+      "title": "Samples"
+     },
+     "empty_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Empty Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "retracted_count",
+     "limit",
+     "offset",
+     "samples"
+    ],
+    "title": "TrackRecordResponse"
+   },
+   "TrackRecordSample": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "kickoff_at_utc": {
+      "type": "string",
+      "title": "Kickoff At Utc"
+     },
+     "home": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "away": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "home_probability": {
+      "type": "number",
+      "title": "Home Probability"
+     },
+     "draw_probability": {
+      "type": "number",
+      "title": "Draw Probability"
+     },
+     "away_probability": {
+      "type": "number",
+      "title": "Away Probability"
+     },
+     "predicted_outcome": {
+      "type": "string",
+      "enum": [
+       "home",
+       "draw",
+       "away"
+      ],
+      "title": "Predicted Outcome"
+     },
+     "actual_outcome": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "home",
+         "draw",
+         "away"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actual Outcome"
+     },
+     "home_goals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Goals"
+     },
+     "away_goals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Goals"
+     },
+     "hit": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hit"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "model_version_id": {
+      "type": "string",
+      "title": "Model Version Id"
+     },
+     "published_at": {
+      "type": "string",
+      "title": "Published At"
+     },
+     "locked_at": {
+      "type": "string",
+      "title": "Locked At"
+     },
+     "prediction_hash": {
+      "type": "string",
+      "title": "Prediction Hash"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "kickoff_at_utc",
+     "home",
+     "away",
+     "home_probability",
+     "draw_probability",
+     "away_probability",
+     "predicted_outcome",
+     "status",
+     "model_version_id",
+     "published_at",
+     "locked_at",
+     "prediction_hash"
+    ],
+    "title": "TrackRecordSample"
+   },
+   "UpdateDraftBody": {
+    "properties": {
+     "title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Title"
+     },
+     "overrides": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Overrides"
+     }
+    },
+    "type": "object",
+    "title": "UpdateDraftBody"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   }
+  }
+ }
+}

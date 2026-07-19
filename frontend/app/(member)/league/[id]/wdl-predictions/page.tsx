@@ -152,15 +152,14 @@ export default async function WdlPredictionsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ season?: string; membership?: string }>;
+  searchParams: Promise<{ season?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const simulateMembership = sp.membership === "paid" ? "paid" : undefined;
 
   let data;
   try {
-    data = await fetchWdlPredictions(id, sp.season, simulateMembership);
+    data = await fetchWdlPredictions(id, sp.season);
   } catch (err) {
     return (
       <main className={styles.page}>
@@ -196,8 +195,8 @@ export default async function WdlPredictionsPage({
         <span className={styles.seasonChip}>{data.season}</span>
       </div>
       <p className={styles.membershipNote}>
-        当前展示:{simulateMembership === "paid" ? "已付费" : "未付费"}态
-        (会员体系接入前用 ?membership=paid 模拟切换)
+        此页为匿名公开视图(免费层)。完整三项概率需 Pro 会员并登录后查看,详见
+        「会员」页;本页展示不构成投注建议。
       </p>
 
       <TopBar season={data.season} nextRoundMatches={nextRoundMatches} />

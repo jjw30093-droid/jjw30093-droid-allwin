@@ -1,0 +1,12 @@
+# 每 15 分钟触发一次 allwin-worker.service(oneshot 任务链)
+[Unit]
+Description=Run allwin worker chain every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+# 服务器时区应为 UTC;错过的触发开机后补跑一次
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,82 @@
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row:hover {
+  background: var(--surface-2);
+}
+
+.home {
+  text-align: right;
+  color: var(--ink);
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.away {
+  text-align: left;
+  color: var(--ink);
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 96px;
+}
+
+.score {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--gold-300);
+}
+
+.date {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.status {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.tip {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-2);
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+}
+
+.tip b {
+  color: var(--gold-300);
+  font-weight: 700;
+}
+
+.tipNote {
+  color: var(--ink-3);
+  margin-left: 6px;
+}

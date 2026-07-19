@@ -145,12 +145,10 @@ export interface WdlPredictionsResponse {
 
 export async function fetchWdlPredictions(
   leagueId: string,
-  season?: string,
-  simulateMembership?: "paid"
+  season?: string
 ): Promise<WdlPredictionsResponse> {
   const url = new URL(`/api/league/${leagueId}/wdl-predictions`, API_BASE);
   if (season) url.searchParams.set("season", season);
-  if (simulateMembership) url.searchParams.set("simulate_membership", simulateMembership);
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {

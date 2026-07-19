@@ -1,0 +1,22 @@
+# allwin SQLite 每日备份(oneshot,由 allwin-backup.timer 触发)
+# 手动跑一次:systemctl start allwin-backup.service
+[Unit]
+Description=allwin sqlite backup (.backup + integrity_check + optional S3)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+# .env 里可配 S3_BACKUP_BUCKET / BACKUP_KEEP / AWS 凭证(或用 EC2 instance role)
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/bin/bash /opt/allwin/current/deploy/scripts/backup_sqlite.sh
+TimeoutStartSec=1800
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

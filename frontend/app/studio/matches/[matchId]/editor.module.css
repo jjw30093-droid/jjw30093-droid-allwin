@@ -1,0 +1,383 @@
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+/* ── 顶栏 ─────────────────────────────────────────────── */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.backLink {
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.backLink:hover {
+  color: var(--gold-300);
+}
+
+.pageTitle {
+  font-size: 19px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.statusPill {
+  border-radius: var(--r-pill);
+  padding: 3px 12px;
+  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+}
+
+.statusPill[data-status="reviewed"] {
+  color: var(--gold-300);
+  border-color: var(--gold-700);
+}
+
+.statusPill[data-status="published"] {
+  color: #2a1b06;
+  background: var(--gold-grad);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.topActions {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryBtn {
+  background: var(--gold-grad);
+  color: #2a1b06;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 20px;
+  cursor: pointer;
+}
+
+.secondaryBtn {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  padding: 7px 18px;
+  cursor: pointer;
+}
+
+.secondaryBtn:hover {
+  border-color: var(--gold-700);
+}
+
+.primaryBtn:disabled,
+.secondaryBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.metaLine {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: 14px;
+}
+
+.notice {
+  background: var(--surface);
+  border: 1px solid var(--gold-700);
+  border-radius: var(--r-control);
+  color: var(--gold-300);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+
+/* ── 布局 ─────────────────────────────────────────────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sectionTitle {
+  font-size: 14.5px;
+  font-weight: 900;
+  color: var(--gold-300);
+  margin: 0 0 10px;
+}
+
+/* ── 预览横滑 ─────────────────────────────────────────── */
+
+.previewCol {
+  min-width: 0;
+}
+
+.previewStrip {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.previewCard,
+.previewCardActive {
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.previewCardActive {
+  border-color: var(--gold-500);
+}
+
+.previewCard:focus-visible,
+.previewCardActive:focus-visible {
+  outline: 2px solid var(--gold-300);
+  outline-offset: 2px;
+}
+
+.previewLabel {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.previewCardActive .previewLabel {
+  color: var(--gold-300);
+  font-weight: 700;
+}
+
+.previewViewport {
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.previewInner {
+  transform-origin: top left;
+  width: 1080px;
+}
+
+/* ── 导出 ─────────────────────────────────────────────── */
+
+.exportCard {
+  margin-top: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 16px;
+}
+
+.exportRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.exportBtn {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.exportBtn:hover {
+  border-color: var(--gold-700);
+  color: var(--gold-300);
+}
+
+.exportBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.exportNote {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 4px 0 0;
+  line-height: 1.6;
+}
+
+/* PNG 导出用的离屏渲染台(html-to-image 需要节点在 DOM 中) */
+.exportStage {
+  position: fixed;
+  left: -12000px;
+  top: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ── 编辑面板 ─────────────────────────────────────────── */
+
+.editCol {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.editGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editGroupTitle {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.editHint {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--gold-700);
+  outline-offset: 1px;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.scriptRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scriptLabel {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.itemRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.smallBtn {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  color: var(--gold-300);
+  font-size: 12px;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.smallBtn:hover {
+  border-color: var(--gold-700);
+}
+
+.deleteBtn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  color: var(--ink-3);
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.deleteBtn:hover {
+  color: var(--loss);
+  border-color: var(--loss);
+}
+
+/* ── 加载 / 错误 ──────────────────────────────────────── */
+
+.skeletonRow {
+  display: flex;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.skeletonCard {
+  flex-shrink: 0;
+  width: 259px;
+  height: 461px;
+  border-radius: var(--r-control);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.skeletonNote {
+  color: var(--ink-3);
+  text-align: center;
+  margin-top: 16px;
+}
+
+.errorBox {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 32px;
+  text-align: center;
+}
+
+.errorTitle {
+  color: var(--loss);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.errorText {
+  color: var(--ink-2);
+  word-break: break-all;
+  margin: 0 0 16px;
+}

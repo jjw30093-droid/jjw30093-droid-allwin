@@ -1,0 +1,231 @@
+.page {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.countChip {
+  font-size: 13px;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+}
+
+.countChip .num {
+  color: var(--gold-300);
+  font-weight: 600;
+}
+
+/* ── 筛选 ── */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chipLabel {
+  font-size: 12px;
+  color: var(--ink-3);
+  min-width: 32px;
+}
+
+.chip,
+.chipActive {
+  font-size: 13px;
+  border-radius: var(--r-pill);
+  padding: 5px 14px;
+  text-decoration: none;
+  border: 1px solid var(--border);
+}
+
+.chip {
+  color: var(--ink-2);
+  background: var(--surface);
+}
+
+.chip:hover {
+  background: var(--surface-2);
+}
+
+.chipActive {
+  color: #2a1b06;
+  background: var(--gold-grad);
+  font-weight: 700;
+  border-color: transparent;
+}
+
+.proBadge {
+  margin-left: 6px;
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--gold-300);
+  border: 1px solid var(--gold-700);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+  vertical-align: 1px;
+}
+
+.chipActive .proBadge {
+  color: #2a1b06;
+  border-color: #2a1b06;
+}
+
+.dateForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dateInput {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  font-size: 13px;
+  padding: 5px 10px;
+  color-scheme: dark;
+}
+
+.filterBtn {
+  font-size: 13px;
+  color: var(--gold-300);
+  background: none;
+  border: 1px solid var(--gold-700);
+  border-radius: var(--r-pill);
+  padding: 5px 16px;
+  cursor: pointer;
+}
+
+.filterBtn:hover {
+  background: var(--surface-2);
+}
+
+.clearLink {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* ── 列表 ── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.emptyBox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 32px;
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.emptyBox p {
+  margin: 0;
+}
+
+.emptySub {
+  margin-top: 10px !important;
+}
+
+.emptyLink {
+  color: var(--gold-300);
+  text-decoration: none;
+}
+
+/* ── 分页 ── */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.pagerLink {
+  font-size: 13.5px;
+  color: var(--gold-300);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 6px 16px;
+}
+
+.pagerLink:hover {
+  background: var(--surface-2);
+}
+
+.pagerDisabled {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  opacity: 0.5;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 6px 16px;
+}
+
+.pagerInfo {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.footNote {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ── 错误态 ── */
+
+.errorBox {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 32px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.errorTitle {
+  color: var(--loss);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.errorDetail {
+  font-size: 12px;
+  color: var(--ink-3);
+}

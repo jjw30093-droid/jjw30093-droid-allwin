@@ -1,0 +1,132 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 16px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.brandMark {
+  font-family: var(--font-cn);
+  font-weight: 900;
+  font-size: 20px;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brandSub {
+  font-family: var(--font-latin);
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nav {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.link,
+.active {
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--ink-2);
+  transition: color 0.15s, background 0.15s;
+}
+
+.link:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.active {
+  color: var(--gold-100);
+  background: var(--surface-2);
+  font-weight: 500;
+}
+
+.account {
+  flex-shrink: 0;
+}
+
+.loginBtn {
+  display: inline-block;
+  padding: 7px 18px;
+  border-radius: var(--r-pill);
+  background: var(--gold-grad);
+  color: #1a1206;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.accountLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+}
+
+.planBadge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border: 1px solid var(--border);
+}
+
+.planBadge[data-plan="pro"],
+.planBadge[data-plan="premium"] {
+  background: var(--gold-grad);
+  color: #1a1206;
+  border: none;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .inner {
+    gap: 10px;
+    padding: 0 10px;
+  }
+  .brandSub {
+    display: none;
+  }
+}

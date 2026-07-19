@@ -1,0 +1,12 @@
+# 每日备份(UTC 19:00 ≈ 北京时间 03:00,英超比赛日结束后)
+[Unit]
+Description=Daily allwin sqlite backup
+
+[Timer]
+OnCalendar=*-*-* 19:00:00 UTC
+# 错过的触发(停机窗口)开机后补跑一次
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

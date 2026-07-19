@@ -1,0 +1,297 @@
+.page {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.subtitle {
+  margin: 0 0 20px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  max-width: 640px;
+}
+
+.noticeCard {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 14px 18px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  margin-bottom: 24px;
+}
+
+.noticeCard strong {
+  color: var(--gold-300);
+  font-weight: 500;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--gold-300);
+  margin: 32px 0 14px;
+}
+
+/* ── 套餐卡 ── */
+
+.planGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .planGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.planCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.planName {
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--gold-300);
+  margin-bottom: 8px;
+}
+
+.planDesc {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.productList {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.productRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 10px 14px;
+}
+
+.productName {
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 13.5px;
+}
+
+.productPrice {
+  white-space: nowrap;
+}
+
+.priceNum {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--gold-300);
+}
+
+.productDuration {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.freeNote {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 10px 14px;
+}
+
+.entList {
+  list-style: none;
+  margin: auto 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.entList li::before {
+  content: "✓";
+  color: var(--gold-500);
+  margin-right: 8px;
+}
+
+/* ── 对比表 ── */
+
+.tableCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+}
+
+.table thead th {
+  background: var(--bg-2);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-align: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.thLeft {
+  text-align: left !important;
+}
+
+.table tbody td {
+  height: 46px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.entName {
+  text-align: left !important;
+  color: var(--ink);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.checkCell {
+  font-family: var(--font-latin), system-ui, sans-serif;
+}
+
+.checkYes {
+  color: var(--gold-300);
+  font-weight: 700;
+}
+
+.checkNo {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+
+/* ── 空态 / 错误 ── */
+
+.emptyCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 48px 32px;
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.emptyText {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.errorBox {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 32px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.errorTitle {
+  color: var(--loss);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.errorDetail {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ── 骨架 ── */
+
+.skeletonCard {
+  min-height: 220px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonTable {
+  height: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  margin-top: 24px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonCard,
+  .skeletonTable {
+    animation: none;
+  }
+}

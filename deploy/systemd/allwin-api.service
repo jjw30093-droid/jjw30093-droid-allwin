@@ -1,0 +1,25 @@
+# allwin 后端 API(FastAPI/uvicorn,仅监听 127.0.0.1:8000,由 Nginx 反代)
+# 安装:cp 到 /etc/systemd/system/ → systemctl daemon-reload → systemctl enable --now allwin-api
+[Unit]
+Description=allwin API (uvicorn backend.api.app:app on 127.0.0.1:8000)
+After=network.target
+
+[Service]
+Type=simple
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+# 共享 .env:APP_ENV=production、AUTH/微信凭证、THORDATA_PROXY、
+# ALLWIN_DATA_DIR=/opt/allwin/shared/data(数据库随 release 切换保持不动)
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/uvicorn backend.api.app:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# SQLite 数据目录必须可写(WAL/锁文件)
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

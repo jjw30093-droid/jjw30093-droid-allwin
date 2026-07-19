@@ -1,0 +1,328 @@
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+/* ── 头部 ── */
+
+.header {
+  margin-bottom: 28px;
+}
+
+.metaRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.chip,
+.chipStatus {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+.chipStatus {
+  color: var(--gold-300);
+  border-color: var(--gold-700);
+}
+
+.teamsRow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.teamName {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.scoreBox {
+  min-width: 90px;
+}
+
+.score {
+  font-size: 30px;
+  color: var(--gold-hi);
+  font-weight: 700;
+}
+
+.vs {
+  font-size: 16px;
+  color: var(--ink-3);
+  letter-spacing: 0.2em;
+}
+
+.dateLine {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* ── 分区 ── */
+
+.section {
+  margin-bottom: 32px;
+}
+
+.sectionTitle {
+  font-size: 17px;
+  font-weight: 900;
+  margin: 0 0 14px;
+  padding-left: 10px;
+  border-left: 3px solid var(--gold-500);
+}
+
+.emptyText {
+  color: var(--ink-3);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  margin: 0;
+}
+
+.errorBox {
+  margin: 48px auto;
+  max-width: 560px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+}
+
+/* ── 证据 ── */
+
+.evidenceGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.evidenceCol {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.evidenceTitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tonePro {
+  color: var(--win);
+}
+
+.toneCon {
+  color: var(--loss);
+}
+
+.toneWarn {
+  color: var(--gold-300);
+}
+
+.evidenceList {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+/* ── 近期表现 ── */
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.formCol {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.formTitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.formList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+  min-width: 0;
+}
+
+.formBadge {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  color: #fff;
+}
+
+.badgeW {
+  background: var(--win);
+}
+
+.badgeD {
+  background: var(--draw);
+}
+
+.badgeL {
+  background: var(--loss);
+}
+
+.formScore {
+  flex: none;
+  min-width: 38px;
+}
+
+.formOpp {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formDate {
+  flex: none;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+/* ── 图表 ── */
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.chartCard {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 16px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.chartTitle {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.chartSummary {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+
+/* ── 模型与登记 ── */
+
+.metaList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+}
+
+.metaList > div {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.metaList dt {
+  flex: none;
+  width: 76px;
+  color: var(--ink-3);
+}
+
+.metaList dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.noteList {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.7;
+}
+
+.disclaimer {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ── 响应式(手机第一优先:窄屏减列) ── */
+
+@media (max-width: 720px) {
+  .evidenceGrid,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .teamName {
+    font-size: 18px;
+  }
+
+  .score {
+    font-size: 24px;
+  }
+}

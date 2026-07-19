@@ -1,0 +1,118 @@
+.stateBox {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  padding: 18px 0;
+}
+
+.stateBox b {
+  color: var(--gold-300);
+}
+
+.retryBtn {
+  margin-left: 10px;
+  font-size: 12.5px;
+  color: var(--gold-300);
+  background: none;
+  border: 1px solid var(--gold-700);
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.retryBtn:hover {
+  background: var(--surface-2);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.skelLine {
+  height: 14px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skelLine:nth-child(2) {
+  width: 70%;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skelLine {
+    animation: none;
+  }
+}
+
+.lockNote {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.lockLink {
+  margin-left: 8px;
+  color: var(--gold-300);
+  text-decoration: none;
+}
+
+.countLine {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.countLine b {
+  color: var(--gold-300);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.itemLine {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+
+.itemTime {
+  color: var(--ink-3);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  word-break: break-all;
+}

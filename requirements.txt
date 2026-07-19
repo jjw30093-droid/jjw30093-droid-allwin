@@ -6,3 +6,9 @@ pandas
 numpy
 scipy
 scikit-learn
+httpx
+argon2-cffi
+dashscope
+
+# dev/test
+pytest

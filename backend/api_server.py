@@ -35,7 +35,10 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import DB_PATH
+try:
+    from backend.db import DB_PATH          # 包内运行(backend.api.app 装配)
+except ImportError:
+    from db import DB_PATH                  # 兼容旧脚本式运行(cwd=backend)
 
 app = FastAPI(title="allwin serving API")
 
@@ -57,12 +60,14 @@ def get_readonly_connection() -> sqlite3.Connection:
 
 
 def require_membership(request: Request) -> bool:
-    # TODO: 1.6 接入真实 entitlement 校验(FastAPI 侧读 subscription 状态)。
-    # 现在还没有真实登录/支付,用查询参数 ?simulate_membership=paid 模拟两态,
-    # 方便验证"服务端按这个返回值真的分支"这件事本身——真正接入 1.6 后只改
-    # 这个函数体(读真实 subscription 状态),每个付费 endpoint 的调用方式
-    # 不用跟着改。默认(不传参数)按未付费处理,不默认放行。
-    return request.query_params.get("simulate_membership") == "paid"
+    """真实 entitlement 校验:cookie 会话 → 有效订阅 → prediction:full_wdl。
+
+    生产绕过入口(?simulate_membership 等)已移除(CLAUDE.md §14.1)。
+    默认(匿名/无订阅)按未付费处理,不默认放行。
+    """
+    from backend.api.deps import auth_context_for
+
+    return auth_context_for(request).has("prediction:full_wdl")
 
 
 def _rows_to_dicts(rows) -> list:
@@ -214,7 +219,14 @@ def league_overview(league_id: int, season: Optional[str] = None):
 # ── 付费:GET /api/league/{league_id}/betting ─────────────────────────
 @app.get("/api/league/{league_id}/betting")
 def league_betting(request: Request, league_id: int, season: Optional[str] = None):
-    require_membership(request)
+    from backend.api.deps import auth_context_for
+
+    ctx = auth_context_for(request)
+    if not ctx.has("report:deep"):
+        raise HTTPException(
+            status_code=403 if ctx.authenticated else 401,
+            detail={"code": "membership_required", "entitlement": "report:deep"},
+        )
 
     conn = get_readonly_connection()
     try:
