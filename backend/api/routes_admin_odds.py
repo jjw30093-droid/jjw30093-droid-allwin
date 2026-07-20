@@ -14,8 +14,13 @@ from backend.db.util import utc_now_iso
 
 from .deps import NO_STORE, AuthContext, odds_ro, platform_rw, require_admin
 from .routes_admin import require_admin_csrf
+from .schemas import XrefListResponse, XrefReviewResultDTO, error_responses
 
-router = APIRouter(prefix="/api/v1/admin/xref", tags=["admin-xref"])
+router = APIRouter(
+    prefix="/api/v1/admin/xref",
+    tags=["admin-xref"],
+    responses=error_responses(401, 403, 404, 422),
+)
 
 
 def odds_rw():
@@ -31,7 +36,7 @@ def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = NO_STORE
 
 
-@router.get("")
+@router.get("", response_model=XrefListResponse)
 def list_xrefs(
     response: Response,
     status: str = "",
@@ -103,7 +108,7 @@ def _review_xref(
     return {"status": "ok", "xref_id": xref_id, "review_status": new_status}
 
 
-@router.post("/{xref_id}/confirm")
+@router.post("/{xref_id}/confirm", response_model=XrefReviewResultDTO)
 def confirm_xref(
     xref_id: int,
     response: Response,
@@ -115,7 +120,7 @@ def confirm_xref(
     return _review_xref(xref_id, "confirmed", 1, "xref.confirm", ctx, conn_odds, conn_platform)
 
 
-@router.post("/{xref_id}/reject")
+@router.post("/{xref_id}/reject", response_model=XrefReviewResultDTO)
 def reject_xref(
     xref_id: int,
     response: Response,

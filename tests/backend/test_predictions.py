@@ -32,6 +32,31 @@ def _past(days=1):
     return _iso(datetime.now(timezone.utc) - timedelta(days=days))
 
 
+ORIGIN = {"Origin": "http://localhost:3000"}
+
+
+def _login_admin(app, ip):
+    from fastapi.testclient import TestClient
+
+    from backend.cli.create_admin import create_admin
+
+    conn = connect_rw("platform")
+    try:
+        create_admin(conn, "boss", "admin-pass-123", reset=True)
+    finally:
+        conn.close()
+    admin = TestClient(app)
+    r = admin.post("/api/v1/auth/password/login",
+                   json={"username": "boss", "password": "admin-pass-123"},
+                   headers={"x-real-ip": ip})
+    assert r.status_code == 200
+    return admin
+
+
+def _csrf(client):
+    return {"X-CSRF-Token": client.cookies.get("allwin_csrf"), **ORIGIN}
+
+
 @pytest.fixture
 def platform(data_dir):
     conn = connect_rw("platform")
@@ -40,11 +65,19 @@ def platform(data_dir):
     conn.close()
 
 
-def _register(conn, match_id=1, kickoff=None, probs=(0.5, 0.3, 0.2), **kw):
+def _register(conn, match_id=1, kickoff=None, probs=(0.5, 0.3, 0.2),
+              kickoff_precision="exact", kickoff_source="test:fixture", **kw):
+    """默认构造一个"精确 + 有来源"的合法赛前快照(exact provenance)。
+
+    需要测试 date_only/unknown/缺来源等不合格情形时,显式传 kickoff_precision/
+    kickoff_source 覆盖。
+    """
     return register_snapshot(
         conn,
         match_id=match_id,
         kickoff_at_utc=kickoff or _future(),
+        kickoff_precision=kickoff_precision,
+        kickoff_source=kickoff_source,
         model_version_id="m-test",
         home_win=probs[0], draw=probs[1], away_win=probs[2],
         **kw,
@@ -98,12 +131,99 @@ class TestLifecycle:
         assert ei.value.reason == "bad_probabilities"
 
 
+class TestUtcNormalizationAtWrite:
+    """12. register_snapshot 对带偏移的 exact kickoff 在写入时规范化为 UTC 'Z',
+    不保留调用方原始的 +08:00/-05:00 等偏移格式。"""
+
+    def test_positive_offset_normalized_to_z(self, platform):
+        sid = _register(platform, kickoff="2099-06-01T22:00:00+08:00")
+        row = platform.execute(
+            "SELECT kickoff_at_utc FROM prediction_snapshots WHERE id=?", (sid,)
+        ).fetchone()
+        assert row["kickoff_at_utc"] == "2099-06-01T14:00:00Z"
+
+    def test_negative_offset_normalized_to_z(self, platform):
+        sid = _register(platform, kickoff="2099-06-01T09:00:00-05:00")
+        row = platform.execute(
+            "SELECT kickoff_at_utc FROM prediction_snapshots WHERE id=?", (sid,)
+        ).fetchone()
+        assert row["kickoff_at_utc"] == "2099-06-01T14:00:00Z"
+
+    def test_publish_and_lock_succeed_after_offset_normalization(self, platform):
+        """规范化后的记录本身仍能正常走完 publish/lock 流程(不因规范化引入回归)。"""
+        sid = _register(platform, kickoff=_future(days=2).replace("Z", "+00:00"))
+        publish_snapshot(platform, sid, actor=None)
+        lock_snapshot(platform, sid, actor=None)
+        row = platform.execute(
+            "SELECT status, kickoff_at_utc FROM prediction_snapshots WHERE id=?", (sid,)
+        ).fetchone()
+        assert row["status"] == "locked" and row["kickoff_at_utc"].endswith("Z")
+
+
+class TestMixedTimezoneJuliandayDefense:
+    """13/14:用户给出的具体反例——kickoff_at_utc 用 '-05:00' 偏移格式写入(代表
+    未经 register_snapshot 规范化的历史/外部写入路径),published_at 是 UTC 'Z'。
+    按时间语义,published(23:00Z)比 kickoff(20:00-05:00 = 次日 01:00Z)早 2 小时,
+    是合法的赛前发布;但裸文本比较会因为 '23' 在字典序上大于 '20' 而错误地判定
+    "published_at 不早于 kickoff_at_utc",导致这条本应合格的官方记录被 track
+    record/evaluation/manifest 悄悄漏掉。julianday() 比较必须给出正确结论。"""
+
+    KICKOFF = "2099-01-01T20:00:00-05:00"    # = 2099-01-02T01:00:00Z
+    PUBLISHED = "2099-01-01T23:00:00Z"        # 比 kickoff 早 2 小时
+
+    def test_text_comparison_would_be_wrong_precondition(self):
+        """先证明这不是伪造的边界情形:裸文本比较确实会给出错误结论。"""
+        assert not (self.PUBLISHED < self.KICKOFF)   # 文本比较误判"不早于"
+
+    def _insert_legacy_offset_official(self, platform, match_id):
+        from backend.db.util import new_uuid
+
+        sid = new_uuid()
+        platform.execute(
+            """INSERT INTO prediction_snapshots
+               (id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source,
+                model_version_id, generated_at, published_at, locked_at,
+                prediction_hash, home_win, draw, away_win, visibility, status,
+                is_official, created_at)
+               VALUES (?, ?, ?, 'exact', 'legacy:import', 'm-test', ?, ?, ?,
+                       'h', 0.5, 0.3, 0.2, 'public', 'locked', 1, ?)""",
+            (sid, match_id, self.KICKOFF, self.PUBLISHED, self.PUBLISHED,
+             self.PUBLISHED, self.PUBLISHED),
+        )
+        platform.commit()
+        return sid
+
+    def test_reaches_official_samples(self, platform):
+        self._insert_legacy_offset_official(platform, 501)
+        official = official_samples(platform)
+        assert 501 in {s["match_id"] for s in official["samples"]}
+        assert official["total"] == 1
+
+    def test_reaches_evaluation_samples_once_settled(self, platform):
+        self._insert_legacy_offset_official(platform, 502)
+        platform.execute(
+            "INSERT INTO prediction_outcomes (match_id, home_goals, away_goals, outcome, settled_at)"
+            " VALUES (502, 2, 0, 'home', ?)",
+            (self.PUBLISHED,),
+        )
+        platform.commit()
+        samples = evaluation_samples(platform)
+        assert len(samples) == 1
+        assert samples[0][1] == "home"
+
+    def test_reaches_daily_manifest(self, platform):
+        self._insert_legacy_offset_official(platform, 503)
+        manifest = build_daily_manifest(platform, "2099-01-01")
+        assert manifest["entries"] == 1
+
+
 def _seed_core_tables(conn):
     conn.execute(
         """CREATE TABLE IF NOT EXISTS dim_match (
             Match_ID INTEGER PRIMARY KEY, Season TEXT, League_ID INTEGER, Date TEXT,
             Home_Team_ID INTEGER, Away_Team_ID INTEGER, Home_Team_Name TEXT, Away_Team_Name TEXT,
-            home_score INTEGER, away_score INTEGER, status TEXT, Match_Round TEXT)"""
+            home_score INTEGER, away_score INTEGER, status TEXT, Match_Round TEXT,
+            kickoff_at_utc TEXT, kickoff_precision TEXT, kickoff_source TEXT)"""
     )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS gold_wdl_predictions (
@@ -124,25 +244,36 @@ class TestImportAdapter:
         # 2025/2026:比赛已完,gold 写入在赛后 → legacy_unverified
         core.execute("INSERT INTO dim_match (Match_ID, Season, League_ID, Date, status, home_score, away_score) VALUES (101,'2025/2026',47,'2026-05-01','Finish',2,1)")
         core.execute("INSERT INTO gold_wdl_predictions (match_id, league_id, season, lambda_home, lambda_away, p_home, p_draw, p_away, calibrated, updated_at) VALUES (101,47,'2025/2026',1.5,1.1,0.5,0.3,0.2,1,'2026-07-09 19:42:15')")
-        # 2026/2027:未开球 → draft
-        core.execute("INSERT INTO dim_match (Match_ID, Season, League_ID, Date, status) VALUES (201,'2026/2027',47,'2027-05-01','NotStarted')")
+        # 2026/2027:未开球、canonical 只有日期(无精确 kickoff)→ draft + date_only
+        core.execute("INSERT INTO dim_match (Match_ID, Season, League_ID, Date, status, kickoff_precision) VALUES (201,'2026/2027',47,'2027-05-01','NotStarted','date_only')")
         core.execute("INSERT INTO gold_wdl_predictions (match_id, league_id, season, lambda_home, lambda_away, p_home, p_draw, p_away, calibrated, updated_at, confidence) VALUES (201,47,'2026/2027',1.4,1.2,0.45,0.28,0.27,1,'2026-07-09 23:40:05','normal')")
+        # 2026/2027:canonical 有精确 kickoff(exact + 来源)→ draft + exact 透传
+        core.execute("INSERT INTO dim_match (Match_ID, Season, League_ID, Date, status, kickoff_at_utc, kickoff_precision, kickoff_source) VALUES (202,'2026/2027',47,'2027-05-02','NotStarted','2027-05-02T14:30:00Z','exact','fotmob:fixtures')")
+        core.execute("INSERT INTO gold_wdl_predictions (match_id, league_id, season, lambda_home, lambda_away, p_home, p_draw, p_away, calibrated, updated_at, confidence) VALUES (202,47,'2026/2027',1.3,1.3,0.4,0.3,0.3,1,'2026-07-09 23:40:05','normal')")
         core.commit()
 
         platform = connect_rw("platform")
         stats = import_gold(platform, core)
-        assert stats == {"total": 2, "skipped": 0, "legacy_unverified": 1, "draft": 1}
+        assert stats["total"] == 3 and stats["legacy_unverified"] == 1 and stats["draft"] == 2
 
         rows = {r["match_id"]: r for r in platform.execute("SELECT * FROM prediction_snapshots")}
-        legacy, draft = rows[101], rows[201]
+        legacy, draft_dateonly, draft_exact = rows[101], rows[201], rows[202]
         assert legacy["status"] == "legacy_unverified" and legacy["is_official"] == 0
         assert legacy["visibility"] == "internal"
         assert legacy["generated_at"] == "2026-07-09T19:42:15Z"
-        assert draft["status"] == "draft" and draft["kickoff_at_utc"] == "2027-05-01T00:00:00Z"
+        # 修复缺陷:日期-only 的比赛不再被拼成 '2027-05-01T00:00:00Z' 伪精确
+        assert draft_dateonly["status"] == "draft"
+        assert draft_dateonly["kickoff_at_utc"] is None
+        assert draft_dateonly["kickoff_precision"] == "date_only"
+        assert "gold_wdl_predictions" in draft_dateonly["kickoff_source"]
+        # 有精确 kickoff 的比赛按 exact 透传,来源承接 canonical 的真实来源(不覆盖)
+        assert draft_exact["kickoff_at_utc"] == "2027-05-02T14:30:00Z"
+        assert draft_exact["kickoff_precision"] == "exact"
+        assert draft_exact["kickoff_source"] == "fotmob:fixtures"
 
         # 幂等
         stats2 = import_gold(platform, core)
-        assert stats2["skipped"] == 2 and stats2["draft"] == 0
+        assert stats2["skipped"] == 3 and stats2["draft"] == 0
         core.close()
         platform.close()
 
@@ -150,6 +281,150 @@ class TestImportAdapter:
         with pytest.raises(PredictionError) as ei:
             _register(platform, status="legacy_unverified", is_official=1)
         assert ei.value.reason == "bad_status"
+
+
+class TestKickoffProvenanceIntegrity:
+    """P0-A §6.1:精确开球时间来源(provenance)门禁——不再靠字符串形状。"""
+
+    def _publishable(self, conn, sid):
+        publish_snapshot(conn, sid, actor=None)
+        lock_snapshot(conn, sid, actor=None)
+
+    def test_date_only_precision_cannot_publish(self, platform):
+        """1. 精度 date_only(即使 kickoff_at_utc 为空)不能 publish。"""
+        sid = _register(platform, match_id=1, kickoff="2099-08-21",
+                        kickoff_precision="date_only", kickoff_source="core:dim_match")
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason in ("imprecise_kickoff",)
+
+    def test_midnight_string_with_date_only_provenance_cannot_publish(self, platform):
+        """2. `<date>T00:00:00Z` 但 provenance=date_only 不能 publish(核心:形状像精确也不行)。"""
+        sid = _register(platform, match_id=2, kickoff="2099-08-21T00:00:00Z",
+                        kickoff_precision="date_only", kickoff_source="legacy:date_only")
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "imprecise_kickoff"
+
+    def test_midnight_string_with_unknown_provenance_cannot_lock(self, platform):
+        """3. 同样(unknown 精度)也不能 lock。"""
+        sid = _register(platform, match_id=3, kickoff="2099-08-21T00:00:00Z",
+                        kickoff_precision="unknown", kickoff_source=None)
+        # 直接置 published(未锁定,触发器不拦),再验证 lock 拒绝
+        platform.execute("UPDATE prediction_snapshots SET status='published', published_at=? WHERE id=?",
+                         (_past(days=0), sid))
+        with pytest.raises(PredictionError) as ei:
+            lock_snapshot(platform, sid, actor=None)
+        assert ei.value.reason in ("imprecise_kickoff", "no_kickoff_source")
+
+    def test_invalid_format_with_T_cannot_publish(self, platform):
+        """4. 含 'T' 但格式非法不能 publish。"""
+        sid = _register(platform, match_id=4, kickoff="2099-13-99T99:99:99Z",
+                        kickoff_precision="exact", kickoff_source="test")
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "imprecise_kickoff"
+
+    def test_naive_datetime_cannot_publish(self, platform):
+        """5. 无时区的 datetime(naive)不能 publish。"""
+        sid = _register(platform, match_id=5, kickoff="2099-08-21T14:00:00",
+                        kickoff_precision="exact", kickoff_source="test")
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "naive_kickoff"
+
+    def test_exact_precision_missing_source_cannot_publish(self, platform):
+        """6. precision=exact 但 kickoff_source 缺失不能 publish。"""
+        sid = _register(platform, match_id=6, kickoff=_future(days=1),
+                        kickoff_precision="exact", kickoff_source=None)
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "no_kickoff_source"
+
+    def test_real_exact_with_source_can_publish_and_lock(self, platform):
+        """7. 真实 exact UTC kickoff + 合法来源可以 publish 且 lock。"""
+        sid = _register(platform, match_id=7, kickoff=_future(days=1),
+                        kickoff_precision="exact", kickoff_source="fotmob:fixtures")
+        self._publishable(platform, sid)
+        row = platform.execute(
+            "SELECT status, is_official, kickoff_precision, kickoff_source"
+            " FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert row["status"] == "locked" and row["is_official"] == 1
+        # provenance 已冻结在快照上
+        assert row["kickoff_precision"] == "exact" and row["kickoff_source"] == "fotmob:fixtures"
+
+    def test_post_kickoff_even_if_exact_cannot_publish(self, platform):
+        """8. 已过 kickoff,即使 exact 也不能 publish/lock。"""
+        sid = _register(platform, match_id=8, kickoff=_past(days=1),
+                        kickoff_precision="exact", kickoff_source="fotmob:fixtures")
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "post_kickoff"
+
+    def test_bulk_publish_upcoming_fails_unqualified_per_record(self, data_dir, platform, client):
+        """9. bulk publish-upcoming 对不合格记录逐条失败并返回明确 reason,不 official。"""
+        from .coreseed import seed_basic_core
+        seed_basic_core(data_dir)
+        good = _register(platform, match_id=8801, kickoff=_future(days=2),
+                         kickoff_precision="exact", kickoff_source="fotmob:fixtures")
+        bad = _register(platform, match_id=8802, kickoff=_future(days=2),
+                        kickoff_precision="date_only", kickoff_source="legacy:date_only")
+        platform.commit()
+        admin = _login_admin(client.app, "10.9.9.9")
+        r = admin.post("/api/v1/admin/predictions/publish-upcoming",
+                       json={"lock": True}, headers=_csrf(admin))
+        assert r.status_code == 200
+        body = r.json()
+        assert body["published"] == 1
+        assert any(f["id"] == bad and f["reason"] == "imprecise_kickoff" for f in body["failed"])
+        # 不合格记录未 official
+        row = platform.execute("SELECT is_official, status FROM prediction_snapshots WHERE id=?",
+                               (bad,)).fetchone()
+        assert row["is_official"] == 0 and row["status"] == "draft"
+        assert platform.execute("SELECT is_official FROM prediction_snapshots WHERE id=?",
+                               (good,)).fetchone()["is_official"] == 1
+
+    def test_supersede_cannot_bypass_precision(self, platform):
+        """10. supersede 不能绕过 kickoff 精度约束最终形成新的 official。
+
+        register_snapshot 现在对 date_only/unknown 记录强制 kickoff_at_utc=NULL(§5.2),
+        所以"date_only 但仍有可解析 kickoff"这类不一致状态不再能通过 register_snapshot
+        产生——但历史遗留数据(repair 工具处理前、或本轮修复前的旧代码写入)仍可能是这种
+        形状,直接用 raw SQL 构造,验证 supersede 面对这类既有数据同样不会洗白精度。
+        """
+        from backend.db.util import new_uuid, utc_now_iso
+        old_id = new_uuid()
+        now = utc_now_iso()
+        platform.execute(
+            """INSERT INTO prediction_snapshots
+               (id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source, model_version_id,
+                generated_at, prediction_hash, home_win, draw, away_win, status, is_official, created_at)
+               VALUES (?, 8901, ?, 'date_only', 'legacy:date_only', 'm-test', ?, 'h', 0.5, 0.3, 0.2,
+                       'draft', 0, ?)""",
+            (old_id, _future(days=2), now, now),
+        )
+        platform.commit()
+        new = supersede_snapshot(platform, old_id, actor=None,
+                                 home_win=0.4, draw=0.3, away_win=0.3, status="draft")
+        # 新版继承了 date_only provenance(register_snapshot 强制其 kickoff_at_utc=NULL),
+        # publish 被拒
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, new, actor=None)
+        assert ei.value.reason == "imprecise_kickoff"
+        new_row = platform.execute(
+            "SELECT kickoff_at_utc FROM prediction_snapshots WHERE id=?", (new,)
+        ).fetchone()
+        assert new_row["kickoff_at_utc"] is None
+
+    def test_precision_frozen_at_register(self, platform):
+        """provenance 在 register 时冻结在快照行上,可事后审计。"""
+        sid = _register(platform, match_id=8910, kickoff=_future(days=1),
+                        kickoff_precision="exact", kickoff_source="fotmob:match_details")
+        row = platform.execute(
+            "SELECT kickoff_precision, kickoff_source FROM prediction_snapshots WHERE id=?",
+            (sid,)).fetchone()
+        assert row["kickoff_precision"] == "exact"
+        assert row["kickoff_source"] == "fotmob:match_details"
 
 
 def _insert_official(conn, match_id, probs, kickoff, published_offset_min=-60, status="locked"):
@@ -161,9 +436,10 @@ def _insert_official(conn, match_id, probs, kickoff, published_offset_min=-60, s
     sid = new_uuid()
     conn.execute(
         """INSERT INTO prediction_snapshots
-           (id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at, locked_at,
+           (id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source,
+            model_version_id, generated_at, published_at, locked_at,
             prediction_hash, home_win, draw, away_win, visibility, status, is_official, created_at)
-           VALUES (?, ?, ?, 'm-test', ?, ?, ?, 'h', ?, ?, ?, 'public', ?, 1, ?)""",
+           VALUES (?, ?, ?, 'exact', 'test:fixture', 'm-test', ?, ?, ?, 'h', ?, ?, ?, 'public', ?, 1, ?)""",
         (sid, match_id, kickoff, pub, pub, pub, probs[0], probs[1], probs[2], status, pub),
     )
     return sid
@@ -218,7 +494,193 @@ class TestTrackRecordScope:
 
     def test_empty_state_is_honest(self, platform):
         result = official_samples(platform)
-        assert result == {"total": 0, "retracted_count": 0, "samples": []}
+        assert result == {"total": 0, "retracted_count": 0, "superseded_count": 0, "samples": []}
+
+
+class TestPermanentEligibility:
+    """CLAUDE.md §9.1 永久资格不变量:official+曾锁定+赛前发布的快照永不退出
+    公开列表、manifest 与评估分母;retract/supersede 只是标注。"""
+
+    def _settle_match(self, platform, match_id, kickoff, score=(3, 1)):
+        core = connect_rw("core")
+        _seed_core_tables(core)
+        core.execute(
+            "INSERT INTO dim_match (Match_ID, Season, League_ID, Date, status, home_score, away_score)"
+            " VALUES (?,'2025/2026',47,?,'Finish',?,?)",
+            (match_id, kickoff[:10], score[0], score[1]),
+        )
+        core.commit()
+        settled = settle_outcomes(platform, core)
+        core.close()
+        return settled
+
+    def test_retract_after_settlement_keeps_public_total_and_eval_denominator(
+        self, data_dir, platform
+    ):
+        kickoff = _past(days=2)
+        sid = _insert_official(platform, 601, (0.7, 0.2, 0.1), kickoff)
+        assert self._settle_match(platform, 601, kickoff) == 1
+        before = official_samples(platform)
+        ev_before = evaluation_samples(platform)
+        assert before["total"] == 1 and len(ev_before) == 1
+
+        retract_snapshot(platform, sid, actor=None, reason="赛后撤回(测试)")
+
+        after = official_samples(platform)
+        ev_after = evaluation_samples(platform)
+        assert after["total"] == 1                       # 公开 total 不变
+        assert after["retracted_count"] == 1             # 撤回只是透明标注
+        assert ev_after == ev_before and len(ev_after) == 1   # 评估分母不变
+        assert after["samples"][0]["status"] == "retracted"
+
+    def test_superseded_old_sample_still_public_and_in_evaluation(self, data_dir, platform):
+        kickoff = _past(days=2)
+        old = _insert_official(platform, 611, (0.6, 0.25, 0.15), kickoff)
+        assert self._settle_match(platform, 611, kickoff) == 1
+        assert len(evaluation_samples(platform)) == 1
+        # 开球后 supersede 被命令层拒绝,这里模拟"已存在的修正链"(superseded_by
+        # 是赛前合法创建的):直接 SQL 设链,验证查询层不会因此剔除旧样本。
+        other = _register(platform, match_id=611)        # draft,不是正式样本
+        platform.execute(
+            "UPDATE prediction_snapshots SET superseded_by=? WHERE id=?", (other, old)
+        )
+
+        result = official_samples(platform)
+        assert result["total"] == 1                      # 旧样本仍公开
+        assert result["superseded_count"] == 1
+        assert result["samples"][0]["superseded_by"] == other
+        assert len(evaluation_samples(platform)) == 1    # 仍进评估分母
+
+    def test_supersede_after_kickoff_refused(self, data_dir, platform):
+        old = _insert_official(platform, 621, (0.5, 0.3, 0.2), _past(days=1))
+        with pytest.raises(PredictionError) as ei:
+            supersede_snapshot(
+                platform, old, actor=None,
+                home_win=0.4, draw=0.35, away_win=0.25, status="draft",
+            )
+        assert ei.value.reason == "post_kickoff"
+        row = platform.execute(
+            "SELECT superseded_by FROM prediction_snapshots WHERE id=?", (old,)
+        ).fetchone()
+        assert row["superseded_by"] is None              # 链未被写入
+        count = platform.execute(
+            "SELECT COUNT(*) FROM prediction_snapshots WHERE match_id=621"
+        ).fetchone()[0]
+        assert count == 1                                # 没有偷偷追加新版本
+
+    def test_correction_chain_old_and_new_both_listed(self, data_dir, platform):
+        kickoff = _future(days=2)
+        # 旧版:official+locked,published 在今天(kickoff-2 天)
+        old = _insert_official(platform, 631, (0.55, 0.25, 0.2), kickoff,
+                               published_offset_min=-2880)
+        new = supersede_snapshot(
+            platform, old, actor=None,
+            home_win=0.45, draw=0.3, away_win=0.25, status="draft",
+        )
+        publish_snapshot(platform, new, actor=None)
+        lock_snapshot(platform, new, actor=None)
+
+        result = official_samples(platform)
+        assert result["total"] == 2                      # 旧版新版同时可查
+        by_id = {s["id"]: s for s in result["samples"]}
+        assert by_id[old]["superseded_by"] == new
+        assert by_id[new]["correction_of"] == old
+        assert by_id[old]["home_win"] == 0.55            # 旧版内容原样保留
+        assert by_id[new]["home_win"] == 0.45
+        assert result["superseded_count"] == 1
+
+        # 锁定行仍受 DB 触发器保护:概率 UPDATE / 物理 DELETE 都被拒绝
+        import sqlite3 as _sqlite3
+        with pytest.raises(_sqlite3.IntegrityError, match="immutable"):
+            platform.execute(
+                "UPDATE prediction_snapshots SET home_win=0.9, draw=0.05, away_win=0.05 WHERE id=?",
+                (old,),
+            )
+        with pytest.raises(_sqlite3.IntegrityError, match="cannot be deleted"):
+            platform.execute("DELETE FROM prediction_snapshots WHERE id=?", (old,))
+
+    def test_manifest_covers_all_versions_of_correction_chain(self, data_dir, platform):
+        import json as _json
+
+        kickoff = _future(days=2)
+        old = _insert_official(platform, 641, (0.5, 0.3, 0.2), kickoff,
+                               published_offset_min=-2880)   # published ≈ 今天
+        new = supersede_snapshot(
+            platform, old, actor=None,
+            home_win=0.42, draw=0.33, away_win=0.25, status="draft",
+        )
+        publish_snapshot(platform, new, actor=None)          # published_at = 今天
+        lock_snapshot(platform, new, actor=None)
+
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        r1 = build_daily_manifest(platform, date)
+        row = platform.execute(
+            "SELECT manifest_json FROM prediction_manifests WHERE manifest_date=? AND version=?",
+            (date, r1["version"]),
+        ).fetchone()
+        ids = {e["id"] for e in _json.loads(row["manifest_json"])["entries"]}
+        assert {old, new} <= ids                         # 修正链全部版本都在清单里
+
+        # 赛后 retract 不改变 manifest 内容与 hash(实质字段不含 status)
+        retract_snapshot(platform, old, actor=None, reason="测试")
+        r2 = build_daily_manifest(platform, date)
+        assert r2["changed"] is False and r2["manifest_hash"] == r1["manifest_hash"]
+
+    def test_publish_lock_require_precise_kickoff(self, platform):
+        # 日期-only kickoff(不含 'T')→ publish 拒绝
+        sid = _register(platform, match_id=651, kickoff="2099-08-21")
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "imprecise_kickoff"
+        # 绕过 publish 直接置 published(未锁定,触发器不拦)→ lock 同样拒绝
+        platform.execute(
+            "UPDATE prediction_snapshots SET status='published', published_at=? WHERE id=?",
+            (_past(days=0), sid),
+        )
+        with pytest.raises(PredictionError) as ei:
+            lock_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "imprecise_kickoff"
+        # 精确 kickoff(含 'T')→ 放行
+        ok = _register(platform, match_id=652, kickoff=_future(days=1))
+        publish_snapshot(platform, ok, actor=None)
+        lock_snapshot(platform, ok, actor=None)
+        row = platform.execute(
+            "SELECT status, is_official FROM prediction_snapshots WHERE id=?", (ok,)
+        ).fetchone()
+        assert row["status"] == "locked" and row["is_official"] == 1
+
+
+class TestTrackRecordApiPermanence:
+    """API 层:/api/v1/track-record 返回修正链新旧版本与撤回样本(不剔除)。"""
+
+    def test_api_lists_chain_and_retracted(self, data_dir, platform, client):
+        from .coreseed import seed_basic_core
+
+        # platform 与 client 共享同一 data_dir(function-scoped fixture 复用)
+        seed_basic_core(data_dir)
+        kickoff = _future(days=2)
+        old = _insert_official(platform, 9001, (0.55, 0.25, 0.2), kickoff,
+                               published_offset_min=-2880)
+        new = supersede_snapshot(
+            platform, old, actor=None,
+            home_win=0.45, draw=0.3, away_win=0.25, status="draft",
+        )
+        publish_snapshot(platform, new, actor=None)
+        lock_snapshot(platform, new, actor=None)
+        retract_snapshot(platform, new, actor=None, reason="测试撤回新版")
+
+        body = client.get("/api/v1/track-record").json()
+        assert body["total"] == 2
+        assert body["retracted_count"] == 1
+        assert body["superseded_count"] == 1
+        by_snap = {s["snapshot_id"]: s for s in body["samples"]}
+        assert set(by_snap) == {old, new}
+        assert by_snap[old]["superseded_by"] == new
+        assert by_snap[old]["superseded_note"] is not None
+        assert by_snap[new]["correction_of"] == old
+        assert by_snap[new]["status"] == "retracted"     # 撤回版仍在列表,透明标注
+        assert by_snap[old]["home_probability"] == 0.55
+        assert by_snap[new]["home_probability"] == 0.45
 
 
 class TestManifest:
@@ -236,3 +698,96 @@ class TestManifest:
         _insert_official(platform, 502, (0.4, 0.3, 0.3), kickoff)
         r3 = build_daily_manifest(platform, date)
         assert r3["version"] == 2 and r3["manifest_hash"] != r1["manifest_hash"]
+
+
+class TestUnifiedOfficialScope:
+    """§9 manifest(11-15):track record / evaluation / daily manifest 三处对同一批样本
+    的正式资格集合必须一致。同时构造合格与不合格记录,比较三个集合(不只证明"有记录")。
+
+    构造(published 全部落在 2099-05-01,便于单一 manifest 对比):
+      A(701)合法:locked pre-kickoff official           → 三者均含
+      B(702)不合格:published 晚于 kickoff(开球后发布)→ 三者均无
+      C(703)不合格:official 但未 locked(locked_at NULL)→ 三者均无
+      D(704)合法但 retracted                            → 三者均含
+      E(705)合法但 superseded                           → 三者均含
+      F(706)合法且混合时区(kickoff '-05:00' / pub 'Z')→ 三者均含(julianday 正确)
+    """
+
+    def _ins(self, conn, mid, kickoff, published, *, locked=True, official=1,
+             status="locked", superseded_by=None):
+        from backend.db.util import new_uuid
+
+        sid = new_uuid()
+        conn.execute(
+            """INSERT INTO prediction_snapshots
+               (id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source, model_version_id,
+                generated_at, published_at, locked_at, prediction_hash, home_win, draw, away_win,
+                visibility, status, is_official, superseded_by, created_at)
+               VALUES (?, ?, ?, 'exact', 'test:fixture', 'm-test', ?, ?, ?, 'h', 0.5, 0.3, 0.2,
+                       'public', ?, ?, ?, ?)""",
+            (sid, mid, kickoff, published, published, (published if locked else None),
+             status, official, superseded_by, published),
+        )
+        return sid
+
+    def test_official_scope_consistent_across_track_eval_manifest(self, platform):
+        import json as _json
+        from backend.db.util import new_uuid
+
+        PUB = "2099-05-01T12:00:00Z"
+        FUT_KO = "2099-06-01T14:00:00Z"
+        self._ins(platform, 701, FUT_KO, PUB)                                   # A 合法
+        self._ins(platform, 702, "2099-05-01T10:00:00Z", PUB)                   # B 开球后发布
+        self._ins(platform, 703, FUT_KO, PUB, locked=False)                     # C 未锁定
+        self._ins(platform, 704, FUT_KO, PUB, status="retracted")              # D retracted
+        target = new_uuid()                                                     # E 的修正目标(draft)
+        platform.execute(
+            """INSERT INTO prediction_snapshots
+               (id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source, model_version_id,
+                generated_at, prediction_hash, home_win, draw, away_win, status, is_official, created_at)
+               VALUES (?, 705, ?, 'exact', 'test:fixture', 'm-test', ?, 'h', 0.4, 0.3, 0.3,
+                       'draft', 0, ?)""",
+            (target, FUT_KO, PUB, PUB),
+        )
+        self._ins(platform, 705, FUT_KO, PUB, superseded_by=target)           # E superseded
+        # F:混合时区——kickoff '-05:00'(=2099-05-02T01:00Z),published 'Z';
+        # 裸文本比较会误判 published 不早于 kickoff('23' > '20'),julianday 才正确。
+        self._ins(platform, 706, "2099-05-01T20:00:00-05:00", "2099-05-01T23:00:00Z")
+
+        # 所有 official 都给结算结果(含不合格 B/C,以证明它们被资格判据而非缺结算排除)
+        from backend.db.util import utc_now_iso
+
+        now = utc_now_iso()
+        for mid in (701, 702, 703, 704, 705, 706):
+            platform.execute(
+                "INSERT INTO prediction_outcomes (match_id, home_goals, away_goals, outcome, settled_at)"
+                " VALUES (?, 2, 0, 'home', ?)", (mid, now),
+            )
+        platform.commit()
+
+        qualified = {701, 704, 705, 706}
+
+        # 1) track record
+        tr = official_samples(platform)
+        tr_ids = {s["match_id"] for s in tr["samples"]}
+        assert tr_ids == qualified
+        assert tr["total"] == 4
+        assert tr["retracted_count"] == 1 and tr["superseded_count"] == 1
+
+        # 2) evaluation(不含 match_id,比较计数:合格且已结算 = 4)
+        ev = evaluation_samples(platform)
+        assert len(ev) == 4
+
+        # 3) manifest(2099-05-01)
+        mf = build_daily_manifest(platform, "2099-05-01")
+        row = platform.execute(
+            "SELECT manifest_json FROM prediction_manifests WHERE manifest_date='2099-05-01'"
+            " ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        mf_ids = {e["match_id"] for e in _json.loads(row["manifest_json"])["entries"]}
+        assert mf["entries"] == 4
+        assert mf_ids == qualified
+
+        # 三集合一致(资格口径统一)
+        assert tr_ids == mf_ids == qualified
+        assert len(ev) == len(qualified)

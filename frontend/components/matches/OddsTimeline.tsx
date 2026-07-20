@@ -117,7 +117,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
 
   const chart = useMemo(
     () =>
-      resp?.tier === "full" && resp.snapshots
+      resp?.available && resp.tier === "full"
         ? build1x2Chart(resp.snapshots)
         : null,
     [resp],
@@ -142,11 +142,12 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
       </div>
     );
   }
-  if (!resp.available || !resp.snapshots || resp.snapshots.length === 0) {
+  if (!resp.available) {
+    return <div className={styles.stateBox}>{resp.reason}</div>;
+  }
+  if (resp.snapshots.length === 0) {
     return (
-      <div className={styles.stateBox}>
-        {resp.reason ?? "该场比赛暂无可展示的赔率快照。"}
-      </div>
+      <div className={styles.stateBox}>该场比赛暂无可展示的赔率快照。</div>
     );
   }
 
@@ -170,7 +171,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
 
       {markets.map((market) => {
         const fields = MARKET_FIELDS[market] ?? [];
-        const rows = resp.snapshots!.filter((s) => s.market === market);
+        const rows = resp.snapshots.filter((s) => s.market === market);
         return (
           <div key={market} className={styles.marketBlock}>
             <h4 className={styles.marketTitle}>{MARKET_ZH[market] ?? market}</h4>

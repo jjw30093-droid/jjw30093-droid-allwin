@@ -56,16 +56,88 @@ Base:`https://www.nowgoal26.com`(`providers/nowgoal.py`)。
 旧仓另有 probe 记录(`miaomiaodi` 仓 `backend/logs/nowgoal_xhr_probe.json`,本项目未读)。
 在验证之前,odds.db 的时间线起点 = 本系统开始轮询之日,更早的只有当时抓到的 `f`(初盘)。
 
-## 3. 轮询策略
+### 2.4 实体解析安全规则(P0-B 收口,`backend/ingest/entity_resolution.py`)
 
-- **锁定目标(CLAUDE.md §6.3)**:赛前 72 小时起每 15 分钟;赛前 2 小时起每 5 分钟。
-- **当前实现(如实)**:`allwin-worker.timer` 每 15 分钟触发任务链,其中
-  `nowgoal_snapshot` 步骤跑一轮 `backend.cli.poll_nowgoal`(当日日程 → 实体解析 →
-  已映射比赛抓赔率)。**T-2h 加密到 5 分钟的分级轮询尚未实现**;上线赔率产品前需补
-  (可行方案:独立 5 分钟 timer 只跑 nowgoal_snapshot,按开球时间过滤)。
-- 单轮流程(`poll_nowgoal.run_poll`):日程失败 → 整轮终止并记 source_health;
-  单场赔率失败 → 继续其余场次,末尾汇总。只有 `review_status ∈ (auto_ok, confirmed)`
-  的映射才抓赔率;needs_review 不抓(等人工审核,见 `/api/v1/admin/xref`)。
+跨源映射(NowGoal ↔ FotMob canonical)的自动通过(`review_status='auto_ok'`)是**自动候选**,
+`verified` 恒为 0——只有管理员在 `/api/v1/admin/xref` 确认才 `verified=1`。
+
+**召回 vs 身份证明**:候选比赛的**召回打分**用别名 ∪ dim_team_xref 直查的**并集**(历史
+provider xref 帮助召回一个候选),但**并集本身不足以 auto_ok**——历史 provider xref 不得
+单独充当身份证明,否则错误队名会被历史 xref 掩盖(见反例)。auto_ok 的**全部**必要条件:
+
+1. **最终身份证明:本轮 `home_name`/`away_name` 经 `dim_team_alias` 独立、唯一地解析到候选
+   比赛(按方向计算)的预期 canonical**;名称未知、错误或多 canonical 歧义 → `needs_review`
+   (`home_team_name_mismatch` / `away_team_name_mismatch`);
+2. 方向唯一,无同分歧义;
+3. **双边都有可严格解析的精确 kickoff**:core 侧统一验证器 `normalize_exact_kickoff`
+   (`kickoff_precision='exact'` ∧ 非空真实来源 ∧ 显式时区可解析),NowGoal 侧行内 kickoff
+   (北京墙上时间,-8h 转 UTC)真实含时间部分且可解析;
+4. 两侧 kickoff 差值可计算且 `|diff| ≤ 30 分钟`;
+5. **provider 主客球队 ID 都存在、互不相同**,且本次映射蕴含的
+   `(provider_team_id, canonical_team_id)` pairs 内部自洽(同一 provider ID 不指向多个
+   canonical、主客 canonical 不被折叠成同一支);
+6. provider ID 对应的既有 team xref:**不存在**时允许在本次严格通过后创建、**已存在**时
+   必须与预期 canonical 完全一致;
+7. 比赛 xref 一对一约束与 team xref 均无冲突。
+
+任一侧缺精确 kickoff、时间无法解析或差值无法计算 → `kickoff_diff_seconds` 记 **NULL** 且强制
+`needs_review`(**不再因 `kickoff_diff is None` 放行**)。
+
+**provider 球队身份完整性**:主队或客队 provider ID 缺失、相同、或 pairs 内部矛盾时,整场
+`needs_review`、**不写任何 team xref**,返回明确 `validation_errors`
+(`provider_team_id_missing` / `provider_team_ids_not_distinct` /
+`provider_team_internal_conflict`)——**绝不依赖 `INSERT OR IGNORE` 把"重复 provider ID 只写一行"
+的半映射吞成看似成功**。
+
+**team xref 冲突显式化 + 事务一致**:auto_ok 写库前先检查 `(provider, provider_team_id)` 是否已
+映射到**不同** canonical。若冲突 → 整场降级 `needs_review` 且**不写任何 team xref**(不产生
+"比赛 auto_ok 但 team xref 未写"或反之的半成功);相同 canonical → 幂等复用,不改写既有
+`verified`/`manual` 行。pair 内部校验、DB team xref 冲突检查、match xref 占用检查与写入都在
+同一个 `BEGIN IMMEDIATE` 事务内完成。返回值带 `team_conflicts` 明细供审计。
+
+**既有 auto_ok 每次重新遇到都重新验证**(`_revalidate_existing_auto_ok`,不盲信历史结论):
+除 kickoff provenance 与差值外,还用**本次 schedule_row 的队名/别名**独立验证主客方向——按
+`home_away_inverted` 计算 NowGoal 主客队各自预期 canonical,要求两侧队名经 `dim_team_alias`
+明确、唯一解析到预期 canonical(不匹配对手、无多 canonical 歧义);并要求 provider 球队 ID
+存在、互异,且**两个 provider ID 对应的 dim_team_xref 行真实存在**(既有行被删、或本轮换成
+从未映射的新 provider ID → `provider_team_xref_missing`)**且都指向预期 canonical**(存在但
+canonical 不符 → `team_conflicts`,与 missing 用不同信号区分)。任一项不满足(纯换名、主客名
+互换、provider ID 缺失/重复、team xref 缺失或冲突、kickoff 漂移)→ **原子降级 `needs_review`**,
+该轮不进入赔率采集;重验证**只允许保留 auto_ok 或降级**,绝不静默创建、补写或覆盖任何 team
+xref。
+
+**事务边界**:existing auto_ok 重验证把 match xref 当前权威状态、alias、dim_team_xref 的读取
+与"保留 auto_ok 还是降级"的最终判定放在**同一个 `BEGIN IMMEDIATE` 事务**内——**保持 auto_ok
+的成功路径也在事务内做最终复核,不在事务开始前提前 return**;core 库全程只读(在持有 odds
+事务时读取)。先在事务内重查确认仍是 `auto_ok`+`verified=0` 才更新,避免与并发人工操作竞态。
+
+**既有映射保护**:`confirmed`/`verified`/`manual` 的既有 match/team xref 不被自动流程或上述
+重验证覆盖;`rejected` 映射不被自动复活(同 provider_match_id 早返回原状态)。
+
+**边界**:needs_review / rejected 映射不进入 Silver(变化点/共现构建只取 auto_ok/confirmed)。
+真实 NowGoal 端点连续采集 **UNVERIFIED**,以上规则由离线 fixture + 单元测试验证同一条代码链路
+(`tests/backend/test_odds_pipeline.py` 的 `TestEntityResolutionSafety`、
+`TestProviderIdentityAndRevalidation`、`TestTeamXrefExistenceAndAliasGate`)。
+
+## 3. 轮询策略(窗口到期调度,CLAUDE.md §6.3)
+
+- **触发**:`allwin-poll.timer` 每 5 分钟触发一次"到期判断"(`worker --job
+  nowgoal_snapshot` + `--job fotmob_snapshot`);这不代表每 5 分钟都请求数据源。
+- **窗口与频率**(`backend/ingest/poll_windows.py`,离线 fixture 已验证):
+  - 只有 `kickoff_at_utc` 精确、状态 NotStarted、开球落在 [now, now+72h] 的比赛
+    进入采集窗口(缺精确开球时间的比赛不进入,不按当天 00:00 伪装);
+  - 距开球 2–72h:同一 (source, 比赛) 最小间隔 15 分钟;0–2h:5 分钟;
+  - 已开球即退出赛前窗口(in-play 采集是显式的另一件事,当前未实现);
+  - 到期状态持久化于 odds.db `poll_state`,进程重启不重复采集。
+- **日程发现**:窗口内未映射比赛按其北京日期(NowGoal timezone=8)抓日程,
+  同一日期最小间隔 15 分钟;不再只抓"当天"而漏掉未来 72h。
+- **单轮流程**(`poll_nowgoal.run_due_poll` / 单日模式 `run_poll`):日程失败记
+  source_health 并跳过该日期;单场赔率失败继续其余场次。只有
+  `review_status ∈ (auto_ok, confirmed)` 的映射才抓赔率;needs_review 不抓
+  (等人工审核,见 `/api/v1/admin/xref`)。
+- **FotMob 快照**(`poll_fotmob_snapshots.run_snapshot_poll`):同窗口同频率;
+  同一比赛同一轮只抓一次 match payload,阵容 + 两队伤停三条快照共用
+  `observed_at` 与 `poll_run_id`。
 
 ## 4. 落库规则(hash-diff)
 
@@ -75,9 +147,15 @@ market, company_id) 一条序列)、`bronze_fm_lineup_snap`、`bronze_fm_sidelin
 1. record → canonical JSON(`canonical_payload_json`:排序键、紧凑分隔符)→ SHA-256;
 2. 与同序列最近一条 `payload_hash` 比较:**不变则跳过,变了才 INSERT**(append-only,
    从不 UPDATE 旧快照);
-3. `market_phase`:按 core dim_match 日期粗判——比赛日尚未过去 → `pre_match`,
-   否则 `unknown`。**dim_match 无开球时刻,无法精确判 `in_play`,代码不硬猜**;
-   `FINAL`(开球前最后一个 pre_match 快照)的精确判定同样受此限制,待开球时刻数据补齐。
+3. `market_phase` 精确判定(不按自然日、不按字符串是否含 'T' 粗判):来源状态 + **完整
+   kickoff provenance**(唯一真源 `normalize_exact_kickoff`:exact ∧ 非空来源 ∧ 显式时区
+   可解析)+ 观察时间共同决定——core status='NotStarted' 且 now < kickoff(datetime 比较,
+   非裸字符串)→ `pre_match`;core status='InPlay' → `in_play`;信息不足(含无精确 kickoff、
+   缺来源、naive/非法时间)→ `unknown`。
+4. `FINAL`(`silver/odds_moves.final_pre_match_snapshot`):精确 kickoff 前最后一条
+   `market_phase='pre_match'` 快照,同样经 `normalize_exact_kickoff` 判定,明确排除
+   unknown/in_play;kickoff 缺失、precision 非 exact、缺来源或不可解析时返回 None
+   ——**不声称任何快照是收盘快照**。
 
 ## 5. 时间戳四件套语义(CLAUDE.md §6.2)
 
@@ -112,5 +190,6 @@ market, company_id) 一条序列)、`bronze_fm_lineup_snap`、`bronze_fm_sidelin
 | NowGoal type=14 赔率端点与格式 | **UNVERIFIED**(按旧项目代码审计构造,有离线 fixture 测试) |
 | NowGoal 公司覆盖(除 Bet365/Sbobet 优先级设定外) | **UNVERIFIED** |
 | NowGoal 历史回填 | **UNVERIFIED** |
-| T-72h/15min + T-2h/5min 分级轮询 | 目标策略;当前仅 15 分钟统一轮询(worker timer) |
-| in_play / FINAL 精确判定 | 受 dim_match 无开球时刻限制,当前为保守粗判 |
+| T-72h/15min + T-2h/5min 分级轮询 | **已实现**(`poll_windows.required_interval_seconds`:2–72h→900s,0–2h→300s;`poll_state` 持久化节流);离线 fixture 验证,真实端点连续采集仍 UNVERIFIED |
+| `market_phase` / `FINAL` 精确判定 | **已实现**(唯一真源 `normalize_exact_kickoff`,按完整 provenance 判 pre_match/in_play/unknown;不精确时 FINAL 返回 None);对缺精确开球的比赛如实标 `unknown`,不伪装收盘 |
+| 采集窗口混合时区筛选 | **已修复**(`upcoming_precise_matches` 用 `julianday()` 比较窗口边界,带 `-05:00`/`+08:00` 偏移的合法 kickoff 不被裸文本范围误排除) |

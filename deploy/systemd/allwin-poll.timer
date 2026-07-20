@@ -1,0 +1,12 @@
+# 每 5 分钟触发一次赛前采集到期判断(allwin-poll.service)。
+# 采集频率的真实上限由程序内 poll_state 节流保证,进程重启不重复采集。
+[Unit]
+Description=Run allwin pre-match polling every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -1,91 +1,33 @@
 /**
- * Creator Studio 类型:analysis_bundle 与 content_drafts 的前端形状。
- *
- * 后端 /api/v1/studio/* 返回 dict(OpenAPI 里是 unknown),字段以
- * backend/studio/bundle.py 与 backend/api/routes_studio.py 为真源,
- * 这里手写对应 TS 形状(只在 Studio 内部使用,不与 lib/api-types.ts 漂移竞争)。
+ * Creator Studio 类型:全部从 lib/api-types.ts(OpenAPI 生成,Pydantic 单一真源)
+ * 以别名 / Pick / Omit 派生,不再手写字段结构(宪法 §10.3)。
+ * 仅当生成类型为宽 dict / 宽 string 时保留窄化类型,并注明后端真源。
  */
 
-import type { ChartSpec } from "@/components/charts/SpecCharts";
+import type { components } from "@/lib/api-types";
+import type { GetJson, PostJson } from "@/lib/api-v1";
 
-export interface BundleTeamRef {
-  team_id: number | null;
-  name: string;
-  name_en?: string | null;
-}
+type Schemas = components["schemas"];
 
-export interface BundleMatch {
-  match_id: number;
-  league_id: number;
-  season: string;
-  date_utc: string; // 日期粒度(dim_match 无开球时刻)
-  round: string | null;
-  status: string;
-  home: BundleTeamRef;
-  away: BundleTeamRef;
-  home_score: number | null;
-  away_score: number | null;
-}
+export type ScriptSection = Schemas["BundleScriptSection"];
+export type SubtitleCue = Schemas["BundleSubtitleCue"];
 
-export interface EvidenceItem {
-  side?: string;
-  kind: string;
-  text: string;
-}
+/**
+ * 证据/反向证据/不确定性在编辑器里共用同一列表组件:
+ * evidence 项有 side(BundleEvidenceItem),uncertainty 项没有
+ * (BundleUncertaintyItem),故 side 以 Partial<Pick> 派生为可选。
+ */
+export type EvidenceItem = Pick<Schemas["BundleEvidenceItem"], "kind" | "text"> &
+  Partial<Pick<Schemas["BundleEvidenceItem"], "side">>;
 
-export interface ScriptSection {
-  id: string;
-  title: string;
-  text: string;
-}
+/** GET /api/v1/studio/matches/{id}/bundle:完整 bundle(含 subtitle_cues)。 */
+export type AnalysisBundle = GetJson<"/api/v1/studio/matches/{match_id}/bundle">;
 
-export interface SubtitleCue {
-  start: number;
-  end: number;
-  text: string;
-}
-
-export interface SourceNote {
-  kind: string;
-  text: string;
-}
-
-export interface PredictionPublic {
-  top_outcome: "home" | "draw" | "away";
-  top_probability: number;
-}
-
-export interface PredictionMember {
-  home_probability: number;
-  draw_probability: number;
-  away_probability: number;
-  expected_home_goals: number | null;
-  expected_away_goals: number | null;
-  status: string;
-  prediction_hash: string;
-}
-
-export interface AnalysisBundle {
-  bundle_version: string;
-  built_at: string;
-  bundle_hash: string;
-  match: BundleMatch;
-  data_cutoff_at: string | null;
-  model_version: string | null;
-  prediction_public: PredictionPublic | null;
-  prediction_member: PredictionMember | null;
-  evidence: EvidenceItem[];
-  counter_evidence: EvidenceItem[];
-  uncertainty: EvidenceItem[];
-  odds_timeline: unknown[];
-  cooccurring_events: unknown[];
-  chart_specs: ChartSpec[];
-  script_sections: ScriptSection[];
-  subtitle_cues: SubtitleCue[];
-  source_notes: SourceNote[];
-}
-
-/** 草稿 overrides:只覆盖可编辑文本,冻结的 bundle 本体不动。 */
+/**
+ * 草稿 overrides:只覆盖可编辑文本,冻结的 bundle 本体不动。
+ * 契约里 overrides 是宽 dict(UpdateDraftBody.overrides);本类型是其前端窄化,
+ * 键名与 backend/api/routes_studio.py 的导出合成逻辑一致。
+ */
 export interface DraftOverrides {
   title?: string;
   script_sections?: ScriptSection[];
@@ -95,28 +37,30 @@ export interface DraftOverrides {
   uncertainty?: EvidenceItem[];
 }
 
+/**
+ * 从生成类型窄化:契约里 status 是宽 string;取值由后端
+ * DraftStatusBody(pattern="^(draft|reviewed|published)$")与建稿默认 'draft' 保证。
+ */
 export type DraftStatus = "draft" | "reviewed" | "published";
 
-export interface DraftSummary {
-  id: string;
-  match_id: number;
-  title: string;
+export type DraftSummary = Omit<Schemas["StudioDraftListItem"], "status"> & {
   status: DraftStatus;
-  created_at: string;
-  updated_at: string;
-}
+};
 
-export interface DraftDetail {
-  id: string;
-  match_id: number;
-  title: string;
+/**
+ * 从生成类型窄化:契约里 bundle/overrides 是宽 dict(历史草稿形状可能不同);
+ * 本仓库当前版本的草稿快照即 StudioBundleDTO 形状,真源 backend/studio/bundle.py。
+ */
+export type DraftDetail = Omit<
+  Schemas["StudioDraftDetailDTO"],
+  "status" | "bundle" | "overrides"
+> & {
   status: DraftStatus;
   bundle: AnalysisBundle;
   overrides: DraftOverrides;
-  created_at: string;
-  updated_at: string;
-}
+};
 
+/** 契约里 ExportBody.kind 是宽 string;取值由 routes_studio.EXPORT_KINDS 保证。 */
 export type ExportKind =
   | "png_1080x1920"
   | "png_1080x1350"
@@ -124,13 +68,8 @@ export type ExportKind =
   | "json"
   | "srt";
 
-export interface ExportResult {
-  job_id: string;
-  side: "client" | "server";
-  download_url?: string;
-  data_cutoff_at: string | null;
-  model_version: string | null;
-}
+/** side="client"(PNG,前端 DOM 生成)/ side="server"(txt/json/srt)判别联合。 */
+export type ExportResult = PostJson<"/api/v1/studio/drafts/{draft_id}/export">;
 
 /** 六段式竖屏场景(顺序即导出顺序)。 */
 export const SCENES = [

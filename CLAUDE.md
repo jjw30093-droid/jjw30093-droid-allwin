@@ -200,12 +200,29 @@ NowGoal → Bronze(odds) ┘
 
 来源没有声明更新时间时必须为 NULL，不得用抓取时间伪装来源更新时间。用户文案写“系统于 observed_at 检测到”。
 
-### 6.3 赔率快照
+### 6.2.1 精确开球时间
 
-- 赛前 72 小时起每 15 分钟轮询；赛前 2 小时起每 5 分钟轮询。
+canonical 比赛实体必须区分：
+
+- `match_date`：比赛自然日，可用于列表和历史聚合；
+- `kickoff_at_utc`：来源提供的精确 UTC 开球时刻，可空。
+
+来源只提供日期时，`kickoff_at_utc` 必须为 NULL，不得补成当天 00:00 并当成精确时间。正式预测赛前判定、赔率轮询、`FINAL`、`pre_match/in_play` 和倒计时必须使用精确 `kickoff_at_utc`。
+
+缺少精确开球时间的比赛不得生成新的正式赛前预测，不得声称某条快照是收盘快照；页面和分析包必须暴露相应数据质量提示。
+
+### 6.3 赔率与赛前信息快照
+
+- Worker 每 5 分钟触发一次到期判断，不代表所有比赛每 5 分钟都请求数据源。
+- 只有具有精确 `kickoff_at_utc` 且进入采集窗口的比赛才允许轮询：
+  - 距开球 2–72 小时：同一来源和比赛至少间隔 15 分钟；
+  - 距开球 0–2 小时：同一来源和比赛至少间隔 5 分钟；
+  - 已开球比赛是否继续采集由明确的 in-play 任务决定，不能继续伪装为赛前采集。
+- 轮询到期状态必须可持久化或由最后一次 poll run 可靠推导，进程重启不能造成无界重复采集。
 - 只有 canonical payload hash 相对上一条发生变化才落库。
-- 明确区分 `pre_match` 与 `in_play`。
-- `FINAL` 是开球前最后一个 `pre_match` 有效快照，明确排除滚球。
+- `market_phase` 必须由来源状态、精确 kickoff 和观察时间共同判定；信息不足时使用 `unknown`，不得仅按自然日判断。
+- `FINAL` 是开球前最后一个 `market_phase='pre_match'` 的有效快照，明确排除 `unknown` 和 `in_play`。
+- 同一轮 FotMob 比赛请求应复用原始 payload，阵容与两队伤停使用相同 `poll_run_id` 和 `observed_at`。
 - 首先支持真实验证过的公司和市场；不得把“抓到一家公司的初盘/最新”描述为完整多公司时间序列。
 - 历史回填能力、时间粒度和公司覆盖写入 `docs/data-sources.md`；不可验证则标 `UNVERIFIED`。
 
@@ -273,6 +290,14 @@ MVP 的首选认证是已认证服务号网页授权：
 不得沿用旧项目的以下模式：普通 `random` 四位验证码、只存在内存的登录状态、把 JWT 放进查询参数、把 API token 暴露到客户端 session、用 `users.openid='USER_xxx'` 伪造其他身份。
 
 如果 `WECHAT_AUTH_ENABLED=1`，production 启动时缺少 AppID、AppSecret、回调配置必须拒绝启动。Development 可以使用显式 Mock Provider，但 Mock 在 production 必须 fail-fast。
+
+认证开关必须具有三种明确状态：
+
+- production + `WECHAT_AUTH_ENABLED=0`：公开站点必须可以无微信凭证启动；微信登录端点返回结构化 `AUTH_DISABLED`，不得尝试实例化真实 Provider；
+- production + `WECHAT_AUTH_ENABLED=1`：只能使用 Real Provider，缺 AppID、AppSecret 或 HTTPS 回调配置必须 fail-fast；
+- development：只有显式配置时才允许 Mock Provider，production 检测到 Mock 必须 fail-fast。
+
+电脑端 Device Login 的验收必须覆盖“桌面创建 → 手机 OAuth/claim → 桌面轮询 → 原子消费 → 设置会话”的完整流程。直接测试普通 OAuth 回调不能替代 Device Login 验收。登录页必须渲染真实二维码图像，不能只展示待编码 URL。
 
 ### 7.4 网站会话
 
@@ -371,6 +396,17 @@ confidence / visibility / status / is_official
 - 公开 track record 默认展示全部正式样本。
 - 每日正式预测 manifest 生成稳定 hash，可上传 S3 版本桶；启用 Object Lock 时优先 governance 模式。
 
+正式样本集合具有永久资格不变量：
+
+- 一条快照一旦满足 `is_official=1`、`locked_at IS NOT NULL` 且 `published_at < kickoff_at_utc`，就永久属于公开正式样本集合；
+- `status='retracted'`、`superseded_by`、管理员撤回或后续修正版不得使旧样本从公开列表、manifest 或评估分母中消失；
+- 修正版必须追加为新快照，旧版和新版均可查询并显示修正链；
+- 开球后禁止创建 supersede 版本；
+- 赛后撤回只能作为公开说明和审计状态，不能改变评估资格；
+- track record 和 evaluation 查询不得使用 `status` 或 `superseded_by` 选择性排除已经成为正式样本的记录。
+
+任何能让已经公开的失败预测退出指标分母的实现都属于 P0 数据完整性缺陷。
+
 历史 `gold_wdl_predictions` 如果无法证明生成时间早于开球，只能导入为 `legacy_unverified` 或 draft，不能冒充正式历史战绩。
 
 ### 9.2 评估口径
@@ -420,6 +456,16 @@ GET  /api/v1/admin/...
 - 带 Session Cookie、Authorization 或 Set-Cookie 的响应不得进入 Cloudflare 共享缓存。
 - 公共 HTML 不因用户身份变化；登录后会员数据由私有 API 加载，避免缓存变体泄漏。
 - Next.js Server Component 调 FastAPI 时优先走 `127.0.0.1` 内网地址，不绕 Cloudflare 回源。
+
+### 10.3 API 契约与运行时地址
+
+- 每个返回 JSON 的 FastAPI operation 必须声明明确的 Pydantic 成功响应模型和统一错误模型。
+- Redirect、204 和文件流可以不使用普通 response model，但必须在 OpenAPI 中明确声明状态码和 content type。
+- OpenAPI 必须从实际 FastAPI app 生成，前端 TypeScript API 类型必须从该 OpenAPI 自动生成。
+- 前端不得手写与 API 响应重复的 DTO；页面展示类型只能从生成类型派生。
+- 契约检查必须确保所有 JSON 2xx response 都有非空 schema，并验证生成类型没有漂移。
+
+生产环境的浏览器请求必须使用同源 `/api/v1`，不得默认访问 `127.0.0.1` 或 `localhost`。Next.js 服务端可以通过 `INTERNAL_API_BASE` 请求 localhost FastAPI。任何 `NEXT_PUBLIC_*` 变量都必须在 `next build` 前确定，不能依赖 systemd 运行期注入改变已构建 bundle。
 
 ## 11. 前端与设计
 
@@ -513,20 +559,32 @@ MVP Studio 提供：
 - 错误摘要；
 - 从指定步骤重跑。
 
-推荐任务链：
+核心任务链至少包含：
 
 ```text
 schedule_sync
 → fotmob_incremental
 → nowgoal_snapshot
+→ fotmob_snapshot
 → entity_resolution
-→ silver_build
+→ core_silver_build
+→ odds_silver_build
 → model_predict
 → prediction_register
 → analysis_bundle_build
 → postmatch_settle
 → metrics_rebuild
 ```
+
+具体任务可以在实现中合并，但以下能力不得只是 `optional` 模块探测占位：
+
+- NowGoal 快照；
+- FotMob 阵容和伤停快照；
+- 实体解析；
+- 赔率/事件变化点与时间共现构建；
+- analysis bundle 构建。
+
+外部凭证缺失时任务可以诚实记录 `skipped` 或 `failed` 及原因，但对应代码路径、离线 fixture 测试和 Worker 注册必须真实存在。默认任务因“候选模块不存在”跳过时，不得声称核心链路已经完成。
 
 采集器失败不能拖垮 API。页面显示最后成功更新时间和 stale 状态，不展示伪造的新鲜数据。
 
@@ -554,6 +612,17 @@ schedule_sync
 ```
 
 发布顺序：备份 → 构建 → migration → 启动候选服务 → healthcheck → 切换 → 冒烟测试。失败必须可回滚到上一 release，禁止直接覆盖线上目录。
+
+发布脚本的业务冒烟不能只检查进程存活和首页 HTTP 200。至少必须验证：
+
+- `/api/v1/products` 返回符合契约的 JSON；
+- `/api/v1/matches` 返回符合契约的 JSON；
+- 首页或核心公开页能够通过生产地址读取 API 数据；
+- 浏览器构建产物没有把生产用户指向 `127.0.0.1`；
+- 认证关闭时公开站点能够启动；
+- 冒烟失败时在切换后自动回滚。
+
+构建所需环境变量必须在 `npm run build` 前加载。
 
 ### 14.3 备份
 
@@ -583,6 +652,26 @@ schedule_sync
 - ESLint、TypeScript、Vitest；
 - `npm run build`；
 - Playwright 覆盖：匿名浏览、免费概率、微信 Mock 登录、会员解锁、Admin 拒绝、Studio 导出。
+
+### 核心链路验收
+
+- 使用临时数据库和固定 fixture 跑通 xref → Bronze → Silver → Gold → API → analysis bundle；
+- fixture 必须包含至少两次赔率快照和两次阵容/伤停快照，证明变化点及时间共现实际产生；
+- 同一链路重跑必须幂等；
+- 真实外部访问与离线 fixture 验证必须分别汇报。
+
+### 预测账本验收
+
+- retract 后公开样本数和评估分母不变；
+- supersede 后旧样本仍公开并进入评估；
+- 开球后 supersede 被拒绝；
+- 旧版、新版、撤回版均能通过 track record 查询；
+- manifest 不得只包含修正链最新版。
+
+### 登录与导出验收
+
+- Playwright 必须覆盖完整 Device Login，不得只覆盖普通 OAuth；
+- Studio PNG 验收必须检查下载文件 PNG signature 和实际像素尺寸，后台创建导出记录不能替代图片生成测试。
 
 ### 部署
 
@@ -633,3 +722,6 @@ schedule_sync
 5. 文档描述与真实代码一致；
 6. 所有无法验证的外部能力明确标记 `UNVERIFIED`；
 7. 最终汇报列出真实命令、退出码、失败项和未完成项，以及仍需用户提供的外部凭证。
+8. 默认 Worker 中的核心采集、实体解析、赔率 Silver/Gold 和 analysis bundle 任务不是模块缺失占位；
+9. 生产浏览器 API 地址、认证启用和关闭两种模式、业务 API 冒烟已经通过自动化验证；
+10. “代码实现”“离线 fixture 验证”“真实外部服务验证”分别汇报，任一核心能力仅为 `UNVERIFIED` 时不得笼统声称生产验证完成。

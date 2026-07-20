@@ -73,6 +73,8 @@ npm install
 | `WECHAT_OA_APP_ID` / `WECHAT_OA_APP_SECRET` | 服务号凭证(只存在服务端) |
 | `PUBLIC_BASE_URL` | 对外基础地址(OAuth 回调、扫码 URL);production 必须 https |
 | `FRONTEND_BASE_URL` | 登录后跳转前缀;生产同域留空,本地指向 Next dev server |
+| `NEXT_PUBLIC_API_BASE` | 浏览器端 API 基址,**next build 构建期内联**;生产留空走同源 `/api/v1`,开发/E2E 显式指定 |
+| `INTERNAL_API_BASE` | Next.js 服务端(RSC)请求 FastAPI 的内网基址(默认 `http://127.0.0.1:8000`),运行期读取 |
 | `ALLOWED_ORIGINS` | 写请求 Origin/Referer 白名单(逗号分隔) |
 | `SESSION_TTL_DAYS` | 会话有效期(默认 30) |
 | `OAUTH_STATE_TTL_SECONDS` | OAuth state 有效期(默认 600) |
@@ -81,9 +83,13 @@ npm install
 | `ALLWIN_ADMIN_PASSWORD` | (可选)create_admin 非交互模式的密码来源;交互模式走 getpass |
 | `S3_BACKUP_BUCKET` | (可选)备份 S3 桶;未配置时备份脚本只做本地备份 |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_DEFAULT_REGION` | (可选)不用 EC2 instance role 时的 AWS 凭证 |
+| `BACKUP_KEEP` | 本地保留备份份数(默认 14,必须为正整数) |
+| `KEEP_RELEASES` | release.sh 保留最近几个 release 目录(默认 5;current/previous 永不清理) |
+| `MIN_FREE_DISK_MB` | release.sh preflight 的磁盘可用空间下限(默认 2048) |
+| `OPS_DISK_WARN_PCT` / `OPS_DISK_CRITICAL_PCT` | `ops_check` 磁盘告警/严重阈值(默认 70/85) |
+| `OPS_BACKUP_STALE_HOURS` / `OPS_JOB_STUCK_MINUTES` / `OPS_JOB_STALE_HOURS` / `OPS_SOURCE_STALE_HOURS` | `ops_check` 备份新鲜度/任务卡住/任务过期/数据源过期阈值 |
 
-部署侧另有 `BACKUP_KEEP`(本地保留备份份数,默认 14),见
-[docs/deployment-aws-cloudflare.md](docs/deployment-aws-cloudflare.md) §9。
+见 [docs/deployment-aws-cloudflare.md](docs/deployment-aws-cloudflare.md) §5/§6/§11。
 
 ## 常用命令
 
@@ -116,19 +122,26 @@ python -m backend.cli.import_gold_predictions --dry-run        # gold → 预测
 python -m backend.cli.import_gold_predictions                  # 正式导入(幂等)
 python -m backend.cli.evaluate_predictions                     # 结算 + 正式口径评估
 python -m backend.cli.build_manifest [--date YYYY-MM-DD]       # 每日正式预测 manifest
-python -m backend.cli.poll_nowgoal --date 2026-07-19           # NowGoal 单轮采集
-python -m backend.cli.poll_nowgoal --date 2026-07-19 --offline-fixture tests/fixtures/nowgoal/poll_fixture.json
+python -m backend.cli.poll_nowgoal --due                       # NowGoal 窗口到期采集(worker 用)
+python -m backend.cli.poll_nowgoal --date 2026-07-19           # NowGoal 指定单日采集
+python -m backend.cli.poll_nowgoal --due --offline-fixture f.json --now 2026-08-21T10:00:00Z  # 离线验证
+python -m backend.cli.poll_fotmob_snapshots --due              # FotMob 阵容/伤停快照(需 THORDATA_PROXY)
+python -m backend.cli.poll_fotmob_snapshots --match-id 5795363 # 指定单场
+python -m backend.cli.resolve_entities                         # 实体解析:别名种子 + xref 状态
+python -m backend.cli.build_odds_silver                        # odds 变化点 + 时间共现(幂等)
 python -m backend.cli.export_openapi                           # 导出 OpenAPI → frontend/lib/openapi.json
 ```
 
 ### Worker(任务链)
 
 ```bash
-python -m backend.worker.runner --list                # 列出注册任务
-python -m backend.worker.runner --job silver_build    # 单任务
-python -m backend.worker.runner --job schedule_sync --key 2026-07-19   # 幂等键
-python -m backend.worker.runner --chain               # 全链(生产由 systemd timer 触发)
-python -m backend.worker.runner --chain --from silver_build            # 从中间步骤重跑
+python -m backend.worker.runner --list                     # 列出注册任务
+python -m backend.worker.runner --job core_silver_build    # 单任务(silver_build 为兼容别名)
+python -m backend.worker.runner --job schedule_sync --key 2026-07-19    # 幂等键
+python -m backend.worker.runner --chain                    # 全链(生产 allwin-worker.timer 每 15 分钟)
+python -m backend.worker.runner --chain --from core_silver_build        # 从中间步骤重跑
+# 赛前采集另由 allwin-poll.timer 每 5 分钟触发 nowgoal_snapshot + fotmob_snapshot
+# (真实采集频率由 odds.db poll_state 节流:2–72h 每 15 分钟,0–2h 每 5 分钟)
 ```
 
 ### 数据脚本(legacy,直接以脚本运行)
@@ -170,13 +183,18 @@ cd frontend && npm run lint && npm run typecheck && npm run test && npm run buil
 
 - 免费 DTO 不含受限字段、锁定预测不可改、OAuth state 与扫码一次性消费、CSRF 等
   安全断言都在 pytest 内(CLAUDE.md §15)。
-- `npm run e2e`(Playwright)脚本已就位,但 playwright.config 与 e2e 用例尚未编写
-  ——当前跑不出结果,属 P0.8 前端产品页交付范围。
+- `CI=1 npm run e2e`(Playwright,`frontend/playwright.config.ts` + `frontend/e2e/`
+  五个 spec:匿名浏览、mock 登录、admin+studio 导出、Device Login 双 context、
+  Studio PNG signature+像素校验)——真实运行 9/9 通过,无 skip;不设 `CI=1` 时
+  默认复用已在跑的本地 dev 服务(`reuseExistingServer`),便于本地调试单个用例。
 
 ## 部署与备份
 
-单机(东京 EC2)+ Cloudflare,systemd 管理,release 目录 + `current` 软链发布,
-每日 SQLite `.backup` + 可选 S3。完整步骤、Cache Rules、恢复演练见
+单机(东京 EC2)+ Cloudflare,systemd 管理,release 目录 + `current` 软链发布
+(preflight 拒绝 dirty 源码树/同 SHA 重复覆盖,失败自动回滚并重新验收),
+每日 SQLite `.backup`(原子发布 + checksum + 并发锁)+ 可选 S3。
+只读运维检查:`python -m backend.cli.ops_check --json`(见 §11)。
+完整步骤、Cache Rules、恢复演练见
 [docs/deployment-aws-cloudflare.md](docs/deployment-aws-cloudflare.md);
 材料在 `deploy/`(nginx / systemd / release.sh / backup_sqlite.sh / restore_verify.sh)。
 

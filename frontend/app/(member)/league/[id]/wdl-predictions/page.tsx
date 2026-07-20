@@ -2,6 +2,12 @@ import { fetchWdlPredictions, type WdlMatch } from "@/lib/api";
 import { LeagueNav } from "@/components/LeagueNav";
 import styles from "./wdl-predictions.module.css";
 
+// 三种 JSON 形状物理上互斥(见 lib/api.ts 顶部说明),ProbDistribution/LockedHook
+// 各自只接受narrow 后的那一支——TypeScript 据此在编译期就禁止越界读取字段,
+// 不依赖调用方自觉只在正确分支下调用。
+type WdlLiveFull = Extract<WdlMatch, { availability: "live"; locked: false }>;
+type WdlLiveLocked = Extract<WdlMatch, { availability: "live"; locked: true }>;
+
 const TENDENCY_ZH: Record<string, string> = {
   home: "主队",
   draw: "平局",
@@ -22,9 +28,9 @@ function formatDateZh(dateStr: string | null): string {
 
 // 已付费 + 在 7 天有效期内(availability='live'):呈现"概率分布"
 // (主胜 44% / 平局 26% / 客胜 30%),不是"预测胜负"。p_home/p_draw/p_away
-// 只在这个分支里被读取——未付费、或距开赛 >7 天的 WdlMatch 对象根本不带
-// 这几个字段,这个函数只会在 m.locked === false 时被调用。
-function ProbDistribution({ m, compact }: { m: WdlMatch; compact?: boolean }) {
+// 只在这个分支里被读取——未付费、或距开赛 >7 天的 JSON 形状物理上根本不带
+// 这几个字段(LegacyWdlLiveFullMatch 专属),prop 类型已收窄,不接受其他两支。
+function ProbDistribution({ m, compact }: { m: WdlLiveFull; compact?: boolean }) {
   const pHome = m.p_home!;
   const pDraw = m.p_draw!;
   const pAway = m.p_away!;
@@ -51,9 +57,10 @@ function ProbDistribution({ m, compact }: { m: WdlMatch; compact?: boolean }) {
 }
 
 // 已在 7 天有效期内(availability='live')但未付费:只有 tendency(倾向词)
-// 这一个钩子 + 锁定文案。这个分支不引用、也读不到 m.p_home/p_draw/p_away
-// ——数据来源是 API 响应本身没下发,不是拿到之后用 CSS/JS 遮起来。
-function LockedHook({ m, compact }: { m: WdlMatch; compact?: boolean }) {
+// 这一个钩子 + 锁定文案。这个分支的 prop 类型(LegacyWdlLiveLockedMatch 专属)
+// 物理上不含 p_home/p_draw/p_away——数据来源是 API 响应本身没下发,不是拿到
+// 之后用 CSS/JS 遮起来。
+function LockedHook({ m, compact }: { m: WdlLiveLocked; compact?: boolean }) {
   return (
     <div className={`${styles.lockedRow} ${compact ? styles.compact : ""}`}>
       <span className={styles.tendencyHook}>

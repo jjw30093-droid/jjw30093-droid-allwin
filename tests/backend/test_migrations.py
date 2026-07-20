@@ -89,6 +89,22 @@ def test_checksum_drift_detected(tmp_path):
         migrate.apply_all("platform", db_file=db, migrations_dir=mdir, quiet=True)
 
 
+def test_status_reports_checksum_drift_without_applying(tmp_path):
+    """status() 必须能在不调用 apply_all() 的情况下发现漂移(restore_verify/
+    ops_check 只想"检查",不想真的对被检查的库副本执行一次迁移)。"""
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    st = migrate.status("platform", db_file=db)
+    assert st["checksum_drift"] == []
+    # 直接改写 schema_migrations 里的 checksum,模拟"记录的校验和与当前文件不符"
+    conn = sqlite3.connect(db)
+    conn.execute("UPDATE schema_migrations SET checksum='tampered' WHERE version=1")
+    conn.commit()
+    conn.close()
+    st2 = migrate.status("platform", db_file=db)
+    assert st2["checksum_drift"], "篡改 schema_migrations.checksum 后 status() 必须报告漂移"
+
+
 def test_failed_migration_rolls_back(tmp_path):
     mdir = tmp_path / "migrations"
     mdir.mkdir()

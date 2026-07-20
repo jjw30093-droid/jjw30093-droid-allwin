@@ -1,0 +1,30 @@
+# 赛前采集轮询(oneshot):NowGoal 赔率 + FotMob 阵容/伤停。
+# 每 5 分钟由 allwin-poll.timer 触发一次"到期判断"(CLAUDE.md §6.3)——
+# 真正是否请求数据源由 poll_state 节流决定(2–72h 每 15 分钟,0–2h 每 5 分钟),
+# 不是所有比赛每 5 分钟都打数据源。
+#
+# 两个采集任务通过 backend.worker.poll_wrapper 顺序执行、汇总退出码——不是两条
+# 独立 ExecStart=:systemd 多条 ExecStart= 是顺序执行,一条非零退出且未加 `-`
+# 前缀会阻止后续 ExecStart= 执行,直接拆成两条会导致 NowGoal 失败时 FotMob 完全
+# 不被尝试。FotMob 需 THORDATA_PROXY,缺失时该子任务如实记 failed,不崩溃、
+# 不影响 NowGoal 那一半是否被尝试。
+[Unit]
+Description=allwin pre-match polling (nowgoal odds + fotmob lineup/sideline)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.poll_wrapper
+User=allwin
+Group=allwin
+Nice=5
+TimeoutStartSec=1200
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data

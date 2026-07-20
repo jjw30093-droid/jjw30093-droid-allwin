@@ -18,6 +18,9 @@ Environment=NODE_ENV=production
 ExecStart=/opt/allwin/current/frontend/node_modules/.bin/next start -H 127.0.0.1 -p 3000
 Restart=on-failure
 RestartSec=3
+TimeoutStartSec=30
+TimeoutStopSec=30
+UMask=0077
 # 基础加固
 NoNewPrivileges=true
 PrivateTmp=true

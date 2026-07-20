@@ -2,6 +2,8 @@
 
 - RealWechatOAProvider:已认证服务号网页授权(snsapi_base)。真实凭证缺失时无法验证,
   外部能力状态见 docs/auth-wechat.md(UNVERIFIED 标记)。
+- DisabledWechatProvider:WECHAT_AUTH_ENABLED=0 时的显式占位,公开站点可无凭证启动,
+  微信端点由路由层返回 503 AUTH_DISABLED(CLAUDE.md §7.3 三态)。
 - MockWechatProvider:仅 development。production 在 config 层 fail-fast,双保险在
   build_provider 里再拦一次。
 """
@@ -66,6 +68,24 @@ class RealWechatOAProvider:
         return WechatIdentity(openid=data["openid"], union_id=data.get("unionid"))
 
 
+class DisabledWechatProvider:
+    """WECHAT_AUTH_ENABLED=0(real 未开启)时的显式占位 Provider(CLAUDE.md §7.3 三态)。
+
+    公开站点必须可以无微信凭证启动:不实例化 RealWechatOAProvider,也不校验凭证。
+    微信端点在路由层(settings.wechat_login_available)直接返回 503 AUTH_DISABLED,
+    正常情况下不会调用到这里;万一被调用,抛错兜底而不是静默放行。
+    """
+
+    kind = "disabled"
+    app_id = ""
+
+    def authorize_url(self, redirect_uri: str, state: str) -> str:
+        raise AuthProviderError("微信登录未启用(AUTH_DISABLED),不应调用 authorize_url")
+
+    def exchange_code(self, code: str) -> WechatIdentity:
+        raise AuthProviderError("微信登录未启用(AUTH_DISABLED),不应调用 exchange_code")
+
+
 class MockWechatProvider:
     """development 专用:authorize_url 直接 302 回本站 callback,code=mock-<subject>。"""
 
@@ -84,6 +104,10 @@ class MockWechatProvider:
 
 def build_provider(settings: AuthSettings):
     if settings.wechat_provider_kind == "real":
+        if not settings.wechat_auth_enabled:
+            # 三态之一:production/development + real + ENABLED=0
+            # → 无凭证可启动,不得尝试实例化真实 Provider(CLAUDE.md §7.3)
+            return DisabledWechatProvider()
         return RealWechatOAProvider(settings.wechat_app_id, settings.wechat_app_secret)
     if settings.is_production:
         raise AuthConfigError("production 禁止实例化 MockWechatProvider(fail-fast)")

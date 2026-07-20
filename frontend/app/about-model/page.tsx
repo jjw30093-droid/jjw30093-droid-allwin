@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { serverGet } from "@/lib/api-v1";
+import { serverGet, type GetJson } from "@/lib/api-v1";
 import { LocalTime } from "@/components/trust/LocalTime";
 import styles from "./about-model.module.css";
 
@@ -10,36 +10,11 @@ export const metadata: Metadata = {
     "预测模型的通俗说明:数据来源、特征、Dixon-Coles + isotonic 校准原理、walk-forward 评估方法、各项指标解释与已知局限。",
 };
 
-/* /api/v1/model/metrics 无 response_model,OpenAPI 生成类型为 unknown;
- * 此接口结构以 backend/api/routes_public.py::model_metrics 为准,在此按实际
- * 返回结构收窄。数字字段全部做运行时类型守卫,API 缺数据的项不显示数字。 */
-interface ModelVersionDTO {
-  id: string;
-  algorithm: string;
-  description: string;
-  trained_at: string | null;
-  train_range: string | null;
-  created_at: string;
-  params: Record<string, unknown>;
-  dev_metrics: Record<string, unknown>;
-}
-
-interface OfficialEvaluationDTO {
-  sample_size: number;
-  accuracy: number | null;
-  brier: number | null;
-  log_loss: number | null;
-  rps: number | null;
-  calibration: unknown[];
-  evaluated_at: string | null;
-}
-
-interface ModelMetricsResponse {
-  model_versions: ModelVersionDTO[];
-  official_evaluation: OfficialEvaluationDTO | null;
-  official_evaluation_note: string | null;
-  market_baseline: { status: string; note: string };
-}
+/* 类型从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3)。
+ * params / dev_metrics 在契约里就是宽 dict,数字字段全部做运行时类型守卫,
+ * API 缺数据的项不显示数字。 */
+type ModelMetricsResponse = GetJson<"/api/v1/model/metrics">;
+type ModelVersionDTO = ModelMetricsResponse["model_versions"][number];
 
 function asNum(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;

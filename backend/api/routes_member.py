@@ -8,8 +8,19 @@ from backend.db.connections import tx
 from backend.db.util import utc_now_iso
 
 from .deps import NO_STORE, AuthContext, platform_ro, platform_rw, require_csrf, require_user
+from .schemas import (
+    AccountResponse,
+    FavoritesResponse,
+    OkDTO,
+    RedeemResponse,
+    error_responses,
+)
 
-router = APIRouter(prefix="/api/v1", tags=["member"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["member"],
+    responses=error_responses(400, 401, 403, 404, 422),
+)
 
 
 def _no_store(response: Response) -> None:
@@ -20,7 +31,7 @@ class RedeemBody(BaseModel):
     code: str = Field(min_length=6, max_length=32)
 
 
-@router.post("/redeem")
+@router.post("/redeem", response_model=RedeemResponse)
 def redeem(
     body: RedeemBody,
     response: Response,
@@ -41,7 +52,7 @@ class FavoriteBody(BaseModel):
     match_id: int
 
 
-@router.post("/favorites")
+@router.post("/favorites", response_model=OkDTO)
 def add_favorite(
     body: FavoriteBody,
     response: Response,
@@ -57,7 +68,7 @@ def add_favorite(
     return {"status": "ok"}
 
 
-@router.delete("/favorites/{match_id}")
+@router.delete("/favorites/{match_id}", response_model=OkDTO)
 def remove_favorite(
     match_id: int,
     response: Response,
@@ -72,7 +83,7 @@ def remove_favorite(
     return {"status": "ok"}
 
 
-@router.get("/favorites")
+@router.get("/favorites", response_model=FavoritesResponse)
 def list_favorites(
     response: Response,
     ctx: AuthContext = Depends(require_user),
@@ -86,7 +97,7 @@ def list_favorites(
     return {"favorites": [dict(r) for r in rows]}
 
 
-@router.get("/account")
+@router.get("/account", response_model=AccountResponse)
 def account(
     response: Response,
     ctx: AuthContext = Depends(require_user),
@@ -126,7 +137,7 @@ class RevokeSessionBody(BaseModel):
     session_id: str
 
 
-@router.post("/account/sessions/revoke")
+@router.post("/account/sessions/revoke", response_model=OkDTO)
 def revoke_other_session(
     body: RevokeSessionBody,
     response: Response,

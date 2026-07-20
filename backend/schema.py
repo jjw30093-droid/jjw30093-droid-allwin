@@ -128,6 +128,13 @@ DIM_MATCH_COLUMNS = [
     ("Temperature", "TEXT"),
     ("Wind_Speed", "TEXT"),
     ("Who_Lost_On_Penalties", "TEXT"),
+    # 精确 UTC 开球时刻(CLAUDE.md §6.2.1);来源只给日期时为 NULL,不伪装精确时间。
+    # 已有库经 backend/migrations/core/0001_dim_match_kickoff.sql 补列。
+    ("kickoff_at_utc", "TEXT"),
+    # 开球时间精度与来源(provenance,§6.2.1);migrations/core/0002 补列。
+    # kickoff_precision ∈ exact / date_only / unknown;kickoff_source 可空,不编造。
+    ("kickoff_precision", "TEXT"),
+    ("kickoff_source", "TEXT"),
 ]
 
 DIM_PLAYER_COLUMNS = [

@@ -25,6 +25,8 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 | 目录/文件 | 职责 | 关键内容 |
 |---|---|---|
 | `api/app.py` | FastAPI 应用装配 | `create_app()`:加载 AuthSettings(production fail-fast)、构建微信 Provider、装配 v1 路由、挂载旧 `/api/league/*` 兼容层(标 deprecated)、`/healthz` `/readyz` |
+| `api/cache_policy.py` | 缓存隔离(app 层 default-deny) | 纯 ASGI `CachePolicyMiddleware`:请求带 Cookie/Authorization 或响应带 Set-Cookie → 强制 `private, no-store`;路径不在显式 `PUBLIC_ALLOWLIST` → 同样强制;未设置任何 Cache-Control(异常路径等遗漏)→ 默认 `private, no-store`;`backend.api.app:app` 与 `backend.api_server.app` 都已接入,回归见 `tests/backend/test_cache_policy.py` |
+| `api/error_handlers.py` | 全站统一错误契约 | `register_error_handlers(app)`:HTTPException/422/未捕获异常统一为 `{code,message,details}`;未捕获异常(500)由 Starlette `ServerErrorMiddleware` 直接发送、不经过任何 `user_middleware`,故其 `Cache-Control` 头在这里直接设置,不依赖 cache_policy 中间件兜底 |
 | `api/deps.py` | 请求级依赖 | 三库 ro/rw 连接依赖、`AuthContext`(user/role/plan/entitlements)、`require_user/require_admin/require_entitlement/require_csrf`、Origin allowlist、限流键 |
 | `api/schemas.py` | Pydantic DTO(单一真源) | `PredictionFreeDTO`(只有 top_outcome/top_probability)与 `PredictionFullDTO` 物理分离;OpenAPI → 前端 TS 类型生成 |
 | `api/routes_auth.py` | `/api/v1/auth/*`、`/api/v1/me` | 微信 OAuth start/callback、Device Login、密码登录(admin)、logout |
@@ -51,8 +53,9 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 | `models/` | 模型 | `features/build_match_features.py`(int_match_features)、`build_wdl_baseline.py`(DC+isotonic 训练)、`predict_wdl_future.py`(固定参数出未来预测) |
 | `eval/metrics.py` | 评估指标纯函数 | Accuracy/Brier/LogLoss/RPS/Calibration,离线运行 |
 | `studio/bundle.py` | analysis_bundle | 同一份 bundle 驱动比赛详情页与 Studio;含导出渲染(txt/srt) |
-| `worker/runner.py` | 轻量 Worker | 任务注册表、job_runs 全生命周期、文件锁、幂等键、有限重试/退避/超时、`--chain --from` |
-| `cli/` | 命令行工具 | `create_admin`、`import_gold_predictions`、`evaluate_predictions`、`build_manifest`、`poll_nowgoal`、`export_openapi` |
+| `worker/runner.py` | 轻量 Worker | 任务注册表、job_runs 全生命周期、文件锁、幂等键、有限重试/退避/超时、`--chain --from --periodic`(`--periodic` 跳过 `PERIODIC_CHAIN_EXCLUDE`=nowgoal_snapshot/fotmob_snapshot,避免与 allwin-poll.timer 重复调度) |
+| `worker/poll_wrapper.py` | allwin-poll.service 调度包装 | 顺序执行 nowgoal_snapshot + fotmob_snapshot,任一失败不阻止另一个被尝试,汇总退出码(代替两条独立 systemd ExecStart=) |
+| `cli/` | 命令行工具 | `create_admin`、`import_gold_predictions`、`evaluate_predictions`、`build_manifest`、`poll_nowgoal`、`poll_fotmob_snapshots`、`resolve_entities`、`build_odds_silver`、`repair_kickoff_provenance`、`export_openapi`、`ops_check`(只读运维检查,见 docs/deployment-aws-cloudflare.md §11) |
 
 ### 2.2 既有(legacy)模块,保留兼容
 
@@ -142,13 +145,30 @@ gold_wdl_predictions ──cli/import_gold_predictions──▶ platform.db 预�
 
 ## 6. Worker 任务链
 
-`backend/worker/runner.py`,job_runs 记录在 platform.db;生产由 `allwin-worker.timer`(15 分钟)触发 `--chain`:
+`backend/worker/runner.py`,job_runs 记录在 platform.db。生产两个 timer:
+`allwin-worker.timer`(15 分钟)触发 `--chain --periodic`(跳过
+nowgoal_snapshot/fotmob_snapshot,这两步已由 allwin-poll.timer 独立调度,
+避免两个定时器争抢同一把 `data/locks/<job>.lock`——`run_chain()` 把"被锁"
+和"失败"同等对待,重复调度会让整条 15 分钟链被良性锁竞争无谓地级联跳过);
+`allwin-poll.timer`(5 分钟)通过 `backend/worker/poll_wrapper.py` 顺序执行
+nowgoal_snapshot + fotmob_snapshot 两个采集任务的"到期判断"(真实频率由
+odds.db poll_state 节流:2–72h 每 15 分钟,0–2h 每 5 分钟),两者互不阻塞、
+汇总退出码。手动端到端重跑仍用不带 `--periodic` 的完整 `--chain`。
 
 ```text
-schedule_sync → fotmob_incremental → nowgoal_snapshot → entity_resolution
-→ silver_build → model_predict → prediction_register → analysis_bundle_build
-→ postmatch_settle → metrics_rebuild
+schedule_sync → fotmob_incremental → nowgoal_snapshot → fotmob_snapshot
+→ entity_resolution → core_silver_build → odds_silver_build → model_predict
+→ prediction_register → analysis_bundle_build → postmatch_settle → metrics_rebuild
 ```
+
+核心任务全部为真实注册任务(CLAUDE.md §13):
+- `nowgoal_snapshot` = `python -m backend.cli.poll_nowgoal --due`;
+- `fotmob_snapshot` = `python -m backend.cli.poll_fotmob_snapshots --due`(需 THORDATA_PROXY);
+- `entity_resolution` = `python -m backend.cli.resolve_entities`(全联赛别名种子 + xref 状态);
+- `odds_silver_build` = `python -m backend.cli.build_odds_silver`(moves + 时间共现,幂等);
+- `analysis_bundle_build` = 包内函数,对窗口内 NotStarted 场次逐场构建
+  (与详情页 /Studio 共用同一 `backend/studio/bundle.py`)。
+外部凭证缺失时任务如实记 failed + 原因,不以"模块不存在"跳过。
 
 - 某步 failed 后,后续步骤记 skipped(依赖检查);`--from <step>` 支持从中间重跑。
 - 幂等键 `(job_name, idempotency_key)` 已成功 → skipped;`--force` 强制重跑。

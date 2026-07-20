@@ -36,6 +36,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db import get_connection
+from db.util import normalize_utc_iso
 from fotmob_client import FotMobClient
 from ingest_match import _upsert
 from schema import DIM_MATCH_COLUMNS
@@ -66,12 +67,25 @@ def fetch_fixture_rows(client: FotMobClient, league_id: int, season: str) -> lis
         away = m.get("away") or {}
         utc = status_obj.get("utcTime")
         date = utc[:10] if isinstance(utc, str) and len(utc) >= 10 and utc[4] == "-" and utc[7] == "-" else None
+        # 精确开球时刻(CLAUDE.md §6.2.1):保留来源 utcTime 的完整时间;
+        # 来源只给日期时为 NULL,不补当天 00:00 伪装精确时间。provenance 同步落库:
+        # 有精确时刻 → exact + source 'fotmob:fixtures';只有日期 → date_only,不编造来源。
+        kickoff_at_utc = normalize_utc_iso(utc)
+        if kickoff_at_utc is not None:
+            kickoff_precision, kickoff_source = "exact", "fotmob:fixtures"
+        elif date is not None:
+            kickoff_precision, kickoff_source = "date_only", None
+        else:
+            kickoff_precision, kickoff_source = "unknown", None
 
         rows.append({
             "Match_ID": int(m["id"]),
             "Season": season,
             "League_ID": int(league_id),
             "Date": date,
+            "kickoff_at_utc": kickoff_at_utc,
+            "kickoff_precision": kickoff_precision,
+            "kickoff_source": kickoff_source,
             "Home_Team_ID": int(home["id"]) if home.get("id") is not None else None,
             "Away_Team_ID": int(away["id"]) if away.get("id") is not None else None,
             "Home_Team_Name": home.get("name"),

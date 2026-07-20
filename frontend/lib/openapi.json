@@ -5,6 +5,97 @@
   "version": "1.0.0"
  },
  "paths": {
+  "/api/v1/auth/methods": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Auth Methods",
+    "operationId": "auth_methods_api_v1_auth_methods_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AuthMethodsDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "502": {
+      "description": "Bad Gateway",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/auth/wechat/oa/start": {
    "get": {
     "tags": [
@@ -42,20 +133,85 @@
      }
     ],
     "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      }
+     "302": {
+      "description": "跳转微信授权页(无 body)"
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Gateway"
+     },
+     "503": {
+      "description": "微信登录暂未开放(AUTH_DISABLED)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -97,16 +253,91 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/WechatCallbackApprovedDTO"
+        }
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Gateway"
+     },
+     "302": {
+      "description": "login 分支:种会话 Cookie 后跳回站内 next(无 body)"
+     },
+     "503": {
+      "description": "微信登录暂未开放(AUTH_DISABLED)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -126,7 +357,89 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/DeviceLoginCreatedDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "502": {
+      "description": "Bad Gateway",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "微信登录暂未开放(AUTH_DISABLED)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -166,16 +479,88 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/DeviceClaimResultDTO"
+        }
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Gateway"
+     },
+     "503": {
+      "description": "微信登录暂未开放(AUTH_DISABLED)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -205,16 +590,78 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      },
      "422": {
-      "description": "Validation Error",
+      "description": "Unprocessable Content",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "502": {
+      "description": "Bad Gateway",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -234,7 +681,79 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "502": {
+      "description": "Bad Gateway",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -255,6 +774,76 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/MeDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "502": {
+      "description": "Bad Gateway",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -280,6 +869,56 @@
          },
          "type": "array",
          "title": "Response List Leagues Api V1 Leagues Get"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -326,19 +965,61 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/StandingsResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -428,15 +1109,55 @@
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
-      }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -535,15 +1256,55 @@
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
-      }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -577,15 +1338,55 @@
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
-      }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -620,15 +1421,55 @@
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
-      }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -657,19 +1498,61 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/AnalysisBundleDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -698,19 +1581,69 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/MatchOddsAvailableDTO"
+          },
+          {
+           "$ref": "#/components/schemas/MatchOddsUnavailableDTO"
+          }
+         ],
+         "title": "Response Match Odds Api V1 Matches  Match Id  Odds Get"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -739,19 +1672,69 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/CooccurrenceFullDTO"
+          },
+          {
+           "$ref": "#/components/schemas/CooccurrenceSummaryDTO"
+          }
+         ],
+         "title": "Response Match Cooccurrence Api V1 Matches  Match Id  Cooccurrence Get"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -762,7 +1745,7 @@
      "public"
     ],
     "summary": "Track Record",
-    "description": "匿名公开:official + locked + pre-kickoff 全量样本(含撤回,透明),不挑选。",
+    "description": "匿名公开:全部正式样本(official + 曾锁定 + 赛前发布),不挑选。\n\n永久资格不变量(CLAUDE.md §9.1):撤回(retracted)与被修正版取代\n(superseded_by 非空)的正式样本不退出列表与指标分母,只带状态与修正链\n标注(status / superseded_by / correction_of);修正链新旧版本同时返回。",
     "operationId": "track_record_api_v1_track_record_get",
     "parameters": [
      {
@@ -800,15 +1783,55 @@
        }
       }
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
-      }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -819,14 +1842,66 @@
      "public"
     ],
     "summary": "Model Metrics",
-    "description": "模型版本与评估口径。研发期指标来自 walk-forward 回测;正式战绩指标只来自\nofficial 样本的离线评估。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。",
+    "description": "模型版本与评估口径。研发期指标来自 walk-forward 回测;正式战绩指标只来自\n正式样本(official + 曾锁定 + 赛前发布)的离线评估,分母含撤回与被取代版本,\n不可选择性剔除(CLAUDE.md §9.1)。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。",
     "operationId": "model_metrics_api_v1_model_metrics_get",
     "responses": {
      "200": {
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/ModelMetricsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -846,7 +1921,59 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/ProductsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -875,16 +2002,58 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/RedeemResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      },
      "422": {
-      "description": "Validation Error",
+      "description": "Unprocessable Content",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -904,7 +2073,59 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/FavoritesResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -931,16 +2152,58 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      },
      "422": {
-      "description": "Validation Error",
+      "description": "Unprocessable Content",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -971,19 +2234,61 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1000,7 +2305,59 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/AccountResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -1029,16 +2386,58 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      },
      "422": {
-      "description": "Validation Error",
+      "description": "Unprocessable Content",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -1090,19 +2489,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/AdminUsersResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1140,19 +2591,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/GrantResultDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1180,19 +2683,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1220,19 +2775,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/AdminCodesCreatedResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    },
@@ -1269,19 +2876,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/AdminCodesListResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1330,19 +2989,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/AdminPredictionsResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1370,19 +3081,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1410,19 +3173,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1460,19 +3275,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1483,7 +3350,7 @@
      "admin"
     ],
     "summary": "Publish Upcoming",
-    "description": "批量:把所有开球前的 draft 发布(可选同时锁定)。逐条独立事务,失败不拖累其余。",
+    "description": "批量:尝试发布全部 draft(可选同时锁定)。逐条独立事务,失败不拖累其余。\n\n候选集不再按 kickoff_at_utc 预筛(候选行可能因 date_only/unknown provenance 而\nkickoff_at_utc 为 NULL,仍应被尝试并拿到明确失败原因,而不是被 SQL 悄悄排除在外)——\n唯一验证入口是 publish_snapshot/lock_snapshot 内部的门禁,这里只负责收集结果。",
     "operationId": "publish_upcoming_api_v1_admin_predictions_publish_upcoming_post",
     "requestBody": {
      "content": {
@@ -1500,16 +3367,68 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/PublishUpcomingResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "Conflict",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      },
      "422": {
-      "description": "Validation Error",
+      "description": "Unprocessable Content",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -1551,19 +3470,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/AuditLogsResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1613,19 +3584,51 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/XrefListResponse"
         }
        }
       }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1653,19 +3656,51 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/XrefReviewResultDTO"
         }
        }
       }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1693,19 +3728,51 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/XrefReviewResultDTO"
         }
        }
       }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1733,19 +3800,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/StudioBundleDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1762,7 +3881,69 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/StudioDraftsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      }
@@ -1790,16 +3971,68 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/StudioDraftCreatedDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "410": {
+      "description": "Gone",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
        }
       }
      },
      "422": {
-      "description": "Validation Error",
+      "description": "Unprocessable Content",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -1830,19 +4063,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/StudioDraftDetailDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    },
@@ -1878,19 +4163,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1928,19 +4265,71 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/OkDTO"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -1978,19 +4367,79 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/StudioExportServerDTO"
+          },
+          {
+           "$ref": "#/components/schemas/StudioExportClientDTO"
+          }
+         ],
+         "title": "Response Export Draft Api V1 Studio Drafts  Draft Id  Export Post"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -2015,22 +4464,75 @@
     ],
     "responses": {
      "200": {
-      "description": "Successful Response",
+      "description": "导出文件下载(txt/json/srt)",
       "content": {
-       "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
+       "application/octet-stream": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "type": "string",
+         "format": "binary"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "410": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Gone"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -2054,14 +4556,24 @@
     },
     "responses": {
      "204": {
-      "description": "Successful Response"
+      "description": "已记录/已限流丢弃(无 body)"
      },
-     "422": {
-      "description": "Validation Error",
+     "400": {
+      "description": "Bad Request",
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
         }
        }
       }
@@ -2109,19 +4621,31 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/LeagueOverviewResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -2166,19 +4690,51 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/LeagueBettingResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -2223,19 +4779,31 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/LeagueMatchesResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -2280,19 +4848,31 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "description": "Validation Error",
-      "content": {
-       "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
+         "$ref": "#/components/schemas/LeagueWdlPredictionsResponse"
         }
        }
       }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -2306,7 +4886,9 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/HealthzDTO"
+        }
        }
       }
      }
@@ -2316,14 +4898,26 @@
   "/readyz": {
    "get": {
     "summary": "Readyz",
-    "description": "三库可读 + migration 无 pending 才 ready。",
+    "description": "三库可读 + migration 无 pending 才 ready。\n\n公网未认证响应只返回稳定、清理过的问题标识——不返回原始异常文本、\nSQL、绝对路径、迁移文件名或堆栈(这些是内部实现细节,即便不算\"秘密\"\n也不该暴露给任意匿名调用者当侦察信息)。真实异常详情记录到服务端日志。",
     "operationId": "readyz_readyz_get",
     "responses": {
      "200": {
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/HealthzDTO"
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "数据库不可读或存在 pending migration",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReadyzProblemsDTO"
+        }
        }
       }
      }
@@ -2333,6 +4927,659 @@
  },
  "components": {
   "schemas": {
+   "AccountIdentity": {
+    "properties": {
+     "provider": {
+      "type": "string",
+      "title": "Provider"
+     },
+     "provider_app_id": {
+      "type": "string",
+      "title": "Provider App Id"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "last_used_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Used At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "provider",
+     "provider_app_id",
+     "created_at"
+    ],
+    "title": "AccountIdentity"
+   },
+   "AccountRecovery": {
+    "properties": {
+     "available": {
+      "type": "boolean",
+      "title": "Available"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "available",
+     "note"
+    ],
+    "title": "AccountRecovery"
+   },
+   "AccountResponse": {
+    "properties": {
+     "user": {
+      "$ref": "#/components/schemas/MeUser"
+     },
+     "plan": {
+      "type": "string",
+      "title": "Plan"
+     },
+     "entitlements": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Entitlements"
+     },
+     "identities": {
+      "items": {
+       "$ref": "#/components/schemas/AccountIdentity"
+      },
+      "type": "array",
+      "title": "Identities"
+     },
+     "subscriptions": {
+      "items": {
+       "$ref": "#/components/schemas/AccountSubscription"
+      },
+      "type": "array",
+      "title": "Subscriptions"
+     },
+     "sessions": {
+      "items": {
+       "$ref": "#/components/schemas/AccountSession"
+      },
+      "type": "array",
+      "title": "Sessions"
+     },
+     "recovery": {
+      "$ref": "#/components/schemas/AccountRecovery"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user",
+     "plan",
+     "entitlements",
+     "identities",
+     "subscriptions",
+     "sessions",
+     "recovery"
+    ],
+    "title": "AccountResponse"
+   },
+   "AccountSession": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "last_seen_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Seen At"
+     },
+     "expires_at": {
+      "type": "string",
+      "title": "Expires At"
+     },
+     "user_agent": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Agent"
+     },
+     "is_current": {
+      "type": "integer",
+      "title": "Is Current"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "created_at",
+     "expires_at",
+     "is_current"
+    ],
+    "title": "AccountSession"
+   },
+   "AccountSubscription": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "starts_at": {
+      "type": "string",
+      "title": "Starts At"
+     },
+     "ends_at": {
+      "type": "string",
+      "title": "Ends At"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "plan_id",
+     "status",
+     "starts_at",
+     "ends_at",
+     "source",
+     "created_at"
+    ],
+    "title": "AccountSubscription"
+   },
+   "AdminCodesCreatedResponse": {
+    "properties": {
+     "codes": {
+      "items": {
+       "$ref": "#/components/schemas/RedeemCodeCreatedItem"
+      },
+      "type": "array",
+      "title": "Codes"
+     }
+    },
+    "type": "object",
+    "required": [
+     "codes"
+    ],
+    "title": "AdminCodesCreatedResponse"
+   },
+   "AdminCodesListResponse": {
+    "properties": {
+     "codes": {
+      "items": {
+       "$ref": "#/components/schemas/AdminRedeemCodeItem"
+      },
+      "type": "array",
+      "title": "Codes"
+     }
+    },
+    "type": "object",
+    "required": [
+     "codes"
+    ],
+    "title": "AdminCodesListResponse"
+   },
+   "AdminPredictionItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "kickoff_at_utc": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kickoff At Utc"
+     },
+     "model_version_id": {
+      "type": "string",
+      "title": "Model Version Id"
+     },
+     "generated_at": {
+      "type": "string",
+      "title": "Generated At"
+     },
+     "published_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Published At"
+     },
+     "locked_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Locked At"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "is_official": {
+      "type": "integer",
+      "title": "Is Official"
+     },
+     "visibility": {
+      "type": "string",
+      "title": "Visibility"
+     },
+     "home_win": {
+      "type": "number",
+      "title": "Home Win"
+     },
+     "draw": {
+      "type": "number",
+      "title": "Draw"
+     },
+     "away_win": {
+      "type": "number",
+      "title": "Away Win"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "match_id",
+     "model_version_id",
+     "generated_at",
+     "status",
+     "is_official",
+     "visibility",
+     "home_win",
+     "draw",
+     "away_win"
+    ],
+    "title": "AdminPredictionItem"
+   },
+   "AdminPredictionsResponse": {
+    "properties": {
+     "counts": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "type": "object",
+      "title": "Counts"
+     },
+     "predictions": {
+      "items": {
+       "$ref": "#/components/schemas/AdminPredictionItem"
+      },
+      "type": "array",
+      "title": "Predictions"
+     }
+    },
+    "type": "object",
+    "required": [
+     "counts",
+     "predictions"
+    ],
+    "title": "AdminPredictionsResponse"
+   },
+   "AdminRedeemCodeItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "duration_days": {
+      "type": "integer",
+      "title": "Duration Days"
+     },
+     "batch_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Batch Id"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "expires_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expires At"
+     },
+     "used_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Used By"
+     },
+     "used_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Used At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "plan_id",
+     "duration_days",
+     "status",
+     "created_at"
+    ],
+    "title": "AdminRedeemCodeItem"
+   },
+   "AdminUserItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "display_name": {
+      "type": "string",
+      "title": "Display Name"
+     },
+     "role": {
+      "type": "string",
+      "title": "Role"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "last_login_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Login At"
+     },
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "plan_ends_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plan Ends At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "display_name",
+     "role",
+     "status",
+     "created_at",
+     "plan_id"
+    ],
+    "title": "AdminUserItem"
+   },
+   "AdminUsersResponse": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "users": {
+      "items": {
+       "$ref": "#/components/schemas/AdminUserItem"
+      },
+      "type": "array",
+      "title": "Users"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "users"
+    ],
+    "title": "AdminUsersResponse"
+   },
+   "AnalysisBundleDTO": {
+    "properties": {
+     "bundle_version": {
+      "type": "string",
+      "title": "Bundle Version"
+     },
+     "built_at": {
+      "type": "string",
+      "title": "Built At"
+     },
+     "match": {
+      "$ref": "#/components/schemas/MatchSummary"
+     },
+     "data_cutoff_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Cutoff At"
+     },
+     "model_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Version"
+     },
+     "prediction_public": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BundlePredictionPublic"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "prediction_member": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BundlePredictionMember"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "evidence": {
+      "items": {
+       "$ref": "#/components/schemas/BundleEvidenceItem"
+      },
+      "type": "array",
+      "title": "Evidence"
+     },
+     "counter_evidence": {
+      "items": {
+       "$ref": "#/components/schemas/BundleEvidenceItem"
+      },
+      "type": "array",
+      "title": "Counter Evidence"
+     },
+     "uncertainty": {
+      "items": {
+       "$ref": "#/components/schemas/BundleUncertaintyItem"
+      },
+      "type": "array",
+      "title": "Uncertainty"
+     },
+     "odds_timeline": {
+      "items": {
+       "$ref": "#/components/schemas/BundleOddsPoint"
+      },
+      "type": "array",
+      "title": "Odds Timeline"
+     },
+     "cooccurring_events": {
+      "items": {
+       "$ref": "#/components/schemas/BundleCoocEvent"
+      },
+      "type": "array",
+      "title": "Cooccurring Events"
+     },
+     "chart_specs": {
+      "items": {
+       "$ref": "#/components/schemas/BundleChartSpec"
+      },
+      "type": "array",
+      "title": "Chart Specs"
+     },
+     "script_sections": {
+      "items": {
+       "$ref": "#/components/schemas/BundleScriptSection"
+      },
+      "type": "array",
+      "title": "Script Sections"
+     },
+     "source_notes": {
+      "items": {
+       "$ref": "#/components/schemas/BundleSourceNote"
+      },
+      "type": "array",
+      "title": "Source Notes"
+     },
+     "bundle_hash": {
+      "type": "string",
+      "title": "Bundle Hash"
+     },
+     "cooccurrence_count": {
+      "type": "integer",
+      "title": "Cooccurrence Count"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bundle_version",
+     "built_at",
+     "match",
+     "evidence",
+     "counter_evidence",
+     "uncertainty",
+     "odds_timeline",
+     "cooccurring_events",
+     "chart_specs",
+     "script_sections",
+     "source_notes",
+     "bundle_hash",
+     "cooccurrence_count"
+    ],
+    "title": "AnalysisBundleDTO",
+    "description": "GET /matches/{id}/analysis:公开投影(无 subtitle_cues,带 cooccurrence_count)。"
+   },
    "AnalyticsEventBody": {
     "properties": {
      "event": {
@@ -2386,6 +5633,568 @@
      "event"
     ],
     "title": "AnalyticsEventBody"
+   },
+   "ApiErrorDTO": {
+    "properties": {
+     "code": {
+      "type": "string",
+      "title": "Code"
+     },
+     "message": {
+      "type": "string",
+      "title": "Message"
+     },
+     "details": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Details"
+     }
+    },
+    "type": "object",
+    "required": [
+     "code",
+     "message",
+     "details"
+    ],
+    "title": "ApiErrorDTO"
+   },
+   "AuditLogItem": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "actor_user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor User Id"
+     },
+     "actor_type": {
+      "type": "string",
+      "title": "Actor Type"
+     },
+     "action": {
+      "type": "string",
+      "title": "Action"
+     },
+     "target_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target Type"
+     },
+     "target_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target Id"
+     },
+     "detail_json": {
+      "type": "string",
+      "title": "Detail Json"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "actor_type",
+     "action",
+     "detail_json",
+     "created_at"
+    ],
+    "title": "AuditLogItem"
+   },
+   "AuditLogsResponse": {
+    "properties": {
+     "logs": {
+      "items": {
+       "$ref": "#/components/schemas/AuditLogItem"
+      },
+      "type": "array",
+      "title": "Logs"
+     }
+    },
+    "type": "object",
+    "required": [
+     "logs"
+    ],
+    "title": "AuditLogsResponse"
+   },
+   "AuthMethodsDTO": {
+    "properties": {
+     "wechat_enabled": {
+      "type": "boolean",
+      "title": "Wechat Enabled"
+     }
+    },
+    "type": "object",
+    "required": [
+     "wechat_enabled"
+    ],
+    "title": "AuthMethodsDTO"
+   },
+   "BundleChartSpec": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "type": {
+      "type": "string",
+      "title": "Type"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "data": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Data"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "title",
+     "data"
+    ],
+    "title": "BundleChartSpec"
+   },
+   "BundleCoocEvent": {
+    "properties": {
+     "delta_seconds": {
+      "type": "integer",
+      "title": "Delta Seconds"
+     },
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "field": {
+      "type": "string",
+      "title": "Field"
+     },
+     "prev_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prev Value"
+     },
+     "new_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "New Value"
+     },
+     "moved_at": {
+      "type": "string",
+      "title": "Moved At"
+     },
+     "event_type": {
+      "type": "string",
+      "title": "Event Type"
+     },
+     "detail_json": {
+      "type": "string",
+      "title": "Detail Json"
+     }
+    },
+    "type": "object",
+    "required": [
+     "delta_seconds",
+     "market",
+     "field",
+     "moved_at",
+     "event_type",
+     "detail_json"
+    ],
+    "title": "BundleCoocEvent"
+   },
+   "BundleEvidenceItem": {
+    "properties": {
+     "side": {
+      "type": "string",
+      "title": "Side"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "text": {
+      "type": "string",
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "side",
+     "kind",
+     "text"
+    ],
+    "title": "BundleEvidenceItem"
+   },
+   "BundleOddsPoint": {
+    "properties": {
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "company": {
+      "type": "string",
+      "title": "Company"
+     },
+     "observed_at": {
+      "type": "string",
+      "title": "Observed At"
+     },
+     "payload": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Payload"
+     }
+    },
+    "type": "object",
+    "required": [
+     "market",
+     "company",
+     "observed_at",
+     "payload"
+    ],
+    "title": "BundleOddsPoint"
+   },
+   "BundlePredictionMember": {
+    "properties": {
+     "home_probability": {
+      "type": "number",
+      "title": "Home Probability"
+     },
+     "draw_probability": {
+      "type": "number",
+      "title": "Draw Probability"
+     },
+     "away_probability": {
+      "type": "number",
+      "title": "Away Probability"
+     },
+     "expected_home_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Home Goals"
+     },
+     "expected_away_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Away Goals"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "prediction_hash": {
+      "type": "string",
+      "title": "Prediction Hash"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home_probability",
+     "draw_probability",
+     "away_probability",
+     "status",
+     "prediction_hash"
+    ],
+    "title": "BundlePredictionMember"
+   },
+   "BundlePredictionPublic": {
+    "properties": {
+     "top_outcome": {
+      "type": "string",
+      "enum": [
+       "home",
+       "draw",
+       "away"
+      ],
+      "title": "Top Outcome"
+     },
+     "top_probability": {
+      "type": "number",
+      "title": "Top Probability"
+     }
+    },
+    "type": "object",
+    "required": [
+     "top_outcome",
+     "top_probability"
+    ],
+    "title": "BundlePredictionPublic"
+   },
+   "BundleScriptSection": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "text": {
+      "type": "string",
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "title",
+     "text"
+    ],
+    "title": "BundleScriptSection"
+   },
+   "BundleSourceNote": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "text": {
+      "type": "string",
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind",
+     "text"
+    ],
+    "title": "BundleSourceNote"
+   },
+   "BundleSubtitleCue": {
+    "properties": {
+     "start": {
+      "type": "number",
+      "title": "Start"
+     },
+     "end": {
+      "type": "number",
+      "title": "End"
+     },
+     "text": {
+      "type": "string",
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "start",
+     "end",
+     "text"
+    ],
+    "title": "BundleSubtitleCue"
+   },
+   "BundleUncertaintyItem": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "text": {
+      "type": "string",
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind",
+     "text"
+    ],
+    "title": "BundleUncertaintyItem"
+   },
+   "CooccurrenceFullDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count"
+     },
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/CooccurrenceItem"
+      },
+      "type": "array",
+      "title": "Items"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "count",
+     "items"
+    ],
+    "title": "CooccurrenceFullDTO",
+    "description": "report:deep:含明细。"
+   },
+   "CooccurrenceItem": {
+    "properties": {
+     "window_seconds": {
+      "type": "integer",
+      "title": "Window Seconds"
+     },
+     "delta_seconds": {
+      "type": "integer",
+      "title": "Delta Seconds"
+     },
+     "computed_at": {
+      "type": "string",
+      "title": "Computed At"
+     },
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "company_id": {
+      "type": "string",
+      "title": "Company Id"
+     },
+     "field": {
+      "type": "string",
+      "title": "Field"
+     },
+     "prev_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prev Value"
+     },
+     "new_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "New Value"
+     },
+     "odds_moved_at": {
+      "type": "string",
+      "title": "Odds Moved At"
+     },
+     "event_type": {
+      "type": "string",
+      "title": "Event Type"
+     },
+     "detail_json": {
+      "type": "string",
+      "title": "Detail Json"
+     },
+     "event_moved_at": {
+      "type": "string",
+      "title": "Event Moved At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "window_seconds",
+     "delta_seconds",
+     "computed_at",
+     "market",
+     "company_id",
+     "field",
+     "odds_moved_at",
+     "event_type",
+     "detail_json",
+     "event_moved_at"
+    ],
+    "title": "CooccurrenceItem"
+   },
+   "CooccurrenceSummaryDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count"
+     },
+     "items": {
+      "type": "null",
+      "title": "Items"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "count",
+     "note"
+    ],
+    "title": "CooccurrenceSummaryDTO",
+    "description": "匿名/free:只有计数,items 显式为 null。"
    },
    "CreateCodesBody": {
     "properties": {
@@ -2456,6 +6265,51 @@
     ],
     "title": "DeviceClaimBody"
    },
+   "DeviceClaimResultDTO": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "pending",
+       "claimed"
+      ],
+      "title": "Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status"
+    ],
+    "title": "DeviceClaimResultDTO"
+   },
+   "DeviceLoginCreatedDTO": {
+    "properties": {
+     "request_id": {
+      "type": "string",
+      "title": "Request Id"
+     },
+     "secret": {
+      "type": "string",
+      "title": "Secret"
+     },
+     "qr_url": {
+      "type": "string",
+      "title": "Qr Url"
+     },
+     "expires_at": {
+      "type": "string",
+      "title": "Expires At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "request_id",
+     "secret",
+     "qr_url",
+     "expires_at"
+    ],
+    "title": "DeviceLoginCreatedDTO"
+   },
    "DraftStatusBody": {
     "properties": {
      "status": {
@@ -2496,6 +6350,40 @@
     ],
     "title": "FavoriteBody"
    },
+   "FavoriteItem": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "created_at"
+    ],
+    "title": "FavoriteItem"
+   },
+   "FavoritesResponse": {
+    "properties": {
+     "favorites": {
+      "items": {
+       "$ref": "#/components/schemas/FavoriteItem"
+      },
+      "type": "array",
+      "title": "Favorites"
+     }
+    },
+    "type": "object",
+    "required": [
+     "favorites"
+    ],
+    "title": "FavoritesResponse"
+   },
    "GrantBody": {
     "properties": {
      "plan_id": {
@@ -2521,18 +6409,96 @@
     ],
     "title": "GrantBody"
    },
-   "HTTPValidationError": {
+   "GrantResultDTO": {
     "properties": {
-     "detail": {
-      "items": {
-       "$ref": "#/components/schemas/ValidationError"
-      },
-      "type": "array",
-      "title": "Detail"
+     "subscription_id": {
+      "type": "string",
+      "title": "Subscription Id"
+     },
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "starts_at": {
+      "type": "string",
+      "title": "Starts At"
+     },
+     "ends_at": {
+      "type": "string",
+      "title": "Ends At"
      }
     },
     "type": "object",
-    "title": "HTTPValidationError"
+    "required": [
+     "subscription_id",
+     "plan_id",
+     "starts_at",
+     "ends_at"
+    ],
+    "title": "GrantResultDTO"
+   },
+   "HealthzDTO": {
+    "properties": {
+     "ok": {
+      "type": "boolean",
+      "title": "Ok"
+     }
+    },
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "title": "HealthzDTO"
+   },
+   "LeagueBettingResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "type": "string",
+      "title": "Season"
+     },
+     "over_under": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyOverUnderThreshold"
+      },
+      "type": "array",
+      "title": "Over Under"
+     },
+     "score_distribution": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyScoreDistributionEntry"
+      },
+      "type": "array",
+      "title": "Score Distribution"
+     },
+     "goal_minute_buckets": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyGoalMinuteBucket"
+      },
+      "type": "array",
+      "title": "Goal Minute Buckets"
+     },
+     "team_betting_stats": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyTeamBettingStats"
+      },
+      "type": "array",
+      "title": "Team Betting Stats"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "season",
+     "over_under",
+     "score_distribution",
+     "goal_minute_buckets",
+     "team_betting_stats"
+    ],
+    "title": "LeagueBettingResponse"
    },
    "LeagueInfo": {
     "properties": {
@@ -2571,6 +6537,1242 @@
      "accessible"
     ],
     "title": "LeagueInfo"
+   },
+   "LeagueMatchesResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "type": "string",
+      "title": "Season"
+     },
+     "matches": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyMatchRow"
+      },
+      "type": "array",
+      "title": "Matches"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "season",
+     "matches"
+    ],
+    "title": "LeagueMatchesResponse"
+   },
+   "LeagueOverviewResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "type": "string",
+      "title": "Season"
+     },
+     "standings": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyStanding"
+      },
+      "type": "array",
+      "title": "Standings"
+     },
+     "league_summary": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LegacyLeagueSummary"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "team_stats": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyTeamSeasonStats"
+      },
+      "type": "array",
+      "title": "Team Stats"
+     },
+     "player_leaderboards": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/LegacyPlayerLeaderboard"
+      },
+      "type": "object",
+      "title": "Player Leaderboards"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "season",
+     "standings",
+     "league_summary",
+     "team_stats",
+     "player_leaderboards"
+    ],
+    "title": "LeagueOverviewResponse"
+   },
+   "LeagueWdlPredictionsResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "type": "string",
+      "title": "Season"
+     },
+     "matches": {
+      "items": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/LegacyWdlUpcomingMatch"
+        },
+        {
+         "$ref": "#/components/schemas/LegacyWdlLiveLockedMatch"
+        },
+        {
+         "$ref": "#/components/schemas/LegacyWdlLiveFullMatch"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Matches"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "season",
+     "matches"
+    ],
+    "title": "LeagueWdlPredictionsResponse"
+   },
+   "LegacyGoalMinuteBucket": {
+    "properties": {
+     "bucket": {
+      "type": "string",
+      "title": "Bucket"
+     },
+     "goal_count": {
+      "type": "integer",
+      "title": "Goal Count"
+     },
+     "pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bucket",
+     "goal_count",
+     "pct"
+    ],
+    "title": "LegacyGoalMinuteBucket"
+   },
+   "LegacyLeagueSummary": {
+    "properties": {
+     "total_matches": {
+      "type": "integer",
+      "title": "Total Matches"
+     },
+     "home_win_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Win Pct"
+     },
+     "draw_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Draw Pct"
+     },
+     "away_win_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Win Pct"
+     },
+     "avg_total_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Total Goals"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total_matches",
+     "home_win_pct",
+     "draw_pct",
+     "away_win_pct",
+     "avg_total_goals"
+    ],
+    "title": "LegacyLeagueSummary"
+   },
+   "LegacyMatchRow": {
+    "properties": {
+     "Match_ID": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "Date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Date"
+     },
+     "home_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Score"
+     },
+     "away_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Score"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "Match_Round": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Match Round"
+     },
+     "home_team_id": {
+      "type": "integer",
+      "title": "Home Team Id"
+     },
+     "away_team_id": {
+      "type": "integer",
+      "title": "Away Team Id"
+     },
+     "home_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Team Name Zh"
+     },
+     "away_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Team Name Zh"
+     }
+    },
+    "type": "object",
+    "required": [
+     "Match_ID",
+     "Date",
+     "home_score",
+     "away_score",
+     "status",
+     "Match_Round",
+     "home_team_id",
+     "away_team_id",
+     "home_team_name_zh",
+     "away_team_name_zh"
+    ],
+    "title": "LegacyMatchRow"
+   },
+   "LegacyOverUnderThreshold": {
+    "properties": {
+     "threshold": {
+      "type": "number",
+      "title": "Threshold"
+     },
+     "over_count": {
+      "type": "integer",
+      "title": "Over Count"
+     },
+     "under_count": {
+      "type": "integer",
+      "title": "Under Count"
+     },
+     "over_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Over Pct"
+     },
+     "under_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Under Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "threshold",
+     "over_count",
+     "under_count",
+     "over_pct",
+     "under_pct"
+    ],
+    "title": "LegacyOverUnderThreshold"
+   },
+   "LegacyPlayerLeaderboard": {
+    "properties": {
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "entries": {
+      "items": {
+       "$ref": "#/components/schemas/LegacyPlayerLeaderboardEntry"
+      },
+      "type": "array",
+      "title": "Entries"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label_zh",
+     "entries"
+    ],
+    "title": "LegacyPlayerLeaderboard"
+   },
+   "LegacyPlayerLeaderboardEntry": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "Player_Name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Player Name"
+     },
+     "Team_ID": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Id"
+     },
+     "Team_Name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Name"
+     },
+     "rank": {
+      "type": "integer",
+      "title": "Rank"
+     },
+     "value": {
+      "type": "number",
+      "title": "Value"
+     },
+     "player_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Player Name Zh"
+     },
+     "player_name_zh_short": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Player Name Zh Short"
+     },
+     "team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Name Zh"
+     }
+    },
+    "type": "object",
+    "required": [
+     "player_id",
+     "Player_Name",
+     "Team_ID",
+     "Team_Name",
+     "rank",
+     "value",
+     "player_name_zh",
+     "player_name_zh_short",
+     "team_name_zh"
+    ],
+    "title": "LegacyPlayerLeaderboardEntry"
+   },
+   "LegacyScoreDistributionEntry": {
+    "properties": {
+     "home_score": {
+      "type": "integer",
+      "title": "Home Score"
+     },
+     "away_score": {
+      "type": "integer",
+      "title": "Away Score"
+     },
+     "match_count": {
+      "type": "integer",
+      "title": "Match Count"
+     },
+     "pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home_score",
+     "away_score",
+     "match_count",
+     "pct"
+    ],
+    "title": "LegacyScoreDistributionEntry"
+   },
+   "LegacyStanding": {
+    "properties": {
+     "position": {
+      "type": "integer",
+      "title": "Position"
+     },
+     "played": {
+      "type": "integer",
+      "title": "Played"
+     },
+     "wins": {
+      "type": "integer",
+      "title": "Wins"
+     },
+     "draws": {
+      "type": "integer",
+      "title": "Draws"
+     },
+     "losses": {
+      "type": "integer",
+      "title": "Losses"
+     },
+     "goals_for": {
+      "type": "integer",
+      "title": "Goals For"
+     },
+     "goals_against": {
+      "type": "integer",
+      "title": "Goals Against"
+     },
+     "goal_diff": {
+      "type": "integer",
+      "title": "Goal Diff"
+     },
+     "points": {
+      "type": "integer",
+      "title": "Points"
+     },
+     "qual_color": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Qual Color"
+     },
+     "team_id": {
+      "type": "integer",
+      "title": "Team Id"
+     },
+     "team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Name Zh"
+     }
+    },
+    "type": "object",
+    "required": [
+     "position",
+     "played",
+     "wins",
+     "draws",
+     "losses",
+     "goals_for",
+     "goals_against",
+     "goal_diff",
+     "points",
+     "qual_color",
+     "team_id",
+     "team_name_zh"
+    ],
+    "title": "LegacyStanding"
+   },
+   "LegacyTeamBettingStats": {
+    "properties": {
+     "team_id": {
+      "type": "integer",
+      "title": "Team Id"
+     },
+     "team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Name Zh"
+     },
+     "matches_played": {
+      "type": "integer",
+      "title": "Matches Played"
+     },
+     "avg_corners": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Corners"
+     },
+     "avg_yellow_cards": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Yellow Cards"
+     },
+     "avg_red_cards": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Red Cards"
+     },
+     "clean_sheets": {
+      "type": "integer",
+      "title": "Clean Sheets"
+     },
+     "btts_matches": {
+      "type": "integer",
+      "title": "Btts Matches"
+     },
+     "btts_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Btts Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team_id",
+     "team_name_zh",
+     "matches_played",
+     "avg_corners",
+     "avg_yellow_cards",
+     "avg_red_cards",
+     "clean_sheets",
+     "btts_matches",
+     "btts_pct"
+    ],
+    "title": "LegacyTeamBettingStats"
+   },
+   "LegacyTeamSeasonStats": {
+    "properties": {
+     "team_id": {
+      "type": "integer",
+      "title": "Team Id"
+     },
+     "team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Name Zh"
+     },
+     "matches_played": {
+      "type": "integer",
+      "title": "Matches Played"
+     },
+     "avg_total_shots": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Total Shots"
+     },
+     "avg_shots_on_target": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Shots On Target"
+     },
+     "avg_possession": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Possession"
+     },
+     "avg_expected_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Expected Goals"
+     },
+     "avg_expected_goals_on_target": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Expected Goals On Target"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team_id",
+     "team_name_zh",
+     "matches_played",
+     "avg_total_shots",
+     "avg_shots_on_target",
+     "avg_possession",
+     "avg_expected_goals",
+     "avg_expected_goals_on_target"
+    ],
+    "title": "LegacyTeamSeasonStats"
+   },
+   "LegacyWdlLiveFullMatch": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Date"
+     },
+     "round": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Round"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "home_team_id": {
+      "type": "integer",
+      "title": "Home Team Id"
+     },
+     "away_team_id": {
+      "type": "integer",
+      "title": "Away Team Id"
+     },
+     "home_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Team Name Zh"
+     },
+     "away_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Team Name Zh"
+     },
+     "days_until_kickoff": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Days Until Kickoff"
+     },
+     "availability": {
+      "type": "string",
+      "const": "live",
+      "title": "Availability"
+     },
+     "tendency": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "home",
+         "draw",
+         "away"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tendency"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "normal",
+         "low"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "locked": {
+      "type": "boolean",
+      "const": false,
+      "title": "Locked"
+     },
+     "p_home": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P Home"
+     },
+     "p_draw": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P Draw"
+     },
+     "p_away": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P Away"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "match_id",
+     "date",
+     "round",
+     "status",
+     "home_team_id",
+     "away_team_id",
+     "home_team_name_zh",
+     "away_team_name_zh",
+     "days_until_kickoff",
+     "availability",
+     "tendency",
+     "confidence",
+     "reason",
+     "locked",
+     "p_home",
+     "p_draw",
+     "p_away"
+    ],
+    "title": "LegacyWdlLiveFullMatch",
+    "description": "distance-to-kickoff ≤7 天且已付费:locked=false,额外带完整三项概率。"
+   },
+   "LegacyWdlLiveLockedMatch": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Date"
+     },
+     "round": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Round"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "home_team_id": {
+      "type": "integer",
+      "title": "Home Team Id"
+     },
+     "away_team_id": {
+      "type": "integer",
+      "title": "Away Team Id"
+     },
+     "home_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Team Name Zh"
+     },
+     "away_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Team Name Zh"
+     },
+     "days_until_kickoff": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Days Until Kickoff"
+     },
+     "availability": {
+      "type": "string",
+      "const": "live",
+      "title": "Availability"
+     },
+     "tendency": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "home",
+         "draw",
+         "away"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tendency"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "normal",
+         "low"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "locked": {
+      "type": "boolean",
+      "const": true,
+      "title": "Locked"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "match_id",
+     "date",
+     "round",
+     "status",
+     "home_team_id",
+     "away_team_id",
+     "home_team_name_zh",
+     "away_team_name_zh",
+     "days_until_kickoff",
+     "availability",
+     "tendency",
+     "confidence",
+     "reason",
+     "locked"
+    ],
+    "title": "LegacyWdlLiveLockedMatch",
+    "description": "distance-to-kickoff ≤7 天且未付费:有 tendency/confidence/reason/locked=true,\n物理上没有 p_home/p_draw/p_away(不是放了真值再指望前端隐藏)。"
+   },
+   "LegacyWdlUpcomingMatch": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Date"
+     },
+     "round": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Round"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Status"
+     },
+     "home_team_id": {
+      "type": "integer",
+      "title": "Home Team Id"
+     },
+     "away_team_id": {
+      "type": "integer",
+      "title": "Away Team Id"
+     },
+     "home_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Team Name Zh"
+     },
+     "away_team_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Team Name Zh"
+     },
+     "days_until_kickoff": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Days Until Kickoff"
+     },
+     "availability": {
+      "type": "string",
+      "const": "upcoming",
+      "title": "Availability"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "match_id",
+     "date",
+     "round",
+     "status",
+     "home_team_id",
+     "away_team_id",
+     "home_team_name_zh",
+     "away_team_name_zh",
+     "days_until_kickoff",
+     "availability"
+    ],
+    "title": "LegacyWdlUpcomingMatch",
+    "description": "distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/locked/\np_home/p_draw/p_away——不是\"这几个字段为 null\",是这个 JSON 形状根本不含它们。"
+   },
+   "MarketBaselineDTO": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status",
+     "note"
+    ],
+    "title": "MarketBaselineDTO"
    },
    "MatchDetailResponse": {
     "properties": {
@@ -2642,6 +7844,71 @@
     ],
     "title": "MatchListResponse"
    },
+   "MatchOddsAvailableDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "available": {
+      "type": "boolean",
+      "const": true,
+      "title": "Available"
+     },
+     "tier": {
+      "type": "string",
+      "enum": [
+       "full",
+       "delayed_summary"
+      ],
+      "title": "Tier"
+     },
+     "home_away_inverted": {
+      "type": "boolean",
+      "title": "Home Away Inverted"
+     },
+     "snapshots": {
+      "items": {
+       "$ref": "#/components/schemas/OddsSnapshotItem"
+      },
+      "type": "array",
+      "title": "Snapshots"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "available",
+     "tier",
+     "home_away_inverted",
+     "snapshots"
+    ],
+    "title": "MatchOddsAvailableDTO"
+   },
+   "MatchOddsUnavailableDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "available": {
+      "type": "boolean",
+      "const": false,
+      "title": "Available"
+     },
+     "reason": {
+      "type": "string",
+      "title": "Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "available",
+     "reason"
+    ],
+    "title": "MatchOddsUnavailableDTO"
+   },
    "MatchSummary": {
     "properties": {
      "match_id": {
@@ -2659,6 +7926,17 @@
      "date_utc": {
       "type": "string",
       "title": "Date Utc"
+     },
+     "kickoff_at_utc": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kickoff At Utc"
      },
      "round": {
       "anyOf": [
@@ -2786,6 +8064,244 @@
     ],
     "title": "MeUser"
    },
+   "ModelMetricsResponse": {
+    "properties": {
+     "model_versions": {
+      "items": {
+       "$ref": "#/components/schemas/ModelVersionDTO"
+      },
+      "type": "array",
+      "title": "Model Versions"
+     },
+     "official_evaluation": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/OfficialEvaluationDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "official_evaluation_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Official Evaluation Note"
+     },
+     "market_baseline": {
+      "$ref": "#/components/schemas/MarketBaselineDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "model_versions",
+     "market_baseline"
+    ],
+    "title": "ModelMetricsResponse"
+   },
+   "ModelVersionDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "algorithm": {
+      "type": "string",
+      "title": "Algorithm"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "trained_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trained At"
+     },
+     "train_range": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Train Range"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "params": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Params"
+     },
+     "dev_metrics": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Dev Metrics"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "algorithm",
+     "description",
+     "created_at",
+     "params",
+     "dev_metrics"
+    ],
+    "title": "ModelVersionDTO"
+   },
+   "OddsSnapshotItem": {
+    "properties": {
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "company_id": {
+      "type": "string",
+      "title": "Company Id"
+     },
+     "company_name": {
+      "type": "string",
+      "title": "Company Name"
+     },
+     "market_phase": {
+      "type": "string",
+      "title": "Market Phase"
+     },
+     "source_updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source Updated At"
+     },
+     "observed_at": {
+      "type": "string",
+      "title": "Observed At"
+     },
+     "payload": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Payload"
+     }
+    },
+    "type": "object",
+    "required": [
+     "market",
+     "company_id",
+     "company_name",
+     "market_phase",
+     "observed_at",
+     "payload"
+    ],
+    "title": "OddsSnapshotItem"
+   },
+   "OfficialEvaluationDTO": {
+    "properties": {
+     "sample_size": {
+      "type": "integer",
+      "title": "Sample Size"
+     },
+     "accuracy": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accuracy"
+     },
+     "brier": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Brier"
+     },
+     "log_loss": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Log Loss"
+     },
+     "rps": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rps"
+     },
+     "calibration": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Calibration"
+     },
+     "evaluated_at": {
+      "type": "string",
+      "title": "Evaluated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "sample_size",
+     "calibration",
+     "evaluated_at"
+    ],
+    "title": "OfficialEvaluationDTO"
+   },
+   "OkDTO": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "const": "ok",
+      "title": "Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status"
+    ],
+    "title": "OkDTO"
+   },
    "PasswordLoginBody": {
     "properties": {
      "username": {
@@ -2803,6 +8319,42 @@
      "password"
     ],
     "title": "PasswordLoginBody"
+   },
+   "PlanDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "name_zh": {
+      "type": "string",
+      "title": "Name Zh"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "rank": {
+      "type": "integer",
+      "title": "Rank"
+     },
+     "entitlements": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Entitlements"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "name_zh",
+     "description",
+     "rank",
+     "entitlements"
+    ],
+    "title": "PlanDTO"
    },
    "PredictionFreeDTO": {
     "properties": {
@@ -3024,6 +8576,78 @@
     ],
     "title": "PredictionResponse"
    },
+   "ProductDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "name_zh": {
+      "type": "string",
+      "title": "Name Zh"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "duration_days": {
+      "type": "integer",
+      "title": "Duration Days"
+     },
+     "price_cents": {
+      "type": "integer",
+      "title": "Price Cents"
+     },
+     "currency": {
+      "type": "string",
+      "title": "Currency"
+     },
+     "sort_order": {
+      "type": "integer",
+      "title": "Sort Order"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "plan_id",
+     "name_zh",
+     "description",
+     "duration_days",
+     "price_cents",
+     "currency",
+     "sort_order"
+    ],
+    "title": "ProductDTO"
+   },
+   "ProductsResponse": {
+    "properties": {
+     "plans": {
+      "items": {
+       "$ref": "#/components/schemas/PlanDTO"
+      },
+      "type": "array",
+      "title": "Plans"
+     },
+     "products": {
+      "items": {
+       "$ref": "#/components/schemas/ProductDTO"
+      },
+      "type": "array",
+      "title": "Products"
+     }
+    },
+    "type": "object",
+    "required": [
+     "plans",
+     "products"
+    ],
+    "title": "ProductsResponse"
+   },
    "PublishUpcomingBody": {
     "properties": {
      "lock": {
@@ -3034,6 +8658,67 @@
     },
     "type": "object",
     "title": "PublishUpcomingBody"
+   },
+   "PublishUpcomingFailedItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "reason": {
+      "type": "string",
+      "title": "Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "reason"
+    ],
+    "title": "PublishUpcomingFailedItem"
+   },
+   "PublishUpcomingResponse": {
+    "properties": {
+     "published": {
+      "type": "integer",
+      "title": "Published"
+     },
+     "failed": {
+      "items": {
+       "$ref": "#/components/schemas/PublishUpcomingFailedItem"
+      },
+      "type": "array",
+      "title": "Failed"
+     }
+    },
+    "type": "object",
+    "required": [
+     "published",
+     "failed"
+    ],
+    "title": "PublishUpcomingResponse"
+   },
+   "ReadyzProblemsDTO": {
+    "properties": {
+     "ok": {
+      "type": "boolean",
+      "title": "Ok"
+     },
+     "problems": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Problems"
+     }
+    },
+    "type": "object",
+    "required": [
+     "ok",
+     "problems"
+    ],
+    "title": "ReadyzProblemsDTO",
+    "description": "/readyz 503 时的诚实故障说明。"
    },
    "RedeemBody": {
     "properties": {
@@ -3049,6 +8734,58 @@
      "code"
     ],
     "title": "RedeemBody"
+   },
+   "RedeemCodeCreatedItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "code": {
+      "type": "string",
+      "title": "Code"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "code"
+    ],
+    "title": "RedeemCodeCreatedItem"
+   },
+   "RedeemResponse": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "const": "ok",
+      "title": "Status"
+     },
+     "subscription_id": {
+      "type": "string",
+      "title": "Subscription Id"
+     },
+     "plan_id": {
+      "type": "string",
+      "title": "Plan Id"
+     },
+     "starts_at": {
+      "type": "string",
+      "title": "Starts At"
+     },
+     "ends_at": {
+      "type": "string",
+      "title": "Ends At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status",
+     "subscription_id",
+     "plan_id",
+     "starts_at",
+     "ends_at"
+    ],
+    "title": "RedeemResponse"
    },
    "RetractBody": {
     "properties": {
@@ -3077,6 +8814,562 @@
      "session_id"
     ],
     "title": "RevokeSessionBody"
+   },
+   "StandingRow": {
+    "properties": {
+     "Team_ID": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Id"
+     },
+     "Team_Name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Name"
+     },
+     "position": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Position"
+     },
+     "played": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Played"
+     },
+     "wins": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Wins"
+     },
+     "draws": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Draws"
+     },
+     "losses": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Losses"
+     },
+     "goals_for": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Goals For"
+     },
+     "goals_against": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Goals Against"
+     },
+     "goal_diff": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Goal Diff"
+     },
+     "points": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Points"
+     },
+     "qual_color": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Qual Color"
+     },
+     "team": {
+      "$ref": "#/components/schemas/TeamRef"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team"
+    ],
+    "title": "StandingRow",
+    "description": "fact_league_table 行 + team 引用(列名保留数据库原始大小写)。"
+   },
+   "StandingsResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons"
+     },
+     "rows": {
+      "items": {
+       "$ref": "#/components/schemas/StandingRow"
+      },
+      "type": "array",
+      "title": "Rows"
+     },
+     "empty_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Empty Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "available_seasons",
+     "rows"
+    ],
+    "title": "StandingsResponse",
+    "description": "empty_reason 只在无数据时出现(端点用 response_model_exclude_unset 保持现状)。"
+   },
+   "StudioBundleDTO": {
+    "properties": {
+     "bundle_version": {
+      "type": "string",
+      "title": "Bundle Version"
+     },
+     "built_at": {
+      "type": "string",
+      "title": "Built At"
+     },
+     "match": {
+      "$ref": "#/components/schemas/MatchSummary"
+     },
+     "data_cutoff_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Cutoff At"
+     },
+     "model_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Version"
+     },
+     "prediction_public": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BundlePredictionPublic"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "prediction_member": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BundlePredictionMember"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "evidence": {
+      "items": {
+       "$ref": "#/components/schemas/BundleEvidenceItem"
+      },
+      "type": "array",
+      "title": "Evidence"
+     },
+     "counter_evidence": {
+      "items": {
+       "$ref": "#/components/schemas/BundleEvidenceItem"
+      },
+      "type": "array",
+      "title": "Counter Evidence"
+     },
+     "uncertainty": {
+      "items": {
+       "$ref": "#/components/schemas/BundleUncertaintyItem"
+      },
+      "type": "array",
+      "title": "Uncertainty"
+     },
+     "odds_timeline": {
+      "items": {
+       "$ref": "#/components/schemas/BundleOddsPoint"
+      },
+      "type": "array",
+      "title": "Odds Timeline"
+     },
+     "cooccurring_events": {
+      "items": {
+       "$ref": "#/components/schemas/BundleCoocEvent"
+      },
+      "type": "array",
+      "title": "Cooccurring Events"
+     },
+     "chart_specs": {
+      "items": {
+       "$ref": "#/components/schemas/BundleChartSpec"
+      },
+      "type": "array",
+      "title": "Chart Specs"
+     },
+     "script_sections": {
+      "items": {
+       "$ref": "#/components/schemas/BundleScriptSection"
+      },
+      "type": "array",
+      "title": "Script Sections"
+     },
+     "subtitle_cues": {
+      "items": {
+       "$ref": "#/components/schemas/BundleSubtitleCue"
+      },
+      "type": "array",
+      "title": "Subtitle Cues"
+     },
+     "source_notes": {
+      "items": {
+       "$ref": "#/components/schemas/BundleSourceNote"
+      },
+      "type": "array",
+      "title": "Source Notes"
+     },
+     "bundle_hash": {
+      "type": "string",
+      "title": "Bundle Hash"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bundle_version",
+     "built_at",
+     "match",
+     "evidence",
+     "counter_evidence",
+     "uncertainty",
+     "odds_timeline",
+     "cooccurring_events",
+     "chart_specs",
+     "script_sections",
+     "subtitle_cues",
+     "source_notes",
+     "bundle_hash"
+    ],
+    "title": "StudioBundleDTO",
+    "description": "GET /studio/matches/{id}/bundle:完整 bundle(含 subtitle_cues,不做投影)。"
+   },
+   "StudioDraftCreatedDTO": {
+    "properties": {
+     "draft_id": {
+      "type": "string",
+      "title": "Draft Id"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "bundle_hash": {
+      "type": "string",
+      "title": "Bundle Hash"
+     }
+    },
+    "type": "object",
+    "required": [
+     "draft_id",
+     "title",
+     "bundle_hash"
+    ],
+    "title": "StudioDraftCreatedDTO"
+   },
+   "StudioDraftDetailDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "bundle": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Bundle"
+     },
+     "overrides": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Overrides"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "title": "Updated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "match_id",
+     "title",
+     "status",
+     "bundle",
+     "overrides",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "StudioDraftDetailDTO",
+    "description": "bundle 为创建草稿时冻结的 analysis_bundle 快照(历史版本形状可能不同,故为 dict)。"
+   },
+   "StudioDraftListItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "title": "Updated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "match_id",
+     "title",
+     "status",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "StudioDraftListItem"
+   },
+   "StudioDraftsResponse": {
+    "properties": {
+     "drafts": {
+      "items": {
+       "$ref": "#/components/schemas/StudioDraftListItem"
+      },
+      "type": "array",
+      "title": "Drafts"
+     }
+    },
+    "type": "object",
+    "required": [
+     "drafts"
+    ],
+    "title": "StudioDraftsResponse"
+   },
+   "StudioExportClientDTO": {
+    "properties": {
+     "job_id": {
+      "type": "string",
+      "title": "Job Id"
+     },
+     "side": {
+      "type": "string",
+      "const": "client",
+      "title": "Side"
+     },
+     "data_cutoff_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Cutoff At"
+     },
+     "model_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Version"
+     }
+    },
+    "type": "object",
+    "required": [
+     "job_id",
+     "side"
+    ],
+    "title": "StudioExportClientDTO",
+    "description": "PNG:前端 DOM→PNG 生成,服务端只登记审计。"
+   },
+   "StudioExportServerDTO": {
+    "properties": {
+     "job_id": {
+      "type": "string",
+      "title": "Job Id"
+     },
+     "side": {
+      "type": "string",
+      "const": "server",
+      "title": "Side"
+     },
+     "download_url": {
+      "type": "string",
+      "title": "Download Url"
+     },
+     "data_cutoff_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Cutoff At"
+     },
+     "model_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Version"
+     }
+    },
+    "type": "object",
+    "required": [
+     "job_id",
+     "side",
+     "download_url"
+    ],
+    "title": "StudioExportServerDTO",
+    "description": "txt/json/srt:服务端生成可下载文件。"
    },
    "TeamFormEntry": {
     "properties": {
@@ -3242,6 +9535,11 @@
       "type": "integer",
       "title": "Retracted Count"
      },
+     "superseded_count": {
+      "type": "integer",
+      "title": "Superseded Count",
+      "default": 0
+     },
      "limit": {
       "type": "integer",
       "title": "Limit"
@@ -3291,6 +9589,10 @@
    },
    "TrackRecordSample": {
     "properties": {
+     "snapshot_id": {
+      "type": "string",
+      "title": "Snapshot Id"
+     },
      "match_id": {
       "type": "integer",
       "title": "Match Id"
@@ -3379,6 +9681,39 @@
       "type": "string",
       "title": "Status"
      },
+     "superseded_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Superseded By"
+     },
+     "correction_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Correction Of"
+     },
+     "superseded_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Superseded Note"
+     },
      "model_version_id": {
       "type": "string",
       "title": "Model Version Id"
@@ -3398,6 +9733,7 @@
     },
     "type": "object",
     "required": [
+     "snapshot_id",
      "match_id",
      "kickoff_at_utc",
      "home",
@@ -3412,7 +9748,8 @@
      "locked_at",
      "prediction_hash"
     ],
-    "title": "TrackRecordSample"
+    "title": "TrackRecordSample",
+    "description": "公开正式样本(永久资格,CLAUDE.md §9.1)。\n\n撤回(status='retracted')与被取代(superseded_by 非空)的正式样本同样出现\n在列表并计入指标分母;修正链通过 superseded_by / correction_of 双向可查。"
    },
    "UpdateDraftBody": {
     "properties": {
@@ -3443,45 +9780,147 @@
     "type": "object",
     "title": "UpdateDraftBody"
    },
-   "ValidationError": {
+   "WechatCallbackApprovedDTO": {
     "properties": {
-     "loc": {
-      "items": {
-       "anyOf": [
-        {
-         "type": "string"
-        },
-        {
-         "type": "integer"
-        }
-       ]
-      },
-      "type": "array",
-      "title": "Location"
+     "status": {
+      "type": "string",
+      "const": "approved",
+      "title": "Status"
      },
-     "msg": {
+     "message": {
       "type": "string",
       "title": "Message"
-     },
-     "type": {
-      "type": "string",
-      "title": "Error Type"
-     },
-     "input": {
-      "title": "Input"
-     },
-     "ctx": {
-      "type": "object",
-      "title": "Context"
      }
     },
     "type": "object",
     "required": [
-     "loc",
-     "msg",
-     "type"
+     "status",
+     "message"
     ],
-    "title": "ValidationError"
+    "title": "WechatCallbackApprovedDTO",
+    "description": "oa/callback 的 device_approve 分支(login 分支为 302 跳转,无 body)。"
+   },
+   "XrefItem": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "fotmob_match_id": {
+      "type": "integer",
+      "title": "Fotmob Match Id"
+     },
+     "provider": {
+      "type": "string",
+      "title": "Provider"
+     },
+     "provider_match_id": {
+      "type": "string",
+      "title": "Provider Match Id"
+     },
+     "home_away_inverted": {
+      "type": "integer",
+      "title": "Home Away Inverted"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence"
+     },
+     "verified": {
+      "type": "integer",
+      "title": "Verified"
+     },
+     "method": {
+      "type": "string",
+      "title": "Method"
+     },
+     "kickoff_diff_seconds": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kickoff Diff Seconds"
+     },
+     "review_status": {
+      "type": "string",
+      "title": "Review Status"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "title": "Updated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "fotmob_match_id",
+     "provider",
+     "provider_match_id",
+     "home_away_inverted",
+     "confidence",
+     "verified",
+     "method",
+     "review_status",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "XrefItem"
+   },
+   "XrefListResponse": {
+    "properties": {
+     "counts": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "type": "object",
+      "title": "Counts"
+     },
+     "xrefs": {
+      "items": {
+       "$ref": "#/components/schemas/XrefItem"
+      },
+      "type": "array",
+      "title": "Xrefs"
+     }
+    },
+    "type": "object",
+    "required": [
+     "counts",
+     "xrefs"
+    ],
+    "title": "XrefListResponse"
+   },
+   "XrefReviewResultDTO": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "const": "ok",
+      "title": "Status"
+     },
+     "xref_id": {
+      "type": "integer",
+      "title": "Xref Id"
+     },
+     "review_status": {
+      "type": "string",
+      "title": "Review Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "status",
+     "xref_id",
+     "review_status"
+    ],
+    "title": "XrefReviewResultDTO"
    }
   }
  }

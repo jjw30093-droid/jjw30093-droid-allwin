@@ -28,16 +28,18 @@ def seeded(data_dir):
     seed_basic_core(data_dir)
     conn = connect_rw("platform")
     get_or_create_model_version(conn, "m-api", "dixon-coles")
-    # 9001:已发布并锁定的公开预测(kickoff 2027-04-01 未来)
+    # 9001:已发布的公开预测(exact kickoff 2027-04-01 未来 + 可追溯来源)
     sid = register_snapshot(
-        conn, match_id=9001, kickoff_at_utc="2027-04-01T00:00:00Z",
+        conn, match_id=9001, kickoff_at_utc="2027-04-01T14:30:00Z",
+        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
         model_version_id="m-api", home_win=0.48, draw=0.29, away_win=0.23,
         expected_home_goals=1.62, expected_away_goals=1.01, status="draft",
     )
     publish_snapshot(conn, sid, actor=None)   # 只发布不锁定:published 可对外,但不是正式样本
     # 9002:draft(绝不能对外)
     register_snapshot(
-        conn, match_id=9002, kickoff_at_utc="2027-05-01T00:00:00Z",
+        conn, match_id=9002, kickoff_at_utc="2027-05-01T14:00:00Z",
+        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
         model_version_id="m-api", home_win=0.5, draw=0.3, away_win=0.2, status="draft",
     )
     conn.close()

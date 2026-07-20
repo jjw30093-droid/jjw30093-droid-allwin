@@ -3,7 +3,7 @@
  * (带 credentials + CSRF;会话 cookie Path=/api/v1,只能浏览器端调)。
  */
 
-import { API_BASE, clientFetch } from "@/lib/api-v1";
+import { API_BASE, clientFetch, type GetJson, type PostJson } from "@/lib/api-v1";
 import type {
   DraftDetail,
   DraftOverrides,
@@ -15,14 +15,18 @@ import type {
   SubtitleCue,
 } from "./types";
 
-export const fetchDrafts = () =>
-  clientFetch<{ drafts: DraftSummary[] }>("/api/v1/studio/drafts");
+/** 列表响应 = 生成类型,drafts 项收窄为 DraftSummary(status 联合)。 */
+type DraftsResp = Omit<GetJson<"/api/v1/studio/drafts">, "drafts"> & {
+  drafts: DraftSummary[];
+};
+
+export const fetchDrafts = () => clientFetch<DraftsResp>("/api/v1/studio/drafts");
 
 export const createDraft = (matchId: number, title = "") =>
-  clientFetch<{ draft_id: string; title: string; bundle_hash: string }>(
-    "/api/v1/studio/drafts",
-    { method: "POST", body: { match_id: matchId, title } },
-  );
+  clientFetch<PostJson<"/api/v1/studio/drafts">>("/api/v1/studio/drafts", {
+    method: "POST",
+    body: { match_id: matchId, title },
+  });
 
 export const fetchDraft = (draftId: string) =>
   clientFetch<DraftDetail>(`/api/v1/studio/drafts/${draftId}`);
@@ -31,16 +35,16 @@ export const saveDraft = (
   draftId: string,
   body: { title?: string | null; overrides?: DraftOverrides },
 ) =>
-  clientFetch<{ status: string }>(`/api/v1/studio/drafts/${draftId}`, {
-    method: "POST",
-    body,
-  });
+  clientFetch<PostJson<"/api/v1/studio/drafts/{draft_id}">>(
+    `/api/v1/studio/drafts/${draftId}`,
+    { method: "POST", body },
+  );
 
 export const setDraftStatus = (draftId: string, status: DraftStatus) =>
-  clientFetch<{ status: string }>(`/api/v1/studio/drafts/${draftId}/status`, {
-    method: "POST",
-    body: { status },
-  });
+  clientFetch<PostJson<"/api/v1/studio/drafts/{draft_id}/status">>(
+    `/api/v1/studio/drafts/${draftId}/status`,
+    { method: "POST", body: { status } },
+  );
 
 export const requestExport = (draftId: string, kind: ExportKind) =>
   clientFetch<ExportResult>(`/api/v1/studio/drafts/${draftId}/export`, {
@@ -98,8 +102,8 @@ export function exportFilename(
   matchId: number,
   part: string,
   ext: string,
-  modelVersion: string | null,
-  dataCutoffAt: string | null,
+  modelVersion: string | null | undefined,
+  dataCutoffAt: string | null | undefined,
 ): string {
   const clean = (s: string) => s.replace(/[^0-9A-Za-z_.-]+/g, "-");
   const model = modelVersion ? clean(modelVersion) : "no-model";

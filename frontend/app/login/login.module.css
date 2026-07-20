@@ -84,6 +84,37 @@
   line-height: 1.6;
 }
 
+/* 真二维码:白底色块保证扫码对比度(站点深色主题下同样可扫) */
+.qrCanvas {
+  display: block;
+  width: 200px;
+  height: 200px;
+  max-width: 100%;
+  border-radius: 8px;
+  background: #fff;
+  align-self: center;
+}
+
+.qrFallback {
+  margin-bottom: 12px;
+}
+
+.qrFallbackSummary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  padding: 4px 0;
+}
+
+.qrFallback[open] .qrFallbackSummary {
+  margin-bottom: 8px;
+}
+
+.qrFallback .qrUrl {
+  display: block;
+  margin-bottom: 8px;
+}
+
 .countdown {
   font-size: 13px;
   color: var(--ink-2);

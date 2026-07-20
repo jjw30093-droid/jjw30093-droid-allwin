@@ -10,7 +10,7 @@
 import json
 import sqlite3
 
-from backend.db.util import sha256_hex, utc_now_iso
+from backend.db.util import normalize_exact_kickoff, sha256_hex, utc_now_iso
 from backend.queries import matches as q_matches
 from backend.queries.predictions import current_public_snapshot
 
@@ -37,6 +37,40 @@ def _features_row(conn_core: sqlite3.Connection, match_id: int):
 
 def _fmt(x, nd=2):
     return None if x is None else round(float(x), nd)
+
+
+def _kickoff_uncertainty(conn_core: sqlite3.Connection, match_id: int) -> dict | None:
+    """按**完整 provenance**(kickoff_at_utc + precision + source)判定是否需要开球精度提示。
+
+    唯一真源 normalize_exact_kickoff:只有 exact + 非空来源 + 显式时区 + 合法时间 才算
+    可信精确,返回 None(不提示)。只看 kickoff_precision 字段是不够的——exact + 缺来源
+    / naive / 非法时间 / 纯日期冒充 都必须提示(否则 Studio 会把不可信的开球时间当真)。
+
+    文案按精度如实区分,不统一谎称"只精确到比赛日":
+      - date_only:确实只知道比赛日 → "只精确到比赛日";
+      - 其余(unknown / 缺来源 / naive / 非法 / 纯日期冒充 exact)→ 更通用的
+        "缺少可验证的精确开球时间"。
+
+    独立查询 dim_match(不改动 queries/matches.py 的公开返回结构),只服务 bundle 内部
+    诚实提示,不影响 /api/v1/matches/{id} 的 API 契约。
+    """
+    try:
+        row = conn_core.execute(
+            "SELECT kickoff_at_utc, kickoff_precision, kickoff_source FROM dim_match WHERE Match_ID=?",
+            (match_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    ko = row["kickoff_at_utc"] if row else None
+    precision = row["kickoff_precision"] if row else None
+    source = row["kickoff_source"] if row else None
+    if normalize_exact_kickoff(ko, precision, source) is not None:
+        return None
+    if precision == "date_only":
+        text = "该场开球时间只精确到比赛日(UTC),赛前判定与数据截止口径按比赛日保守处理"
+    else:
+        text = "该场缺少可验证的精确开球时间,赛前判定与数据截止口径按比赛日保守处理"
+    return {"kind": "kickoff_precision", "text": text}
 
 
 def build_analysis_bundle(
@@ -96,8 +130,11 @@ def build_analysis_bundle(
     if snap is not None and snap["draw"] >= 0.28:
         counter_evidence.append({"side": "draw", "kind": "draw_risk",
                                  "text": f"平局概率不低({round(snap['draw']*100)}%),分胜负的判断有相当不确定性"})
-    uncertainty.append({"kind": "kickoff_precision",
-                        "text": "开球时间目前只精确到比赛日(UTC),数据截止口径按比赛日 00:00 保守处理"})
+    # 数据质量提示(§6.2.1):按完整 provenance 判定(normalize_exact_kickoff),
+    # 不能只看 kickoff_precision 字段——exact + 缺来源 / naive / 非法时间也必须提示。
+    ko_uncertainty = _kickoff_uncertainty(conn_core, match_id)
+    if ko_uncertainty is not None:
+        uncertainty.append(ko_uncertainty)
 
     prediction_public = prediction_member = None
     if snap is not None and snap["status"] in ("published", "locked"):

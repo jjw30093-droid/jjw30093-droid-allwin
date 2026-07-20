@@ -1,6 +1,8 @@
 """离线评估命令:结算 → 计算 Accuracy/Brier/LogLoss/RPS/Calibration → 写 prediction_evaluations。
 
-只统计正式口径样本(official+locked+pre-kickoff+非撤回+已结算)。
+样本口径(CLAUDE.md §9.1 永久资格不变量):全部已结算的正式样本
+(is_official + 曾锁定 + 赛前发布),含撤回与被取代版本——任何后续状态变化
+都不能把已成为正式样本的记录移出评估分母。
 用法:python -m backend.cli.evaluate_predictions [--model <id>] [--notes ...]
 """
 
@@ -32,7 +34,13 @@ def evaluate(conn_platform, conn_core, model_version_id=None, notes="") -> dict:
             (
                 new_uuid(),
                 model_version_id,
-                json.dumps({"official_only": True, "model_version_id": model_version_id}),
+                json.dumps({
+                    "official_only": True,
+                    "model_version_id": model_version_id,
+                    # 永久资格口径:撤回/被取代的正式样本仍在分母内(CLAUDE.md §9.1)
+                    "includes_retracted": True,
+                    "includes_superseded": True,
+                }),
                 result["sample_size"],
                 result["accuracy"],
                 result["brier"],
@@ -59,7 +67,7 @@ def main(argv=None) -> int:
         conn_core.close()
         conn_platform.close()
     if result["sample_size"] == 0:
-        print("暂无符合口径的正式样本(official+locked+pre-kickoff+已结算),未写入评估。")
+        print("暂无符合口径的正式样本(official+曾锁定+赛前发布+已结算;含撤回/被取代),未写入评估。")
     else:
         printable = {k: v for k, v in result.items() if k != "calibration"}
         print(f"evaluation: {printable}")

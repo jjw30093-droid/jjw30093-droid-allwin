@@ -30,6 +30,12 @@ class AuthSettings:
     def is_production(self) -> bool:
         return self.app_env == "production"
 
+    @property
+    def wechat_login_available(self) -> bool:
+        """认证三态(CLAUDE.md §7.3):mock(仅 development)视为可用,便于本地 E2E;
+        real 必须显式 WECHAT_AUTH_ENABLED=1,否则微信端点返回 AUTH_DISABLED。"""
+        return self.wechat_provider_kind == "mock" or self.wechat_auth_enabled
+
 
 def load_auth_settings(env=None) -> AuthSettings:
     e = env if env is not None else os.environ

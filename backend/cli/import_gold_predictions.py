@@ -22,7 +22,7 @@ from backend.commands.predictions import (
     start_run,
 )
 from backend.db.connections import connect_ro, connect_rw, tx
-from backend.db.util import sha256_hex
+from backend.db.util import normalize_exact_kickoff, sha256_hex
 
 MODEL_ID = "dc-baseline-1.M.2"
 
@@ -32,6 +32,31 @@ def _norm_ts(sqlite_ts: str | None) -> str | None:
     if not sqlite_ts:
         return None
     return sqlite_ts.replace(" ", "T") + ("" if sqlite_ts.endswith("Z") else "Z")
+
+
+def _resolve_snapshot_kickoff(r) -> tuple[str | None, str, str]:
+    """按 canonical 比赛 provenance 决定快照的 (kickoff_at_utc, precision, source)。
+
+    唯一真源 normalize_exact_kickoff——绝不为了让检查通过而临时拼造来源
+    (如曾经的 'core:dim_match' 占位,那是伪造 provenance,已移除):
+    - canonical 明确 exact 且有**真实非空**来源、时间可解析 → 规范化后原样透传,
+      来源就是 canonical 记录的真实来源(不覆盖、不替换);
+    - canonical 声称 exact 但缺来源(或时间不可解析)→ 不得伪造来源,降级为 unknown,
+      kickoff_at_utc=NULL,来源如实标注 'legacy:gold_wdl_predictions:unknown';
+    - canonical 只有日期(date_only)→ kickoff_at_utc=NULL,来源
+      'legacy:gold_wdl_predictions:date_only';
+    - canonical 精度未知(unknown 或缺失)→ 同上,来源
+      'legacy:gold_wdl_predictions:unknown'。
+    """
+    precision = r["kickoff_precision"] if "kickoff_precision" in r.keys() else None
+    ko = r["kickoff_at_utc"] if "kickoff_at_utc" in r.keys() else None
+    src = r["kickoff_source"] if "kickoff_source" in r.keys() else None
+    normalized = normalize_exact_kickoff(ko, precision, src)
+    if normalized is not None:
+        return normalized, "exact", src
+    if precision == "date_only":
+        return None, "date_only", "legacy:gold_wdl_predictions:date_only"
+    return None, "unknown", "legacy:gold_wdl_predictions:unknown"
 
 
 def import_gold(conn_platform, conn_core, dry_run: bool = False) -> dict:
@@ -54,7 +79,8 @@ def import_gold(conn_platform, conn_core, dry_run: bool = False) -> dict:
     rows = conn_core.execute(
         """SELECT g.match_id, g.season, g.p_home, g.p_draw, g.p_away,
                   g.lambda_home, g.lambda_away, g.confidence, g.reason, g.updated_at,
-                  m.Date AS match_date
+                  m.Date AS match_date, m.kickoff_at_utc AS kickoff_at_utc,
+                  m.kickoff_precision AS kickoff_precision, m.kickoff_source AS kickoff_source
            FROM gold_wdl_predictions g JOIN dim_match m ON m.Match_ID = g.match_id
            ORDER BY g.match_id"""
     ).fetchall()
@@ -82,12 +108,21 @@ def import_gold(conn_platform, conn_core, dry_run: bool = False) -> dict:
         legacy = r["season"] == "2025/2026"
         status = "legacy_unverified" if legacy else "draft"
         stats["legacy_unverified" if legacy else "draft"] += 1
+        # 开球 provenance:优先读 canonical 比赛真实精确时刻;不再把 Date 拼成午夜伪装精确。
+        # 只有 canonical 明确 exact 才作为 exact 写入;否则 kickoff_at_utc=NULL,
+        # 精度沿用 canonical(date_only/unknown),来源如实标注(不编造 FotMob)。
+        ko, precision, source = _resolve_snapshot_kickoff(r)
+        stats.setdefault("exact_kickoff", 0)
+        stats.setdefault("date_only_kickoff", 0)
+        stats["exact_kickoff" if precision == "exact" else "date_only_kickoff"] += 1
         if dry_run:
             continue
         register_snapshot(
             conn_platform,
             match_id=r["match_id"],
-            kickoff_at_utc=f"{r['match_date']}T00:00:00Z",
+            kickoff_at_utc=ko,
+            kickoff_precision=precision,
+            kickoff_source=source,
             model_version_id=MODEL_ID,
             home_win=probs[0], draw=probs[1], away_win=probs[2],
             generated_at=_norm_ts(r["updated_at"]),

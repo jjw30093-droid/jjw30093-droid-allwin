@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { serverGet } from "@/lib/api-v1";
+import { serverGet, type GetJson } from "@/lib/api-v1";
 import { RedeemBox } from "@/components/trust/RedeemBox";
 import styles from "./pricing.module.css";
 
@@ -10,31 +10,11 @@ export const metadata: Metadata = {
     "免费 / Pro / Premium 套餐权益对比与价格。当前未接线上支付,通过兑换码或管理员开通。",
 };
 
-/* /api/v1/products 无 response_model,OpenAPI 生成类型为 unknown;结构以
- * backend/api/routes_public.py::list_products 为准(plans + products 全部来自 DB)。 */
-interface PlanDTO {
-  id: string;
-  name_zh: string;
-  description: string;
-  rank: number;
-  entitlements: string[];
-}
-
-interface ProductDTO {
-  id: string;
-  plan_id: string;
-  name_zh: string;
-  description: string;
-  duration_days: number;
-  price_cents: number;
-  currency: string;
-  sort_order: number;
-}
-
-interface ProductsResponse {
-  plans: PlanDTO[];
-  products: ProductDTO[];
-}
+/* 类型从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3);
+ * plans + products 数据全部来自 DB。 */
+type ProductsResponse = GetJson<"/api/v1/products">;
+type PlanDTO = ProductsResponse["plans"][number];
+type ProductDTO = ProductsResponse["products"][number];
 
 /* entitlement 中文化;未知 key 原样展示,不猜 */
 const ENTITLEMENT_ZH: Record<string, string> = {

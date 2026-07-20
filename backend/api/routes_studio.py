@@ -24,8 +24,21 @@ from .deps import (
     require_csrf,
     require_user,
 )
+from .schemas import (
+    OkDTO,
+    StudioBundleDTO,
+    StudioDraftCreatedDTO,
+    StudioDraftDetailDTO,
+    StudioDraftsResponse,
+    StudioExportResponse,
+    error_responses,
+)
 
-router = APIRouter(prefix="/api/v1/studio", tags=["studio"])
+router = APIRouter(
+    prefix="/api/v1/studio",
+    tags=["studio"],
+    responses=error_responses(400, 401, 403, 404, 410, 422),
+)
 
 EXPORT_KINDS = ("png_1080x1920", "png_1080x1350", "txt", "json", "srt")
 
@@ -65,7 +78,7 @@ def _build_bundle_now(match_id: int) -> dict:
     return bundle
 
 
-@router.get("/matches/{match_id}/bundle")
+@router.get("/matches/{match_id}/bundle", response_model=StudioBundleDTO)
 def match_bundle(
     match_id: int,
     response: Response,
@@ -80,7 +93,7 @@ class CreateDraftBody(BaseModel):
     title: str = ""
 
 
-@router.post("/drafts")
+@router.post("/drafts", response_model=StudioDraftCreatedDTO)
 def create_draft(
     body: CreateDraftBody,
     response: Response,
@@ -103,7 +116,7 @@ def create_draft(
     return {"draft_id": draft_id, "title": title, "bundle_hash": bundle["bundle_hash"]}
 
 
-@router.get("/drafts")
+@router.get("/drafts", response_model=StudioDraftsResponse)
 def list_drafts(
     response: Response,
     ctx: AuthContext = Depends(require_analyst),
@@ -127,7 +140,7 @@ def _get_draft(conn, draft_id: str, user_id: str):
     return row
 
 
-@router.get("/drafts/{draft_id}")
+@router.get("/drafts/{draft_id}", response_model=StudioDraftDetailDTO)
 def get_draft(
     draft_id: str,
     response: Response,
@@ -153,7 +166,7 @@ class UpdateDraftBody(BaseModel):
     overrides: dict | None = None      # 标题/证据/风险/口播稿等编辑覆盖
 
 
-@router.post("/drafts/{draft_id}")
+@router.post("/drafts/{draft_id}", response_model=OkDTO)
 def update_draft(
     draft_id: str,
     body: UpdateDraftBody,
@@ -178,7 +191,7 @@ class DraftStatusBody(BaseModel):
     status: str = Field(pattern="^(draft|reviewed|published)$")
 
 
-@router.post("/drafts/{draft_id}/status")
+@router.post("/drafts/{draft_id}/status", response_model=OkDTO)
 def set_draft_status(
     draft_id: str,
     body: DraftStatusBody,
@@ -200,7 +213,7 @@ class ExportBody(BaseModel):
     kind: str
 
 
-@router.post("/drafts/{draft_id}/export")
+@router.post("/drafts/{draft_id}/export", response_model=StudioExportResponse)
 def export_draft(
     draft_id: str,
     body: ExportBody,
@@ -257,7 +270,16 @@ def export_draft(
             "model_version": bundle.get("model_version")}
 
 
-@router.get("/exports/{job_id}/download")
+@router.get(
+    "/exports/{job_id}/download",
+    response_class=FileResponse,   # 文件流:不走 JSON response_model
+    responses={
+        200: {
+            "description": "导出文件下载(txt/json/srt)",
+            "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
 def download_export(
     job_id: str,
     ctx: AuthContext = Depends(require_analyst),

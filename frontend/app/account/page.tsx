@@ -3,61 +3,18 @@
 /**
  * /account — 账户中心。全部数据在浏览器端经 clientFetch 拉取
  * (会话 cookie Path=/api/v1,匿名 HTML/RSC payload 不含任何会员数据,宪法 §10.2)。
- *
- * 响应结构以 backend/api/routes_member.py 的 GET /api/v1/account 为准;
- * OpenAPI 对该端点未声明 schema,故在此按后端真实返回手写最小类型。
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, clientFetch, getMe, logout } from "@/lib/api-v1";
+import { ApiError, apiErrorMessage, clientFetch, getMe, logout, type GetJson } from "@/lib/api-v1";
 import styles from "./account.module.css";
 
-/* ── 类型(对齐 routes_member.py 真实返回) ─────────────── */
+/* ── 类型:从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3) ── */
 
-interface Identity {
-  provider: string;
-  provider_app_id: string;
-  created_at: string;
-  last_used_at: string | null;
-}
-
-interface Subscription {
-  id: string;
-  plan_id: string;
-  status: string;
-  starts_at: string;
-  ends_at: string;
-  source: string;
-  created_at: string;
-}
-
-interface SessionRow {
-  id: string;
-  created_at: string;
-  last_seen_at: string | null;
-  expires_at: string;
-  user_agent: string | null;
-  is_current: number;
-}
-
-interface AccountResponse {
-  user: { id: string; display_name: string | null; role: string };
-  plan: string;
-  entitlements: string[];
-  identities: Identity[];
-  subscriptions: Subscription[];
-  sessions: SessionRow[];
-  recovery: { available: boolean; note: string };
-}
-
-interface FavoritesResponse {
-  favorites: { match_id: number; created_at: string }[];
-}
-
-interface ProductsResponse {
-  plans: { id: string; name_zh: string; description: string | null; rank: number }[];
-}
+type AccountResponse = GetJson<"/api/v1/account">;
+type FavoritesResponse = GetJson<"/api/v1/favorites">;
+type ProductsResponse = GetJson<"/api/v1/products">;
 
 /* ── 工具 ──────────────────────────────────────────────── */
 
@@ -75,19 +32,6 @@ function fmtLocal(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("zh-CN", { hour12: false });
-}
-
-function apiErrMsg(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) {
-    const d = e.detail;
-    if (typeof d === "string" && d) return d;
-    if (d && typeof d === "object" && "message" in d) {
-      const m = (d as { message?: unknown }).message;
-      if (typeof m === "string" && m) return m;
-    }
-    return `${fallback}(HTTP ${e.status})`;
-  }
-  return fallback;
 }
 
 function SectionSkeleton() {
@@ -132,7 +76,7 @@ export default function AccountPage() {
       }
       setState({
         phase: "error",
-        message: apiErrMsg(e, "账户数据加载失败,请确认后端服务已启动后重试"),
+        message: apiErrorMessage(e, "账户数据加载失败,请确认后端服务已启动后重试"),
       });
     }
   }, []);
@@ -147,7 +91,7 @@ export default function AccountPage() {
     if (state.phase !== "ready") return;
     clientFetch<FavoritesResponse>("/api/v1/favorites")
       .then(setFavorites)
-      .catch((e) => setFavError(apiErrMsg(e, "收藏列表加载失败")));
+      .catch((e) => setFavError(apiErrorMessage(e, "收藏列表加载失败")));
     clientFetch<ProductsResponse>("/api/v1/products")
       .then((r) => {
         const m: Record<string, string> = {};
@@ -171,7 +115,7 @@ export default function AccountPage() {
       setActionMsg("会话已撤销");
       await load();
     } catch (e) {
-      setActionMsg(apiErrMsg(e, "撤销失败"));
+      setActionMsg(apiErrorMessage(e, "撤销失败"));
     } finally {
       setBusyId(null);
     }
@@ -184,7 +128,7 @@ export default function AccountPage() {
       await logout();
       window.location.assign("/");
     } catch (e) {
-      setActionMsg(apiErrMsg(e, "退出失败,请重试"));
+      setActionMsg(apiErrorMessage(e, "退出失败,请重试"));
       setBusyId(null);
     }
   };

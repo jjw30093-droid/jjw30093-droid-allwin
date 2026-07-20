@@ -7,13 +7,14 @@
 
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
+import type { components } from "@/lib/api-types";
 
-export interface ChartSpec {
-  id: string;
-  type: string;
-  title: string;
-  data: Record<string, unknown>;
-}
+/**
+ * 图表规格 = OpenAPI 生成的 BundleChartSpec(Pydantic 单一真源)。
+ * data 在契约里就是宽 dict({[key]: unknown}),各 type 的具体字段以
+ * backend/studio/bundle.py 的 chart_specs 构造为准,本文件按 type 做运行时窄化。
+ */
+export type ChartSpec = components["schemas"]["BundleChartSpec"];
 
 const GOLD = "#d49e33";
 const INK2 = "#a79c87";

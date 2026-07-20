@@ -8,8 +8,13 @@ from backend.db.util import utc_now_iso
 
 from .deps import NO_STORE, AuthContext, client_ip_key, get_auth_context, platform_rw
 from .ratelimit import limiter
+from .schemas import error_responses
 
-router = APIRouter(prefix="/api/v1", tags=["analytics"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["analytics"],
+    responses=error_responses(400, 422),
+)
 
 ALLOWED_EVENTS = {
     "landing_view",
@@ -32,7 +37,11 @@ class AnalyticsEventBody(BaseModel):
     meta: dict = Field(default_factory=dict)
 
 
-@router.post("/analytics/events", status_code=204)
+@router.post(
+    "/analytics/events",
+    status_code=204,
+    responses={204: {"description": "已记录/已限流丢弃(无 body)"}},
+)
 def record_event(
     body: AnalyticsEventBody,
     request: Request,

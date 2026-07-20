@@ -20,3 +20,8 @@ export function seedRedeemCode(): string {
     "utf-8",
   ).trim();
 }
+
+/** E2E 临时 platform 库路径(仅供测试篡改行;指向 data/e2e,绝不指向真实 data/platform.db)。 */
+export function e2ePlatformDbPath(): string {
+  return resolve(__dirname, "../../data/e2e/platform.db");
+}

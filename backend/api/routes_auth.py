@@ -14,7 +14,15 @@ from backend.auth.config import AuthSettings
 from backend.auth.providers import AuthProviderError
 from backend.db.connections import tx
 
-from .schemas import MeDTO
+from .schemas import (
+    ApiErrorDTO,
+    DeviceClaimResultDTO,
+    DeviceLoginCreatedDTO,
+    MeDTO,
+    OkDTO,
+    WechatCallbackApprovedDTO,
+    error_responses,
+)
 from .deps import (
     NO_STORE,
     AuthContext,
@@ -29,17 +37,42 @@ from .ratelimit import limiter
 
 log = logging.getLogger("allwin.auth")
 
-router = APIRouter(prefix="/api/v1", tags=["auth"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["auth"],
+    responses=error_responses(400, 401, 403, 410, 422, 429, 502),
+)
+
+# 微信端点专用:WECHAT_AUTH_ENABLED=0 时统一 503,顶层结构与全站一致(ApiErrorDTO)
+AUTH_DISABLED_RESPONSE = {
+    503: {"model": ApiErrorDTO, "description": "微信登录暂未开放(AUTH_DISABLED)"}
+}
 
 
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = NO_STORE
 
 
+class WechatDisabledException(Exception):
+    """认证三态(CLAUDE.md §7.3):WECHAT_AUTH_ENABLED=0(real)时微信端点统一
+    503 + 全站统一错误顶层结构 {"code","message","details"}。app.py 注册 handler。"""
+
+    body = {"code": "AUTH_DISABLED", "message": "微信登录暂未开放", "details": None}
+
+    def to_response(self) -> JSONResponse:
+        resp = JSONResponse(self.body, status_code=503)
+        _no_store(resp)
+        return resp
+
+
 def _ensure_wechat_enabled(settings: AuthSettings) -> None:
-    # mock(仅 development)视为可用,便于本地 E2E;real 必须显式开启
-    if settings.wechat_provider_kind == "real" and not settings.wechat_auth_enabled:
-        raise HTTPException(status_code=503, detail="微信登录未启用")
+    """微信相关端点(oa/start、oa/callback、device、claim)可用性闸门。
+
+    mock(仅 development)视为可用,便于本地 E2E;real 必须显式 WECHAT_AUTH_ENABLED=1;
+    密码登录/登出/me 不经过此闸门,不受影响。
+    """
+    if not settings.wechat_login_available:
+        raise WechatDisabledException()
 
 
 def _callback_uri(settings: AuthSettings) -> str:
@@ -74,9 +107,32 @@ def _clear_session_cookies(response: Response, settings: AuthSettings) -> None:
     response.delete_cookie(settings.csrf_cookie_name, path="/")
 
 
+# ── 可用登录方式(登录页据此显示"微信登录暂未开放") ────────
+
+class AuthMethodsDTO(BaseModel):
+    wechat_enabled: bool
+
+
+@router.get("/auth/methods", response_model=AuthMethodsDTO)
+def auth_methods(
+    response: Response,
+    settings: AuthSettings = Depends(get_settings),
+):
+    _no_store(response)
+    return {"wechat_enabled": settings.wechat_login_available}
+
+
 # ── 微信 OAuth(手机 / 微信内) ─────────────────────────────
 
-@router.get("/auth/wechat/oa/start")
+@router.get(
+    "/auth/wechat/oa/start",
+    status_code=302,
+    response_class=RedirectResponse,
+    responses={
+        302: {"description": "跳转微信授权页(无 body)"},
+        **AUTH_DISABLED_RESPONSE,
+    },
+)
 def wechat_oa_start(
     request: Request,
     next: str = "/",
@@ -115,7 +171,14 @@ def wechat_oa_start(
     return resp
 
 
-@router.get("/auth/wechat/oa/callback")
+@router.get(
+    "/auth/wechat/oa/callback",
+    response_model=WechatCallbackApprovedDTO,   # 200 仅 device_approve 分支
+    responses={
+        302: {"description": "login 分支:种会话 Cookie 后跳回站内 next(无 body)"},
+        **AUTH_DISABLED_RESPONSE,
+    },
+)
 def wechat_oa_callback(
     request: Request,
     code: str = "",
@@ -171,7 +234,11 @@ def wechat_oa_callback(
 
 # ── Device Login(电脑扫码) ───────────────────────────────
 
-@router.post("/auth/wechat/device")
+@router.post(
+    "/auth/wechat/device",
+    response_model=DeviceLoginCreatedDTO,
+    responses=AUTH_DISABLED_RESPONSE,
+)
 def create_device_login(
     request: Request,
     settings: AuthSettings = Depends(get_settings),
@@ -200,7 +267,11 @@ class DeviceClaimBody(BaseModel):
     secret: str
 
 
-@router.post("/auth/wechat/device/{request_id}/claim")
+@router.post(
+    "/auth/wechat/device/{request_id}/claim",
+    response_model=DeviceClaimResultDTO,
+    responses=AUTH_DISABLED_RESPONSE,
+)
 def claim_device_login(
     request_id: str,
     body: DeviceClaimBody,
@@ -208,6 +279,7 @@ def claim_device_login(
     settings: AuthSettings = Depends(get_settings),
     conn=Depends(platform_rw),
 ):
+    _ensure_wechat_enabled(settings)
     if not limiter.allow(f"device_claim:{client_ip_key(request)}", 60, 60):
         raise HTTPException(status_code=429, detail="请求过于频繁")
     with tx(conn):
@@ -240,7 +312,7 @@ class PasswordLoginBody(BaseModel):
     password: str
 
 
-@router.post("/auth/password/login")
+@router.post("/auth/password/login", response_model=OkDTO)
 def password_login(
     body: PasswordLoginBody,
     request: Request,
@@ -279,7 +351,7 @@ def password_login(
 
 # ── 会话 ───────────────────────────────────────────────────
 
-@router.post("/auth/logout")
+@router.post("/auth/logout", response_model=OkDTO)
 def logout(
     response: Response,
     ctx: AuthContext = Depends(require_csrf),

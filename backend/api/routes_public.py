@@ -15,19 +15,30 @@ from backend.queries.predictions import current_public_snapshot
 
 from .deps import NO_STORE, AuthContext, core_ro, get_auth_context, odds_ro, platform_ro
 from .schemas import (
+    AnalysisBundleDTO,
+    CooccurrenceResponse,
     LeagueInfo,
     MatchDetailResponse,
     MatchListResponse,
+    MatchOddsResponse,
+    ModelMetricsResponse,
     PredictionFreeDTO,
     PredictionFullDTO,
     PredictionMeta,
     PredictionResponse,
+    ProductsResponse,
+    StandingsResponse,
     TrackRecordMetrics,
     TrackRecordResponse,
     TrackRecordSample,
+    error_responses,
 )
 
-router = APIRouter(prefix="/api/v1", tags=["public"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["public"],
+    responses=error_responses(400, 401, 403, 404, 422),
+)
 
 PUBLIC_CACHE = "public, s-maxage=300, stale-while-revalidate=60"
 PUBLIC_CACHE_SHORT = "public, s-maxage=60, stale-while-revalidate=30"
@@ -63,7 +74,12 @@ def list_leagues(response: Response, ctx: AuthContext = Depends(get_auth_context
     ]
 
 
-@router.get("/leagues/{league_id}/standings")
+@router.get(
+    "/leagues/{league_id}/standings",
+    response_model=StandingsResponse,
+    # empty_reason 只在无数据时出现;exclude_unset 保持响应键集与原 dict 一致
+    response_model_exclude_unset=True,
+)
 def league_standings(
     league_id: int,
     response: Response,
@@ -212,7 +228,7 @@ def match_prediction(
     return PredictionResponse(match_id=match_id, available=True, prediction=dto)
 
 
-@router.get("/matches/{match_id}/analysis")
+@router.get("/matches/{match_id}/analysis", response_model=AnalysisBundleDTO)
 def match_analysis(
     match_id: int,
     response: Response,
@@ -240,12 +256,25 @@ def match_analysis(
     if not ctx.has("prediction:full_wdl"):
         bundle["prediction_member"] = None
         bundle["chart_specs"] = [c for c in bundle["chart_specs"] if c["type"] != "probability_bar"]
+        # counter_evidence 里的 draw_risk 条目原样嵌了真实平局概率(bundle.py 的
+        # "draw_risk" 分支),不是只有 prediction_member/chart_specs 会泄漏受限数值。
+        bundle["counter_evidence"] = [
+            c for c in bundle["counter_evidence"] if c.get("kind") != "draw_risk"
+        ]
         # 口播稿概率段含完整概率,免费层同样收敛为最高一项
         for sec in bundle["script_sections"]:
             if sec["id"] == "probability" and bundle["prediction_public"]:
                 p = bundle["prediction_public"]
                 zh = {"home": "主胜", "draw": "平局", "away": "客胜"}[p["top_outcome"]]
                 sec["text"] = f"模型当前倾向:{zh}(概率 {round(p['top_probability'] * 100)}%)。完整三项概率为会员内容。"
+            elif sec["id"] == "risk":
+                # bundle.py 用未过滤的 counter_evidence 预渲染了这段文字(可能包含
+                # 上面刚删掉的 draw_risk 数值),必须用过滤后的列表重新拼接,不能
+                # 假设"数组级过滤"会自动反映到已经渲染成字符串的 script_sections 里。
+                sec["text"] = (
+                    "。".join(c["text"] for c in (bundle["counter_evidence"] + bundle["uncertainty"])[:3])
+                    or "本场无特别突出的反向证据。"
+                )
     if not ctx.has("odds:history_full"):
         bundle["odds_timeline"] = []
     if not ctx.has("report:deep"):
@@ -257,7 +286,7 @@ def match_analysis(
 
 # ── 赔率与同期事件 ─────────────────────────────────────────
 
-@router.get("/matches/{match_id}/odds")
+@router.get("/matches/{match_id}/odds", response_model=MatchOddsResponse)
 def match_odds(
     match_id: int,
     response: Response,
@@ -317,7 +346,7 @@ def match_odds(
     }
 
 
-@router.get("/matches/{match_id}/cooccurrence")
+@router.get("/matches/{match_id}/cooccurrence", response_model=CooccurrenceResponse)
 def match_cooccurrence(
     match_id: int,
     response: Response,
@@ -360,7 +389,12 @@ def track_record(
     conn_platform=Depends(platform_ro),
     conn_core=Depends(core_ro),
 ):
-    """匿名公开:official + locked + pre-kickoff 全量样本(含撤回,透明),不挑选。"""
+    """匿名公开:全部正式样本(official + 曾锁定 + 赛前发布),不挑选。
+
+    永久资格不变量(CLAUDE.md §9.1):撤回(retracted)与被修正版取代
+    (superseded_by 非空)的正式样本不退出列表与指标分母,只带状态与修正链
+    标注(status / superseded_by / correction_of);修正链新旧版本同时返回。
+    """
     response.headers["Cache-Control"] = PUBLIC_CACHE
     data = q_track.official_samples(conn_platform, limit=limit, offset=offset)
     zh = q_matches.team_i18n_map(conn_core)
@@ -376,6 +410,7 @@ def track_record(
         predicted = max(probs, key=probs.get)
         samples.append(
             TrackRecordSample(
+                snapshot_id=s["id"],
                 match_id=s["match_id"],
                 kickoff_at_utc=s["kickoff_at_utc"],
                 home=home,
@@ -389,6 +424,12 @@ def track_record(
                 away_goals=s["away_goals"],
                 hit=(s["outcome"] == predicted) if s["outcome"] else None,
                 status=s["status"],
+                superseded_by=s["superseded_by"],
+                correction_of=s["correction_of"],
+                superseded_note=(
+                    "该版本已被修正版取代;新旧版本均保留并计入公开战绩与评估"
+                    if s["superseded_by"] else None
+                ),
                 model_version_id=s["model_version_id"],
                 published_at=s["published_at"],
                 locked_at=s["locked_at"],
@@ -409,6 +450,7 @@ def track_record(
     return TrackRecordResponse(
         total=data["total"],
         retracted_count=data["retracted_count"],
+        superseded_count=data["superseded_count"],
         limit=limit,
         offset=offset,
         metrics=metrics,
@@ -417,10 +459,11 @@ def track_record(
     )
 
 
-@router.get("/model/metrics")
+@router.get("/model/metrics", response_model=ModelMetricsResponse)
 def model_metrics(response: Response, conn=Depends(platform_ro)):
     """模型版本与评估口径。研发期指标来自 walk-forward 回测;正式战绩指标只来自
-    official 样本的离线评估。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。"""
+    正式样本(official + 曾锁定 + 赛前发布)的离线评估,分母含撤回与被取代版本,
+    不可选择性剔除(CLAUDE.md §9.1)。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。"""
     response.headers["Cache-Control"] = PUBLIC_CACHE
     versions = [
         dict(r) | {
@@ -457,7 +500,7 @@ def model_metrics(response: Response, conn=Depends(platform_ro)):
 
 # ── 产品(定价页数据源) ───────────────────────────────────
 
-@router.get("/products")
+@router.get("/products", response_model=ProductsResponse)
 def list_products(response: Response, conn=Depends(platform_ro)):
     """定价页数据源:plans + products 全部来自 DB,不在前端组件写死。"""
     response.headers["Cache-Control"] = PUBLIC_CACHE

@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ApiError, getMe, redeemCode } from "@/lib/api-v1";
+import { ApiError, apiErrorMessage, getMe, redeemCode } from "@/lib/api-v1";
 import { track } from "@/lib/analytics";
 import { LocalTime } from "./LocalTime";
 import styles from "./RedeemBox.module.css";
@@ -20,19 +20,6 @@ const PLAN_ZH: Record<string, string> = {
 };
 
 type AuthState = "loading" | "anonymous" | "authenticated" | "unknown";
-
-function detailMessage(detail: unknown): string | null {
-  if (typeof detail === "string" && detail) return detail;
-  if (
-    detail !== null &&
-    typeof detail === "object" &&
-    "message" in detail &&
-    typeof (detail as { message: unknown }).message === "string"
-  ) {
-    return (detail as { message: string }).message;
-  }
-  return null;
-}
 
 export function RedeemBox() {
   const [auth, setAuth] = useState<AuthState>("loading");
@@ -76,7 +63,7 @@ export function RedeemBox() {
           setError("登录状态已失效,请先登录后再兑换");
           setAuth("anonymous");
         } else {
-          setError(detailMessage(err.detail) ?? `兑换失败(HTTP ${err.status}),请稍后重试`);
+          setError(apiErrorMessage(err, `兑换失败(HTTP ${err.status}),请稍后重试`));
         }
       } else {
         setError("网络异常,兑换请求未完成,请稍后重试");

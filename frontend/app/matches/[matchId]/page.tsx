@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   serverGetOptional,
+  type GetJson,
   type MatchDetailResponse,
   type PredictionResponse,
 } from "@/lib/api-v1";
@@ -9,7 +10,6 @@ import { PredictionCard } from "@/components/matches/PredictionCard";
 import { OddsTimeline } from "@/components/matches/OddsTimeline";
 import { CooccurrenceSection } from "@/components/matches/CooccurrenceSection";
 import { LocalTime } from "@/components/matches/LocalTime";
-import type { ChartSpec } from "@/components/charts/SpecCharts";
 import { ChartWithSummary } from "@/components/matches/ChartWithSummary";
 import { LEAGUE_ZH, STATUS_ZH, formatDateZh } from "@/components/matches/zh";
 import styles from "./match-detail.module.css";
@@ -22,27 +22,10 @@ import styles from "./match-detail.module.css";
  * 会员增强(完整概率/完整赔率历史)全部由客户端组件带会话 cookie 重拉。
  */
 
-// /analysis 无 response_model,按 backend/api/routes_public.py + backend/studio/bundle.py 真实结构手写
-interface EvidenceItem {
-  side?: string;
-  kind: string;
-  text: string;
-}
-interface SourceNote {
-  kind: string;
-  text: string;
-}
-interface AnalysisBundle {
-  bundle_version: string | number;
-  data_cutoff_at: string | null;
-  model_version: string | null;
-  evidence: EvidenceItem[];
-  counter_evidence: EvidenceItem[];
-  uncertainty: EvidenceItem[];
-  chart_specs: ChartSpec[];
-  source_notes: SourceNote[];
-  cooccurrence_count: number;
-}
+/** /analysis 响应类型来自 OpenAPI 生成的 AnalysisBundleDTO(Pydantic 单一真源)。 */
+type AnalysisBundle = GetJson<"/api/v1/matches/{match_id}/analysis">;
+/** 证据/不确定性列表共用的最小展示形状(uncertainty 项无 side,故 Pick 掉)。 */
+type EvidenceLike = Pick<AnalysisBundle["evidence"][number], "kind" | "text">;
 
 type FormEntry = MatchDetailResponse["home_form"][number];
 
@@ -109,7 +92,7 @@ function EvidenceList({
   emptyText,
 }: {
   title: string;
-  items: EvidenceItem[];
+  items: EvidenceLike[];
   tone: "pro" | "con" | "warn";
   emptyText: string;
 }) {

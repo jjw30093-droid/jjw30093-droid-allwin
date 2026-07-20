@@ -65,6 +65,11 @@ GET /api/v1/auth/wechat/oa/callback?code=...&state=...
   → 二维码内容 = PUBLIC_BASE_URL/api/v1/auth/wechat/oa/start?device=<request_id>
     (二维码只含公开 request id,绝不含浏览器 secret)
 
+登录页(/login)渲染真实二维码图像:npm `qrcode` 库在浏览器本地把 qr_url 画到
+<canvas>(不经任何第三方图片服务、无外链请求);URL 文本降级为 <details>
+"无法扫码?查看授权链接" 次要展示。过期倒计时归零 → 过期态,可"重新生成";
+轮询 claim 每 2.5s 一次,secret 只存在本页 React state,不进 DOM 文本、不进二维码。
+
 手机微信扫码 → 走上面同一个公众号 OAuth(state.kind='device_approve')
   → callback 中 approve_device_request:UPDATE ... WHERE status='pending' AND 未过期
     (原子;成功返回 JSON"已批准登录,请回到电脑继续",手机端不建会话)
@@ -115,7 +120,18 @@ JWT 进查询参数/客户端 session、`users.openid='USER_xxx'` 伪身份—�
 - Mock 视为"已启用微信登录"(`_ensure_wechat_enabled`:仅 real 才要求
   `WECHAT_AUTH_ENABLED=1`),便于本地默认可登录。
 
-## 6. Production fail-fast 条件
+## 6. 认证三态与 Production fail-fast(CLAUDE.md §7.3)
+
+认证开关有三种明确状态(`load_auth_settings` + `build_provider` + 路由闸门):
+
+| 状态 | Provider | 行为 |
+|---|---|---|
+| production + `WECHAT_AUTH_ENABLED=0` | `DisabledWechatProvider`(显式占位) | **无微信凭证可启动**;微信端点(oa/start、oa/callback、device、device claim)统一返回 `503` + 顶层结构 `{"code":"AUTH_DISABLED","message":...}`;密码登录/登出/me 不受影响 |
+| production + `WECHAT_AUTH_ENABLED=1` | 只能 `RealWechatOAProvider` | 缺 AppID/AppSecret 或 `PUBLIC_BASE_URL` 非 https → 启动抛 `AuthConfigError` fail-fast |
+| development + `WECHAT_AUTH_PROVIDER=mock` | `MockWechatProvider` | 可用(mock 视为已启用,便于本地/E2E);production 检测到 mock → fail-fast |
+
+`GET /api/v1/auth/methods` 返回 `{"wechat_enabled": bool}`(`private, no-store`);
+登录页据此显示"微信登录暂未开放",不再把用户引向必然 503 的入口。
 
 应用启动即 `load_auth_settings()`(`api/app.py`),`APP_ENV=production` 时以下任一
 条件直接抛 `AuthConfigError` 拒绝启动:
@@ -126,7 +142,9 @@ JWT 进查询参数/客户端 session、`users.openid='USER_xxx'` 伪身份—�
 3. `WECHAT_AUTH_ENABLED=1` 且 `PUBLIC_BASE_URL` 不是 `https://` 地址。
 
 另:production 下 Cookie 强制 `Secure`;`RealWechatOAProvider` 构造时缺
-AppID/AppSecret 同样抛错。
+AppID/AppSecret 同样抛错;`DisabledWechatProvider` 不校验凭证、被意外调用时抛错兜底,
+不静默放行。冒烟:`tests/backend/test_auth.py::TestProductionDisabledUvicornSmoke`
+以子进程真实启动 uvicorn(production+ENABLED=0 无凭证)验证 healthz 200、oa/start 503。
 
 ## 7. 管理员账号(create_admin CLI)
 
@@ -162,6 +180,8 @@ ALLWIN_ADMIN_PASSWORD=... .venv/bin/python -m backend.cli.create_admin --usernam
 | 能力 | 状态 |
 |---|---|
 | Mock Provider 全流程(OAuth/Device/会话/CSRF/撤销) | 已验证(pytest,`tests/backend/test_auth.py`) |
+| 认证三态(production+ENABLED=0 无凭证启动 / AUTH_DISABLED / fail-fast) | 已验证(pytest `TestAuthTriState` + uvicorn 子进程冒烟) |
+| Device Login 浏览器端到端(桌面创建→canvas 真二维码→手机独立 context 批准→桌面轮询领取→刷新仍登录→二次 claim 410 / 错 secret 403 / 篡改过期 410) | 已验证(Playwright `frontend/e2e/device-login.spec.ts`,Mock Provider) |
 | 微信 authorize 跳转、code 换 openid、UnionID 返回 | **UNVERIFIED**(无真实凭证) |
 | 公众号后台网页授权域名/IP 白名单配置 | **UNVERIFIED**(上线时按 §1 配置后验证) |
-| 真机微信内 H5 + 电脑扫码端到端 | **UNVERIFIED** |
+| 真机微信内 H5 + 真实微信扫码端到端 | **UNVERIFIED**(同一代码链路已用 Mock+离线临时库验证) |

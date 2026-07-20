@@ -57,6 +57,9 @@ server {
     proxy_set_header Connection "";
 
     # ── 部署探针:直通 API,禁止任何缓存 ─────────────────────────────
+    # FastAPI 自身(backend/api/cache_policy.py)现在也会对 /healthz /readyz
+    # 下发 Cache-Control: private, no-store(app 层 default-deny 兜底,不再
+    # 只靠这里的 add_header)——两层叠加,任一层失效不影响结果。
     location = /healthz {
         proxy_pass http://allwin_api;
         add_header Cache-Control "no-store" always;
@@ -72,14 +75,26 @@ server {
     # 以下路径带 Cookie / Authorization / Set-Cookie,属于按用户返回的内容,
     # 一旦进入共享缓存就是把 A 用户的会员数据发给 B 用户(灾难级事故):
     #   /api/v1/auth/*      登录 / 会话 / 设备码
-    #   /api/v1/member/*    会员付费数据(服务端 entitlement 校验后才返回)
-    #   /api/v1/account/*   账户 / 订阅状态
+    #   /api/v1/account/*   账户 / 订阅状态 / 收藏
     #   /api/v1/admin/*     管理后台
-    #   /api/v1/studio/*    Studio 分析包 / 草稿
-    #   /api/v1/exports/*   导出产物(按用户)
+    #   /api/v1/studio/*    Studio 分析包 / 草稿 / 导出
+    #   /api/league/*       旧兼容层(legacy,不再扩展,统一保守 no-store)
     # 规则:请求带 Cookie 或 Authorization → 不缓存;响应带 Set-Cookie → 不缓存。
-    # 本层统一 no-store 兜底;匿名可缓存的公开接口由 API 自身显式下发
-    # Cache-Control(s-maxage),不在 Nginx 层猜。
+    #
+    # 本层 proxy_cache off 只是不做 Nginx 自身的反代缓存,真正的 public/private
+    # 判断权威来自 FastAPI 应用层(backend/api/cache_policy.py 的
+    # CachePolicyMiddleware,已有回归测试 tests/backend/test_cache_policy.py
+    # 覆盖):
+    #   - 请求带 Cookie/Authorization,或响应带 Set-Cookie → 强制 private, no-store;
+    #   - 路径不在应用内 PUBLIC_ALLOWLIST(products/track-record/model-metrics/
+    #     leagues 的 standings/fixtures/matches 列表与详情)→ 强制 private, no-store;
+    #   - 以上都不触发但 endpoint 完全没设置 Cache-Control(未捕获异常等遗漏
+    #     路径)→ 同样默认 private, no-store;
+    #   - 只有上述都不触发,且 endpoint 自己显式声明了 Cache-Control,才保留
+    #     原样(该端点自身还会按 league_id/登录态等条件在 public 与 private 间
+    #     二次判断,例如非英超联赛、已登录用户看 /matches 列表)。
+    # Cloudflare Cache Rules 因此可以放心信任源站声明的 Cache-Control,不需要
+    # 也不应该在边缘另行"猜" public/private。
     location /api/ {
         proxy_pass http://allwin_api;
         proxy_read_timeout 30s;

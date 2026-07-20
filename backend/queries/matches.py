@@ -27,6 +27,8 @@ def _row_to_summary(r, zh_map) -> dict:
         "league_id": r["League_ID"],
         "season": r["Season"],
         "date_utc": r["Date"],
+        # 精确开球时刻可空(§6.2.1);旧测试布景可能没有该列,容错取 None
+        "kickoff_at_utc": r["kickoff_at_utc"] if "kickoff_at_utc" in r.keys() else None,
         "round": str(r["Match_Round"]) if r["Match_Round"] is not None else None,
         "status": r["status"],
         "home": _team_ref(r["Home_Team_ID"], r["Home_Team_Name"], zh_map),

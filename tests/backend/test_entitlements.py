@@ -121,19 +121,19 @@ class TestRedeem:
         assert r.status_code == 200, r.text
         assert client.get("/api/v1/me").json()["plan"] == "pro"
 
-        # 同码复用 → used
+        # 同码复用 → used(全站统一错误契约:顶层 code/message/details,不再嵌套在 detail 下)
         r2 = client.post("/api/v1/redeem", json={"code": code}, headers=_csrf(client))
         assert r2.status_code == 400
-        assert r2.json()["detail"]["code"] == "used"
+        assert r2.json()["code"] == "used"
 
     def test_redeem_invalid_and_expired(self, app, client, data_dir, fresh_ip):
         _login_user(client, ip=fresh_ip)
         admin = _login_admin(app, data_dir, ip=fresh_ip)
         r = client.post("/api/v1/redeem", json={"code": "AW-XXXX-XXXX-XXXX"}, headers=_csrf(client))
-        assert r.status_code == 400 and r.json()["detail"]["code"] == "invalid"
+        assert r.status_code == 400 and r.json()["code"] == "invalid"
         expired = self._make_codes(admin, expires_at="2020-01-01T00:00:00Z")[0]
         r2 = client.post("/api/v1/redeem", json={"code": expired}, headers=_csrf(client))
-        assert r2.status_code == 400 and r2.json()["detail"]["code"] == "expired"
+        assert r2.status_code == 400 and r2.json()["code"] == "expired"
 
     def test_redeem_requires_login_and_csrf(self, app, data_dir):
         anon = TestClient(app)

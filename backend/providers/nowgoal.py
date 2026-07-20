@@ -73,6 +73,21 @@ def _extract_titan_id(head: str) -> str | None:
     return numbers[0] if numbers else None
 
 
+def _extract_head_team_ids(head: str) -> tuple[str | None, str | None]:
+    """提取 A 行头部的 NowGoal 主/客队 id(hid/aid,"=[" 后第 3/4 段数字)。
+
+    格式按真实 probe:[titan_id, league_id, hid, aid, '主队', ...];
+    裸格式或字段不足时返回 (None, None),不猜。
+    """
+    m = _TITAN_AFTER_BRACKET_RE.search(head)
+    if not m:
+        return (None, None)
+    numbers = _INT_RE.findall(head[m.start():])
+    if len(numbers) < 4:
+        return (None, None)
+    return (numbers[2], numbers[3])
+
+
 def _extract_kickoff(parts: list[str], raw_line: str) -> str | None:
     """从行内提取开球时间(尽力而为,提不到给 None,不编造)。
 
@@ -114,11 +129,14 @@ def parse_schedule(data_text: str) -> list[dict]:
         away_name = parts[3].strip()
         if not titan_id or not home_name or not away_name:
             continue
+        provider_home_id, provider_away_id = _extract_head_team_ids(parts[0])
         rows.append(
             {
                 "titan_id": titan_id,
                 "home_name": home_name,
                 "away_name": away_name,
+                "provider_home_id": provider_home_id,
+                "provider_away_id": provider_away_id,
                 "kickoff": _extract_kickoff(parts, stripped),
                 "raw_line": stripped,
             }

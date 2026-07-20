@@ -16,18 +16,23 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { useSearchParams } from "next/navigation";
+import { toCanvas as qrToCanvas } from "qrcode";
 import {
   ApiError,
+  apiErrorMessage,
   claimDeviceLogin,
   clientFetch,
   createDeviceLogin,
   getMe,
   wechatLoginUrl,
+  type AuthMethodsResponse,
   type MeResponse,
+  type PasswordLoginResponse,
 } from "@/lib/api-v1";
 import styles from "./login.module.css";
 
@@ -36,19 +41,6 @@ function safeNext(raw: string | null): string {
   if (!raw || !raw.startsWith("/")) return "/";
   if (raw.startsWith("//") || raw.includes("\\") || raw.includes("://")) return "/";
   return raw;
-}
-
-function apiErrMsg(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) {
-    const d = e.detail;
-    if (typeof d === "string" && d) return d;
-    if (d && typeof d === "object" && "message" in d) {
-      const m = (d as { message?: unknown }).message;
-      if (typeof m === "string" && m) return m;
-    }
-    return `${fallback}(HTTP ${e.status})`;
-  }
-  return fallback;
 }
 
 type Env = "wechat" | "mobile" | "desktop";
@@ -101,6 +93,47 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
+/* ── 真二维码(本地 canvas 渲染,不经任何第三方图片服务) ── */
+
+function QrCanvas({ url }: { url: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let cancelled = false;
+    // 二维码内容只含公开 qr_url(request id),绝不含浏览器 secret
+    qrToCanvas(canvas, url, {
+      width: 200,
+      margin: 2,
+      errorCorrectionLevel: "M",
+    }).catch(() => {
+      if (!cancelled) setFailed(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (failed) {
+    return (
+      <code className={styles.qrUrl} data-qr-url={url}>
+        {url}
+      </code>
+    );
+  }
+  return (
+    <canvas
+      ref={canvasRef}
+      className={styles.qrCanvas}
+      data-qr-url={url}
+      role="img"
+      aria-label="微信扫码登录二维码"
+    />
+  );
+}
+
 /* ── 电脑端:Device Login 扫码卡片 ─────────────────────── */
 
 function DeviceLoginCard({ nextPath }: { nextPath: string }) {
@@ -121,7 +154,7 @@ function DeviceLoginCard({ nextPath }: { nextPath: string }) {
     } catch (e) {
       setDevice({
         phase: "error",
-        message: apiErrMsg(e, "无法创建扫码登录请求,请确认后端服务已启动后重试"),
+        message: apiErrorMessage(e, "无法创建扫码登录请求,请确认后端服务已启动后重试"),
       });
     }
   }, []);
@@ -188,19 +221,27 @@ function DeviceLoginCard({ nextPath }: { nextPath: string }) {
       ) : device.phase === "waiting" ? (
         <>
           <div className={styles.qrBox}>
-            <span className={styles.qrHint}>扫码授权链接</span>
-            <code className={styles.qrUrl}>{device.qrUrl}</code>
+            <QrCanvas url={device.qrUrl} />
+            <span className={styles.qrHint}>
+              用手机微信扫一扫,完成公众号授权后本页自动登录
+            </span>
           </div>
-          <p className={styles.note}>
-            本页暂未内置二维码图片生成:请在手机微信中打开上面的链接,完成公众号授权后,
-            本页会自动完成登录。
-          </p>
           <div className={styles.row}>
-            <CopyButton text={device.qrUrl} label="复制授权链接" />
             <span className={`${styles.countdown} num`}>
               {secondsLeft} 秒后过期
             </span>
           </div>
+          <details className={styles.qrFallback}>
+            <summary className={styles.qrFallbackSummary}>
+              无法扫码?查看授权链接
+            </summary>
+            <code className={styles.qrUrl} data-testid="qr-url">
+              {device.qrUrl}
+            </code>
+            <div className={styles.row}>
+              <CopyButton text={device.qrUrl} label="复制授权链接" />
+            </div>
+          </details>
           {IS_DEV && (
             <p className={styles.devNote}>
               开发环境:后端默认使用 Mock 微信 Provider,可直接在新标签页打开授权链接模拟扫码。
@@ -244,13 +285,13 @@ function PasswordLoginSection({ nextPath }: { nextPath: string }) {
     setBusy(true);
     setErr(null);
     try {
-      await clientFetch<{ status: string }>("/api/v1/auth/password/login", {
+      await clientFetch<PasswordLoginResponse>("/api/v1/auth/password/login", {
         method: "POST",
         body: { username, password },
       });
       window.location.assign(nextPath);
     } catch (e2) {
-      setErr(apiErrMsg(e2, "登录失败,请稍后重试"));
+      setErr(apiErrorMessage(e2, "登录失败,请稍后重试"));
       setBusy(false);
     }
   };
@@ -298,6 +339,8 @@ function LoginBody() {
 
   const env = useEnv();
   const [me, setMe] = useState<MeResponse | null>(null);
+  // null=未知(按可用渲染),false=后端明确告知微信登录未开放(AUTH_DISABLED 三态)
+  const [wechatEnabled, setWechatEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +350,13 @@ function LoginBody() {
       })
       .catch(() => {
         // /me 拉不到(后端未启动等)不阻塞登录入口本身
+      });
+    clientFetch<AuthMethodsResponse>("/api/v1/auth/methods")
+      .then((r) => {
+        if (!cancelled) setWechatEnabled(r.wechat_enabled);
+      })
+      .catch(() => {
+        // 拉不到 methods 时不阻塞登录入口(按可用渲染,端点自身仍会 503)
       });
     return () => {
       cancelled = true;
@@ -333,7 +383,15 @@ function LoginBody() {
         </section>
       )}
 
-      {env === null ? (
+      {wechatEnabled === false ? (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}>微信登录暂未开放</h2>
+          <p className={styles.note}>
+            站点尚未开启微信登录(需要完成公众号配置)。开放后本页将提供微信授权与扫码登录入口,
+            请稍后再试。
+          </p>
+        </section>
+      ) : env === null ? (
         <section className={styles.card} aria-busy="true">
           <div className={styles.skeleton} />
           <div className={styles.skeletonShort} />

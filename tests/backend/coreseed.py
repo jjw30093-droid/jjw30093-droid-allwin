@@ -8,7 +8,8 @@ def seed_core_schema(conn):
         """CREATE TABLE IF NOT EXISTS dim_match (
             Match_ID INTEGER PRIMARY KEY, Season TEXT, League_ID INTEGER, Date TEXT,
             Home_Team_ID INTEGER, Away_Team_ID INTEGER, Home_Team_Name TEXT, Away_Team_Name TEXT,
-            home_score INTEGER, away_score INTEGER, status TEXT, Match_Round TEXT)"""
+            home_score INTEGER, away_score INTEGER, status TEXT, Match_Round TEXT,
+            kickoff_at_utc TEXT)"""
     )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS dim_team_i18n (
@@ -25,12 +26,14 @@ def seed_core_schema(conn):
 
 def insert_match(conn, match_id, league_id=47, season="2026/2027", date="2027-04-01",
                  home_id=1001, away_id=1002, home="Arsenal", away="Chelsea",
-                 status="NotStarted", home_score=None, away_score=None, rnd="1"):
+                 status="NotStarted", home_score=None, away_score=None, rnd="1",
+                 kickoff_at_utc=None):
     conn.execute(
         "INSERT OR REPLACE INTO dim_match (Match_ID, Season, League_ID, Date, Home_Team_ID, Away_Team_ID,"
-        " Home_Team_Name, Away_Team_Name, home_score, away_score, status, Match_Round)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (match_id, season, league_id, date, home_id, away_id, home, away, home_score, away_score, status, rnd),
+        " Home_Team_Name, Away_Team_Name, home_score, away_score, status, Match_Round, kickoff_at_utc)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (match_id, season, league_id, date, home_id, away_id, home, away, home_score, away_score, status, rnd,
+         kickoff_at_utc),
     )
 
 

@@ -4,123 +4,40 @@
  * /admin — 最小可用管理后台(权限真源在服务端:非 admin 调任何 admin API 均 403)。
  *
  * 全部数据浏览器端 clientFetch(cookie Path=/api/v1 + CSRF),不进 RSC payload。
- * 各响应结构对齐 backend/api/routes_admin.py 与 routes_admin_odds.py 的真实返回
- * (OpenAPI 对这些端点未声明 schema,故在此手写最小类型)。
+ * 响应类型全部从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3)。
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, clientFetch, getMe } from "@/lib/api-v1";
+import {
+  ApiError,
+  apiErrorMessage,
+  clientFetch,
+  getMe,
+  type GetJson,
+  type PostJson,
+} from "@/lib/api-v1";
 import styles from "./admin.module.css";
 
-/* ── 类型(对齐后端真实返回) ───────────────────────────── */
+/* ── 类型:从生成类型派生 ──────────────────────────────── */
 
-interface AdminUserRow {
-  id: string;
-  display_name: string | null;
-  role: string;
-  status: string;
-  created_at: string;
-  last_login_at: string | null;
-  plan_id: string;
-  plan_ends_at: string | null;
-}
-interface UsersResp {
-  total: number;
-  users: AdminUserRow[];
-}
+type UsersResp = GetJson<"/api/v1/admin/users">;
 
-interface PlanInfo {
-  id: string;
-  name_zh: string;
-  rank: number;
-}
-interface ProductsResp {
-  plans: PlanInfo[];
-}
+type ProductsResp = GetJson<"/api/v1/products">;
+/** 开通/生成表单只用到套餐的这三个字段(含本地回退项),故 Pick 收窄。 */
+type PlanInfo = Pick<ProductsResp["plans"][number], "id" | "name_zh" | "rank">;
 
-interface GrantResp {
-  subscription_id: string;
-  plan_id: string;
-  starts_at: string;
-  ends_at: string;
-}
+type GrantResp = PostJson<"/api/v1/admin/users/{user_id}/grant">;
 
-interface RedeemCodeRow {
-  id: string;
-  plan_id: string;
-  duration_days: number;
-  batch_id: string;
-  status: string;
-  created_at: string;
-  expires_at: string | null;
-  used_by: string | null;
-  used_at: string | null;
-}
-interface CodesListResp {
-  codes: RedeemCodeRow[];
-}
-interface CodesCreateResp {
-  codes: { id: string; code: string }[];
-}
+type CodesListResp = GetJson<"/api/v1/admin/redeem-codes">;
+type CodesCreateResp = PostJson<"/api/v1/admin/redeem-codes">;
 
-interface PredictionRow {
-  id: string;
-  match_id: number;
-  kickoff_at_utc: string;
-  model_version_id: string;
-  generated_at: string;
-  published_at: string | null;
-  locked_at: string | null;
-  status: string;
-  is_official: number;
-  visibility: string;
-  home_win: number | null;
-  draw: number | null;
-  away_win: number | null;
-  confidence: string | null;
-}
-interface PredictionsResp {
-  counts: Record<string, number>;
-  predictions: PredictionRow[];
-}
-interface PublishUpcomingResp {
-  published: number;
-  failed: { id: string; reason: string }[];
-}
+type PredictionsResp = GetJson<"/api/v1/admin/predictions">;
+type PublishUpcomingResp = PostJson<"/api/v1/admin/predictions/publish-upcoming">;
 
-interface XrefRow {
-  id: number;
-  fotmob_match_id: number;
-  provider: string;
-  provider_match_id: string;
-  home_away_inverted: number;
-  confidence: number | null;
-  verified: number;
-  method: string | null;
-  kickoff_diff_seconds: number | null;
-  review_status: string;
-  created_at: string;
-  updated_at: string;
-}
-interface XrefResp {
-  counts: Record<string, number>;
-  xrefs: XrefRow[];
-}
+type XrefResp = GetJson<"/api/v1/admin/xref">;
 
-interface AuditRow {
-  id: number;
-  actor_user_id: string | null;
-  actor_type: string;
-  action: string;
-  target_type: string | null;
-  target_id: string | null;
-  detail_json: string;
-  created_at: string;
-}
-interface AuditResp {
-  logs: AuditRow[];
-}
+type AuditResp = GetJson<"/api/v1/admin/audit-logs">;
 
 /* ── 工具 ──────────────────────────────────────────────── */
 
@@ -138,19 +55,6 @@ function shortId(id: string | null | undefined, n = 8): string {
 
 function pct(v: number | null): string {
   return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
-}
-
-function apiErrMsg(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) {
-    const d = e.detail;
-    if (typeof d === "string" && d) return d;
-    if (d && typeof d === "object" && "message" in d) {
-      const m = (d as { message?: unknown }).message;
-      if (typeof m === "string" && m) return m;
-    }
-    return `${fallback}(HTTP ${e.status})`;
-  }
-  return fallback;
 }
 
 function isForbidden(e: unknown): boolean {
@@ -198,7 +102,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
       setData(r);
       setMsg(null);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "用户列表加载失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "用户列表加载失败") });
     } finally {
       setLoading(false);
     }
@@ -232,7 +136,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
       setGrantNotes("");
       await load(query);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "开通失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "开通失败") });
     } finally {
       setBusy(false);
     }
@@ -252,7 +156,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
       setRevokeSubId("");
       await load(query);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "撤销失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "撤销失败") });
     } finally {
       setBusy(false);
     }
@@ -418,7 +322,7 @@ function CodesTab({ plans }: { plans: PlanInfo[] }) {
       );
       setList(r);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "兑换码列表加载失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "兑换码列表加载失败") });
     } finally {
       setLoading(false);
     }
@@ -448,7 +352,7 @@ function CodesTab({ plans }: { plans: PlanInfo[] }) {
       setMsg({ kind: "ok", text: `已生成 ${r.codes.length} 个兑换码(明文仅本次显示,请立即保存)` });
       await load(batchFilter);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "生成失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "生成失败") });
     } finally {
       setBusy(false);
     }
@@ -619,7 +523,7 @@ function PredictionsTab() {
       );
       setData(r);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "预测列表加载失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "预测列表加载失败") });
     } finally {
       setLoading(false);
     }
@@ -645,7 +549,7 @@ function PredictionsTab() {
       setMsg({ kind: "ok", text: `操作成功:${action} ${shortId(id)}` });
       await load(statusFilter);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "操作失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "操作失败") });
     } finally {
       setBusyId(null);
     }
@@ -675,7 +579,7 @@ function PredictionsTab() {
       setRetractReason("");
       await load(statusFilter);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "撤回失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "撤回失败") });
     } finally {
       setBusyId(null);
     }
@@ -704,7 +608,7 @@ function PredictionsTab() {
       setMsg({ kind: r.failed.length > 0 ? "err" : "ok", text: `已发布 ${r.published} 条${failText}` });
       await load(statusFilter);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "批量发布失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "批量发布失败") });
     } finally {
       setBusyId(null);
     }
@@ -896,7 +800,7 @@ function XrefTab() {
       );
       setData(r);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "映射列表加载失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "映射列表加载失败") });
     } finally {
       setLoading(false);
     }
@@ -919,7 +823,7 @@ function XrefTab() {
       setMsg({ kind: "ok", text: `映射 #${id} 已${label}` });
       await load(statusFilter);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, `${label}失败`) });
+      setMsg({ kind: "err", text: apiErrorMessage(e, `${label}失败`) });
     } finally {
       setBusyId(null);
     }
@@ -1059,7 +963,7 @@ function JobsTab() {
       if (e instanceof ApiError && (e.status === 404 || e.status === 405)) {
         setState({ phase: "unavailable" });
       } else {
-        setState({ phase: "error", message: apiErrMsg(e, "任务健康数据加载失败") });
+        setState({ phase: "error", message: apiErrorMessage(e, "任务健康数据加载失败") });
       }
     }
   }, []);
@@ -1156,7 +1060,7 @@ function AuditTab() {
       setData(r);
       setMsg(null);
     } catch (e) {
-      setMsg({ kind: "err", text: apiErrMsg(e, "审计日志加载失败") });
+      setMsg({ kind: "err", text: apiErrorMessage(e, "审计日志加载失败") });
     } finally {
       setLoading(false);
     }
@@ -1284,7 +1188,7 @@ export default function AdminPage() {
             phase: "error",
             message: isForbidden(e)
               ? "需要管理员权限"
-              : apiErrMsg(e, "无法确认登录状态,请确认后端服务已启动"),
+              : apiErrorMessage(e, "无法确认登录状态,请确认后端服务已启动"),
           });
       }
     })();

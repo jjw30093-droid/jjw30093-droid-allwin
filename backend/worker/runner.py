@@ -14,8 +14,9 @@
   * input_count / output_count 由任务返回 dict 提供({"input_count": .., "output_count": .., "meta": {..}})。
 - run_chain():按 DEFAULT_CHAIN 顺序执行;某步 failed 则后续全部记 skipped(依赖检查);
   --from <step> 支持从中间步骤重跑。
-- 可选任务(nowgoal_snapshot / entity_resolution / analysis_bundle_build):依赖的模块
-  尚未交付时记 skipped + reason,不算失败、不阻断链。
+- 核心链任务(采集/实体解析/两类 Silver/analysis bundle)全部为真实注册任务
+  (CLAUDE.md §13):外部凭证缺失时诚实记 failed + 原因,不以"模块不存在"跳过;
+  "optional" kind 仅保留给测试注入使用。
 
 用法:
   python -m backend.worker.runner --list
@@ -85,12 +86,52 @@ def _job_postmatch_settle() -> dict:
         conn_platform.close()
     meta = {k: v for k, v in result.items() if k != "calibration"}
     if result.get("sample_size", 0) == 0:
-        meta["note"] = "暂无符合正式口径的样本(official+locked+pre-kickoff+已结算),未写入评估"
+        meta["note"] = "暂无符合正式口径的样本(official+曾锁定+赛前发布+已结算;含撤回/被取代),未写入评估"
     return {
         "input_count": result.get("sample_size", 0),
         "output_count": result.get("settled_now", 0),
         "meta": meta,
     }
+
+
+def _job_analysis_bundle_build() -> dict:
+    """为未开赛比赛构建 analysis_bundle(详情页与 Studio 共用的同一 builder)。
+
+    验证并预热链路:窗口内(按 kickoff/日期最近的)NotStarted 场次逐场构建,
+    单场失败继续其余;bundle 构建为只读操作,不写库。
+    """
+    from backend.db.connections import connect_ro
+    from backend.studio.bundle import build_analysis_bundle
+
+    conn_core = connect_ro("core")
+    conn_platform = connect_ro("platform")
+    try:
+        conn_odds = connect_ro("odds")
+    except Exception:  # noqa: BLE001 — odds.db 尚未建库时 bundle 允许 None
+        conn_odds = None
+    built = 0
+    errors: list[str] = []
+    try:
+        rows = conn_core.execute(
+            """SELECT Match_ID FROM dim_match WHERE status='NotStarted'
+               ORDER BY COALESCE(kickoff_at_utc, Date), Match_ID LIMIT 50"""
+        ).fetchall()
+        for r in rows:
+            try:
+                bundle = build_analysis_bundle(
+                    conn_core, conn_platform, conn_odds, int(r["Match_ID"])
+                )
+                if bundle is not None:
+                    built += 1
+            except Exception as exc:  # noqa: BLE001 — 单场失败不拖垮整轮
+                errors.append(f"match {r['Match_ID']}: {type(exc).__name__}: {exc}")
+    finally:
+        conn_core.close()
+        conn_platform.close()
+        if conn_odds is not None:
+            conn_odds.close()
+    meta = {"errors": errors[:10]} if errors else {}
+    return {"input_count": len(rows), "output_count": built, "meta": meta}
 
 
 def _job_metrics_rebuild() -> dict:
@@ -137,32 +178,50 @@ REGISTRY: dict[str, dict] = {
         "description": "增量抓取新完赛场次(比分+xG+事件+阵容,需住宅代理)",
     },
     "nowgoal_snapshot": {
-        "kind": "optional",
-        "candidates": [("backend/cli/poll_nowgoal.py", "backend.cli.poll_nowgoal")],
+        "kind": "subprocess",
+        "argv": [sys.executable, "-m", "backend.cli.poll_nowgoal", "--due"],
+        "cwd": str(PROJECT_ROOT),
         "max_attempts": 2,
         "timeout_seconds": 900,
         "backoff_seconds": 60,
-        "description": "NowGoal 单轮采集:日程→实体映射→hash-diff 赔率快照(poll_nowgoal)",
+        "description": "NowGoal 窗口到期采集:72h 内精确 kickoff 比赛,15/5 分钟节流,hash-diff 落库",
+    },
+    "fotmob_snapshot": {
+        "kind": "subprocess",
+        "argv": [sys.executable, "-m", "backend.cli.poll_fotmob_snapshots", "--due"],
+        "cwd": str(PROJECT_ROOT),
+        "require_env": ("THORDATA_PROXY",),
+        "max_attempts": 2,
+        "timeout_seconds": 900,
+        "backoff_seconds": 60,
+        "description": "FotMob 阵容/伤停快照:同场同轮单次 payload,三快照共用 observed_at(需住宅代理)",
     },
     "entity_resolution": {
-        "kind": "optional",
-        "candidates": [
-            ("backend/cli/resolve_entities.py", "backend.cli.resolve_entities"),
-            ("backend/odds/entity_resolution.py", "backend.odds.entity_resolution"),
-        ],
+        "kind": "subprocess",
+        "argv": [sys.executable, "-m", "backend.cli.resolve_entities"],
+        "cwd": str(PROJECT_ROOT),
         "max_attempts": 2,
         "timeout_seconds": 600,
         "backoff_seconds": 30,
-        "description": "实体对齐链位:当前已内联在 nowgoal_snapshot(poll_nowgoal)内执行;独立 CLI 出现前记 skipped",
+        "description": "实体解析:全联赛别名种子 + xref 审核状态汇报(新行解析内联在采集轮)",
     },
-    "silver_build": {
+    "core_silver_build": {
         "kind": "subprocess",
         "argv": [sys.executable, "silver/build_silver.py"],
         "cwd": str(BACKEND_DIR),
         "max_attempts": 1,
         "timeout_seconds": 1800,
         "backoff_seconds": 0,
-        "description": "Bronze → Silver 聚合(按联赛+赛季 DELETE+INSERT,幂等)",
+        "description": "core Bronze → Silver 聚合(按联赛+赛季 DELETE+INSERT,幂等)",
+    },
+    "odds_silver_build": {
+        "kind": "subprocess",
+        "argv": [sys.executable, "-m", "backend.cli.build_odds_silver"],
+        "cwd": str(PROJECT_ROOT),
+        "max_attempts": 1,
+        "timeout_seconds": 900,
+        "backoff_seconds": 0,
+        "description": "odds Bronze → 变化点/时间共现(UNIQUE 幂等,needs_review 映射不产出)",
     },
     "model_predict": {
         "kind": "subprocess",
@@ -182,15 +241,12 @@ REGISTRY: dict[str, dict] = {
         "description": "gold_wdl_predictions → 预测登记簿(幂等导入)",
     },
     "analysis_bundle_build": {
-        "kind": "optional",
-        "candidates": [
-            ("backend/studio/build_bundle.py", "backend.studio.build_bundle"),
-            ("backend/studio/__main__.py", "backend.studio"),
-        ],
+        "kind": "fn",
+        "fn": _job_analysis_bundle_build,
         "max_attempts": 1,
         "timeout_seconds": 900,
         "backoff_seconds": 0,
-        "description": "Studio 分析包构建(backend.studio 未交付时 skipped)",
+        "description": "analysis_bundle 构建:窗口内 NotStarted 场次逐场构建(详情页/Studio 共用 builder)",
     },
     "postmatch_settle": {
         "kind": "fn",
@@ -214,14 +270,28 @@ DEFAULT_CHAIN = [
     "schedule_sync",
     "fotmob_incremental",
     "nowgoal_snapshot",
+    "fotmob_snapshot",
     "entity_resolution",
-    "silver_build",
+    "core_silver_build",
+    "odds_silver_build",
     "model_predict",
     "prediction_register",
     "analysis_bundle_build",
     "postmatch_settle",
     "metrics_rebuild",
 ]
+
+# allwin-poll.timer 每 5 分钟独立调度这两步(CLAUDE.md §6.3 的到期判断);
+# allwin-worker.timer 每 15 分钟的周期性任务链不应再重复调度同一对任务名——
+# 否则两个 systemd 定时器都会尝试获取同一个 data/locks/<job>.lock,而
+# run_chain() 把"被锁"和"失败"同等对待(见下方 run_chain 文档),会导致
+# 纯粹的锁竞争(不是真失败)级联跳过链上其余全部步骤。
+# --chain(不带 --periodic)仍然是完整手动链,用于端到端/人工重跑,不受影响;
+# 只有 allwin-worker.service 的周期性调用改用 --periodic 跳过这两步。
+PERIODIC_CHAIN_EXCLUDE = frozenset({"nowgoal_snapshot", "fotmob_snapshot"})
+
+# 兼容别名:旧名 silver_build 指向 core_silver_build(不在默认链中)
+REGISTRY["silver_build"] = REGISTRY["core_silver_build"]
 
 
 def register_job(name: str, **spec) -> None:
@@ -509,7 +579,13 @@ def run_job(job_name: str, idempotency_key: str | None = None, force: bool = Fal
 
 
 def run_chain(names: list[str] | None = None, start_from: str | None = None) -> list[dict]:
-    """按顺序执行任务链;某步 failed/locked 后,后续步骤记 skipped(依赖检查)。"""
+    """按顺序执行任务链;某步 failed/locked 后,后续步骤记 skipped(依赖检查)。
+
+    注意:`locked`(被同名任务的文件锁挡住,通常是 allwin-poll.timer 的独立
+    5 分钟调度撞上本链)与 `failed` 被同等处理——都会让后续步骤级联 skip。
+    这正是 CLI 层要提供 `--periodic`(排除 PERIODIC_CHAIN_EXCLUDE)的原因:
+    避免周期性调用把这类良性锁竞争当成链路真的失败。
+    """
     chain = list(names) if names else list(DEFAULT_CHAIN)
     if start_from is not None:
         if start_from not in chain:
@@ -561,6 +637,11 @@ def main(argv=None) -> int:
     ap.add_argument("--force", action="store_true", help="忽略幂等键强制重跑")
     ap.add_argument("--chain", action="store_true", help="按默认顺序执行任务链")
     ap.add_argument("--from", dest="from_step", default=None, help="链从指定步骤开始(配合 --chain)")
+    ap.add_argument(
+        "--periodic", action="store_true",
+        help="配合 --chain:跳过 nowgoal_snapshot/fotmob_snapshot(由 allwin-poll.timer "
+             "独立、更高频调度,周期性 worker 链不应重复触发,避免良性锁竞争被当成失败级联跳过)",
+    )
     ap.add_argument("--list", action="store_true", dest="list_jobs", help="列出注册任务")
     args = ap.parse_args(argv)
 
@@ -583,7 +664,10 @@ def main(argv=None) -> int:
         return 0 if res["status"] in ("succeeded", "skipped") else 1
 
     if args.chain:
-        results = run_chain(start_from=args.from_step)
+        names = None
+        if args.periodic:
+            names = [n for n in DEFAULT_CHAIN if n not in PERIODIC_CHAIN_EXCLUDE]
+        results = run_chain(names=names, start_from=args.from_step)
         rc = 0
         for res in results:
             _print_result(f"[{res['job']}] ", res)

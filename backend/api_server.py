@@ -40,7 +40,24 @@ try:
 except ImportError:
     from db import DB_PATH                  # 兼容旧脚本式运行(cwd=backend)
 
+from backend.api.cache_policy import install_cache_policy
+from backend.api.error_handlers import register_error_handlers
+from backend.api.schemas import (
+    LeagueBettingResponse,
+    LeagueMatchesResponse,
+    LeagueOverviewResponse,
+    LeagueWdlPredictionsResponse,
+    error_responses,
+)
+
 app = FastAPI(title="allwin serving API")
+
+# 全站统一错误契约(CLAUDE.md §10):本文件的 OpenAPI 声明(response_model/
+# error_responses)早已引用 ApiErrorDTO,但作为可独立运行的 FastAPI app(见文末
+# `if __name__ == "__main__"`),必须自己也注册同一套处理器,否则该独立运行模式
+# 下 schema 与运行时不一致(生产入口 backend.api.app:app 借用本文件路由对象时,
+# 走的是主 app 自己注册的处理器,不受这里影响)。
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +68,10 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+# 缓存隔离(CLAUDE.md §10.2):本文件 4 个 legacy 端点从不设置 Cache-Control,
+# 独立运行模式下同样需要 app 层 default-deny 兜底(见 backend/api/cache_policy.py)。
+install_cache_policy(app)
 
 
 def get_readonly_connection() -> sqlite3.Connection:
@@ -93,14 +114,20 @@ def _resolve_season(conn: sqlite3.Connection, league_id: int, season: Optional[s
     按全部赛季校验,不受这条限制。"""
     all_seasons = _valid_seasons(conn, league_id, only_finished=False)
     if not all_seasons:
-        raise HTTPException(status_code=400, detail=f"league_id={league_id} 无数据")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "no_data_for_league", "message": f"league_id={league_id} 无数据"},
+        )
     if season is None:
         finished_seasons = _valid_seasons(conn, league_id, only_finished=True)
         return (finished_seasons or all_seasons)[-1]
     if season not in all_seasons:
         raise HTTPException(
             status_code=400,
-            detail=f"非法 season={season!r},league_id={league_id} 可用赛季: {all_seasons}",
+            detail={
+                "code": "invalid_season",
+                "message": f"非法 season={season!r},league_id={league_id} 可用赛季: {all_seasons}",
+            },
         )
     return season
 
@@ -127,7 +154,11 @@ FREE_PLAYER_STATS = {
 }
 
 
-@app.get("/api/league/{league_id}/overview")
+@app.get(
+    "/api/league/{league_id}/overview",
+    response_model=LeagueOverviewResponse,
+    responses=error_responses(400, 422),
+)
 def league_overview(league_id: int, season: Optional[str] = None):
     conn = get_readonly_connection()
     try:
@@ -217,7 +248,11 @@ def league_overview(league_id: int, season: Optional[str] = None):
 
 
 # ── 付费:GET /api/league/{league_id}/betting ─────────────────────────
-@app.get("/api/league/{league_id}/betting")
+@app.get(
+    "/api/league/{league_id}/betting",
+    response_model=LeagueBettingResponse,
+    responses=error_responses(400, 401, 403, 422),
+)
 def league_betting(request: Request, league_id: int, season: Optional[str] = None):
     from backend.api.deps import auth_context_for
 
@@ -225,7 +260,11 @@ def league_betting(request: Request, league_id: int, season: Optional[str] = Non
     if not ctx.has("report:deep"):
         raise HTTPException(
             status_code=403 if ctx.authenticated else 401,
-            detail={"code": "membership_required", "entitlement": "report:deep"},
+            detail={
+                "code": "membership_required",
+                "message": "需要 report:deep 权益才能访问该数据",
+                "entitlement": "report:deep",
+            },
         )
 
     conn = get_readonly_connection()
@@ -292,7 +331,11 @@ def league_betting(request: Request, league_id: int, season: Optional[str] = Non
 
 
 # ── 免费:GET /api/league/{league_id}/matches ─────────────────────────
-@app.get("/api/league/{league_id}/matches")
+@app.get(
+    "/api/league/{league_id}/matches",
+    response_model=LeagueMatchesResponse,
+    responses=error_responses(400, 422),
+)
 def league_matches(league_id: int, season: Optional[str] = None):
     conn = get_readonly_connection()
     try:
@@ -337,13 +380,22 @@ def _resolve_prediction_season(conn: sqlite3.Connection, league_id: int, season:
     ).fetchall()
     seasons = [r["season"] for r in rows]
     if not seasons:
-        raise HTTPException(status_code=400, detail=f"league_id={league_id} 没有任何 WDL 预测数据")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "no_wdl_predictions_for_league",
+                "message": f"league_id={league_id} 没有任何 WDL 预测数据",
+            },
+        )
     if season is None:
         return seasons[-1]
     if season not in seasons:
         raise HTTPException(
             status_code=400,
-            detail=f"非法 season={season!r},league_id={league_id} 可用预测赛季: {seasons}",
+            detail={
+                "code": "invalid_season",
+                "message": f"非法 season={season!r},league_id={league_id} 可用预测赛季: {seasons}",
+            },
         )
     return season
 
@@ -363,7 +415,11 @@ def _wdl_availability(match_date_str: Optional[str]) -> tuple:
     return availability, days_until
 
 
-@app.get("/api/league/{league_id}/wdl-predictions")
+@app.get(
+    "/api/league/{league_id}/wdl-predictions",
+    response_model=LeagueWdlPredictionsResponse,
+    responses=error_responses(400, 422),
+)
 def league_wdl_predictions(request: Request, league_id: int, season: Optional[str] = None):
     is_paid = require_membership(request)
 

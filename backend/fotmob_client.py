@@ -133,6 +133,29 @@ def _extract_iso_date(general: dict, content: dict) -> Optional[str]:
     return legacy[:10] if legacy else None
 
 
+def _extract_kickoff_utc(general: dict, content: dict) -> Optional[str]:
+    """
+    提取精确 UTC 开球时刻(带时间部分的完整 ISO),来源优先级同 _extract_iso_date。
+    来源只给日期/不可解析 → None,不得补当天 00:00 伪装精确时间(CLAUDE.md §6.2.1)。
+    """
+    try:
+        from backend.db.util import normalize_utc_iso  # 包内运行(worker/providers)
+    except ImportError:
+        from db.util import normalize_utc_iso          # 脚本式运行(cwd=backend)
+
+    candidates = [general.get("matchTimeUTCDate")]
+    info_box = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
+    match_date = info_box.get("Match Date")
+    if isinstance(match_date, dict):
+        candidates.append(match_date.get("utcTime"))
+    candidates.append(general.get("matchTimeUTC"))
+    for value in candidates:
+        normalized = normalize_utc_iso(value)
+        if normalized:
+            return normalized
+    return None
+
+
 def _split_scores_str(value: Any) -> "tuple[Optional[int], Optional[int]]":
     """把 "71-27" 形式的比分字符串拆成 (进球, 失球)，解析失败返回 (None, None)。"""
     if not isinstance(value, str) or "-" not in value:
@@ -477,11 +500,18 @@ class FotMobClient:
         elif general.get("whoLostOnPenalties"):
             who_lost_penalties = str(general["whoLostOnPenalties"])
 
+        kickoff_at_utc = _extract_kickoff_utc(general, content)
+
         return {
             "Match_ID":             int(match_id),
             "Season":               season,
             "League_ID":            league_id,
             "Date":                 date,
+            "kickoff_at_utc":       kickoff_at_utc,
+            # provenance(§6.2.1):有精确时刻 → exact + 'fotmob:match_details';
+            # 只有日期 → date_only;连日期都没有 → unknown。不编造来源。
+            "kickoff_precision":    ("exact" if kickoff_at_utc else ("date_only" if date else "unknown")),
+            "kickoff_source":       ("fotmob:match_details" if kickoff_at_utc else None),
             "Home_Team_ID":         home_id,
             "Away_Team_ID":         away_id,
             "Home_Team_Name":       home_name,

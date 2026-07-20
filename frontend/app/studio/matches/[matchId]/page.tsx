@@ -247,7 +247,8 @@ function Editor({
         if (!ok) return;
       }
       const res = await requestExport(draft.id, kind);
-      if (!res.download_url) throw new Error("后端未返回下载地址");
+      if (res.side !== "server" || !res.download_url)
+        throw new Error("后端未返回下载地址");
       await downloadServerExport(
         res.download_url,
         exportFilename(

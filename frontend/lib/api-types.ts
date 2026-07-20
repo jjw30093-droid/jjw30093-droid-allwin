@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/auth/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Auth Methods */
+        get: operations["auth_methods_api_v1_auth_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/wechat/oa/start": {
         parameters: {
             query?: never;
@@ -311,7 +328,11 @@ export interface paths {
         };
         /**
          * Track Record
-         * @description 匿名公开:official + locked + pre-kickoff 全量样本(含撤回,透明),不挑选。
+         * @description 匿名公开:全部正式样本(official + 曾锁定 + 赛前发布),不挑选。
+         *
+         *     永久资格不变量(CLAUDE.md §9.1):撤回(retracted)与被修正版取代
+         *     (superseded_by 非空)的正式样本不退出列表与指标分母,只带状态与修正链
+         *     标注(status / superseded_by / correction_of);修正链新旧版本同时返回。
          */
         get: operations["track_record_api_v1_track_record_get"];
         put?: never;
@@ -332,7 +353,8 @@ export interface paths {
         /**
          * Model Metrics
          * @description 模型版本与评估口径。研发期指标来自 walk-forward 回测;正式战绩指标只来自
-         *     official 样本的离线评估。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。
+         *     正式样本(official + 曾锁定 + 赛前发布)的离线评估,分母含撤回与被取代版本,
+         *     不可选择性剔除(CLAUDE.md §9.1)。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。
          */
         get: operations["model_metrics_api_v1_model_metrics_get"];
         put?: never;
@@ -600,7 +622,11 @@ export interface paths {
         put?: never;
         /**
          * Publish Upcoming
-         * @description 批量:把所有开球前的 draft 发布(可选同时锁定)。逐条独立事务,失败不拖累其余。
+         * @description 批量:尝试发布全部 draft(可选同时锁定)。逐条独立事务,失败不拖累其余。
+         *
+         *     候选集不再按 kickoff_at_utc 预筛(候选行可能因 date_only/unknown provenance 而
+         *     kickoff_at_utc 为 NULL,仍应被尝试并拿到明确失败原因,而不是被 SQL 悄悄排除在外)——
+         *     唯一验证入口是 publish_snapshot/lock_snapshot 内部的门禁,这里只负责收集结果。
          */
         post: operations["publish_upcoming_api_v1_admin_predictions_publish_upcoming_post"];
         delete?: never;
@@ -911,6 +937,10 @@ export interface paths {
         /**
          * Readyz
          * @description 三库可读 + migration 无 pending 才 ready。
+         *
+         *     公网未认证响应只返回稳定、清理过的问题标识——不返回原始异常文本、
+         *     SQL、绝对路径、迁移文件名或堆栈(这些是内部实现细节,即便不算"秘密"
+         *     也不该暴露给任意匿名调用者当侦察信息)。真实异常详情记录到服务端日志。
          */
         get: operations["readyz_readyz_get"];
         put?: never;
@@ -925,6 +955,205 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountIdentity */
+        AccountIdentity: {
+            /** Provider */
+            provider: string;
+            /** Provider App Id */
+            provider_app_id: string;
+            /** Created At */
+            created_at: string;
+            /** Last Used At */
+            last_used_at?: string | null;
+        };
+        /** AccountRecovery */
+        AccountRecovery: {
+            /** Available */
+            available: boolean;
+            /** Note */
+            note: string;
+        };
+        /** AccountResponse */
+        AccountResponse: {
+            user: components["schemas"]["MeUser"];
+            /** Plan */
+            plan: string;
+            /** Entitlements */
+            entitlements: string[];
+            /** Identities */
+            identities: components["schemas"]["AccountIdentity"][];
+            /** Subscriptions */
+            subscriptions: components["schemas"]["AccountSubscription"][];
+            /** Sessions */
+            sessions: components["schemas"]["AccountSession"][];
+            recovery: components["schemas"]["AccountRecovery"];
+        };
+        /** AccountSession */
+        AccountSession: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /** Expires At */
+            expires_at: string;
+            /** User Agent */
+            user_agent?: string | null;
+            /** Is Current */
+            is_current: number;
+        };
+        /** AccountSubscription */
+        AccountSubscription: {
+            /** Id */
+            id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Status */
+            status: string;
+            /** Starts At */
+            starts_at: string;
+            /** Ends At */
+            ends_at: string;
+            /** Source */
+            source: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** AdminCodesCreatedResponse */
+        AdminCodesCreatedResponse: {
+            /** Codes */
+            codes: components["schemas"]["RedeemCodeCreatedItem"][];
+        };
+        /** AdminCodesListResponse */
+        AdminCodesListResponse: {
+            /** Codes */
+            codes: components["schemas"]["AdminRedeemCodeItem"][];
+        };
+        /** AdminPredictionItem */
+        AdminPredictionItem: {
+            /** Id */
+            id: string;
+            /** Match Id */
+            match_id: number;
+            /** Kickoff At Utc */
+            kickoff_at_utc?: string | null;
+            /** Model Version Id */
+            model_version_id: string;
+            /** Generated At */
+            generated_at: string;
+            /** Published At */
+            published_at?: string | null;
+            /** Locked At */
+            locked_at?: string | null;
+            /** Status */
+            status: string;
+            /** Is Official */
+            is_official: number;
+            /** Visibility */
+            visibility: string;
+            /** Home Win */
+            home_win: number;
+            /** Draw */
+            draw: number;
+            /** Away Win */
+            away_win: number;
+            /** Confidence */
+            confidence?: string | null;
+        };
+        /** AdminPredictionsResponse */
+        AdminPredictionsResponse: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Predictions */
+            predictions: components["schemas"]["AdminPredictionItem"][];
+        };
+        /** AdminRedeemCodeItem */
+        AdminRedeemCodeItem: {
+            /** Id */
+            id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Duration Days */
+            duration_days: number;
+            /** Batch Id */
+            batch_id?: string | null;
+            /** Status */
+            status: string;
+            /** Created At */
+            created_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Used By */
+            used_by?: string | null;
+            /** Used At */
+            used_at?: string | null;
+        };
+        /** AdminUserItem */
+        AdminUserItem: {
+            /** Id */
+            id: string;
+            /** Display Name */
+            display_name: string;
+            /** Role */
+            role: string;
+            /** Status */
+            status: string;
+            /** Created At */
+            created_at: string;
+            /** Last Login At */
+            last_login_at?: string | null;
+            /** Plan Id */
+            plan_id: string;
+            /** Plan Ends At */
+            plan_ends_at?: string | null;
+        };
+        /** AdminUsersResponse */
+        AdminUsersResponse: {
+            /** Total */
+            total: number;
+            /** Users */
+            users: components["schemas"]["AdminUserItem"][];
+        };
+        /**
+         * AnalysisBundleDTO
+         * @description GET /matches/{id}/analysis:公开投影(无 subtitle_cues,带 cooccurrence_count)。
+         */
+        AnalysisBundleDTO: {
+            /** Bundle Version */
+            bundle_version: string;
+            /** Built At */
+            built_at: string;
+            match: components["schemas"]["MatchSummary"];
+            /** Data Cutoff At */
+            data_cutoff_at?: string | null;
+            /** Model Version */
+            model_version?: string | null;
+            prediction_public?: components["schemas"]["BundlePredictionPublic"] | null;
+            prediction_member?: components["schemas"]["BundlePredictionMember"] | null;
+            /** Evidence */
+            evidence: components["schemas"]["BundleEvidenceItem"][];
+            /** Counter Evidence */
+            counter_evidence: components["schemas"]["BundleEvidenceItem"][];
+            /** Uncertainty */
+            uncertainty: components["schemas"]["BundleUncertaintyItem"][];
+            /** Odds Timeline */
+            odds_timeline: components["schemas"]["BundleOddsPoint"][];
+            /** Cooccurring Events */
+            cooccurring_events: components["schemas"]["BundleCoocEvent"][];
+            /** Chart Specs */
+            chart_specs: components["schemas"]["BundleChartSpec"][];
+            /** Script Sections */
+            script_sections: components["schemas"]["BundleScriptSection"][];
+            /** Source Notes */
+            source_notes: components["schemas"]["BundleSourceNote"][];
+            /** Bundle Hash */
+            bundle_hash: string;
+            /** Cooccurrence Count */
+            cooccurrence_count: number;
+        };
         /** AnalyticsEventBody */
         AnalyticsEventBody: {
             /** Event */
@@ -939,6 +1168,212 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
+        };
+        /** ApiErrorDTO */
+        ApiErrorDTO: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** AuditLogItem */
+        AuditLogItem: {
+            /** Id */
+            id: number;
+            /** Actor User Id */
+            actor_user_id?: string | null;
+            /** Actor Type */
+            actor_type: string;
+            /** Action */
+            action: string;
+            /** Target Type */
+            target_type?: string | null;
+            /** Target Id */
+            target_id?: string | null;
+            /** Detail Json */
+            detail_json: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** AuditLogsResponse */
+        AuditLogsResponse: {
+            /** Logs */
+            logs: components["schemas"]["AuditLogItem"][];
+        };
+        /** AuthMethodsDTO */
+        AuthMethodsDTO: {
+            /** Wechat Enabled */
+            wechat_enabled: boolean;
+        };
+        /** BundleChartSpec */
+        BundleChartSpec: {
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        /** BundleCoocEvent */
+        BundleCoocEvent: {
+            /** Delta Seconds */
+            delta_seconds: number;
+            /** Market */
+            market: string;
+            /** Field */
+            field: string;
+            /** Prev Value */
+            prev_value?: string | null;
+            /** New Value */
+            new_value?: string | null;
+            /** Moved At */
+            moved_at: string;
+            /** Event Type */
+            event_type: string;
+            /** Detail Json */
+            detail_json: string;
+        };
+        /** BundleEvidenceItem */
+        BundleEvidenceItem: {
+            /** Side */
+            side: string;
+            /** Kind */
+            kind: string;
+            /** Text */
+            text: string;
+        };
+        /** BundleOddsPoint */
+        BundleOddsPoint: {
+            /** Market */
+            market: string;
+            /** Company */
+            company: string;
+            /** Observed At */
+            observed_at: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+        };
+        /** BundlePredictionMember */
+        BundlePredictionMember: {
+            /** Home Probability */
+            home_probability: number;
+            /** Draw Probability */
+            draw_probability: number;
+            /** Away Probability */
+            away_probability: number;
+            /** Expected Home Goals */
+            expected_home_goals?: number | null;
+            /** Expected Away Goals */
+            expected_away_goals?: number | null;
+            /** Status */
+            status: string;
+            /** Prediction Hash */
+            prediction_hash: string;
+        };
+        /** BundlePredictionPublic */
+        BundlePredictionPublic: {
+            /**
+             * Top Outcome
+             * @enum {string}
+             */
+            top_outcome: "home" | "draw" | "away";
+            /** Top Probability */
+            top_probability: number;
+        };
+        /** BundleScriptSection */
+        BundleScriptSection: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Text */
+            text: string;
+        };
+        /** BundleSourceNote */
+        BundleSourceNote: {
+            /** Kind */
+            kind: string;
+            /** Text */
+            text: string;
+        };
+        /** BundleSubtitleCue */
+        BundleSubtitleCue: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Text */
+            text: string;
+        };
+        /** BundleUncertaintyItem */
+        BundleUncertaintyItem: {
+            /** Kind */
+            kind: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * CooccurrenceFullDTO
+         * @description report:deep:含明细。
+         */
+        CooccurrenceFullDTO: {
+            /** Match Id */
+            match_id: number;
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["CooccurrenceItem"][];
+        };
+        /** CooccurrenceItem */
+        CooccurrenceItem: {
+            /** Window Seconds */
+            window_seconds: number;
+            /** Delta Seconds */
+            delta_seconds: number;
+            /** Computed At */
+            computed_at: string;
+            /** Market */
+            market: string;
+            /** Company Id */
+            company_id: string;
+            /** Field */
+            field: string;
+            /** Prev Value */
+            prev_value?: string | null;
+            /** New Value */
+            new_value?: string | null;
+            /** Odds Moved At */
+            odds_moved_at: string;
+            /** Event Type */
+            event_type: string;
+            /** Detail Json */
+            detail_json: string;
+            /** Event Moved At */
+            event_moved_at: string;
+        };
+        /**
+         * CooccurrenceSummaryDTO
+         * @description 匿名/free:只有计数,items 显式为 null。
+         */
+        CooccurrenceSummaryDTO: {
+            /** Match Id */
+            match_id: number;
+            /** Count */
+            count: number;
+            /** Items */
+            items?: null;
+            /** Note */
+            note: string;
         };
         /** CreateCodesBody */
         CreateCodesBody: {
@@ -966,6 +1401,25 @@ export interface components {
             /** Secret */
             secret: string;
         };
+        /** DeviceClaimResultDTO */
+        DeviceClaimResultDTO: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "claimed";
+        };
+        /** DeviceLoginCreatedDTO */
+        DeviceLoginCreatedDTO: {
+            /** Request Id */
+            request_id: string;
+            /** Secret */
+            secret: string;
+            /** Qr Url */
+            qr_url: string;
+            /** Expires At */
+            expires_at: string;
+        };
         /** DraftStatusBody */
         DraftStatusBody: {
             /** Status */
@@ -981,6 +1435,18 @@ export interface components {
             /** Match Id */
             match_id: number;
         };
+        /** FavoriteItem */
+        FavoriteItem: {
+            /** Match Id */
+            match_id: number;
+            /** Created At */
+            created_at: string;
+        };
+        /** FavoritesResponse */
+        FavoritesResponse: {
+            /** Favorites */
+            favorites: components["schemas"]["FavoriteItem"][];
+        };
         /** GrantBody */
         GrantBody: {
             /** Plan Id */
@@ -993,10 +1459,36 @@ export interface components {
              */
             notes: string;
         };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
+        /** GrantResultDTO */
+        GrantResultDTO: {
+            /** Subscription Id */
+            subscription_id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Starts At */
+            starts_at: string;
+            /** Ends At */
+            ends_at: string;
+        };
+        /** HealthzDTO */
+        HealthzDTO: {
+            /** Ok */
+            ok: boolean;
+        };
+        /** LeagueBettingResponse */
+        LeagueBettingResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season: string;
+            /** Over Under */
+            over_under: components["schemas"]["LegacyOverUnderThreshold"][];
+            /** Score Distribution */
+            score_distribution: components["schemas"]["LegacyScoreDistributionEntry"][];
+            /** Goal Minute Buckets */
+            goal_minute_buckets: components["schemas"]["LegacyGoalMinuteBucket"][];
+            /** Team Betting Stats */
+            team_betting_stats: components["schemas"]["LegacyTeamBettingStats"][];
         };
         /** LeagueInfo */
         LeagueInfo: {
@@ -1012,6 +1504,328 @@ export interface components {
             entitlement: string;
             /** Accessible */
             accessible: boolean;
+        };
+        /** LeagueMatchesResponse */
+        LeagueMatchesResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season: string;
+            /** Matches */
+            matches: components["schemas"]["LegacyMatchRow"][];
+        };
+        /** LeagueOverviewResponse */
+        LeagueOverviewResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season: string;
+            /** Standings */
+            standings: components["schemas"]["LegacyStanding"][];
+            league_summary: components["schemas"]["LegacyLeagueSummary"] | null;
+            /** Team Stats */
+            team_stats: components["schemas"]["LegacyTeamSeasonStats"][];
+            /** Player Leaderboards */
+            player_leaderboards: {
+                [key: string]: components["schemas"]["LegacyPlayerLeaderboard"];
+            };
+        };
+        /** LeagueWdlPredictionsResponse */
+        LeagueWdlPredictionsResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season: string;
+            /** Matches */
+            matches: (components["schemas"]["LegacyWdlUpcomingMatch"] | components["schemas"]["LegacyWdlLiveLockedMatch"] | components["schemas"]["LegacyWdlLiveFullMatch"])[];
+        };
+        /** LegacyGoalMinuteBucket */
+        LegacyGoalMinuteBucket: {
+            /** Bucket */
+            bucket: string;
+            /** Goal Count */
+            goal_count: number;
+            /** Pct */
+            pct: number | null;
+        };
+        /** LegacyLeagueSummary */
+        LegacyLeagueSummary: {
+            /** Total Matches */
+            total_matches: number;
+            /** Home Win Pct */
+            home_win_pct: number | null;
+            /** Draw Pct */
+            draw_pct: number | null;
+            /** Away Win Pct */
+            away_win_pct: number | null;
+            /** Avg Total Goals */
+            avg_total_goals: number | null;
+        };
+        /** LegacyMatchRow */
+        LegacyMatchRow: {
+            /** Match Id */
+            Match_ID: number;
+            /** Date */
+            Date: string | null;
+            /** Home Score */
+            home_score: number | null;
+            /** Away Score */
+            away_score: number | null;
+            /** Status */
+            status: string | null;
+            /** Match Round */
+            Match_Round: string | null;
+            /** Home Team Id */
+            home_team_id: number;
+            /** Away Team Id */
+            away_team_id: number;
+            /** Home Team Name Zh */
+            home_team_name_zh: string | null;
+            /** Away Team Name Zh */
+            away_team_name_zh: string | null;
+        };
+        /** LegacyOverUnderThreshold */
+        LegacyOverUnderThreshold: {
+            /** Threshold */
+            threshold: number;
+            /** Over Count */
+            over_count: number;
+            /** Under Count */
+            under_count: number;
+            /** Over Pct */
+            over_pct: number | null;
+            /** Under Pct */
+            under_pct: number | null;
+        };
+        /** LegacyPlayerLeaderboard */
+        LegacyPlayerLeaderboard: {
+            /** Label Zh */
+            label_zh: string;
+            /** Entries */
+            entries: components["schemas"]["LegacyPlayerLeaderboardEntry"][];
+        };
+        /** LegacyPlayerLeaderboardEntry */
+        LegacyPlayerLeaderboardEntry: {
+            /** Player Id */
+            player_id: string;
+            /** Player Name */
+            Player_Name: string | null;
+            /** Team Id */
+            Team_ID: number | null;
+            /** Team Name */
+            Team_Name: string | null;
+            /** Rank */
+            rank: number;
+            /** Value */
+            value: number;
+            /** Player Name Zh */
+            player_name_zh: string | null;
+            /** Player Name Zh Short */
+            player_name_zh_short: string | null;
+            /** Team Name Zh */
+            team_name_zh: string | null;
+        };
+        /** LegacyScoreDistributionEntry */
+        LegacyScoreDistributionEntry: {
+            /** Home Score */
+            home_score: number;
+            /** Away Score */
+            away_score: number;
+            /** Match Count */
+            match_count: number;
+            /** Pct */
+            pct: number | null;
+        };
+        /** LegacyStanding */
+        LegacyStanding: {
+            /** Position */
+            position: number;
+            /** Played */
+            played: number;
+            /** Wins */
+            wins: number;
+            /** Draws */
+            draws: number;
+            /** Losses */
+            losses: number;
+            /** Goals For */
+            goals_for: number;
+            /** Goals Against */
+            goals_against: number;
+            /** Goal Diff */
+            goal_diff: number;
+            /** Points */
+            points: number;
+            /** Qual Color */
+            qual_color: string | null;
+            /** Team Id */
+            team_id: number;
+            /** Team Name Zh */
+            team_name_zh: string | null;
+        };
+        /** LegacyTeamBettingStats */
+        LegacyTeamBettingStats: {
+            /** Team Id */
+            team_id: number;
+            /** Team Name Zh */
+            team_name_zh: string | null;
+            /** Matches Played */
+            matches_played: number;
+            /** Avg Corners */
+            avg_corners: number | null;
+            /** Avg Yellow Cards */
+            avg_yellow_cards: number | null;
+            /** Avg Red Cards */
+            avg_red_cards: number | null;
+            /** Clean Sheets */
+            clean_sheets: number;
+            /** Btts Matches */
+            btts_matches: number;
+            /** Btts Pct */
+            btts_pct: number | null;
+        };
+        /** LegacyTeamSeasonStats */
+        LegacyTeamSeasonStats: {
+            /** Team Id */
+            team_id: number;
+            /** Team Name Zh */
+            team_name_zh: string | null;
+            /** Matches Played */
+            matches_played: number;
+            /** Avg Total Shots */
+            avg_total_shots: number | null;
+            /** Avg Shots On Target */
+            avg_shots_on_target: number | null;
+            /** Avg Possession */
+            avg_possession: number | null;
+            /** Avg Expected Goals */
+            avg_expected_goals: number | null;
+            /** Avg Expected Goals On Target */
+            avg_expected_goals_on_target: number | null;
+        };
+        /**
+         * LegacyWdlLiveFullMatch
+         * @description distance-to-kickoff ≤7 天且已付费:locked=false,额外带完整三项概率。
+         */
+        LegacyWdlLiveFullMatch: {
+            /** Match Id */
+            match_id: number;
+            /** Date */
+            date: string | null;
+            /** Round */
+            round: string | null;
+            /** Status */
+            status: string | null;
+            /** Home Team Id */
+            home_team_id: number;
+            /** Away Team Id */
+            away_team_id: number;
+            /** Home Team Name Zh */
+            home_team_name_zh: string | null;
+            /** Away Team Name Zh */
+            away_team_name_zh: string | null;
+            /** Days Until Kickoff */
+            days_until_kickoff: number | null;
+            /**
+             * Availability
+             * @constant
+             */
+            availability: "live";
+            /** Tendency */
+            tendency: ("home" | "draw" | "away") | null;
+            /** Confidence */
+            confidence: ("normal" | "low") | null;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Locked
+             * @constant
+             */
+            locked: false;
+            /** P Home */
+            p_home: number | null;
+            /** P Draw */
+            p_draw: number | null;
+            /** P Away */
+            p_away: number | null;
+        };
+        /**
+         * LegacyWdlLiveLockedMatch
+         * @description distance-to-kickoff ≤7 天且未付费:有 tendency/confidence/reason/locked=true,
+         *     物理上没有 p_home/p_draw/p_away(不是放了真值再指望前端隐藏)。
+         */
+        LegacyWdlLiveLockedMatch: {
+            /** Match Id */
+            match_id: number;
+            /** Date */
+            date: string | null;
+            /** Round */
+            round: string | null;
+            /** Status */
+            status: string | null;
+            /** Home Team Id */
+            home_team_id: number;
+            /** Away Team Id */
+            away_team_id: number;
+            /** Home Team Name Zh */
+            home_team_name_zh: string | null;
+            /** Away Team Name Zh */
+            away_team_name_zh: string | null;
+            /** Days Until Kickoff */
+            days_until_kickoff: number | null;
+            /**
+             * Availability
+             * @constant
+             */
+            availability: "live";
+            /** Tendency */
+            tendency: ("home" | "draw" | "away") | null;
+            /** Confidence */
+            confidence: ("normal" | "low") | null;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Locked
+             * @constant
+             */
+            locked: true;
+        };
+        /**
+         * LegacyWdlUpcomingMatch
+         * @description distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/locked/
+         *     p_home/p_draw/p_away——不是"这几个字段为 null",是这个 JSON 形状根本不含它们。
+         */
+        LegacyWdlUpcomingMatch: {
+            /** Match Id */
+            match_id: number;
+            /** Date */
+            date: string | null;
+            /** Round */
+            round: string | null;
+            /** Status */
+            status: string | null;
+            /** Home Team Id */
+            home_team_id: number;
+            /** Away Team Id */
+            away_team_id: number;
+            /** Home Team Name Zh */
+            home_team_name_zh: string | null;
+            /** Away Team Name Zh */
+            away_team_name_zh: string | null;
+            /** Days Until Kickoff */
+            days_until_kickoff: number | null;
+            /**
+             * Availability
+             * @constant
+             */
+            availability: "upcoming";
+        };
+        /** MarketBaselineDTO */
+        MarketBaselineDTO: {
+            /** Status */
+            status: string;
+            /** Note */
+            note: string;
         };
         /** MatchDetailResponse */
         MatchDetailResponse: {
@@ -1040,6 +1854,37 @@ export interface components {
             /** Matches */
             matches: components["schemas"]["MatchSummary"][];
         };
+        /** MatchOddsAvailableDTO */
+        MatchOddsAvailableDTO: {
+            /** Match Id */
+            match_id: number;
+            /**
+             * Available
+             * @constant
+             */
+            available: true;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "full" | "delayed_summary";
+            /** Home Away Inverted */
+            home_away_inverted: boolean;
+            /** Snapshots */
+            snapshots: components["schemas"]["OddsSnapshotItem"][];
+        };
+        /** MatchOddsUnavailableDTO */
+        MatchOddsUnavailableDTO: {
+            /** Match Id */
+            match_id: number;
+            /**
+             * Available
+             * @constant
+             */
+            available: false;
+            /** Reason */
+            reason: string;
+        };
         /** MatchSummary */
         MatchSummary: {
             /** Match Id */
@@ -1050,6 +1895,8 @@ export interface components {
             season: string;
             /** Date Utc */
             date_utc: string;
+            /** Kickoff At Utc */
+            kickoff_at_utc?: string | null;
             /** Round */
             round?: string | null;
             /** Status */
@@ -1082,12 +1929,103 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** ModelMetricsResponse */
+        ModelMetricsResponse: {
+            /** Model Versions */
+            model_versions: components["schemas"]["ModelVersionDTO"][];
+            official_evaluation?: components["schemas"]["OfficialEvaluationDTO"] | null;
+            /** Official Evaluation Note */
+            official_evaluation_note?: string | null;
+            market_baseline: components["schemas"]["MarketBaselineDTO"];
+        };
+        /** ModelVersionDTO */
+        ModelVersionDTO: {
+            /** Id */
+            id: string;
+            /** Algorithm */
+            algorithm: string;
+            /** Description */
+            description: string;
+            /** Trained At */
+            trained_at?: string | null;
+            /** Train Range */
+            train_range?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /** Dev Metrics */
+            dev_metrics: {
+                [key: string]: unknown;
+            };
+        };
+        /** OddsSnapshotItem */
+        OddsSnapshotItem: {
+            /** Market */
+            market: string;
+            /** Company Id */
+            company_id: string;
+            /** Company Name */
+            company_name: string;
+            /** Market Phase */
+            market_phase: string;
+            /** Source Updated At */
+            source_updated_at?: string | null;
+            /** Observed At */
+            observed_at: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+        };
+        /** OfficialEvaluationDTO */
+        OfficialEvaluationDTO: {
+            /** Sample Size */
+            sample_size: number;
+            /** Accuracy */
+            accuracy?: number | null;
+            /** Brier */
+            brier?: number | null;
+            /** Log Loss */
+            log_loss?: number | null;
+            /** Rps */
+            rps?: number | null;
+            /** Calibration */
+            calibration: {
+                [key: string]: unknown;
+            }[];
+            /** Evaluated At */
+            evaluated_at: string;
+        };
+        /** OkDTO */
+        OkDTO: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+        };
         /** PasswordLoginBody */
         PasswordLoginBody: {
             /** Username */
             username: string;
             /** Password */
             password: string;
+        };
+        /** PlanDTO */
+        PlanDTO: {
+            /** Id */
+            id: string;
+            /** Name Zh */
+            name_zh: string;
+            /** Description */
+            description: string;
+            /** Rank */
+            rank: number;
+            /** Entitlements */
+            entitlements: string[];
         };
         /**
          * PredictionFreeDTO
@@ -1170,6 +2108,32 @@ export interface components {
             /** Prediction */
             prediction?: components["schemas"]["PredictionFullDTO"] | components["schemas"]["PredictionFreeDTO"] | null;
         };
+        /** ProductDTO */
+        ProductDTO: {
+            /** Id */
+            id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Name Zh */
+            name_zh: string;
+            /** Description */
+            description: string;
+            /** Duration Days */
+            duration_days: number;
+            /** Price Cents */
+            price_cents: number;
+            /** Currency */
+            currency: string;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** ProductsResponse */
+        ProductsResponse: {
+            /** Plans */
+            plans: components["schemas"]["PlanDTO"][];
+            /** Products */
+            products: components["schemas"]["ProductDTO"][];
+        };
         /** PublishUpcomingBody */
         PublishUpcomingBody: {
             /**
@@ -1178,10 +2142,57 @@ export interface components {
              */
             lock: boolean;
         };
+        /** PublishUpcomingFailedItem */
+        PublishUpcomingFailedItem: {
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+        };
+        /** PublishUpcomingResponse */
+        PublishUpcomingResponse: {
+            /** Published */
+            published: number;
+            /** Failed */
+            failed: components["schemas"]["PublishUpcomingFailedItem"][];
+        };
+        /**
+         * ReadyzProblemsDTO
+         * @description /readyz 503 时的诚实故障说明。
+         */
+        ReadyzProblemsDTO: {
+            /** Ok */
+            ok: boolean;
+            /** Problems */
+            problems: string[];
+        };
         /** RedeemBody */
         RedeemBody: {
             /** Code */
             code: string;
+        };
+        /** RedeemCodeCreatedItem */
+        RedeemCodeCreatedItem: {
+            /** Id */
+            id: string;
+            /** Code */
+            code: string;
+        };
+        /** RedeemResponse */
+        RedeemResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+            /** Subscription Id */
+            subscription_id: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Starts At */
+            starts_at: string;
+            /** Ends At */
+            ends_at: string;
         };
         /** RetractBody */
         RetractBody: {
@@ -1192,6 +2203,181 @@ export interface components {
         RevokeSessionBody: {
             /** Session Id */
             session_id: string;
+        };
+        /**
+         * StandingRow
+         * @description fact_league_table 行 + team 引用(列名保留数据库原始大小写)。
+         */
+        StandingRow: {
+            /** Team Id */
+            Team_ID?: number | null;
+            /** Team Name */
+            Team_Name?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Played */
+            played?: number | null;
+            /** Wins */
+            wins?: number | null;
+            /** Draws */
+            draws?: number | null;
+            /** Losses */
+            losses?: number | null;
+            /** Goals For */
+            goals_for?: number | null;
+            /** Goals Against */
+            goals_against?: number | null;
+            /** Goal Diff */
+            goal_diff?: number | null;
+            /** Points */
+            points?: number | null;
+            /** Qual Color */
+            qual_color?: string | null;
+            team: components["schemas"]["TeamRef"];
+        };
+        /**
+         * StandingsResponse
+         * @description empty_reason 只在无数据时出现(端点用 response_model_exclude_unset 保持现状)。
+         */
+        StandingsResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season?: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Rows */
+            rows: components["schemas"]["StandingRow"][];
+            /** Empty Reason */
+            empty_reason?: string | null;
+        };
+        /**
+         * StudioBundleDTO
+         * @description GET /studio/matches/{id}/bundle:完整 bundle(含 subtitle_cues,不做投影)。
+         */
+        StudioBundleDTO: {
+            /** Bundle Version */
+            bundle_version: string;
+            /** Built At */
+            built_at: string;
+            match: components["schemas"]["MatchSummary"];
+            /** Data Cutoff At */
+            data_cutoff_at?: string | null;
+            /** Model Version */
+            model_version?: string | null;
+            prediction_public?: components["schemas"]["BundlePredictionPublic"] | null;
+            prediction_member?: components["schemas"]["BundlePredictionMember"] | null;
+            /** Evidence */
+            evidence: components["schemas"]["BundleEvidenceItem"][];
+            /** Counter Evidence */
+            counter_evidence: components["schemas"]["BundleEvidenceItem"][];
+            /** Uncertainty */
+            uncertainty: components["schemas"]["BundleUncertaintyItem"][];
+            /** Odds Timeline */
+            odds_timeline: components["schemas"]["BundleOddsPoint"][];
+            /** Cooccurring Events */
+            cooccurring_events: components["schemas"]["BundleCoocEvent"][];
+            /** Chart Specs */
+            chart_specs: components["schemas"]["BundleChartSpec"][];
+            /** Script Sections */
+            script_sections: components["schemas"]["BundleScriptSection"][];
+            /** Subtitle Cues */
+            subtitle_cues: components["schemas"]["BundleSubtitleCue"][];
+            /** Source Notes */
+            source_notes: components["schemas"]["BundleSourceNote"][];
+            /** Bundle Hash */
+            bundle_hash: string;
+        };
+        /** StudioDraftCreatedDTO */
+        StudioDraftCreatedDTO: {
+            /** Draft Id */
+            draft_id: string;
+            /** Title */
+            title: string;
+            /** Bundle Hash */
+            bundle_hash: string;
+        };
+        /**
+         * StudioDraftDetailDTO
+         * @description bundle 为创建草稿时冻结的 analysis_bundle 快照(历史版本形状可能不同,故为 dict)。
+         */
+        StudioDraftDetailDTO: {
+            /** Id */
+            id: string;
+            /** Match Id */
+            match_id: number;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Bundle */
+            bundle: {
+                [key: string]: unknown;
+            };
+            /** Overrides */
+            overrides: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** StudioDraftListItem */
+        StudioDraftListItem: {
+            /** Id */
+            id: string;
+            /** Match Id */
+            match_id: number;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** StudioDraftsResponse */
+        StudioDraftsResponse: {
+            /** Drafts */
+            drafts: components["schemas"]["StudioDraftListItem"][];
+        };
+        /**
+         * StudioExportClientDTO
+         * @description PNG:前端 DOM→PNG 生成,服务端只登记审计。
+         */
+        StudioExportClientDTO: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Side
+             * @constant
+             */
+            side: "client";
+            /** Data Cutoff At */
+            data_cutoff_at?: string | null;
+            /** Model Version */
+            model_version?: string | null;
+        };
+        /**
+         * StudioExportServerDTO
+         * @description txt/json/srt:服务端生成可下载文件。
+         */
+        StudioExportServerDTO: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Side
+             * @constant
+             */
+            side: "server";
+            /** Download Url */
+            download_url: string;
+            /** Data Cutoff At */
+            data_cutoff_at?: string | null;
+            /** Model Version */
+            model_version?: string | null;
         };
         /** TeamFormEntry */
         TeamFormEntry: {
@@ -1245,6 +2431,11 @@ export interface components {
             total: number;
             /** Retracted Count */
             retracted_count: number;
+            /**
+             * Superseded Count
+             * @default 0
+             */
+            superseded_count: number;
             /** Limit */
             limit: number;
             /** Offset */
@@ -1255,8 +2446,16 @@ export interface components {
             /** Empty Reason */
             empty_reason?: string | null;
         };
-        /** TrackRecordSample */
+        /**
+         * TrackRecordSample
+         * @description 公开正式样本(永久资格,CLAUDE.md §9.1)。
+         *
+         *     撤回(status='retracted')与被取代(superseded_by 非空)的正式样本同样出现
+         *     在列表并计入指标分母;修正链通过 superseded_by / correction_of 双向可查。
+         */
         TrackRecordSample: {
+            /** Snapshot Id */
+            snapshot_id: string;
             /** Match Id */
             match_id: number;
             /** Kickoff At Utc */
@@ -1284,6 +2483,12 @@ export interface components {
             hit?: boolean | null;
             /** Status */
             status: string;
+            /** Superseded By */
+            superseded_by?: string | null;
+            /** Correction Of */
+            correction_of?: string | null;
+            /** Superseded Note */
+            superseded_note?: string | null;
             /** Model Version Id */
             model_version_id: string;
             /** Published At */
@@ -1302,18 +2507,66 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
+        /**
+         * WechatCallbackApprovedDTO
+         * @description oa/callback 的 device_approve 分支(login 分支为 302 跳转,无 body)。
+         */
+        WechatCallbackApprovedDTO: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "approved";
             /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
+            message: string;
+        };
+        /** XrefItem */
+        XrefItem: {
+            /** Id */
+            id: number;
+            /** Fotmob Match Id */
+            fotmob_match_id: number;
+            /** Provider */
+            provider: string;
+            /** Provider Match Id */
+            provider_match_id: string;
+            /** Home Away Inverted */
+            home_away_inverted: number;
+            /** Confidence */
+            confidence: number;
+            /** Verified */
+            verified: number;
+            /** Method */
+            method: string;
+            /** Kickoff Diff Seconds */
+            kickoff_diff_seconds?: number | null;
+            /** Review Status */
+            review_status: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** XrefListResponse */
+        XrefListResponse: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Xrefs */
+            xrefs: components["schemas"]["XrefItem"][];
+        };
+        /** XrefReviewResultDTO */
+        XrefReviewResultDTO: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+            /** Xref Id */
+            xref_id: number;
+            /** Review Status */
+            review_status: string;
         };
     };
     responses: never;
@@ -1324,12 +2577,9 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    wechat_oa_start_api_v1_auth_wechat_oa_start_get: {
+    auth_methods_api_v1_auth_methods_get: {
         parameters: {
-            query?: {
-                next?: string;
-                device?: string | null;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -1342,16 +2592,163 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AuthMethodsDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    wechat_oa_start_api_v1_auth_wechat_oa_start_get: {
+        parameters: {
+            query?: {
+                next?: string;
+                device?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 跳转微信授权页(无 body) */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description 微信登录暂未开放(AUTH_DISABLED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1374,16 +2771,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WechatCallbackApprovedDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description login 分支:种会话 Cookie 后跳回站内 next(无 body) */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description 微信登录暂未开放(AUTH_DISABLED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1403,7 +2870,79 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DeviceLoginCreatedDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description 微信登录暂未开放(AUTH_DISABLED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1429,16 +2968,79 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DeviceClaimResultDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description 微信登录暂未开放(AUTH_DISABLED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1462,16 +3064,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1491,7 +3147,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1514,6 +3233,69 @@ export interface operations {
                     "application/json": components["schemas"]["MeDTO"];
                 };
             };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
         };
     };
     list_leagues_api_v1_leagues_get: {
@@ -1532,6 +3314,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeagueInfo"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1555,16 +3382,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StandingsResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1594,13 +3457,49 @@ export interface operations {
                     "application/json": components["schemas"]["MatchListResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1629,13 +3528,49 @@ export interface operations {
                     "application/json": components["schemas"]["MatchListResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1660,13 +3595,49 @@ export interface operations {
                     "application/json": components["schemas"]["MatchDetailResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1691,13 +3662,49 @@ export interface operations {
                     "application/json": components["schemas"]["PredictionResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1719,16 +3726,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AnalysisBundleDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1750,16 +3793,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MatchOddsAvailableDTO"] | components["schemas"]["MatchOddsUnavailableDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1781,16 +3860,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CooccurrenceFullDTO"] | components["schemas"]["CooccurrenceSummaryDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1816,13 +3931,49 @@ export interface operations {
                     "application/json": components["schemas"]["TrackRecordResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1842,7 +3993,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ModelMetricsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1862,7 +4058,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ProductsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1886,16 +4127,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RedeemResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1915,7 +4192,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["FavoritesResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1939,16 +4261,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1970,16 +4328,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -1999,7 +4393,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2023,16 +4462,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2056,16 +4531,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUsersResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2091,16 +4611,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["GrantResultDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2122,16 +4687,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2154,16 +4764,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminCodesListResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2187,16 +4842,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminCodesCreatedResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2220,16 +4920,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminPredictionsResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2251,16 +4996,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2282,16 +5072,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2317,16 +5152,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2350,16 +5230,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublishUpcomingResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2382,16 +5307,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AuditLogsResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2415,16 +5385,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["XrefListResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2446,16 +5443,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["XrefReviewResultDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2477,16 +5501,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["XrefReviewResultDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2508,16 +5559,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StudioBundleDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2537,7 +5633,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StudioDraftsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2561,16 +5711,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StudioDraftCreatedDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2592,16 +5787,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StudioDraftDetailDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2627,16 +5867,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2662,16 +5947,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OkDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2697,16 +6027,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StudioExportServerDTO"] | components["schemas"]["StudioExportClientDTO"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2722,22 +6097,67 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description 导出文件下载(txt/json/srt) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/octet-stream": string;
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2755,20 +6175,29 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description 已记录/已限流丢弃(无 body) */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2792,16 +6221,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeagueOverviewResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2825,16 +6263,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeagueBettingResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2858,16 +6323,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeagueMatchesResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2891,16 +6365,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeagueWdlPredictionsResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };
@@ -2920,7 +6403,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HealthzDTO"];
                 };
             };
         };
@@ -2940,7 +6423,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HealthzDTO"];
+                };
+            };
+            /** @description 数据库不可读或存在 pending migration */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadyzProblemsDTO"];
                 };
             };
         };

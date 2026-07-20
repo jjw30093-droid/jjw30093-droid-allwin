@@ -14,7 +14,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from backend.db.connections import tx
-from backend.db.util import utc_now_iso
+from backend.db.util import normalize_exact_kickoff, utc_now_iso
 
 # 已确认(auto_ok/confirmed)映射才进 Silver;needs_review/rejected 不产出派生
 _ACTIVE_XREF_STATUSES = ("auto_ok", "confirmed")
@@ -206,6 +206,33 @@ def build_event_moves(conn_odds: sqlite3.Connection) -> int:
             now,
         )
     return inserted
+
+
+def final_pre_match_snapshot(
+    conn_odds: sqlite3.Connection,
+    provider_match_id: str,
+    market: str,
+    company_id: str,
+    kickoff_at_utc: str | None,
+    kickoff_precision: str | None = None,
+    kickoff_source: str | None = None,
+) -> sqlite3.Row | None:
+    """FINAL:精确 kickoff 前最后一条 market_phase='pre_match' 的有效快照。
+
+    唯一真源 normalize_exact_kickoff——kickoff 缺失、precision 非 exact、缺来源、
+    naive/非法时间一律不满足,返回 None,不得声称某条快照是收盘快照(CLAUDE.md §6.2.1)。
+    明确排除 unknown 与 in_play 阶段的快照(CLAUDE.md §6.3)。
+    """
+    normalized = normalize_exact_kickoff(kickoff_at_utc, kickoff_precision, kickoff_source)
+    if normalized is None:
+        return None
+    return conn_odds.execute(
+        """SELECT * FROM bronze_ng_odds_snap
+           WHERE provider_match_id=? AND market=? AND company_id=?
+             AND market_phase='pre_match' AND observed_at < ?
+           ORDER BY observed_at DESC, id DESC LIMIT 1""",
+        (provider_match_id, market, company_id, normalized),
+    ).fetchone()
 
 
 def build_cooccurrence(conn_odds: sqlite3.Connection, window_seconds: int = 900) -> int:

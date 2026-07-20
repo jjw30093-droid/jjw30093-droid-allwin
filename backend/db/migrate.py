@@ -142,10 +142,16 @@ def apply_all(
 
 
 def status(db_name: str, db_file: Path | str | None = None) -> dict:
+    """三库状态:applied 数、pending 迁移名、checksum_drift(已应用但内容与当前
+    迁移文件不一致的迁移名——正常运行下永远为空;`--restore-verify`/`ops_check`
+    用它在恢复出的库副本上校验,不依赖真的去跑一次 apply_all 才能发现漂移。"""
     path = Path(db_file) if db_file else db_path(db_name)
     mdir = MIGRATIONS_ROOT / db_name
     available = migration_files(mdir)
-    applied: dict[int, str] = {}
+    checksums_by_version = {v: hashlib.sha256(p.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+                             for v, _, p in available}
+    applied_names: dict[int, str] = {}
+    applied_checksums: dict[int, str] = {}
     if path.exists():
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
@@ -153,11 +159,22 @@ def status(db_name: str, db_file: Path | str | None = None) -> dict:
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
             ).fetchone()
             if has_meta:
-                applied = {r[0]: r[1] for r in conn.execute("SELECT version, name FROM schema_migrations")}
+                for v, name, checksum in conn.execute(
+                    "SELECT version, name, checksum FROM schema_migrations"
+                ):
+                    applied_names[v] = name
+                    applied_checksums[v] = checksum
         finally:
             conn.close()
-    pending = [name for v, name, _ in available if v not in applied]
-    return {"db": db_name, "path": str(path), "applied": len(applied), "pending": pending}
+    pending = [name for v, name, _ in available if v not in applied_names]
+    checksum_drift = [
+        applied_names[v] for v, current in checksums_by_version.items()
+        if v in applied_checksums and applied_checksums[v] != current
+    ]
+    return {
+        "db": db_name, "path": str(path), "applied": len(applied_names),
+        "pending": pending, "checksum_drift": checksum_drift,
+    }
 
 
 def main(argv=None) -> int:
