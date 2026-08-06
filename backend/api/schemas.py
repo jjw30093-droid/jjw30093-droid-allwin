@@ -9,7 +9,7 @@
 
 from typing import Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── 全站统一错误 DTO(唯一真源;所有 JSON 错误响应顶层只有这三个字段) ──
@@ -35,12 +35,15 @@ class PredictionMeta(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
     model_version_id: str
+    probability_source: Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]
     generated_at: str
     published_at: Optional[str] = None
     locked_at: Optional[str] = None
     input_cutoff_at: Optional[str] = None
     status: Literal["published", "locked", "retracted"]
     confidence: Optional[str] = None
+    edit_count: int = 0
+    last_edited_at: Optional[str] = None
 
 
 class PredictionFreeDTO(BaseModel):
@@ -91,6 +94,7 @@ class TeamRef(BaseModel):
     team_id: Optional[int] = None
     name: str                              # 中文优先,无映射回退英文
     name_en: Optional[str] = None
+    crest_url: Optional[str] = None         # 同源版本化媒体地址;无可验证本地文件时为 null
 
 
 class MatchSummary(BaseModel):
@@ -105,6 +109,12 @@ class MatchSummary(BaseModel):
     away: TeamRef
     home_score: Optional[int] = None
     away_score: Optional[int] = None
+    sync_state: Optional[Literal["FRESH", "STALE", "UNAVAILABLE"]] = None
+    data_updated_at: Optional[str] = None
+    last_success_sync_at: Optional[str] = None
+    next_planned_sync_at: Optional[str] = None
+    probability_source: Optional[Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]] = None
+    odds_observation_count: Optional[int] = None
 
 
 class MatchListResponse(BaseModel):
@@ -112,6 +122,25 @@ class MatchListResponse(BaseModel):
     limit: int
     offset: int
     matches: list[MatchSummary]
+
+
+class LeagueFixturesResponse(BaseModel):
+    """/leagues/{id}/fixtures 专属响应——与 MatchListResponse 分开定义,不共用。
+
+    刻意不用 response_model_exclude_unset:MatchSummary 的可选字段(如
+    data_updated_at/probability_source)由内容状态投影按分支选择性写入,
+    exclude_unset 会递归进嵌套模型,导致同一响应内不同行的键集不一致,
+    且与 /api/v1/matches 复用同一个 MatchSummary 却呈现不同形状。
+    """
+
+    league_id: int
+    season: Optional[str] = None
+    available_seasons: list[str]
+    total: int
+    limit: int
+    offset: int
+    matches: list[MatchSummary]
+    empty_reason: Optional[str] = None
 
 
 class TeamFormEntry(BaseModel):
@@ -138,6 +167,13 @@ class LeagueInfo(BaseModel):
     name_en: str
     entitlement: str                       # 访问所需 entitlement
     accessible: bool                       # 按当前请求者的 entitlement 计算
+    requires_pro: bool
+    current_season: Optional[str] = None
+    # 该联赛在 dim_match 里真实存在的全部赛季(升序,来自数据而非配置)。
+    # 全站比赛列表用它渲染赛季筛选,避免前端写死赛季名单。
+    available_seasons: list[str] = []
+    data_status: Literal["AVAILABLE", "NOT_SYNCED"]
+    data_updated_at: Optional[str] = None
 
 
 class TrackRecordSample(BaseModel):
@@ -166,6 +202,8 @@ class TrackRecordSample(BaseModel):
     superseded_by: Optional[str] = None    # 被哪条修正版快照取代(旧版仍公开、仍计入指标)
     correction_of: Optional[str] = None    # 本条是哪条旧快照的修正版
     superseded_note: Optional[str] = None  # 被取代时的人话说明
+    edit_count: int = 0                    # 该快照被直接修正过的次数(公开可查,不暴露操作者/原因)
+    last_edited_at: Optional[str] = None   # 最近一次修正时间
     model_version_id: str
     published_at: str
     locked_at: str
@@ -236,6 +274,52 @@ class StandingsResponse(BaseModel):
     season: Optional[str] = None
     available_seasons: list[str]
     rows: list[StandingRow]
+    empty_reason: Optional[str] = None
+
+
+# ── 联赛球队/球员赛季统计(免费字段投影,CLAUDE.md §3) ──────
+
+class TeamSeasonStatRow(BaseModel):
+    """silver_team_season_stats 免费字段投影。角球/红黄牌/零封/BTTS 是付费深度
+    报告字段,物理上不在本 DTO(不是 null 占位,更不是取了再藏)。"""
+
+    team: TeamRef
+    matches_played: Optional[int] = None
+    avg_total_shots: Optional[float] = None
+    avg_shots_on_target: Optional[float] = None
+    avg_possession: Optional[float] = None
+    avg_expected_goals: Optional[float] = None
+    avg_expected_goals_on_target: Optional[float] = None
+
+
+class TeamStatsResponse(BaseModel):
+    league_id: int
+    season: Optional[str] = None
+    available_seasons: list[str]
+    rows: list[TeamSeasonStatRow]
+    empty_reason: Optional[str] = None
+
+
+class PlayerBoardEntry(BaseModel):
+    player_id: str
+    name: str                              # 中文短名 > 中文全名 > 来源英文名 > id
+    name_en: Optional[str] = None
+    team: TeamRef
+    rank: Optional[int] = None
+    value: Optional[float] = None
+
+
+class PlayerBoard(BaseModel):
+    stat_name: str                         # goals / goal_assist / expected_goals / ...
+    label_zh: str
+    entries: list[PlayerBoardEntry]
+
+
+class PlayersResponse(BaseModel):
+    league_id: int
+    season: Optional[str] = None
+    available_seasons: list[str]
+    boards: list[PlayerBoard]
     empty_reason: Optional[str] = None
 
 
@@ -319,6 +403,7 @@ class AnalysisBundleDTO(BaseModel):
     match: MatchSummary
     data_cutoff_at: Optional[str] = None
     model_version: Optional[str] = None
+    probability_source: Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]
     prediction_public: Optional[BundlePredictionPublic] = None
     prediction_member: Optional[BundlePredictionMember] = None   # 免费层置 None,受限字段不下发
     evidence: list[BundleEvidenceItem]
@@ -343,6 +428,7 @@ class StudioBundleDTO(BaseModel):
     match: MatchSummary
     data_cutoff_at: Optional[str] = None
     model_version: Optional[str] = None
+    probability_source: Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]
     prediction_public: Optional[BundlePredictionPublic] = None
     prediction_member: Optional[BundlePredictionMember] = None
     evidence: list[BundleEvidenceItem]
@@ -354,6 +440,8 @@ class StudioBundleDTO(BaseModel):
     script_sections: list[BundleScriptSection]
     subtitle_cues: list[BundleSubtitleCue]
     source_notes: list[BundleSourceNote]
+    team_style_profile: Optional[dict] = None
+    social_profiles: dict[str, dict] = Field(default_factory=dict)
     bundle_hash: str
 
 
@@ -369,12 +457,32 @@ class OddsSnapshotItem(BaseModel):
     payload: dict
 
 
+class LegacyOddsPointItem(BaseModel):
+    """旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。"""
+    market: str                            # 1x2 / ah / ou
+    period: Literal["initial", "latest"]
+    source: str                            # asset_a_json / asset_b_footballdata / asset_b_nowgoal
+    provider: str
+    line: Optional[float] = None           # ah/ou 盘口线;line>0=主队让球
+    home_or_over: float
+    draw: Optional[float] = None           # 仅 1x2
+    away_or_under: float
+
+
 class MatchOddsAvailableDTO(BaseModel):
     match_id: int
     available: Literal[True]
     tier: Literal["full", "delayed_summary"]
+    # full_timeline: 真实观测时间序列(bronze_ng_odds_snap);
+    # open_close_only: 旧项目两点摘要(bronze_legacy_odds_summary),无时间戳,
+    # 前端不得将其渲染为走势图。
+    coverage_tier: Literal["full_timeline", "open_close_only"]
     home_away_inverted: bool
+    observation_count: int
+    display_mode: Literal["current_odds", "odds_changes"]
     snapshots: list[OddsSnapshotItem]
+    summary_points: Optional[list[LegacyOddsPointItem]] = None
+    note: Optional[str] = None
 
 
 class MatchOddsUnavailableDTO(BaseModel):
@@ -629,11 +737,19 @@ class AdminPredictionItem(BaseModel):
     draw: float
     away_win: float
     confidence: Optional[str] = None
+    edit_count: int = 0
+    last_edited_at: Optional[str] = None
 
 
 class AdminPredictionsResponse(BaseModel):
     counts: dict[str, int]
     predictions: list[AdminPredictionItem]
+
+
+class EditPredictionResponse(BaseModel):
+    edit_id: Optional[str] = None    # None = 本次调用未产生实质变化(no-op)
+    changed_fields: list[str]
+    edit_count: int
 
 
 class PublishUpcomingFailedItem(BaseModel):
@@ -730,6 +846,7 @@ class StudioExportClientDTO(BaseModel):
     side: Literal["client"]
     data_cutoff_at: Optional[str] = None
     model_version: Optional[str] = None
+    profile_id: str
 
 
 class StudioExportServerDTO(BaseModel):
@@ -742,6 +859,7 @@ class StudioExportServerDTO(BaseModel):
     download_url: str
     data_cutoff_at: Optional[str] = None
     model_version: Optional[str] = None
+    profile_id: str
 
 
 StudioExportResponse = Union[StudioExportServerDTO, StudioExportClientDTO]
@@ -782,6 +900,7 @@ class LegacyStanding(BaseModel):
     qual_color: Optional[str]           # key 总是存在(SELECT 直出),值可空
     team_id: int
     team_name_zh: Optional[str]         # key 总是存在(无 i18n 映射时值为 None)
+    crest_url: Optional[str] = None      # legacy 排名页迁移完成前的同源队徽地址
 
 
 class LegacyLeagueSummary(BaseModel):

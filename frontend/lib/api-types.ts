@@ -194,6 +194,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/leagues/{league_id}/team-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * League Team Stats
+         * @description 球队赛季统计(免费字段投影:射门/射正/控球/xG/xGOT,付费深度字段物理不在响应)。
+         */
+        get: operations["league_team_stats_api_v1_leagues__league_id__team_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/leagues/{league_id}/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * League Players
+         * @description 球员榜(免费 5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。
+         */
+        get: operations["league_players_api_v1_leagues__league_id__players_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/matches": {
         parameters: {
             query?: never;
@@ -377,6 +417,23 @@ export interface paths {
          * @description 定价页数据源:plans + products 全部来自 DB,不在前端组件写死。
          */
         get: operations["list_products_api_v1_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/team-crests/{provider}/{provider_team_id}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Team Crest */
+        get: operations["team_crest_api_v1_media_team_crests__provider___provider_team_id__png_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -605,6 +662,29 @@ export interface paths {
         put?: never;
         /** Retract Prediction */
         post: operations["retract_prediction_api_v1_admin_predictions__snapshot_id__retract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/predictions/{snapshot_id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Edit Prediction
+         * @description 直接修正一条预测(任意状态、任意时刻,含已锁定/已开球——见 CLAUDE.md §9.1)。
+         *
+         *     每次真正产生变化的修正都会写入 prediction_snapshot_edits(append-only),
+         *     不是静默覆盖;结果里的 changed_fields 为空表示这次调用没有产生实质变化。
+         */
+        post: operations["edit_prediction_api_v1_admin_predictions__snapshot_id__edit_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1060,6 +1140,13 @@ export interface components {
             away_win: number;
             /** Confidence */
             confidence?: string | null;
+            /**
+             * Edit Count
+             * @default 0
+             */
+            edit_count: number;
+            /** Last Edited At */
+            last_edited_at?: string | null;
         };
         /** AdminPredictionsResponse */
         AdminPredictionsResponse: {
@@ -1131,6 +1218,11 @@ export interface components {
             data_cutoff_at?: string | null;
             /** Model Version */
             model_version?: string | null;
+            /**
+             * Probability Source
+             * @enum {string}
+             */
+            probability_source: "MODEL" | "MARKET_BASELINE" | "UNAVAILABLE";
             prediction_public?: components["schemas"]["BundlePredictionPublic"] | null;
             prediction_member?: components["schemas"]["BundlePredictionMember"] | null;
             /** Evidence */
@@ -1425,10 +1517,41 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** EditPredictionBody */
+        EditPredictionBody: {
+            /** Reason */
+            reason: string;
+            /** Home Win */
+            home_win?: number | null;
+            /** Draw */
+            draw?: number | null;
+            /** Away Win */
+            away_win?: number | null;
+            /** Expected Home Goals */
+            expected_home_goals?: number | null;
+            /** Expected Away Goals */
+            expected_away_goals?: number | null;
+            /** Confidence */
+            confidence?: string | null;
+        };
+        /** EditPredictionResponse */
+        EditPredictionResponse: {
+            /** Edit Id */
+            edit_id?: string | null;
+            /** Changed Fields */
+            changed_fields: string[];
+            /** Edit Count */
+            edit_count: number;
+        };
         /** ExportBody */
         ExportBody: {
             /** Kind */
             kind: string;
+            /**
+             * Profile
+             * @default internal-full-v1
+             */
+            profile: string;
         };
         /** FavoriteBody */
         FavoriteBody: {
@@ -1490,6 +1613,33 @@ export interface components {
             /** Team Betting Stats */
             team_betting_stats: components["schemas"]["LegacyTeamBettingStats"][];
         };
+        /**
+         * LeagueFixturesResponse
+         * @description /leagues/{id}/fixtures 专属响应——与 MatchListResponse 分开定义,不共用。
+         *
+         *     刻意不用 response_model_exclude_unset:MatchSummary 的可选字段(如
+         *     data_updated_at/probability_source)由内容状态投影按分支选择性写入,
+         *     exclude_unset 会递归进嵌套模型,导致同一响应内不同行的键集不一致,
+         *     且与 /api/v1/matches 复用同一个 MatchSummary 却呈现不同形状。
+         */
+        LeagueFixturesResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season?: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Matches */
+            matches: components["schemas"]["MatchSummary"][];
+            /** Empty Reason */
+            empty_reason?: string | null;
+        };
         /** LeagueInfo */
         LeagueInfo: {
             /** League Id */
@@ -1504,6 +1654,22 @@ export interface components {
             entitlement: string;
             /** Accessible */
             accessible: boolean;
+            /** Requires Pro */
+            requires_pro: boolean;
+            /** Current Season */
+            current_season?: string | null;
+            /**
+             * Available Seasons
+             * @default []
+             */
+            available_seasons: string[];
+            /**
+             * Data Status
+             * @enum {string}
+             */
+            data_status: "AVAILABLE" | "NOT_SYNCED";
+            /** Data Updated At */
+            data_updated_at?: string | null;
         };
         /** LeagueMatchesResponse */
         LeagueMatchesResponse: {
@@ -1584,6 +1750,31 @@ export interface components {
             /** Away Team Name Zh */
             away_team_name_zh: string | null;
         };
+        /**
+         * LegacyOddsPointItem
+         * @description 旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。
+         */
+        LegacyOddsPointItem: {
+            /** Market */
+            market: string;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "initial" | "latest";
+            /** Source */
+            source: string;
+            /** Provider */
+            provider: string;
+            /** Line */
+            line?: number | null;
+            /** Home Or Over */
+            home_or_over: number;
+            /** Draw */
+            draw?: number | null;
+            /** Away Or Under */
+            away_or_under: number;
+        };
         /** LegacyOverUnderThreshold */
         LegacyOverUnderThreshold: {
             /** Threshold */
@@ -1662,6 +1853,8 @@ export interface components {
             team_id: number;
             /** Team Name Zh */
             team_name_zh: string | null;
+            /** Crest Url */
+            crest_url?: string | null;
         };
         /** LegacyTeamBettingStats */
         LegacyTeamBettingStats: {
@@ -1868,10 +2061,26 @@ export interface components {
              * @enum {string}
              */
             tier: "full" | "delayed_summary";
+            /**
+             * Coverage Tier
+             * @enum {string}
+             */
+            coverage_tier: "full_timeline" | "open_close_only";
             /** Home Away Inverted */
             home_away_inverted: boolean;
+            /** Observation Count */
+            observation_count: number;
+            /**
+             * Display Mode
+             * @enum {string}
+             */
+            display_mode: "current_odds" | "odds_changes";
             /** Snapshots */
             snapshots: components["schemas"]["OddsSnapshotItem"][];
+            /** Summary Points */
+            summary_points?: components["schemas"]["LegacyOddsPointItem"][] | null;
+            /** Note */
+            note?: string | null;
         };
         /** MatchOddsUnavailableDTO */
         MatchOddsUnavailableDTO: {
@@ -1907,6 +2116,18 @@ export interface components {
             home_score?: number | null;
             /** Away Score */
             away_score?: number | null;
+            /** Sync State */
+            sync_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
+            /** Data Updated At */
+            data_updated_at?: string | null;
+            /** Last Success Sync At */
+            last_success_sync_at?: string | null;
+            /** Next Planned Sync At */
+            next_planned_sync_at?: string | null;
+            /** Probability Source */
+            probability_source?: ("MODEL" | "MARKET_BASELINE" | "UNAVAILABLE") | null;
+            /** Odds Observation Count */
+            odds_observation_count?: number | null;
         };
         /** MeDTO */
         MeDTO: {
@@ -2027,6 +2248,42 @@ export interface components {
             /** Entitlements */
             entitlements: string[];
         };
+        /** PlayerBoard */
+        PlayerBoard: {
+            /** Stat Name */
+            stat_name: string;
+            /** Label Zh */
+            label_zh: string;
+            /** Entries */
+            entries: components["schemas"]["PlayerBoardEntry"][];
+        };
+        /** PlayerBoardEntry */
+        PlayerBoardEntry: {
+            /** Player Id */
+            player_id: string;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en?: string | null;
+            team: components["schemas"]["TeamRef"];
+            /** Rank */
+            rank?: number | null;
+            /** Value */
+            value?: number | null;
+        };
+        /** PlayersResponse */
+        PlayersResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season?: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Boards */
+            boards: components["schemas"]["PlayerBoard"][];
+            /** Empty Reason */
+            empty_reason?: string | null;
+        };
         /**
          * PredictionFreeDTO
          * @description 匿名/Free:只有最高一项。禁止出现另外两项概率的任何形式。
@@ -2081,6 +2338,11 @@ export interface components {
         PredictionMeta: {
             /** Model Version Id */
             model_version_id: string;
+            /**
+             * Probability Source
+             * @enum {string}
+             */
+            probability_source: "MODEL" | "MARKET_BASELINE" | "UNAVAILABLE";
             /** Generated At */
             generated_at: string;
             /** Published At */
@@ -2096,6 +2358,13 @@ export interface components {
             status: "published" | "locked" | "retracted";
             /** Confidence */
             confidence?: string | null;
+            /**
+             * Edit Count
+             * @default 0
+             */
+            edit_count: number;
+            /** Last Edited At */
+            last_edited_at?: string | null;
         };
         /** PredictionResponse */
         PredictionResponse: {
@@ -2265,6 +2534,11 @@ export interface components {
             data_cutoff_at?: string | null;
             /** Model Version */
             model_version?: string | null;
+            /**
+             * Probability Source
+             * @enum {string}
+             */
+            probability_source: "MODEL" | "MARKET_BASELINE" | "UNAVAILABLE";
             prediction_public?: components["schemas"]["BundlePredictionPublic"] | null;
             prediction_member?: components["schemas"]["BundlePredictionMember"] | null;
             /** Evidence */
@@ -2285,6 +2559,16 @@ export interface components {
             subtitle_cues: components["schemas"]["BundleSubtitleCue"][];
             /** Source Notes */
             source_notes: components["schemas"]["BundleSourceNote"][];
+            /** Team Style Profile */
+            team_style_profile?: {
+                [key: string]: unknown;
+            } | null;
+            /** Social Profiles */
+            social_profiles?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
             /** Bundle Hash */
             bundle_hash: string;
         };
@@ -2359,6 +2643,8 @@ export interface components {
             data_cutoff_at?: string | null;
             /** Model Version */
             model_version?: string | null;
+            /** Profile Id */
+            profile_id: string;
         };
         /**
          * StudioExportServerDTO
@@ -2378,6 +2664,8 @@ export interface components {
             data_cutoff_at?: string | null;
             /** Model Version */
             model_version?: string | null;
+            /** Profile Id */
+            profile_id: string;
         };
         /** TeamFormEntry */
         TeamFormEntry: {
@@ -2409,6 +2697,41 @@ export interface components {
             name: string;
             /** Name En */
             name_en?: string | null;
+            /** Crest Url */
+            crest_url?: string | null;
+        };
+        /**
+         * TeamSeasonStatRow
+         * @description silver_team_season_stats 免费字段投影。角球/红黄牌/零封/BTTS 是付费深度
+         *     报告字段,物理上不在本 DTO(不是 null 占位,更不是取了再藏)。
+         */
+        TeamSeasonStatRow: {
+            team: components["schemas"]["TeamRef"];
+            /** Matches Played */
+            matches_played?: number | null;
+            /** Avg Total Shots */
+            avg_total_shots?: number | null;
+            /** Avg Shots On Target */
+            avg_shots_on_target?: number | null;
+            /** Avg Possession */
+            avg_possession?: number | null;
+            /** Avg Expected Goals */
+            avg_expected_goals?: number | null;
+            /** Avg Expected Goals On Target */
+            avg_expected_goals_on_target?: number | null;
+        };
+        /** TeamStatsResponse */
+        TeamStatsResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season?: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Rows */
+            rows: components["schemas"]["TeamSeasonStatRow"][];
+            /** Empty Reason */
+            empty_reason?: string | null;
         };
         /** TrackRecordMetrics */
         TrackRecordMetrics: {
@@ -2489,6 +2812,13 @@ export interface components {
             correction_of?: string | null;
             /** Superseded Note */
             superseded_note?: string | null;
+            /**
+             * Edit Count
+             * @default 0
+             */
+            edit_count: number;
+            /** Last Edited At */
+            last_edited_at?: string | null;
             /** Model Version Id */
             model_version_id: string;
             /** Published At */
@@ -3454,7 +3784,145 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MatchListResponse"];
+                    "application/json": components["schemas"]["LeagueFixturesResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    league_team_stats_api_v1_leagues__league_id__team_stats_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+            };
+            header?: never;
+            path: {
+                league_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStatsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    league_players_api_v1_leagues__league_id__players_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+            };
+            header?: never;
+            path: {
+                league_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayersResponse"];
                 };
             };
             /** @description Bad Request */
@@ -3509,7 +3977,11 @@ export interface operations {
             query?: {
                 date?: string | null;
                 league_id?: number | null;
+                season?: string | null;
                 status?: string | null;
+                window?: string | null;
+                content?: string | null;
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4086,6 +4558,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    team_crest_api_v1_media_team_crests__provider___provider_team_id__png_get: {
+        parameters: {
+            query: {
+                v: string;
+            };
+            header?: never;
+            path: {
+                provider: string;
+                provider_team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Manifest-bound PNG team crest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
                 };
             };
             /** @description Not Found */
@@ -5153,6 +5668,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OkDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    edit_prediction_api_v1_admin_predictions__snapshot_id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                snapshot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditPredictionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditPredictionResponse"];
                 };
             };
             /** @description Bad Request */

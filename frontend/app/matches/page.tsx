@@ -8,40 +8,29 @@ import {
   type PredictionResponse,
 } from "@/lib/api-v1";
 import { MatchRow, type FreeTip } from "@/components/matches/MatchRow";
+import {
+  buildMatchesHref,
+  type MatchFilters as Filters,
+} from "@/lib/match-filters";
 import styles from "./matches.module.css";
 
 export const metadata: Metadata = {
-  title: "比赛列表 — 欧赢 allwin",
+  title: "比赛列表 — 欧赢 ALLWIN",
   description:
     "按日期、联赛、状态浏览比赛:中文队名、比分与免费层模型最高一项概率。",
 };
 
 const PAGE_SIZE = 20;
 
-interface Filters {
-  date?: string;
-  league?: number;
-  status?: "upcoming" | "finished";
-  page: number;
-}
-
-/** 组当前筛选的 /matches 链接;patch 中显式 undefined 表示清除该项 */
-function buildHref(f: Filters, patch: Partial<Filters>): string {
-  const next = { ...f, ...patch };
-  const qs = new URLSearchParams();
-  if (next.date) qs.set("date", next.date);
-  if (next.league != null) qs.set("league", String(next.league));
-  if (next.status) qs.set("status", next.status);
-  if (next.page > 1) qs.set("page", String(next.page));
-  const s = qs.toString();
-  return s ? `/matches?${s}` : "/matches";
-}
-
 function freeTipOf(resp: PredictionResponse | null): FreeTip | null {
   if (!resp?.available || !resp.prediction) return null;
   const p = resp.prediction;
   if (p.tier === "free") {
-    return { top_outcome: p.top_outcome, top_probability: p.top_probability };
+    return {
+      top_outcome: p.top_outcome,
+      top_probability: p.top_probability,
+      probability_source: p.meta.probability_source,
+    };
   }
   return null;
 }
@@ -52,22 +41,42 @@ export default async function MatchesPage({
   searchParams: Promise<{
     date?: string;
     league?: string;
+    season?: string;
     status?: string;
+    window?: string;
+    content?: string;
+    q?: string;
     page?: string;
   }>;
 }) {
   const sp = await searchParams;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date : undefined;
   const status =
-    sp.status === "upcoming" || sp.status === "finished" ? sp.status : undefined;
+    sp.status === "finished" || sp.status === "all" ? sp.status : "upcoming";
+  const window =
+    sp.window === "today" ||
+    sp.window === "tomorrow" ||
+    sp.window === "3d" ||
+    sp.window === "all"
+      ? sp.window
+      : "7d";
+  const content =
+    sp.content === "analysis" || sp.content === "odds" ? sp.content : undefined;
+  const q = (sp.q ?? "").trim().slice(0, 80) || undefined;
   const league = /^\d+$/.test(sp.league ?? "") ? Number(sp.league) : undefined;
+  // 与后端 /api/v1/matches 的 season 校验同口径:"2024/2025" 或自然年 "2026"
+  const season = /^\d{4}(\/\d{4})?$/.test(sp.season ?? "") ? sp.season : undefined;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
-  const filters: Filters = { date, league, status, page };
+  const filters: Filters = { date, league, season, status, window, content, q, page };
 
   const qs = new URLSearchParams();
   if (date) qs.set("date", date);
   if (league != null) qs.set("league_id", String(league));
-  if (status) qs.set("status", status);
+  if (season) qs.set("season", season);
+  if (status !== "all") qs.set("status", status);
+  qs.set("window", window);
+  if (content) qs.set("content", content);
+  if (q) qs.set("q", q);
   qs.set("limit", String(PAGE_SIZE));
   qs.set("offset", String((page - 1) * PAGE_SIZE));
 
@@ -80,18 +89,14 @@ export default async function MatchesPage({
         revalidate: 60,
       }),
     ]);
-  } catch (err) {
+  } catch {
     return (
       <main className={styles.page}>
         <h1 className={styles.title}>比赛</h1>
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
           <p>
-            后端 API 未响应,请稍后刷新重试。
-            <br />
-            <span className={styles.errorDetail}>
-              {err instanceof Error ? err.message : String(err)}
-            </span>
+            数据服务暂时不可用，请稍后刷新重试。
           </p>
         </div>
       </main>
@@ -111,6 +116,14 @@ export default async function MatchesPage({
 
   const selectedLeague = leagues.find((l) => l.league_id === league);
   const lockedLeagueSelected = selectedLeague != null && !selectedLeague.accessible;
+  // 选中联赛 → 只列该联赛赛季;否则列并集(降序,最新赛季在前)
+  const seasonOptions = Array.from(
+    new Set(
+      (selectedLeague ? [selectedLeague] : leagues).flatMap(
+        (l) => l.available_seasons ?? [],
+      ),
+    ),
+  ).sort((a, b) => b.localeCompare(a));
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
 
   return (
@@ -118,9 +131,12 @@ export default async function MatchesPage({
       <div className={styles.header}>
         <h1 className={styles.title}>比赛</h1>
         <span className={styles.countChip}>
-          共 <span className="num">{data.total}</span> 场
+          当前筛选共 <span className="num">{data.total}</span> 场
         </span>
       </div>
+      <Link href="/leagues" className={styles.leagueDirectoryLink}>
+        浏览联赛排名与球队数据 →
+      </Link>
 
       {/* 筛选:纯 GET 表单 + 链接,无 JS 也可用 */}
       <div className={styles.filters}>
@@ -135,17 +151,70 @@ export default async function MatchesPage({
           ).map(([value, label]) => (
             <Link
               key={label}
-              href={buildHref(filters, { status: value, page: 1 })}
-              className={status === value ? styles.chipActive : styles.chip}
+              href={buildMatchesHref(filters, {
+                status: value ?? "all",
+                window:
+                  value === "finished" || value == null ? "all" : filters.window,
+                page: 1,
+              })}
+              className={
+                status === (value ?? "all") ? styles.chipActive : styles.chip
+              }
             >
               {label}
             </Link>
           ))}
         </div>
         <div className={styles.chipRow}>
+          <span className={styles.chipLabel}>时间</span>
+          {(
+            [
+              ["today", "今天"],
+              ["tomorrow", "明天"],
+              ["3d", "未来三天"],
+              ["7d", "未来七天"],
+              ["all", "全部未来"],
+            ] as const
+          ).map(([value, label]) => (
+            <Link
+              key={value}
+              href={buildMatchesHref(filters, {
+                status: "upcoming",
+                window: value,
+                date: undefined,
+                page: 1,
+              })}
+              className={window === value ? styles.chipActive : styles.chip}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+        <div className={styles.chipRow}>
+          <span className={styles.chipLabel}>内容</span>
+          <Link
+            href={buildMatchesHref(filters, { content: undefined, page: 1 })}
+            className={content == null ? styles.chipActive : styles.chip}
+          >
+            全部
+          </Link>
+          <Link
+            href={buildMatchesHref(filters, { content: "analysis", page: 1 })}
+            className={content === "analysis" ? styles.chipActive : styles.chip}
+          >
+            已有分析
+          </Link>
+          <Link
+            href={buildMatchesHref(filters, { content: "odds", page: 1 })}
+            className={content === "odds" ? styles.chipActive : styles.chip}
+          >
+            已有赔率
+          </Link>
+        </div>
+        <div className={styles.chipRow}>
           <span className={styles.chipLabel}>联赛</span>
           <Link
-            href={buildHref(filters, { league: undefined, page: 1 })}
+            href={buildMatchesHref(filters, { league: undefined, page: 1 })}
             className={league == null ? styles.chipActive : styles.chip}
           >
             全部
@@ -153,7 +222,7 @@ export default async function MatchesPage({
           {leagues.map((l) => (
             <Link
               key={l.league_id}
-              href={buildHref(filters, { league: l.league_id, page: 1 })}
+              href={buildMatchesHref(filters, { league: l.league_id, page: 1 })}
               className={league === l.league_id ? styles.chipActive : styles.chip}
             >
               {l.name_zh}
@@ -161,6 +230,37 @@ export default async function MatchesPage({
             </Link>
           ))}
         </div>
+        {/* 赛季:库里每个联赛的真实赛季来自 /api/v1/leagues.available_seasons,
+            不写死。选中联赛时只列该联赛的赛季;未选联赛时列全部联赛赛季的并集
+            (五大联赛为 2020/2021..2026/2027,挪超/瑞超为自然年 "2026")。
+            选赛季时一并把 status 放开为 all、window 放开为 all——否则默认的
+            "未开赛 + 未来七天"会把历史赛季筛成 0 场。 */}
+        {seasonOptions.length > 0 && (
+          <div className={styles.chipRow}>
+            <span className={styles.chipLabel}>赛季</span>
+            <Link
+              href={buildMatchesHref(filters, { season: undefined, page: 1 })}
+              className={season == null ? styles.chipActive : styles.chip}
+            >
+              全部
+            </Link>
+            {seasonOptions.map((s) => (
+              <Link
+                key={s}
+                href={buildMatchesHref(filters, {
+                  season: s,
+                  status: "all",
+                  window: "all",
+                  date: undefined,
+                  page: 1,
+                })}
+                className={season === s ? styles.chipActive : styles.chip}
+              >
+                {s}
+              </Link>
+            ))}
+          </div>
+        )}
         <form method="get" action="/matches" className={styles.dateForm}>
           <label className={styles.chipLabel} htmlFor="matches-date">
             日期
@@ -175,16 +275,52 @@ export default async function MatchesPage({
           {league != null && (
             <input type="hidden" name="league" value={String(league)} />
           )}
+          {season && <input type="hidden" name="season" value={season} />}
           {status && <input type="hidden" name="status" value={status} />}
+          <input type="hidden" name="window" value={window} />
+          {content && <input type="hidden" name="content" value={content} />}
+          {q && <input type="hidden" name="q" value={q} />}
           <button type="submit" className={styles.filterBtn}>
             筛选
           </button>
           {date && (
             <Link
-              href={buildHref(filters, { date: undefined, page: 1 })}
+              href={buildMatchesHref(filters, { date: undefined, page: 1 })}
               className={styles.clearLink}
             >
               清除日期
+            </Link>
+          )}
+        </form>
+        <form method="get" action="/matches" className={styles.dateForm}>
+          <label className={styles.chipLabel} htmlFor="matches-team-search">
+            球队
+          </label>
+          <input
+            id="matches-team-search"
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="中文名或英文名"
+            className={styles.searchInput}
+          />
+          {date && <input type="hidden" name="date" value={date} />}
+          {league != null && (
+            <input type="hidden" name="league" value={String(league)} />
+          )}
+          {season && <input type="hidden" name="season" value={season} />}
+          <input type="hidden" name="status" value={status} />
+          <input type="hidden" name="window" value={window} />
+          {content && <input type="hidden" name="content" value={content} />}
+          <button type="submit" className={styles.filterBtn}>
+            搜索
+          </button>
+          {q && (
+            <Link
+              href={buildMatchesHref(filters, { q: undefined, page: 1 })}
+              className={styles.clearLink}
+            >
+              清除搜索
             </Link>
           )}
         </form>
@@ -210,7 +346,12 @@ export default async function MatchesPage({
       ) : (
         <div className={styles.card}>
           {data.matches.map((m, i) => (
-            <MatchRow key={m.match_id} match={m} freeTip={freeTipOf(tips[i])} />
+            <MatchRow
+              key={m.match_id}
+              match={m}
+              freeTip={freeTipOf(tips[i])}
+              returnTo={buildMatchesHref(filters, {})}
+            />
           ))}
         </div>
       )}
@@ -219,7 +360,7 @@ export default async function MatchesPage({
         <div className={styles.pager}>
           {page > 1 ? (
             <Link
-              href={buildHref(filters, { page: page - 1 })}
+              href={buildMatchesHref(filters, { page: page - 1 })}
               className={styles.pagerLink}
             >
               ← 上一页
@@ -233,7 +374,7 @@ export default async function MatchesPage({
           </span>
           {page < totalPages ? (
             <Link
-              href={buildHref(filters, { page: page + 1 })}
+              href={buildMatchesHref(filters, { page: page + 1 })}
               className={styles.pagerLink}
             >
               下一页 →
@@ -245,8 +386,8 @@ export default async function MatchesPage({
       )}
 
       <p className={styles.footNote}>
-        比赛日期为 UTC 口径的比赛日(暂无精确开球时刻);列表为公开数据,
-        缓存约 1 分钟。未开赛且已有正式预测的比赛,展示免费层的模型最高一项概率。
+        默认展示未来七天未开赛比赛，并按精确开球时间排序。未开赛且已有正式
+        分析的比赛只展示匿名层允许公开的一项概率。
       </p>
     </main>
   );

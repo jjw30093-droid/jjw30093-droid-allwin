@@ -1104,7 +1104,205 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/MatchListResponse"
+         "$ref": "#/components/schemas/LeagueFixturesResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/leagues/{league_id}/team-stats": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "League Team Stats",
+    "description": "球队赛季统计(免费字段投影:射门/射正/控球/xG/xGOT,付费深度字段物理不在响应)。",
+    "operationId": "league_team_stats_api_v1_leagues__league_id__team_stats_get",
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TeamStatsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/leagues/{league_id}/players": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "League Players",
+    "description": "球员榜(免费 5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。",
+    "operationId": "league_players_api_v1_leagues__league_id__players_get",
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlayersResponse"
         }
        }
       }
@@ -1205,6 +1403,23 @@
       }
      },
      {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^\\d{4}(/\\d{4})?$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     },
+     {
       "name": "status",
       "in": "query",
       "required": false,
@@ -1219,6 +1434,58 @@
         }
        ],
        "title": "Status"
+      }
+     },
+     {
+      "name": "window",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(today|tomorrow|3d|7d|all)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Window"
+      }
+     },
+     {
+      "name": "content",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(analysis|odds)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Content"
+      }
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 80
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Q"
       }
      },
      {
@@ -1976,6 +2243,74 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/api/v1/media/team-crests/{provider}/{provider_team_id}.png": {
+   "get": {
+    "tags": [
+     "media"
+    ],
+    "summary": "Team Crest",
+    "operationId": "team_crest_api_v1_media_team_crests__provider___provider_team_id__png_get",
+    "parameters": [
+     {
+      "name": "provider",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Provider"
+      }
+     },
+     {
+      "name": "provider_team_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Provider Team Id"
+      }
+     },
+     {
+      "name": "v",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "minLength": 12,
+       "maxLength": 12,
+       "title": "V"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Manifest-bound PNG team crest",
+      "content": {
+       "image/png": {}
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
      }
     }
    }
@@ -3277,6 +3612,109 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/predictions/{snapshot_id}/edit": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Edit Prediction",
+    "description": "直接修正一条预测(任意状态、任意时刻,含已锁定/已开球——见 CLAUDE.md §9.1)。\n\n每次真正产生变化的修正都会写入 prediction_snapshot_edits(append-only),\n不是静默覆盖;结果里的 changed_fields 为空表示这次调用没有产生实质变化。",
+    "operationId": "edit_prediction_api_v1_admin_predictions__snapshot_id__edit_post",
+    "parameters": [
+     {
+      "name": "snapshot_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Snapshot Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/EditPredictionBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EditPredictionResponse"
         }
        }
       }
@@ -5242,6 +5680,22 @@
        }
       ],
       "title": "Confidence"
+     },
+     "edit_count": {
+      "type": "integer",
+      "title": "Edit Count",
+      "default": 0
+     },
+     "last_edited_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Edited At"
      }
     },
     "type": "object",
@@ -5476,6 +5930,15 @@
       ],
       "title": "Model Version"
      },
+     "probability_source": {
+      "type": "string",
+      "enum": [
+       "MODEL",
+       "MARKET_BASELINE",
+       "UNAVAILABLE"
+      ],
+      "title": "Probability Source"
+     },
      "prediction_public": {
       "anyOf": [
        {
@@ -5566,6 +6029,7 @@
      "bundle_version",
      "built_at",
      "match",
+     "probability_source",
      "evidence",
      "counter_evidence",
      "uncertainty",
@@ -6324,11 +6788,129 @@
     ],
     "title": "DraftStatusBody"
    },
+   "EditPredictionBody": {
+    "properties": {
+     "reason": {
+      "type": "string",
+      "maxLength": 500,
+      "minLength": 2,
+      "title": "Reason"
+     },
+     "home_win": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Win"
+     },
+     "draw": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Draw"
+     },
+     "away_win": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Win"
+     },
+     "expected_home_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Home Goals"
+     },
+     "expected_away_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Away Goals"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     }
+    },
+    "type": "object",
+    "required": [
+     "reason"
+    ],
+    "title": "EditPredictionBody"
+   },
+   "EditPredictionResponse": {
+    "properties": {
+     "edit_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Edit Id"
+     },
+     "changed_fields": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Changed Fields"
+     },
+     "edit_count": {
+      "type": "integer",
+      "title": "Edit Count"
+     }
+    },
+    "type": "object",
+    "required": [
+     "changed_fields",
+     "edit_count"
+    ],
+    "title": "EditPredictionResponse"
+   },
    "ExportBody": {
     "properties": {
      "kind": {
       "type": "string",
       "title": "Kind"
+     },
+     "profile": {
+      "type": "string",
+      "title": "Profile",
+      "default": "internal-full-v1"
      }
     },
     "type": "object",
@@ -6500,6 +7082,73 @@
     ],
     "title": "LeagueBettingResponse"
    },
+   "LeagueFixturesResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons"
+     },
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "limit": {
+      "type": "integer",
+      "title": "Limit"
+     },
+     "offset": {
+      "type": "integer",
+      "title": "Offset"
+     },
+     "matches": {
+      "items": {
+       "$ref": "#/components/schemas/MatchSummary"
+      },
+      "type": "array",
+      "title": "Matches"
+     },
+     "empty_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Empty Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "available_seasons",
+     "total",
+     "limit",
+     "offset",
+     "matches"
+    ],
+    "title": "LeagueFixturesResponse",
+    "description": "/leagues/{id}/fixtures 专属响应——与 MatchListResponse 分开定义,不共用。\n\n刻意不用 response_model_exclude_unset:MatchSummary 的可选字段(如\ndata_updated_at/probability_source)由内容状态投影按分支选择性写入,\nexclude_unset 会递归进嵌套模型,导致同一响应内不同行的键集不一致,\n且与 /api/v1/matches 复用同一个 MatchSummary 却呈现不同形状。"
+   },
    "LeagueInfo": {
     "properties": {
      "league_id": {
@@ -6525,6 +7174,48 @@
      "accessible": {
       "type": "boolean",
       "title": "Accessible"
+     },
+     "requires_pro": {
+      "type": "boolean",
+      "title": "Requires Pro"
+     },
+     "current_season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Current Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons",
+      "default": []
+     },
+     "data_status": {
+      "type": "string",
+      "enum": [
+       "AVAILABLE",
+       "NOT_SYNCED"
+      ],
+      "title": "Data Status"
+     },
+     "data_updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Updated At"
      }
     },
     "type": "object",
@@ -6534,7 +7225,9 @@
      "name_zh",
      "name_en",
      "entitlement",
-     "accessible"
+     "accessible",
+     "requires_pro",
+     "data_status"
     ],
     "title": "LeagueInfo"
    },
@@ -6851,6 +7544,71 @@
     ],
     "title": "LegacyMatchRow"
    },
+   "LegacyOddsPointItem": {
+    "properties": {
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "period": {
+      "type": "string",
+      "enum": [
+       "initial",
+       "latest"
+      ],
+      "title": "Period"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "provider": {
+      "type": "string",
+      "title": "Provider"
+     },
+     "line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line"
+     },
+     "home_or_over": {
+      "type": "number",
+      "title": "Home Or Over"
+     },
+     "draw": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Draw"
+     },
+     "away_or_under": {
+      "type": "number",
+      "title": "Away Or Under"
+     }
+    },
+    "type": "object",
+    "required": [
+     "market",
+     "period",
+     "source",
+     "provider",
+     "home_or_over",
+     "away_or_under"
+    ],
+    "title": "LegacyOddsPointItem",
+    "description": "旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。"
+   },
    "LegacyOverUnderThreshold": {
     "properties": {
      "threshold": {
@@ -7112,6 +7870,17 @@
        }
       ],
       "title": "Team Name Zh"
+     },
+     "crest_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Crest Url"
      }
     },
     "type": "object",
@@ -7863,9 +8632,29 @@
       ],
       "title": "Tier"
      },
+     "coverage_tier": {
+      "type": "string",
+      "enum": [
+       "full_timeline",
+       "open_close_only"
+      ],
+      "title": "Coverage Tier"
+     },
      "home_away_inverted": {
       "type": "boolean",
       "title": "Home Away Inverted"
+     },
+     "observation_count": {
+      "type": "integer",
+      "title": "Observation Count"
+     },
+     "display_mode": {
+      "type": "string",
+      "enum": [
+       "current_odds",
+       "odds_changes"
+      ],
+      "title": "Display Mode"
      },
      "snapshots": {
       "items": {
@@ -7873,6 +8662,31 @@
       },
       "type": "array",
       "title": "Snapshots"
+     },
+     "summary_points": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/LegacyOddsPointItem"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Summary Points"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
      }
     },
     "type": "object",
@@ -7880,7 +8694,10 @@
      "match_id",
      "available",
      "tier",
+     "coverage_tier",
      "home_away_inverted",
+     "observation_count",
+     "display_mode",
      "snapshots"
     ],
     "title": "MatchOddsAvailableDTO"
@@ -7980,6 +8797,82 @@
        }
       ],
       "title": "Away Score"
+     },
+     "sync_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sync State"
+     },
+     "data_updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Updated At"
+     },
+     "last_success_sync_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Success Sync At"
+     },
+     "next_planned_sync_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next Planned Sync At"
+     },
+     "probability_source": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "MODEL",
+         "MARKET_BASELINE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Probability Source"
+     },
+     "odds_observation_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Observation Count"
      }
     },
     "type": "object",
@@ -8356,6 +9249,138 @@
     ],
     "title": "PlanDTO"
    },
+   "PlayerBoard": {
+    "properties": {
+     "stat_name": {
+      "type": "string",
+      "title": "Stat Name"
+     },
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "entries": {
+      "items": {
+       "$ref": "#/components/schemas/PlayerBoardEntry"
+      },
+      "type": "array",
+      "title": "Entries"
+     }
+    },
+    "type": "object",
+    "required": [
+     "stat_name",
+     "label_zh",
+     "entries"
+    ],
+    "title": "PlayerBoard"
+   },
+   "PlayerBoardEntry": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "name_en": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name En"
+     },
+     "team": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rank"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     }
+    },
+    "type": "object",
+    "required": [
+     "player_id",
+     "name",
+     "team"
+    ],
+    "title": "PlayerBoardEntry"
+   },
+   "PlayersResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons"
+     },
+     "boards": {
+      "items": {
+       "$ref": "#/components/schemas/PlayerBoard"
+      },
+      "type": "array",
+      "title": "Boards"
+     },
+     "empty_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Empty Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "available_seasons",
+     "boards"
+    ],
+    "title": "PlayersResponse"
+   },
    "PredictionFreeDTO": {
     "properties": {
      "tier": {
@@ -8467,6 +9492,15 @@
       "type": "string",
       "title": "Model Version Id"
      },
+     "probability_source": {
+      "type": "string",
+      "enum": [
+       "MODEL",
+       "MARKET_BASELINE",
+       "UNAVAILABLE"
+      ],
+      "title": "Probability Source"
+     },
      "generated_at": {
       "type": "string",
       "title": "Generated At"
@@ -8523,11 +9557,28 @@
        }
       ],
       "title": "Confidence"
+     },
+     "edit_count": {
+      "type": "integer",
+      "title": "Edit Count",
+      "default": 0
+     },
+     "last_edited_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Edited At"
      }
     },
     "type": "object",
     "required": [
      "model_version_id",
+     "probability_source",
      "generated_at",
      "status"
     ],
@@ -9047,6 +10098,15 @@
       ],
       "title": "Model Version"
      },
+     "probability_source": {
+      "type": "string",
+      "enum": [
+       "MODEL",
+       "MARKET_BASELINE",
+       "UNAVAILABLE"
+      ],
+      "title": "Probability Source"
+     },
      "prediction_public": {
       "anyOf": [
        {
@@ -9130,6 +10190,26 @@
       "type": "array",
       "title": "Source Notes"
      },
+     "team_style_profile": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Style Profile"
+     },
+     "social_profiles": {
+      "additionalProperties": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "object",
+      "title": "Social Profiles"
+     },
      "bundle_hash": {
       "type": "string",
       "title": "Bundle Hash"
@@ -9140,6 +10220,7 @@
      "bundle_version",
      "built_at",
      "match",
+     "probability_source",
      "evidence",
      "counter_evidence",
      "uncertainty",
@@ -9314,12 +10395,17 @@
        }
       ],
       "title": "Model Version"
+     },
+     "profile_id": {
+      "type": "string",
+      "title": "Profile Id"
      }
     },
     "type": "object",
     "required": [
      "job_id",
-     "side"
+     "side",
+     "profile_id"
     ],
     "title": "StudioExportClientDTO",
     "description": "PNG:前端 DOM→PNG 生成,服务端只登记审计。"
@@ -9360,13 +10446,18 @@
        }
       ],
       "title": "Model Version"
+     },
+     "profile_id": {
+      "type": "string",
+      "title": "Profile Id"
      }
     },
     "type": "object",
     "required": [
      "job_id",
      "side",
-     "download_url"
+     "download_url",
+     "profile_id"
     ],
     "title": "StudioExportServerDTO",
     "description": "txt/json/srt:服务端生成可下载文件。"
@@ -9449,6 +10540,17 @@
        }
       ],
       "title": "Name En"
+     },
+     "crest_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Crest Url"
      }
     },
     "type": "object",
@@ -9456,6 +10558,136 @@
      "name"
     ],
     "title": "TeamRef"
+   },
+   "TeamSeasonStatRow": {
+    "properties": {
+     "team": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "matches_played": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Matches Played"
+     },
+     "avg_total_shots": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Total Shots"
+     },
+     "avg_shots_on_target": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Shots On Target"
+     },
+     "avg_possession": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Possession"
+     },
+     "avg_expected_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Expected Goals"
+     },
+     "avg_expected_goals_on_target": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Expected Goals On Target"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team"
+    ],
+    "title": "TeamSeasonStatRow",
+    "description": "silver_team_season_stats 免费字段投影。角球/红黄牌/零封/BTTS 是付费深度\n报告字段,物理上不在本 DTO(不是 null 占位,更不是取了再藏)。"
+   },
+   "TeamStatsResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons"
+     },
+     "rows": {
+      "items": {
+       "$ref": "#/components/schemas/TeamSeasonStatRow"
+      },
+      "type": "array",
+      "title": "Rows"
+     },
+     "empty_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Empty Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "available_seasons",
+     "rows"
+    ],
+    "title": "TeamStatsResponse"
    },
    "TrackRecordMetrics": {
     "properties": {
@@ -9713,6 +10945,22 @@
        }
       ],
       "title": "Superseded Note"
+     },
+     "edit_count": {
+      "type": "integer",
+      "title": "Edit Count",
+      "default": 0
+     },
+     "last_edited_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Edited At"
      },
      "model_version_id": {
       "type": "string",

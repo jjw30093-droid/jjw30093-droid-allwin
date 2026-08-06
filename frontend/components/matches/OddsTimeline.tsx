@@ -7,7 +7,7 @@
  * - 匿名/Free/Pro:后端返回延迟摘要(每公司每市场最新一条,观察时间 ≥1 小时前);
  * - Premium(odds:history_full):完整快照时间线,1x2 市场补一张折线图。
  *
- * 文案纪律:只写"系统于 X 检测到",不写因果;时间按用户时区展示。
+ * 文案纪律:只写"系统于 X 检测到",不写因果;时间按北京时间展示(CLAUDE.md §11.2)。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,7 +15,7 @@ import type { EChartsOption } from "echarts";
 import { clientFetch } from "@/lib/api-v1";
 import { EChart } from "@/components/EChart";
 import { LocalTime } from "./LocalTime";
-import { MARKET_FIELDS, MARKET_ZH } from "./zh";
+import { formatBeijingZh, MARKET_FIELDS, MARKET_ZH } from "./zh";
 import type { OddsResponse, OddsSnapshot } from "./types";
 import styles from "./OddsTimeline.module.css";
 
@@ -48,15 +48,9 @@ function build1x2Chart(
   }
   if (!best) return null;
   const series = best;
-  const times = series.map((s) =>
-    new Date(s.observed_at).toLocaleString("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }),
-  );
+  // 北京时间(与下方表格的 LocalTime 一致)——曾用浏览器本地时区,会让同一
+  // 组件里图表横轴和表格行显示两套不同的时钟,对中文用户反而更迷惑。
+  const times = series.map((s) => formatBeijingZh(s.observed_at) ?? s.observed_at);
   const pick = (key: string) => series.map((s) => s.payload.latest?.[key] ?? null);
   const company = series[0].company_name || series[0].company_id;
   const first = times[0];
@@ -145,6 +139,79 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   if (!resp.available) {
     return <div className={styles.stateBox}>{resp.reason}</div>;
   }
+  if (resp.coverage_tier === "open_close_only") {
+    // 历史存档赔率:仅初盘+临场两点、无观测时间戳——只出表格,绝不画走势图。
+    const pts = resp.summary_points ?? [];
+    if (pts.length === 0) {
+      return <div className={styles.stateBox}>该场比赛暂无可展示的赔率快照。</div>;
+    }
+    const legacyMarkets = Array.from(new Set(pts.map((p) => p.market)));
+    const periodZh: Record<string, string> = { initial: "初盘", latest: "临场" };
+    return (
+      <div>
+        <p className={styles.tierNote}>
+          {resp.note ?? "本场为历史存档赔率,仅有初盘与临场两个观测点,无完整走势时间线。"}
+          {" "}
+          {resp.tier === "full"
+            ? "Premium:展示初盘与临场两点。"
+            : "免费/Pro:仅展示临场一点;初盘对比为 Premium 内容。"}
+        </p>
+        {legacyMarkets.map((market) => {
+          const rows = pts.filter((p) => p.market === market);
+          const is1x2 = market === "1x2";
+          return (
+            <div key={market} className={styles.marketBlock}>
+              <h4 className={styles.marketTitle}>{MARKET_ZH[market] ?? market}</h4>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>公司</th>
+                      <th>阶段</th>
+                      {is1x2 ? (
+                        <>
+                          <th>主胜</th>
+                          <th>平局</th>
+                          <th>客胜</th>
+                        </>
+                      ) : (
+                        <>
+                          <th>{market === "ah" ? "主队" : "大球"}</th>
+                          <th>盘口线</th>
+                          <th>{market === "ah" ? "客队" : "小球"}</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((p, i) => (
+                      <tr key={`${p.source}|${p.period}|${i}`}>
+                        <td>{p.provider}</td>
+                        <td>{periodZh[p.period] ?? p.period}</td>
+                        {is1x2 ? (
+                          <>
+                            <td className="num">{p.home_or_over}</td>
+                            <td className="num">{p.draw ?? "—"}</td>
+                            <td className="num">{p.away_or_under}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="num">{p.home_or_over}</td>
+                            <td className="num">{p.line ?? "—"}</td>
+                            <td className="num">{p.away_or_under}</td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   if (resp.snapshots.length === 0) {
     return (
       <div className={styles.stateBox}>该场比赛暂无可展示的赔率快照。</div>
@@ -156,6 +223,10 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   return (
     <div>
       <p className={styles.tierNote}>
+        {resp.display_mode === "current_odds"
+          ? `当前赔率:目前共 ${resp.observation_count} 个系统观测点,不绘制虚假变化曲线。`
+          : `赔率变化:目前共 ${resp.observation_count} 个系统观测点。`}
+        {" "}
         {resp.tier === "full"
           ? "完整快照时间线(Premium):同一公司同一市场,内容有变化才记录一条。"
           : "延迟摘要(免费/Pro):每公司每市场仅展示观察时间在 1 小时前的最新一条;完整时间线为 Premium 内容。"}
