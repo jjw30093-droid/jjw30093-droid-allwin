@@ -1,0 +1,181 @@
+{
+ "details": {
+  "id": 47,
+  "selectedSeason": "2024/2025",
+  "name": "Premier League"
+ },
+ "fixtures": {
+  "allMatches": [
+   {
+    "id": "4506263",
+    "round": "1",
+    "home": {
+     "id": "10260",
+     "name": "Manchester United"
+    },
+    "away": {
+     "id": "9879",
+     "name": "Fulham"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-16T19:00:00Z",
+     "scoreStr": "1 - 0"
+    }
+   },
+   {
+    "id": "4506264",
+    "round": "1",
+    "home": {
+     "id": "9902",
+     "name": "Ipswich Town"
+    },
+    "away": {
+     "id": "8650",
+     "name": "Liverpool"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-17T11:30:00Z",
+     "scoreStr": "0 - 2"
+    }
+   },
+   {
+    "id": "4506265",
+    "round": "1",
+    "home": {
+     "id": "9825",
+     "name": "Arsenal"
+    },
+    "away": {
+     "id": "8602",
+     "name": "Wolverhampton Wanderers"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-17T14:00:00Z",
+     "scoreStr": "2 - 0"
+    }
+   },
+   {
+    "id": "4506266",
+    "round": "1",
+    "home": {
+     "id": "8668",
+     "name": "Everton"
+    },
+    "away": {
+     "id": "10204",
+     "name": "Brighton & Hove Albion"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-17T14:00:00Z",
+     "scoreStr": "0 - 3"
+    }
+   },
+   {
+    "id": "4506267",
+    "round": "1",
+    "home": {
+     "id": "10261",
+     "name": "Newcastle United"
+    },
+    "away": {
+     "id": "8466",
+     "name": "Southampton"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-17T14:00:00Z",
+     "scoreStr": "1 - 0"
+    }
+   },
+   {
+    "id": "4506268",
+    "round": "1",
+    "home": {
+     "id": "10203",
+     "name": "Nottingham Forest"
+    },
+    "away": {
+     "id": "8678",
+     "name": "AFC Bournemouth"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-17T14:00:00Z",
+     "scoreStr": "1 - 1"
+    }
+   },
+   {
+    "id": "4506269",
+    "round": "1",
+    "home": {
+     "id": "8654",
+     "name": "West Ham United"
+    },
+    "away": {
+     "id": "10252",
+     "name": "Aston Villa"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-17T16:30:00Z",
+     "scoreStr": "1 - 2"
+    }
+   },
+   {
+    "id": "4506270",
+    "round": "1",
+    "home": {
+     "id": "9937",
+     "name": "Brentford"
+    },
+    "away": {
+     "id": "9826",
+     "name": "Crystal Palace"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-18T13:00:00Z",
+     "scoreStr": "2 - 1"
+    }
+   },
+   {
+    "id": "4506271",
+    "round": "1",
+    "home": {
+     "id": "8455",
+     "name": "Chelsea"
+    },
+    "away": {
+     "id": "8456",
+     "name": "Manchester City"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-18T15:30:00Z",
+     "scoreStr": "0 - 2"
+    }
+   },
+   {
+    "id": "4506272",
+    "round": "1",
+    "home": {
+     "id": "8197",
+     "name": "Leicester City"
+    },
+    "away": {
+     "id": "8586",
+     "name": "Tottenham Hotspur"
+    },
+    "status": {
+     "finished": true,
+     "utcTime": "2024-08-19T19:00:00Z",
+     "scoreStr": "1 - 1"
+    }
+   }
+  ]
+ }
+}
