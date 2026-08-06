@@ -115,12 +115,20 @@ class MatchSummary(BaseModel):
     next_planned_sync_at: Optional[str] = None
     probability_source: Optional[Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]] = None
     odds_observation_count: Optional[int] = None
+    # 赔率覆盖档位(D8):full_timeline=完整观测时间线 / open_close_only=旧资产
+    # 两点摘要 / none=无赔率。列表徽标据此渲染,避免 content=odds 把两档混为一谈。
+    # 保持 Optional:联赛 fixtures 端点不算这个字段(None=未计算,不是"无赔率")。
+    odds_coverage_tier: Optional[Literal["full_timeline", "open_close_only", "none"]] = None
 
 
 class MatchListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    # 回显赛季上下文(D4,对齐 LeagueFixturesResponse):?season=2019/2020 的
+    # total:0 必须可解释——available_seasons 告诉客户端哪些赛季真的有数据。
+    season: Optional[str] = None
+    available_seasons: list[str] = []
     matches: list[MatchSummary]
 
 
@@ -351,7 +359,26 @@ class BundlePredictionMember(BaseModel):
     prediction_hash: str
 
 
+class LegacyOddsPointItem(BaseModel):
+    """旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。
+
+    /odds 端点的 summary_points 与 analysis/studio bundle 的
+    odds_summary_points 共用本模型——刻意没有任何时间字段,绝不拿
+    ingested_at 或开球时间顶替观测时间。
+    """
+    market: str                            # 1x2 / ah / ou
+    period: Literal["initial", "latest"]
+    source: str                            # asset_a_json / asset_b_footballdata / asset_b_nowgoal
+    provider: str
+    line: Optional[float] = None           # ah/ou 盘口线;line>0=主队让球
+    home_or_over: float
+    draw: Optional[float] = None           # 仅 1x2
+    away_or_under: float
+
+
 class BundleOddsPoint(BaseModel):
+    # observed_at 必填:odds_timeline 只承载真实观测时间序列。旧资产两点摘要
+    # 没有观测时间戳,走 odds_summary_points(LegacyOddsPointItem),不进本模型。
     market: str
     company: str
     observed_at: str
@@ -410,6 +437,11 @@ class AnalysisBundleDTO(BaseModel):
     counter_evidence: list[BundleEvidenceItem]
     uncertainty: list[BundleUncertaintyItem]
     odds_timeline: list[BundleOddsPoint]         # 仅 odds:history_full,否则空数组
+    # 赔率覆盖档位:full_timeline=真实观测时间序列 / open_close_only=旧资产
+    # 两点摘要(8,336 场,审计 B6 前 bundle 对它们完全失明)/ none=无赔率
+    odds_coverage_tier: Literal["full_timeline", "open_close_only", "none"] = "none"
+    # 两点摘要(无时间戳,绝不混入 odds_timeline);仅 odds:history_full,否则 None
+    odds_summary_points: Optional[list[LegacyOddsPointItem]] = None
     cooccurring_events: list[BundleCoocEvent]    # 仅 report:deep,否则空数组
     chart_specs: list[BundleChartSpec]
     script_sections: list[BundleScriptSection]
@@ -435,6 +467,8 @@ class StudioBundleDTO(BaseModel):
     counter_evidence: list[BundleEvidenceItem]
     uncertainty: list[BundleUncertaintyItem]
     odds_timeline: list[BundleOddsPoint]
+    odds_coverage_tier: Literal["full_timeline", "open_close_only", "none"] = "none"
+    odds_summary_points: Optional[list[LegacyOddsPointItem]] = None
     cooccurring_events: list[BundleCoocEvent]
     chart_specs: list[BundleChartSpec]
     script_sections: list[BundleScriptSection]
@@ -455,18 +489,6 @@ class OddsSnapshotItem(BaseModel):
     source_updated_at: Optional[str] = None
     observed_at: str
     payload: dict
-
-
-class LegacyOddsPointItem(BaseModel):
-    """旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。"""
-    market: str                            # 1x2 / ah / ou
-    period: Literal["initial", "latest"]
-    source: str                            # asset_a_json / asset_b_footballdata / asset_b_nowgoal
-    provider: str
-    line: Optional[float] = None           # ah/ou 盘口线;line>0=主队让球
-    home_or_over: float
-    draw: Optional[float] = None           # 仅 1x2
-    away_or_under: float
 
 
 class MatchOddsAvailableDTO(BaseModel):

@@ -5987,6 +5987,30 @@
       "type": "array",
       "title": "Odds Timeline"
      },
+     "odds_coverage_tier": {
+      "type": "string",
+      "enum": [
+       "full_timeline",
+       "open_close_only",
+       "none"
+      ],
+      "title": "Odds Coverage Tier",
+      "default": "none"
+     },
+     "odds_summary_points": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/LegacyOddsPointItem"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Summary Points"
+     },
      "cooccurring_events": {
       "items": {
        "$ref": "#/components/schemas/BundleCoocEvent"
@@ -7607,7 +7631,7 @@
      "away_or_under"
     ],
     "title": "LegacyOddsPointItem",
-    "description": "旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。"
+    "description": "旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。\n\n/odds 端点的 summary_points 与 analysis/studio bundle 的\nodds_summary_points 共用本模型——刻意没有任何时间字段,绝不拿\ningested_at 或开球时间顶替观测时间。"
    },
    "LegacyOverUnderThreshold": {
     "properties": {
@@ -8596,6 +8620,25 @@
       "type": "integer",
       "title": "Offset"
      },
+     "season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons",
+      "default": []
+     },
      "matches": {
       "items": {
        "$ref": "#/components/schemas/MatchSummary"
@@ -8873,6 +8916,22 @@
        }
       ],
       "title": "Odds Observation Count"
+     },
+     "odds_coverage_tier": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "full_timeline",
+         "open_close_only",
+         "none"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Coverage Tier"
      }
     },
     "type": "object",
@@ -10154,6 +10213,30 @@
       },
       "type": "array",
       "title": "Odds Timeline"
+     },
+     "odds_coverage_tier": {
+      "type": "string",
+      "enum": [
+       "full_timeline",
+       "open_close_only",
+       "none"
+      ],
+      "title": "Odds Coverage Tier",
+      "default": "none"
+     },
+     "odds_summary_points": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/LegacyOddsPointItem"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Summary Points"
      },
      "cooccurring_events": {
       "items": {

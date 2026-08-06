@@ -9,10 +9,17 @@
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 
 from backend.db.util import normalize_exact_kickoff, sha256_hex, utc_now_iso
 from backend.queries import matches as q_matches
+from backend.queries.odds import legacy_summary_points
 from backend.queries.predictions import current_public_snapshot
+from backend.studio.team_style import (
+    DOUYIN_SAFE_PROFILE,
+    build_douyin_safe_profile,
+    latest_team_style_profile,
+)
 
 BUNDLE_VERSION = "1"
 
@@ -32,6 +39,46 @@ def _features_row(conn_core: sqlite3.Connection, match_id: int):
             "SELECT * FROM int_match_features WHERE match_id=?", (match_id,)
         ).fetchone()
     except sqlite3.OperationalError:
+        return None
+
+
+def _season_xg_row(
+    conn_core: sqlite3.Connection, league_id: int, season: str, team_id: int
+):
+    try:
+        return conn_core.execute(
+            """SELECT played,xg,xg_conceded,x_points FROM fact_league_table
+               WHERE League_ID=? AND Season=? AND table_type='xg' AND Team_ID=?
+               LIMIT 1""",
+            (league_id, season, team_id),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+
+
+def _rest_days(
+    conn_core: sqlite3.Connection, team_id: int, kickoff_at_utc: str | None
+) -> float | None:
+    if not kickoff_at_utc:
+        return None
+    try:
+        target = datetime.fromisoformat(kickoff_at_utc.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
+        row = conn_core.execute(
+            """SELECT kickoff_at_utc FROM dim_match
+               WHERE status='Finish' AND kickoff_at_utc < ?
+                 AND (Home_Team_ID=? OR Away_Team_ID=?)
+               ORDER BY kickoff_at_utc DESC LIMIT 1""",
+            (kickoff_at_utc, team_id, team_id),
+        ).fetchone()
+        if row is None or not row["kickoff_at_utc"]:
+            return None
+        previous = datetime.fromisoformat(row["kickoff_at_utc"].replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
+        return round((target - previous).total_seconds() / 86400, 1)
+    except (ValueError, TypeError, sqlite3.OperationalError):
         return None
 
 
@@ -89,6 +136,18 @@ def build_analysis_bundle(
 
     snap = current_public_snapshot(conn_platform, match_id)
     model_version = snap["model_version_id"] if snap else None
+    model_row = (
+        conn_platform.execute(
+            "SELECT algorithm FROM model_versions WHERE id=?", (model_version,)
+        ).fetchone()
+        if model_version
+        else None
+    )
+    probability_source = (
+        "MARKET_BASELINE"
+        if model_row is not None and model_row["algorithm"] == "market_baseline"
+        else ("MODEL" if snap is not None else "UNAVAILABLE")
+    )
     feat = _features_row(conn_core, match_id)
 
     evidence: list[dict] = []
@@ -121,6 +180,42 @@ def build_analysis_bundle(
         uncertainty.append({"kind": "features_missing",
                             "text": "该场比赛暂无赛前特征数据(滚动 xG 等),分析主要依赖近期战绩"})
 
+    home_xg = _season_xg_row(conn_core, match["league_id"], match["season"], home["team_id"])
+    away_xg = _season_xg_row(conn_core, match["league_id"], match["season"], away["team_id"])
+    if (
+        home_xg is not None
+        and away_xg is not None
+        and home_xg["xg"] is not None
+        and away_xg["xg"] is not None
+    ):
+        evidence.append(
+            {
+                "side": "home" if home_xg["xg"] >= away_xg["xg"] else "away",
+                "kind": "season_xg",
+                "text": (
+                    f"当前赛季累计 xG:{home['name']} {_fmt(home_xg['xg'])}"
+                    f"（xGA {_fmt(home_xg['xg_conceded'])}） vs "
+                    f"{away['name']} {_fmt(away_xg['xg'])}"
+                    f"（xGA {_fmt(away_xg['xg_conceded'])}）"
+                ),
+            }
+        )
+    else:
+        uncertainty.append(
+            {"kind": "season_xg_unavailable", "text": "当前赛季 xG/xGA 数据不可用，未以 0 填充"}
+        )
+
+    home_rest = _rest_days(conn_core, home["team_id"], match.get("kickoff_at_utc"))
+    away_rest = _rest_days(conn_core, away["team_id"], match.get("kickoff_at_utc"))
+    if home_rest is not None and away_rest is not None:
+        evidence.append(
+            {
+                "side": "home" if home_rest >= away_rest else "away",
+                "kind": "rest",
+                "text": f"开球前休息时间:{home['name']} {home_rest} 天，{away['name']} {away_rest} 天",
+            }
+        )
+
     if hs["played"] < 5 or as_["played"] < 5:
         uncertainty.append({"kind": "short_history",
                             "text": "至少一方近期样本不足 5 场,战绩类证据可靠性有限"})
@@ -152,11 +247,16 @@ def build_analysis_bundle(
         }
 
     odds_timeline: list[dict] = []
+    odds_summary_points: list[dict] = []
     cooccurring_events: list[dict] = []
     if conn_odds is not None:
         try:
+            # provider='nowgoal':下游 bronze_ng_odds_snap 是 nowgoal 形状的表,
+            # 无 provider 列;不过滤的话同一场比赛若同时有 kbisai xref,
+            # .fetchone() 可能拿到错误 provider 的行(见 routes_public.py 同款注释)。
             xref = conn_odds.execute(
-                "SELECT * FROM dim_match_xref WHERE fotmob_match_id=? AND review_status IN ('auto_ok','confirmed')",
+                "SELECT * FROM dim_match_xref WHERE fotmob_match_id=? AND provider='nowgoal'"
+                " AND review_status IN ('auto_ok','confirmed')",
                 (match_id,),
             ).fetchone()
             if xref:
@@ -181,21 +281,44 @@ def build_analysis_bundle(
                     cooccurring_events.append(dict(r))
         except sqlite3.OperationalError:
             pass
+        if not odds_timeline:
+            # 完整时间线缺席时回退旧资产两点摘要(审计 B6:此前 bundle 只认
+            # xref→bronze_ng_odds_snap 一条路,对 8,336 场 legacy-only 比赛
+            # 返回空 odds_timeline,而同一场 /odds 端点能给出真实点位)。
+            # 两点摘要无观测时间戳,进独立的 odds_summary_points,
+            # 绝不混入 odds_timeline(§6.2:不伪造 observed_at)。
+            # bundle 本身不做权益投影(与 prediction_member 同款约定),
+            # 公开路由按 odds:history_full 投影后再下发。
+            odds_summary_points = legacy_summary_points(conn_odds, match_id, full=True)
+
+    odds_coverage_tier = (
+        "full_timeline"
+        if odds_timeline
+        else "open_close_only"
+        if odds_summary_points
+        else "none"
+    )
 
     top_txt = ""
     if prediction_member:
-        top_txt = (f"模型给出的概率是:主胜 {round(prediction_member['home_probability']*100)}%、"
+        source_label = "市场 1X2 去水基线" if probability_source == "MARKET_BASELINE" else "模型"
+        top_txt = (f"{source_label}概率是:主胜 {round(prediction_member['home_probability']*100)}%、"
                    f"平局 {round(prediction_member['draw_probability']*100)}%、"
                    f"客胜 {round(prediction_member['away_probability']*100)}%")
 
+    probability_title = "市场基线" if probability_source == "MARKET_BASELINE" else "模型概率"
     script_sections = [
-        {"id": "hook", "title": "开场", "text": f"{home['name']} 对 {away['name']},这场比赛模型怎么看?"},
+        {
+            "id": "hook",
+            "title": "开场",
+            "text": f"{home['name']} 对 {away['name']},这场比赛的{probability_title}怎么看?",
+        },
         {"id": "context", "title": "背景",
          "text": f"{match['season']} 赛季第 {match['round'] or '?'} 轮,{match['date_utc']} 进行,{home['name']}坐镇主场。"},
         {"id": "data", "title": "数据",
          "text": f"{home['name']}近{hs['played']}场 {hs['w']}胜{hs['d']}平{hs['l']}负,进 {hs['goals_for']} 失 {hs['goals_against']};"
                  f"{away['name']}近{as_['played']}场 {as_['w']}胜{as_['d']}平{as_['l']}负,进 {as_['goals_for']} 失 {as_['goals_against']}。"},
-        {"id": "probability", "title": "模型概率",
+        {"id": "probability", "title": probability_title,
          "text": top_txt or "该场比赛暂无已发布的模型概率。"},
         {"id": "risk", "title": "风险与反向证据",
          "text": "。".join(c["text"] for c in (counter_evidence + uncertainty)[:3]) or "本场无特别突出的反向证据。"},
@@ -217,6 +340,7 @@ def build_analysis_bundle(
             "data": {"home": prediction_member["home_probability"],
                      "draw": prediction_member["draw_probability"],
                      "away": prediction_member["away_probability"],
+                     "probability_source": probability_source,
                      "home_name": home["name"], "away_name": away["name"]},
         })
     chart_specs.append({
@@ -238,22 +362,44 @@ def build_analysis_bundle(
         "match": match,
         "data_cutoff_at": (snap["input_cutoff_at"] or snap["generated_at"]) if snap else None,
         "model_version": model_version,
+        "probability_source": probability_source,
         "prediction_public": prediction_public,
         "prediction_member": prediction_member,
         "evidence": evidence,
         "counter_evidence": counter_evidence,
         "uncertainty": uncertainty,
         "odds_timeline": odds_timeline,
+        "odds_coverage_tier": odds_coverage_tier,
+        "odds_summary_points": odds_summary_points or None,
         "cooccurring_events": cooccurring_events,
         "chart_specs": chart_specs,
         "script_sections": script_sections,
         "subtitle_cues": subtitle_cues,
         "source_notes": [
             {"kind": "data_source", "text": "比赛与统计数据来源:FotMob(自建 Bronze 层)"},
-            {"kind": "model", "text": f"模型版本:{model_version or '无'};概率来自预测登记簿的已发布快照"},
+            {
+                "kind": "probability_source",
+                "text": (
+                    f"概率来源:{probability_source};版本:{model_version or '无'}。"
+                    + (
+                        "该值是 1X2 赔率去水结果,不是自有模型输出"
+                        if probability_source == "MARKET_BASELINE"
+                        else "概率来自预测登记簿的已发布快照"
+                    )
+                ),
+            },
             {"kind": "limitation", "text": "赔率信息(如有)为系统观察到的快照时间序列,只展示同期事件,不声称因果"},
         ],
     }
+    team_style_profile = latest_team_style_profile(conn_platform, match_id)
+    bundle["team_style_profile"] = team_style_profile
+    bundle["social_profiles"] = {}
+    if team_style_profile is not None:
+        bundle["social_profiles"][DOUYIN_SAFE_PROFILE] = build_douyin_safe_profile(
+            team_style_profile,
+            match,
+            uncertainty,
+        )
     canonical = json.dumps({k: v for k, v in bundle.items() if k != "built_at"},
                            sort_keys=True, ensure_ascii=False)
     bundle["bundle_hash"] = sha256_hex(canonical)

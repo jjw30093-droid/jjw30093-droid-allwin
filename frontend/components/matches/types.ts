@@ -22,15 +22,33 @@ export type AnalysisChartSpec = Schemas["BundleChartSpec"];
 
 /**
  * 从生成类型窄化:OddsSnapshotItem.payload 在契约里是宽 dict。
- * 真实结构以 backend/providers/nowgoal.py 的 canonical payload 为准:
- * { initial, latest },每组为 字段→欧洲赔率数值(1x2: home/draw/away;
- * ah: home/line/away;ou: over/line/under),缺失组为 null。
+ * 真实存在两种形状(2026-08-06 审计 B2 实锤,库内 73.5 万行扁平 vs 65 行嵌套):
+ * - 扁平(历史回填 CLI):字段→数值,1x2: home/draw/away;ah: home/line/away;
+ *   ou: over/line/under —— 与 zh.ts 的 MARKET_FIELDS 键一一对应;
+ * - 嵌套(实时轮询):{ initial, latest },每组即上述扁平组,缺失为 null。
+ * 渲染统一经 flatOddsGroup() 归一,与后端
+ * backend/queries/odds.py::normalize_odds_payload 同规则。
  */
 export type OddsGroup = Record<string, number>;
 
+export type OddsSnapshotPayload =
+  | OddsGroup
+  | { initial: OddsGroup | null; latest: OddsGroup | null };
+
 export type OddsSnapshot = Omit<Schemas["OddsSnapshotItem"], "payload"> & {
-  payload: { initial: OddsGroup | null; latest: OddsGroup | null };
+  payload: OddsSnapshotPayload;
 };
+
+/** 读侧归一:嵌套取 latest(缺则 initial),扁平原样。恒返回扁平组或 null。 */
+export function flatOddsGroup(payload: OddsSnapshotPayload): OddsGroup | null {
+  if (payload == null || typeof payload !== "object") return null;
+  if ("latest" in payload || "initial" in payload) {
+    const nested = payload as { initial: OddsGroup | null; latest: OddsGroup | null };
+    const group = nested.latest ?? nested.initial;
+    return group && typeof group === "object" ? group : null;
+  }
+  return payload as OddsGroup;
+}
 
 type OddsResponseRaw = GetJson<"/api/v1/matches/{match_id}/odds">;
 

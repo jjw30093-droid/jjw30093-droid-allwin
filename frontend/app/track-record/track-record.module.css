@@ -170,6 +170,17 @@
   text-align: left !important;
 }
 
+/* 战绩行对阵链接(B5):默认无下划线,hover 提示可点 */
+.matchLink {
+  text-decoration: none;
+  color: inherit;
+}
+
+.matchLink:hover .teamName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .teamName {
   font-weight: 500;
   color: var(--ink);
@@ -250,6 +261,13 @@
 .retractedBadge {
   color: var(--ink-3);
   border: 1px solid var(--border-strong);
+}
+
+.editedBadge {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ink-3);
 }
 
 .retractedRow td {

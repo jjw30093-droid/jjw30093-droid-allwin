@@ -19,6 +19,14 @@
   margin: 0;
 }
 
+.leagueDirectoryLink {
+  display: inline-block;
+  margin: -10px 0 18px;
+  color: var(--gold-300);
+  font-size: 13px;
+  text-decoration: none;
+}
+
 .countChip {
   font-size: 13px;
   color: var(--ink-2);
@@ -112,6 +120,16 @@
   font-size: 13px;
   padding: 5px 10px;
   color-scheme: dark;
+}
+
+.searchInput {
+  width: min(280px, calc(100vw - 132px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  font-size: 13px;
+  padding: 7px 10px;
 }
 
 .filterBtn {
@@ -228,4 +246,28 @@
 .errorDetail {
   font-size: 12px;
   color: var(--ink-3);
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding-inline: 12px;
+  }
+
+  .chipRow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 3px;
+  }
+
+  .chip,
+  .chipActive {
+    flex: 0 0 auto;
+  }
+}
+
+/* D1:默认时间窗自动放宽的如实提示 */
+.widenNote {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
 }

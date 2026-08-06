@@ -1,0 +1,168 @@
+.page {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 34px 20px 72px;
+}
+
+.header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  margin: 2px 0 6px;
+  font-size: clamp(28px, 4vw, 42px);
+}
+
+.header p {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.eyebrow {
+  color: var(--brand-teal) !important;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.matchLink {
+  color: var(--gold-300);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 14px;
+}
+
+.cardHead h2,
+.cardHead p {
+  margin: 0;
+}
+
+.cardHead h2 {
+  font-size: 21px;
+}
+
+.cardHead p {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.status {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: var(--r-pill);
+  color: var(--ink-3);
+  background: var(--surface-2);
+  font-size: 11px;
+}
+
+.status[data-status="available"] {
+  color: var(--win);
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.meta div {
+  min-width: 0;
+}
+
+.meta dt {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.meta dd {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.actions a {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--gold-300);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.actions span {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.errorBox {
+  margin-top: 20px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--ink-2);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 24px 14px 80px;
+  }
+
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meta {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .meta div:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Pro 徽标链接(B4):入口链接始终存在,该徽标只提示需要会员 */
+.proHint {
+  background: color-mix(in srgb, var(--gold-300) 14%, transparent);
+  font-weight: 600;
+}

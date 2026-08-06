@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from backend.db.connections import tx
 from backend.db.util import normalize_exact_kickoff, utc_now_iso
+from backend.queries.odds import normalize_odds_payload
 
 # 已确认(auto_ok/confirmed)映射才进 Silver;needs_review/rejected 不产出派生
 _ACTIVE_XREF_STATUSES = ("auto_ok", "confirmed")
@@ -25,12 +26,19 @@ def _parse_ts(ts: str) -> datetime:
 
 
 def _latest_fields(payload_json: str) -> dict:
+    """取一条快照的可比较字段组(扁平)。
+
+    bronze_ng_odds_snap 真实存在两种 payload 形状(嵌套=实时轮询,
+    扁平=历史回填 CLI,后者 73 万行)。旧实现只认嵌套,对扁平恒返回 {},
+    导致历史回填数据在 canonical Silver 重建下产出 0 个变化点——
+    统一走 normalize_odds_payload 读侧归一(审计 B2)。
+    """
     try:
         payload = json.loads(payload_json)
     except json.JSONDecodeError:
         return {}
-    latest = payload.get("latest")
-    return latest if isinstance(latest, dict) else {}
+    fields = normalize_odds_payload(payload)
+    return fields if isinstance(fields, dict) else {}
 
 
 def build_odds_moves(conn_odds: sqlite3.Connection) -> int:

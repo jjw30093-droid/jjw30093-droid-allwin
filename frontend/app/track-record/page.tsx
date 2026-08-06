@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { serverGet, type TrackRecordResponse } from "@/lib/api-v1";
+import { buildMatchHref } from "@/lib/match-links";
 import { LocalTime } from "@/components/trust/LocalTime";
 import styles from "./track-record.module.css";
 
 export const metadata: Metadata = {
-  title: "公开战绩 — 欧赢 allwin",
+  title: "公开战绩 — 欧赢 ALLWIN",
   description:
     "全部正式预测的公开记录:样本量、Accuracy、Brier、Log Loss、RPS,逐场展示预测概率与实际结果,不挑选、不删除。",
 };
@@ -19,7 +20,7 @@ const OUTCOME_ZH: Record<string, string> = {
   away: "客胜",
 };
 
-type Sample = TrackRecordResponse["samples"][number];
+export type Sample = TrackRecordResponse["samples"][number];
 
 function pct(v: number): string {
   return `${(v * 100).toFixed(1)}%`;
@@ -92,7 +93,10 @@ function CriteriaCard() {
           只统计<strong>正式样本</strong>:标记 official、已锁定(locked),且发布时间严格早于开球时间的赛前预测。
         </li>
         <li>默认展示全部正式样本,按开球时间排序,不设起止日期筛选,不挑选样本。</li>
-        <li>锁定后的预测不可修改;修正只能追加新版本,旧版本保留。</li>
+        <li>
+          预测锁定后仍可修正;每次修正都会留下公开可查的记录(次数、最近修正时间),
+          修正后的数值会体现在后续的评估指标中。
+        </li>
         <li>撤回的预测保留在列表中并明确标注,不做物理删除。</li>
         <li>
           历史研发期预测因无法证明生成时间早于开球,只作 legacy 归档,不进入本页公开战绩。
@@ -110,7 +114,7 @@ function ProbCell({ value, isTop }: { value: number; isTop: boolean }) {
   );
 }
 
-function SampleRow({ s }: { s: Sample }) {
+export function SampleRow({ s }: { s: Sample }) {
   const retracted = s.status === "retracted";
   const hasScore = s.home_goals != null && s.away_goals != null;
   return (
@@ -119,9 +123,16 @@ function SampleRow({ s }: { s: Sample }) {
         <LocalTime utc={s.kickoff_at_utc} />
       </td>
       <td className={styles.matchCell}>
-        <span className={styles.teamName}>{s.home.name}</span>
-        <span className={styles.vs}>vs</span>
-        <span className={styles.teamName}>{s.away.name}</span>
+        {/* 链接放 <td> 内(表格行不能整行包 <a>);returnTo 让详情页渲染
+            「返回公开战绩」(审计 B5:此前战绩行是死路) */}
+        <Link
+          href={buildMatchHref(s.match_id, "/track-record")}
+          className={styles.matchLink}
+        >
+          <span className={styles.teamName}>{s.home.name}</span>
+          <span className={styles.vs}>vs</span>
+          <span className={styles.teamName}>{s.away.name}</span>
+        </Link>
       </td>
       <ProbCell value={s.home_probability} isTop={s.predicted_outcome === "home"} />
       <ProbCell value={s.draw_probability} isTop={s.predicted_outcome === "draw"} />
@@ -151,6 +162,17 @@ function SampleRow({ s }: { s: Sample }) {
           <span className={styles.retractedBadge}>已撤回</span>
         ) : (
           <span className={styles.lockedBadge}>已锁定</span>
+        )}
+        {s.edit_count > 0 && (
+          <span className={styles.editedBadge}>
+            已修正 {s.edit_count} 次
+            {s.last_edited_at && (
+              <>
+                {" · "}
+                <LocalTime utc={s.last_edited_at} />
+              </>
+            )}
+          </span>
         )}
       </td>
     </tr>

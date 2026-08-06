@@ -1,4 +1,7 @@
-import { fetchWdlPredictions, type WdlMatch } from "@/lib/api";
+import Link from "next/link";
+import { fetchLeagueNameZh, fetchWdlPredictions, type WdlMatch } from "@/lib/api";
+import { buildMatchHref } from "@/lib/match-links";
+import { ApiError } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import styles from "./wdl-predictions.module.css";
 
@@ -81,11 +84,17 @@ function MatchCard({ m }: { m: WdlMatch }) {
   return (
     <div className={styles.card}>
       <div className={styles.teamsRow}>
-        <div className={styles.teams}>
+        {/* match_id 与 /matches/[matchId] 同为 FotMob id 空间
+            (gold_wdl_predictions 760/760 可 join dim_match,2026-08-06 核实);
+            对阵可点进详情(审计 B5) */}
+        <Link
+          href={buildMatchHref(m.match_id)}
+          className={`${styles.teams} ${styles.teamsLink}`}
+        >
           <span className={styles.teamName}>{m.home_team_name_zh ?? m.home_team_id}</span>
           <span className={styles.vs}>vs</span>
           <span className={styles.teamName}>{m.away_team_name_zh ?? m.away_team_id}</span>
-        </div>
+        </Link>
         <span className={styles.meta}>{m.date}</span>
       </div>
       {m.availability === "live" && m.confidence === "low" && (
@@ -168,37 +177,76 @@ export default async function WdlPredictionsPage({
   try {
     data = await fetchWdlPredictions(id, sp.season);
   } catch (err) {
+    // invalid_season / no_wdl_predictions_for_league:该赛季真的没有预测
+    // 数据,不是服务故障——不能用"数据暂时无法加载"这句谎报成外部服务不可用
+    // (CLAUDE.md §2.2)。切换器(排名/赛程等页)会让历史赛季一键可达,这个
+    // 分支正是切换器落到概率卡 tab 时最常触发的诚实空状态。
+    if (
+      err instanceof ApiError &&
+      (err.code === "invalid_season" || err.code === "no_wdl_predictions_for_league")
+    ) {
+      return (
+        <main className={styles.page}>
+          <LeagueNav leagueId={id} active="wdl-predictions" season={sp.season} />
+          <div className={styles.emptyBox}>
+            <div className={styles.emptyTitle}>该赛季暂无模型预测</div>
+            <p>
+              模型预测目前只覆盖部分赛季。
+              <Link href={`/league/${id}/wdl-predictions`} className={styles.emptyLink}>
+                查看默认赛季
+              </Link>
+            </p>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className={styles.page}>
         <LeagueNav leagueId={id} active="wdl-predictions" season={sp.season} />
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
           <p>
-            后端 serving API 未响应,请确认 backend/api_server.py 已启动。
-            <br />
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              {err instanceof Error ? err.message : String(err)}
-            </span>
+              该联赛数据尚未同步，或数据服务暂时不可用。请稍后再试。
           </p>
         </div>
       </main>
     );
   }
 
-  const rounds = Array.from(
-    new Set(data.matches.map((m) => m.round).filter((r): r is string => r !== null))
-  ).sort((a, b) => Number(a) - Number(b));
+  // 轮次按组内最早比赛日期排序,不按轮次号——真实改期轮次必须出现在它
+  // 实际发生的时间位置(同 components/league/FixtureRounds.tsx 的修复;
+  // 这个legacy 端点的 WdlMatch 只有 date,没有精确 kickoff,day 粒度已是
+  // 这里能拿到的最细时间信号)。
+  const earliestDateByRound = new Map<string, string>();
+  for (const m of data.matches) {
+    if (m.round === null || m.date === null) continue;
+    const prev = earliestDateByRound.get(m.round);
+    if (!prev || m.date < prev) earliestDateByRound.set(m.round, m.date);
+  }
+  // 极端情况:某轮所有比赛的 date 都是 null——退回原有轮次号出现顺序,
+  // 保证轮次不会因为完全没有可比较的时间键而从列表里消失。
+  for (const m of data.matches) {
+    if (m.round !== null && !earliestDateByRound.has(m.round)) {
+      earliestDateByRound.set(m.round, "");
+    }
+  }
+  const rounds = Array.from(earliestDateByRound.keys()).sort((a, b) =>
+    earliestDateByRound.get(a)!.localeCompare(earliestDateByRound.get(b)!)
+  );
 
   // 数据按 Date 排序,第一场所在的轮次就是"下一未踢轮次"。
   const nextRound = data.matches[0]?.round ?? null;
   const nextRoundMatches =
     nextRound !== null ? data.matches.filter((m) => m.round === nextRound) : [];
+  const leagueNameZh = await fetchLeagueNameZh(id);
 
   return (
     <main className={styles.page}>
-      <LeagueNav leagueId={id} active="wdl-predictions" season={data.season} />
+      {/* 导航只带用户显式选择(sp.season),不是本页解析出的 data.season——
+          否则会把这个 tab 的默认值钉死成其它 tab 的显式选择。 */}
+      <LeagueNav leagueId={id} active="wdl-predictions" season={sp.season} />
       <div className={styles.header}>
-        <h1 className={styles.title}>26/27 英超 · WDL 概率卡</h1>
+        <h1 className={styles.title}>{leagueNameZh} · WDL 概率卡</h1>
         <span className={styles.seasonChip}>{data.season}</span>
       </div>
       <p className={styles.membershipNote}>

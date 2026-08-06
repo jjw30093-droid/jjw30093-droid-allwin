@@ -16,6 +16,7 @@ from backend.content_status import (
 )
 from backend.queries import league_stats as q_league_stats
 from backend.queries import matches as q_matches
+from backend.queries import odds as q_odds
 from backend.queries import track_record as q_track
 from backend.queries.leagues import (
     LEAGUE_META,
@@ -320,7 +321,33 @@ def list_matches(
         offset=offset,
     )
     result["matches"] = [_with_content_status(match) for match in result["matches"]]
-    return {"limit": limit, "offset": offset, **result}
+    # D8:逐场标注赔率覆盖档位(集合每请求算一次,不逐行查库);
+    # full_timeline 优先于 open_close_only(同场两者皆有时按更高档展示)。
+    full_set, legacy_set = q_odds.odds_coverage_sets(conn_odds)
+    for match in result["matches"]:
+        mid = match["match_id"]
+        match["odds_coverage_tier"] = (
+            "full_timeline"
+            if mid in full_set
+            else "open_close_only"
+            if mid in legacy_set
+            else "none"
+        )
+    # D4:回显赛季上下文,让 ?season= 的 0 结果可解释。
+    if league_id is not None and league_id in allowed:
+        available_seasons = q_matches.seasons_of_league(conn, league_id)
+    else:
+        seen: set[str] = set()
+        for lid in sorted(allowed):
+            seen.update(q_matches.seasons_of_league(conn, lid))
+        available_seasons = sorted(seen)
+    return {
+        "limit": limit,
+        "offset": offset,
+        "season": season,
+        "available_seasons": available_seasons,
+        **result,
+    }
 
 
 @router.get("/matches/{match_id}", response_model=MatchDetailResponse)
@@ -475,6 +502,9 @@ def match_analysis(
                 )
     if not ctx.has("odds:history_full"):
         bundle["odds_timeline"] = []
+        # 两点摘要与完整时间线同属 odds:history_full 权益面:非 Premium 置 None,
+        # 受限数据物理不下发(bundle 生成侧不做投影,与 prediction_member 同约定)
+        bundle["odds_summary_points"] = None
     if not ctx.has("report:deep"):
         bundle["cooccurring_events"] = []
     bundle["cooccurrence_count"] = cooc_count
@@ -570,23 +600,9 @@ def _legacy_odds_fallback(conn_odds, match_id: int, full: bool,
     entitlement 投影:odds:history_full 给 initial+latest 两点(可看开临变化),
     否则只给 latest(与延迟摘要同级,服务端投影,不下发后遮挡)。
     """
-    if full:
-        rows = conn_odds.execute(
-            """SELECT market, period, source, provider, line,
-                      home_or_over, draw, away_or_under
-               FROM bronze_legacy_odds_summary WHERE fotmob_match_id=?
-               ORDER BY market, source, period""",
-            (match_id,),
-        ).fetchall()
-    else:
-        rows = conn_odds.execute(
-            """SELECT market, period, source, provider, line,
-                      home_or_over, draw, away_or_under
-               FROM bronze_legacy_odds_summary
-               WHERE fotmob_match_id=? AND period='latest'
-               ORDER BY market, source""",
-            (match_id,),
-        ).fetchall()
+    # SQL + 权益投影收口在 backend/queries/odds.py::legacy_summary_points,
+    # 与 studio/bundle 共用——保证两处对同一场比赛看到完全相同的点集。
+    rows = q_odds.legacy_summary_points(conn_odds, match_id, full)
     if not rows:
         return {"match_id": match_id, "available": False, "reason": no_data_reason}
     return {
@@ -598,7 +614,7 @@ def _legacy_odds_fallback(conn_odds, match_id: int, full: bool,
         "observation_count": 0,        # 无带时间戳的观测(§6.2:不伪装)
         "display_mode": "current_odds",
         "snapshots": [],
-        "summary_points": [dict(r) for r in rows],
+        "summary_points": rows,
         "note": "本场为历史存档赔率,仅有初盘与临场两个观测点,无完整走势时间线。",
     }
 

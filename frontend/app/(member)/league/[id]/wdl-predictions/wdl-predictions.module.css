@@ -305,3 +305,39 @@
   font-weight: 700;
   margin-bottom: 8px;
 }
+
+/* 该赛季确实没有预测数据(invalid_season/no_wdl_predictions_for_league)——
+   与上面的 errorBox 视觉上刻意不同:这不是故障,不用报警红色。 */
+.emptyBox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 32px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.emptyTitle {
+  color: var(--ink);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.emptyLink {
+  color: var(--gold-300);
+  text-decoration: none;
+}
+
+.emptyLink:hover {
+  text-decoration: underline;
+}
+
+/* 对阵链接(B5):hover 下划线提示可点进比赛详情 */
+.teamsLink {
+  text-decoration: none;
+}
+
+.teamsLink:hover .teamName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

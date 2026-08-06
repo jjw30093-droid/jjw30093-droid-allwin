@@ -142,3 +142,45 @@ class TestOddsContentFilter:
             ).json()["matches"]
         }
         assert ids == {7001}        # 7003 有赔率但不在该赛季
+
+
+class TestSeasonEchoAndCoverageTier:
+    """D4:MatchListResponse 回显 season/available_seasons;D8:逐场赔率档位。"""
+
+    def test_response_echoes_season_and_available(self, app, multi_season):
+        c = TestClient(app)
+        d = c.get(
+            "/api/v1/matches?league_id=47&season=2020/2021&status=finished&window=all"
+        ).json()
+        assert d["season"] == "2020/2021"
+        assert d["available_seasons"] == ["2020/2021", "2022/2023"]
+
+    def test_valid_but_absent_season_is_explainable(self, app, multi_season):
+        """合法但库里没有的赛季:total=0,但 available_seasons 告诉用户有什么。"""
+        c = TestClient(app)
+        d = c.get(
+            "/api/v1/matches?league_id=47&season=2019/2020&status=finished&window=all"
+        ).json()
+        assert d["total"] == 0
+        assert d["season"] == "2019/2020"
+        assert d["available_seasons"] == ["2020/2021", "2022/2023"]
+
+    def test_coverage_tier_per_match(self, app, multi_season):
+        conn = connect_rw("odds")
+        conn.execute(
+            """INSERT INTO bronze_legacy_odds_summary
+                 (fotmob_match_id, source, provider, market, period, line,
+                  home_or_over, draw, away_or_under, orientation_fixed,
+                  source_file, ingested_at)
+               VALUES (7001, 'asset_a_json', 'Bet365', '1x2', 'latest', NULL,
+                       2.0, 3.4, 3.8, 0, 'test', '2026-08-06T00:00:00Z')""",
+        )
+        conn.commit()
+        conn.close()
+        c = TestClient(app)
+        d = c.get(
+            "/api/v1/matches?league_id=47&season=2020/2021&status=finished&window=all"
+        ).json()
+        tiers = {m["match_id"]: m["odds_coverage_tier"] for m in d["matches"]}
+        assert tiers[7001] == "open_close_only"
+        assert tiers[7002] == "none"

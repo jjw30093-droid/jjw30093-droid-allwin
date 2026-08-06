@@ -16,7 +16,7 @@ import { clientFetch } from "@/lib/api-v1";
 import { EChart } from "@/components/EChart";
 import { LocalTime } from "./LocalTime";
 import { formatBeijingZh, MARKET_FIELDS, MARKET_ZH } from "./zh";
-import type { OddsResponse, OddsSnapshot } from "./types";
+import { flatOddsGroup, type OddsResponse, type OddsSnapshot } from "./types";
 import styles from "./OddsTimeline.module.css";
 
 const PHASE_ZH: Record<string, string> = {
@@ -35,7 +35,10 @@ function build1x2Chart(
 ): { option: EChartsOption; summary: string } | null {
   const byCompany = new Map<string, OddsSnapshot[]>();
   for (const s of snapshots) {
-    if (s.market !== "1x2" || !s.payload.latest) continue;
+    // flatOddsGroup:兼容扁平(历史回填,73.5 万行)与嵌套(实时轮询)两种
+    // payload 形状——旧代码只认 payload.latest,扁平数据全部被跳过,
+    // Premium 的 1x2 走势图因此从不渲染(审计 B2)。
+    if (s.market !== "1x2" || !flatOddsGroup(s.payload)) continue;
     const list = byCompany.get(s.company_id) ?? [];
     list.push(s);
     byCompany.set(s.company_id, list);
@@ -51,7 +54,8 @@ function build1x2Chart(
   // 北京时间(与下方表格的 LocalTime 一致)——曾用浏览器本地时区,会让同一
   // 组件里图表横轴和表格行显示两套不同的时钟,对中文用户反而更迷惑。
   const times = series.map((s) => formatBeijingZh(s.observed_at) ?? s.observed_at);
-  const pick = (key: string) => series.map((s) => s.payload.latest?.[key] ?? null);
+  const pick = (key: string) =>
+    series.map((s) => flatOddsGroup(s.payload)?.[key] ?? null);
   const company = series[0].company_name || series[0].company_id;
   const first = times[0];
   const last = times[times.length - 1];
@@ -111,7 +115,12 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
 
   const chart = useMemo(
     () =>
-      resp?.available && resp.tier === "full"
+      // §6.2 纪律护栏:只对"完整时间线且确有 ≥2 个观测点"的档位画走势——
+      // open_close_only(两点摘要)与 current_odds(单点)绝不绘制变化曲线。
+      resp?.available &&
+      resp.tier === "full" &&
+      resp.coverage_tier === "full_timeline" &&
+      resp.display_mode === "odds_changes"
         ? build1x2Chart(resp.snapshots)
         : null,
     [resp],
@@ -261,7 +270,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
                 </thead>
                 <tbody>
                   {rows.map((s, i) => {
-                    const g = s.payload.latest ?? s.payload.initial;
+                    const g = flatOddsGroup(s.payload);
                     return (
                       <tr key={`${groupLabel(s)}|${s.observed_at}|${i}`}>
                         <td>{s.company_name || s.company_id}</td>

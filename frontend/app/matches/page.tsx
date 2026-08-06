@@ -82,6 +82,10 @@ export default async function MatchesPage({
 
   let leagues: LeagueInfo[];
   let data: MatchListResponse;
+  // D1:默认视图(status=upcoming + 隐式 window=7d)在赛季间歇期会是 0 场
+  // (如 8 月上旬:五大联赛下赛季尚未开打)。用户没显式选时间窗时自动放宽到
+  // 全部未来赛程并如实提示,不让首屏对着一片空白。
+  let windowWidened = false;
   try {
     [leagues, data] = await Promise.all([
       serverGet<LeagueInfo[]>("/api/v1/leagues"),
@@ -89,6 +93,20 @@ export default async function MatchesPage({
         revalidate: 60,
       }),
     ]);
+    if (
+      data.total === 0 &&
+      status === "upcoming" &&
+      sp.window == null &&
+      !date &&
+      !season &&
+      !q
+    ) {
+      qs.set("window", "all");
+      data = await serverGet<MatchListResponse>(`/api/v1/matches?${qs.toString()}`, {
+        revalidate: 60,
+      });
+      windowWidened = true;
+    }
   } catch {
     return (
       <main className={styles.page}>
@@ -134,6 +152,11 @@ export default async function MatchesPage({
           当前筛选共 <span className="num">{data.total}</span> 场
         </span>
       </div>
+      {windowWidened && (
+        <p className={styles.widenNote}>
+          未来 7 天暂无比赛,已自动展示全部未来赛程。
+        </p>
+      )}
       <Link href="/leagues" className={styles.leagueDirectoryLink}>
         浏览联赛排名与球队数据 →
       </Link>

@@ -1233,6 +1233,14 @@ export interface components {
             uncertainty: components["schemas"]["BundleUncertaintyItem"][];
             /** Odds Timeline */
             odds_timeline: components["schemas"]["BundleOddsPoint"][];
+            /**
+             * Odds Coverage Tier
+             * @default none
+             * @enum {string}
+             */
+            odds_coverage_tier: "full_timeline" | "open_close_only" | "none";
+            /** Odds Summary Points */
+            odds_summary_points?: components["schemas"]["LegacyOddsPointItem"][] | null;
             /** Cooccurring Events */
             cooccurring_events: components["schemas"]["BundleCoocEvent"][];
             /** Chart Specs */
@@ -1753,6 +1761,10 @@ export interface components {
         /**
          * LegacyOddsPointItem
          * @description 旧项目历史赔率的两点摘要(初盘/临场),无观测时间戳(§6.2:不伪装)。
+         *
+         *     /odds 端点的 summary_points 与 analysis/studio bundle 的
+         *     odds_summary_points 共用本模型——刻意没有任何时间字段,绝不拿
+         *     ingested_at 或开球时间顶替观测时间。
          */
         LegacyOddsPointItem: {
             /** Market */
@@ -2044,6 +2056,13 @@ export interface components {
             limit: number;
             /** Offset */
             offset: number;
+            /** Season */
+            season?: string | null;
+            /**
+             * Available Seasons
+             * @default []
+             */
+            available_seasons: string[];
             /** Matches */
             matches: components["schemas"]["MatchSummary"][];
         };
@@ -2128,6 +2147,8 @@ export interface components {
             probability_source?: ("MODEL" | "MARKET_BASELINE" | "UNAVAILABLE") | null;
             /** Odds Observation Count */
             odds_observation_count?: number | null;
+            /** Odds Coverage Tier */
+            odds_coverage_tier?: ("full_timeline" | "open_close_only" | "none") | null;
         };
         /** MeDTO */
         MeDTO: {
@@ -2549,6 +2570,14 @@ export interface components {
             uncertainty: components["schemas"]["BundleUncertaintyItem"][];
             /** Odds Timeline */
             odds_timeline: components["schemas"]["BundleOddsPoint"][];
+            /**
+             * Odds Coverage Tier
+             * @default none
+             * @enum {string}
+             */
+            odds_coverage_tier: "full_timeline" | "open_close_only" | "none";
+            /** Odds Summary Points */
+            odds_summary_points?: components["schemas"]["LegacyOddsPointItem"][] | null;
             /** Cooccurring Events */
             cooccurring_events: components["schemas"]["BundleCoocEvent"][];
             /** Chart Specs */
