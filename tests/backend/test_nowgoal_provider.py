@@ -1,7 +1,10 @@
 """P0.7 测试:NowGoal / FotMob Provider Adapter 纯解析函数。
 
-fixture 数据放 tests/fixtures/nowgoal/,按旧项目代码审计的格式构造,
-真实端点未验证(UNVERIFIED,见 docs/data-sources.md)。
+fixture 数据放 tests/fixtures/nowgoal/。type=6(日程)与 type=14(赔率,
+odds_sample_real_shape.json)结构均已在 2026-07-21 瑞典超接入实验中用真实
+titan_id 交叉验证过(见 docs/data-sources.md);odds_sample.json/poll_fixture.json
+是仍受支持的旧构造形状(companies 直接列表 + name 字段),parse_odds() 对两种
+形状都兼容。公司覆盖范围(除 Bet365/Sbobet 外)与历史回填仍 UNVERIFIED。
 """
 
 import json
@@ -87,6 +90,46 @@ class TestParseOdds:
     def test_no_companies(self):
         assert nowgoal.parse_odds({}) == []
         assert nowgoal.parse_odds({"companies": []}) == []
+
+
+class TestParseOddsRealShape:
+    """真实响应结构回归测试(2026-07-21,瑞典超接入实验中 titan_id=2912218 真实
+    probe 首次验证 type=14):顶层是 {ErrCode, Data:{mixodds:[...]}, MatchState},
+    不是旧项目审计构造假设的 {companies:[...]}；公司名字段是 'cn' 不是 'name'。
+
+    两个真实 bug(此前完全 UNVERIFIED,首次真实探测才发现):
+      1. _iter_companies 原来只会把 Data 当成"字典转列表"(list(d.values())),
+         取不到 Data.mixodds 这一层,导致真实响应下 parse_odds 恒返回空列表；
+      2. _company_records 原来只认 'name'/'company' 字段,真实响应用 'cn',
+         导致 company_name 恒为空字符串。
+    fixture 数值本身是脱敏占位,不是真实盘口——只用于锁定字段名与嵌套层级。
+    """
+
+    def _payload(self) -> dict:
+        return json.loads((FIXTURES / "odds_sample_real_shape.json").read_text(encoding="utf-8"))
+
+    def test_reaches_mixodds_nested_under_data(self):
+        records = nowgoal.parse_odds(self._payload())
+        cids = {r["company_id"] for r in records}
+        assert cids == {"8", "31"}   # 目标 cid 8/31 命中;cid=50 非目标不选
+        assert records, "真实结构下 parse_odds 不应返回空列表(回归此前 0 条的 bug)"
+
+    def test_company_name_from_cn_field(self):
+        records = nowgoal.parse_odds(self._payload())
+        names = {r["company_id"]: r["company_name"] for r in records}
+        assert names["8"] == "Bet365"
+        assert names["31"] == "Sbobet"
+
+    def test_field_values_correct_under_real_shape(self):
+        records = nowgoal.parse_odds(self._payload())
+        r_1x2 = next(r for r in records if r["company_id"] == "8" and r["market"] == "1x2")
+        assert r_1x2["initial"] == {"home": 2.10, "draw": 3.40, "away": 3.50}
+        assert r_1x2["latest"] == {"home": 2.05, "draw": 3.40, "away": 3.60}
+
+    def test_legacy_companies_shape_still_supported(self):
+        """companies 直接列表 + name 字段(旧项目审计构造)不能因这次修复回归。"""
+        records = nowgoal.parse_odds(_odds_payload())
+        assert {r["company_id"] for r in records} == {"8", "31"}
 
 
 # ── 主客反转 ─────────────────────────────────────────────────────────────
@@ -209,9 +252,11 @@ class TestFotmobSnapshots:
 
     def test_fetch_requires_proxy_env(self, monkeypatch):
         monkeypatch.delenv("THORDATA_PROXY", raising=False)
-        # 阻断 .env 回填,确保走缺配置分支
-        import dotenv
-
-        monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
+        # FotMobClient 以 ``from dotenv import load_dotenv`` 持有模块别名；
+        # 必须 patch 实际调用点，避免全量测试前序加载 .env 后污染本用例。
+        monkeypatch.setattr(
+            "backend.fotmob_client.load_dotenv",
+            lambda *a, **k: None,
+        )
         with pytest.raises(RuntimeError, match="THORDATA_PROXY"):
             fotmob_snapshots.fetch_match_payload(4193490)

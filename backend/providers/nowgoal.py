@@ -185,10 +185,16 @@ def _parse_group(group, market: str) -> dict | None:
 
 
 def _iter_companies(payload: dict):
+    """公司列表定位:优先旧项目审计构造的 `companies`/`Data`(直接列表/字典),
+    真实响应(2026-07-21 titan_id=2912218 实测,ErrCode=0)确认实际是
+    `Data.mixodds`(列表,元素形如 {cid, cn, euro, ah, ou})——旧构造未预见这一层
+    嵌套,故在两种形状都取不到列表时再尝试 `Data.mixodds`。"""
     companies = payload.get("companies")
     if companies is None:
         companies = payload.get("Data")
-    if isinstance(companies, dict):
+    if isinstance(companies, dict) and "mixodds" in companies:
+        companies = companies.get("mixodds")
+    elif isinstance(companies, dict):
         companies = list(companies.values())
     if not isinstance(companies, list):
         return []
@@ -199,7 +205,9 @@ def _company_records(company: dict) -> list[dict]:
     cid = str(company.get("cid") or company.get("id") or "").strip()
     if not cid:
         return []
-    name = str(company.get("name") or company.get("company") or "").strip()
+    # 真实响应公司名字段是 'cn'(2026-07-21 titan_id=2912218 实测,cid=8 对应 cn='Bet365');
+    # 'name'/'company' 是旧项目审计构造时的猜测字段名,保留作回退。
+    name = str(company.get("cn") or company.get("name") or company.get("company") or "").strip()
     records = []
     for src_key, market in _MARKET_KEYS:
         block = company.get(src_key)

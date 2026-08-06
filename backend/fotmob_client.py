@@ -30,16 +30,12 @@ from typing import Optional, Union, List, Dict, Any
 from curl_cffi import requests as cffi_requests
 from dotenv import load_dotenv
 
-load_dotenv()
-
 log = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ThorData 住宅代理（轮换会话，每次请求自动换 IP）— 凭证从 .env 读取
+# ThorData 住宅代理（轮换会话，每次请求自动换 IP）
 # ─────────────────────────────────────────────────────────────────────────────
-THORDATA_PROXY = os.environ["THORDATA_PROXY"]
-
-PROXIES = {"http": THORDATA_PROXY, "https": THORDATA_PROXY}
+_DEFAULT_PROXY = object()
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -156,6 +152,42 @@ def _extract_kickoff_utc(general: dict, content: dict) -> Optional[str]:
     return None
 
 
+# dim_match.status 的封闭词表(CLAUDE.md §6.2.1 / §6.3):四个值,没有第五个。
+# 全站消费方只认这四个:poll_windows.py 的 upcoming_precise_matches()
+# (status='NotStarted')、queries/matches.py(status IN ('NotStarted','InPlay'))、
+# 多处已完赛判定(status='Finish')。把来源的 reason.short 原样透传(旧代码的
+# 行为)会让该场比赛对上述每一个查询同时不可见,和历史 bug 里恒返回 'Unknown'
+# 是同一类静默失踪缺陷,因此这里改成封闭四值而不是透传来源原始短码。
+STATUS_FINISH = "Finish"
+STATUS_NOT_STARTED = "NotStarted"
+STATUS_IN_PLAY = "InPlay"
+STATUS_CANCELLED = "Cancelled"
+
+
+def derive_match_status(status_obj: Any) -> str:
+    """FotMob header.status 的布尔三元组 → dim_match.status 封闭词表。
+
+    parse_match_dim(match_details 详情页)与
+    backend/ingest/ingest_future_fixtures.py 的 _status_from_fixture(赛程列表页)
+    读的是同一个 status 对象形状(started/finished/cancelled),必须共用本函数,
+    不能各写一份、慢慢互相漂移。
+
+    ⚠️ 真实赛前 header.status 没有 `reason` 键(只有
+    cancelled/finished/halfs/started/timezone/utcTime 等)。旧代码
+    `status_obj.get("reason", {}).get("short", "Unknown")` 因此对任何赛前
+    比赛恒返回 'Unknown',导致该场比赛被 poll_windows.upcoming_precise_matches
+    (过滤 status='NotStarted')永久排除出赔率轮询窗口。
+    """
+    st = status_obj if isinstance(status_obj, dict) else {}
+    if st.get("finished"):
+        return STATUS_FINISH          # 含 FT / AET / Pen / AW(点球告负判负胜)等来源短码
+    if st.get("cancelled"):
+        return STATUS_CANCELLED
+    if st.get("started"):
+        return STATUS_IN_PLAY
+    return STATUS_NOT_STARTED
+
+
 def _split_scores_str(value: Any) -> "tuple[Optional[int], Optional[int]]":
     """把 "71-27" 形式的比分字符串拆成 (进球, 失球)，解析失败返回 (None, None)。"""
     if not isinstance(value, str) or "-" not in value:
@@ -201,19 +233,78 @@ def _get_stat_value(stats_data: Any, *keys: str) -> Optional[Any]:
     return None
 
 
+class FotMobError(RuntimeError):
+    """FotMob request failure whose message is safe for logs and callers."""
+
+
+class FotMobTransportError(FotMobError):
+    """Transport failure with all external exception text removed."""
+
+
+class FotMobHTTPError(FotMobError):
+    """Non-success HTTP response with response body deliberately omitted."""
+
+
+class FotMobDecodeError(FotMobError):
+    """Response decoding failure with external content deliberately omitted."""
+
+
+def _safe_exception_class_name(exc: BaseException) -> str:
+    """Return only a Python identifier, never external exception text."""
+    name = type(exc).__name__
+    return name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) else "Exception"
+
+
+_SAFE_RESPONSE_OPERATIONS = frozenset({
+    "check_ip",
+    "daily_matches",
+    "fetch_stat_leaderboard",
+    "league_matches",
+    "match_details",
+    "team_data",
+})
+
+
+def _safe_response_operation_name(operation: str) -> str:
+    """Return a fixed internal operation label, never caller/external text."""
+    return operation if operation in _SAFE_RESPONSE_OPERATIONS else "response"
+
+
 class FotMobClient:
-    """无浏览器 FotMob 数据客户端"""
+    """无浏览器 FotMob 数据客户端。
+
+    模块 import 不加载 ``.env``、不读取代理环境变量。显式 ``proxy=""`` 表示
+    离线/直连构造且完全绕过凭证解析；只有未传 ``proxy`` 的默认 live client
+    才先看已有环境变量，并在缺失时加载一次 ``.env``。
+    """
 
     def __init__(
         self,
-        proxy: str = THORDATA_PROXY,
+        proxy: Any = _DEFAULT_PROXY,
         impersonate: str = "chrome131",
         timeout: int = 25,
         max_retries: int = 3,
         retry_delay: float = 2.0,
     ):
-        self.proxy = proxy
-        self.proxies = {"http": proxy, "https": proxy} if proxy else {}
+        if proxy is _DEFAULT_PROXY:
+            resolved_proxy = os.environ.get("THORDATA_PROXY")
+            if not resolved_proxy:
+                load_dotenv()
+                resolved_proxy = os.environ.get("THORDATA_PROXY")
+            if not resolved_proxy:
+                raise RuntimeError(
+                    "THORDATA_PROXY is required for the default live FotMobClient"
+                )
+        else:
+            resolved_proxy = proxy
+        if not isinstance(resolved_proxy, str):
+            raise TypeError("proxy must be a string")
+
+        self.proxy = resolved_proxy
+        self.proxies = (
+            {"http": resolved_proxy, "https": resolved_proxy}
+            if resolved_proxy else {}
+        )
         self.impersonate = impersonate
         self.timeout = timeout
         self.max_retries = max_retries
@@ -224,7 +315,7 @@ class FotMobClient:
     # ─────────────────────────────────────────────────────────────────────
     def _get(self, url: str, headers: Optional[dict] = None) -> cffi_requests.Response:
         hdrs = {**DEFAULT_HEADERS, **(headers or {})}
-        last_err = None
+        last_err: Optional[FotMobError] = None
         # 硬性墙钟超时：thordata 代理隧道偶发"连接建立但代理无响应"的挂起，
         # curl_cffi 自身的 timeout 参数在这种场景下不会触发（实测挂起过 15+ 分钟）。
         # 用 daemon 线程 + 墙钟超时兜底，到点强制放弃本次尝试、进入下一次重试。
@@ -242,7 +333,13 @@ class FotMobClient:
                         impersonate=self.impersonate,
                         timeout=self.timeout,
                     )
-                    result_q.put(("ok", resp))
+                    raw_status = getattr(resp, "status_code", None)
+                    status_code = (
+                        raw_status
+                        if type(raw_status) is int
+                        else None
+                    )
+                    result_q.put(("ok", (resp, status_code)))
                 except Exception as exc:
                     result_q.put(("err", exc))
 
@@ -254,34 +351,50 @@ class FotMobClient:
                 # 线程仍未返回：硬性墙钟超时命中，放弃本次尝试（线程作为 daemon 泄漏，
                 # 不阻塞进程退出，底层连接最终会自行断开或随进程退出回收）
                 log.warning(
-                    "[FotMob] 硬性墙钟超时(%ds) on %s (attempt %d/%d)：放弃本次尝试",
-                    hard_timeout, url, attempt, self.max_retries,
+                    "[FotMob] hard wall-clock timeout after %ds "
+                    "(attempt %d/%d)",
+                    hard_timeout, attempt, self.max_retries,
                 )
-                last_err = TimeoutError(f"hard wall-clock timeout after {hard_timeout}s: {url}")
+                last_err = FotMobTransportError(
+                    "FotMob transport error HardTimeout "
+                    f"(attempt {attempt}/{self.max_retries})"
+                )
             else:
                 status, payload = result_q.get()
                 if status == "ok":
-                    r = payload
-                    if r.status_code == 200:
+                    r, status_code = payload
+                    if status_code == 200:
                         return r
-                    if r.status_code == 403:
+                    if status_code is None:
                         log.warning(
-                            "[FotMob] 403 on %s (attempt %d/%d) — %s",
-                            url, attempt, self.max_retries, r.text[:120],
+                            "[FotMob] HTTP status unavailable "
+                            "(attempt %d/%d)",
+                            attempt, self.max_retries,
+                        )
+                        last_err = FotMobHTTPError(
+                            "FotMob HTTP error: status unavailable "
+                            f"(attempt {attempt}/{self.max_retries})"
                         )
                     else:
                         log.warning(
-                            "[FotMob] HTTP %d on %s (attempt %d/%d)",
-                            r.status_code, url, attempt, self.max_retries,
+                            "[FotMob] HTTP status %d (attempt %d/%d)",
+                            status_code, attempt, self.max_retries,
                         )
-                    last_err = Exception(f"HTTP {r.status_code}: {r.text[:200]}")
+                        last_err = FotMobHTTPError(
+                            f"FotMob HTTP error: HTTP status {status_code} "
+                            f"(attempt {attempt}/{self.max_retries})"
+                        )
                 else:
                     e = payload
+                    exception_class = _safe_exception_class_name(e)
                     log.warning(
-                        "[FotMob] Request error on %s (attempt %d/%d): %s",
-                        url, attempt, self.max_retries, e,
+                        "[FotMob] transport error %s (attempt %d/%d)",
+                        exception_class, attempt, self.max_retries,
                     )
-                    last_err = e
+                    last_err = FotMobTransportError(
+                        f"FotMob transport error {exception_class} "
+                        f"(attempt {attempt}/{self.max_retries})"
+                    )
 
             if attempt < self.max_retries:
                 # 指数退避：第 N 次重试基础延迟翻倍，代理池持续抖动时不再用同一节奏
@@ -290,16 +403,81 @@ class FotMobClient:
                 sleep = self.retry_delay * (2 ** (attempt - 1)) + random.uniform(0.5, 1.5)
                 time.sleep(sleep)
 
-        raise last_err or Exception(f"Failed after {self.max_retries} retries: {url}")
+        if last_err is None:
+            last_err = FotMobTransportError(
+                "FotMob transport error Unknown "
+                f"(attempts {self.max_retries})"
+            )
+        raise last_err from None
 
     # ─────────────────────────────────────────────────────────────────────
     # 内部：从 SSR HTML 提取 __NEXT_DATA__
     # ─────────────────────────────────────────────────────────────────────
-    def _extract_next_data(self, html: str) -> dict:
+    def _raise_response_decode_error(
+        self,
+        operation: str,
+        exception_class: str,
+    ) -> None:
+        safe_operation = _safe_response_operation_name(operation)
+        safe_exception_class = (
+            exception_class
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", exception_class)
+            else "Exception"
+        )
+        log.warning(
+            "[FotMob] response decode error operation=%s type=%s",
+            safe_operation,
+            safe_exception_class,
+        )
+        raise FotMobDecodeError(
+            "FotMob response decode error "
+            f"{safe_operation} {safe_exception_class}"
+        ) from None
+
+    def _decode_json_response(
+        self,
+        response: cffi_requests.Response,
+        operation: str,
+    ) -> dict:
+        exception_class = None
+        try:
+            return response.json()
+        except Exception as exc:
+            exception_class = _safe_exception_class_name(exc)
+
+        self._raise_response_decode_error(operation, exception_class)
+
+    def _read_response_text(
+        self,
+        response: cffi_requests.Response,
+        operation: str,
+    ) -> str:
+        exception_class = None
+        try:
+            return response.text
+        except Exception as exc:
+            exception_class = _safe_exception_class_name(exc)
+
+        self._raise_response_decode_error(operation, exception_class)
+
+    def _extract_next_data(
+        self,
+        html: str,
+        operation: str = "match_details",
+    ) -> dict:
         m = _NEXT_DATA_RE.search(html)
         if not m:
-            raise ValueError("__NEXT_DATA__ not found in HTML")
-        return json.loads(m.group(1))
+            self._raise_response_decode_error(
+                operation, "MissingNextData",
+            )
+
+        exception_class = None
+        try:
+            return json.loads(m.group(1))
+        except Exception as exc:
+            exception_class = _safe_exception_class_name(exc)
+
+        self._raise_response_decode_error(operation, exception_class)
 
     # ─────────────────────────────────────────────────────────────────────
     # 公开 API — 原始数据
@@ -307,13 +485,10 @@ class FotMobClient:
 
     def check_ip(self) -> dict:
         """验证代理 IP 是否正常工作，返回 IP 信息"""
-        r = cffi_requests.get(
-            "https://httpbin.org/ip",
-            proxies=self.proxies,
-            impersonate=self.impersonate,
-            timeout=10,
-        )
-        return r.json()
+        # 复用同一安全 transport 边界，避免代理连通性检查把底层异常原文直接
+        # 抛给调用方。该方法仍只会在显式调用时访问外部服务。
+        r = self._get("https://httpbin.org/ip")
+        return self._decode_json_response(r, "check_ip")
 
     def daily_matches(self, date: str) -> dict:
         """
@@ -323,7 +498,7 @@ class FotMobClient:
         """
         url = f"https://www.fotmob.com/api/data/matches?date={date}&timezone=Asia%2FShanghai&ccode3=JPN"
         r = self._get(url, headers={"Accept": "application/json"})
-        return r.json()
+        return self._decode_json_response(r, "daily_matches")
 
     def match_details(self, match_id: Union[int, str]) -> dict:
         """
@@ -335,12 +510,21 @@ class FotMobClient:
         """
         url = f"https://www.fotmob.com/match/{match_id}"
         r = self._get(url, headers={"Accept": "text/html"})
-        nd = self._extract_next_data(r.text)
-        page_props = nd.get("props", {}).get("pageProps", {})
-        if not page_props or not page_props.get("general"):
-            raise ValueError(
-                f"Empty pageProps for match {match_id} — "
-                f"possible Cloudflare block or invalid match ID"
+        html = self._read_response_text(r, "match_details")
+        nd = self._extract_next_data(html, "match_details")
+        props = nd.get("props") if isinstance(nd, dict) else None
+        page_props = (
+            props.get("pageProps")
+            if isinstance(props, dict)
+            else None
+        )
+        if (
+            not isinstance(page_props, dict)
+            or not isinstance(page_props.get("general"), dict)
+            or not page_props["general"]
+        ):
+            self._raise_response_decode_error(
+                "match_details", "InvalidPageProps",
             )
         return page_props
 
@@ -374,7 +558,26 @@ class FotMobClient:
         if season:
             url += f"&season={season}"
         r = self._get(url, headers={"Accept": "application/json"})
-        return r.json()
+        return self._decode_json_response(r, "league_matches")
+
+    def team_data(self, team_id: Union[int, str], season: str = "") -> dict:
+        """
+        获取球队总览数据（含 details/fixtures/overview/table/squad/history 等）。
+
+        新增于 analysis/team_schedule_pilot 可行性 pilot（见
+        docs/audits/team-schedule-pilot.md）。
+
+        ⚠️ 实测（2026-07-23，team_id=8456）：`season` 参数对返回内容**没有
+        可观测影响**——该端点不是"按赛季查询历史赛程"接口，而是以当前时刻
+        为中心的"最近 + 未来"滚动窗口（实测 50 场，`details.latestSeason`/
+        `overview.season` 恒为来源当前赛季，不随 season 参数变化）。调用方
+        不得假设传入 season 就能取回该赛季完整历史赛程。
+        """
+        url = f"https://www.fotmob.com/api/data/teams?id={team_id}"
+        if season:
+            url += f"&season={season}"
+        r = self._get(url, headers={"Accept": "application/json"})
+        return self._decode_json_response(r, "team_data")
 
     # ─────────────────────────────────────────────────────────────────────
     # 公开 API — DB-ready 解析方法（字段名与数据库列名一致）
@@ -393,6 +596,7 @@ class FotMobClient:
 
         返回字段（对应 dim_match 列）:
           Match_ID, Season, League_ID, Date,
+          kickoff_at_utc, kickoff_precision, kickoff_source,
           Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name,
           home_score, away_score, status,
           Temperature, Wind_Speed, Referee, Match_Round, Who_Lost_On_Penalties
@@ -437,7 +641,7 @@ class FotMobClient:
                 h_score = a_score = None
 
         # ── 比赛状态 ─────────────────────────────────────────────────────
-        match_status = "Finish" if status_obj.get("finished") else status_obj.get("reason", {}).get("short", "Unknown")
+        match_status = derive_match_status(status_obj)
 
         # ── 联赛 ID / 日期（来自调用方，或从 general 推断）──────────────
         if league_id is None:
@@ -1093,7 +1297,7 @@ class FotMobClient:
            "LeagueName": "..."}
         """
         r = self._get(url, headers={"Accept": "application/json"})
-        return r.json()
+        return self._decode_json_response(r, "fetch_stat_leaderboard")
 
     def parse_season_player_stats(
         self,
@@ -1121,8 +1325,13 @@ class FotMobClient:
                 continue
             try:
                 data = self.fetch_stat_leaderboard(url)
-            except Exception as e:
-                log.warning("[SeasonPlayerStats] 拉取 %s 失败: %s", stat_name, e)
+            except Exception as exc:
+                exception_class = _safe_exception_class_name(exc)
+                log.warning(
+                    "[SeasonPlayerStats] fetch_stat_leaderboard failed "
+                    "(%s); skipping dimension",
+                    exception_class,
+                )
                 continue
 
             top_lists = data.get("TopLists") or []
