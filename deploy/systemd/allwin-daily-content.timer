@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh allwin schedule and content twice daily
+
+[Timer]
+OnCalendar=*-*-* 06:15:00 Asia/Shanghai
+OnCalendar=*-*-* 18:15:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=5min
+Unit=allwin-daily-content.service
+
+[Install]
+WantedBy=timers.target

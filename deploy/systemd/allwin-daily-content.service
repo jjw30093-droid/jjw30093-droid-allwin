@@ -1,0 +1,22 @@
+[Unit]
+Description=allwin fresh active-league content build
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/etc/allwin/content.env
+ExecStart=/opt/allwin/current/scripts/daily_content.sh --league eliteserien --fresh
+TimeoutStartSec=1800
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/allwin
+
+[Install]
+WantedBy=multi-user.target

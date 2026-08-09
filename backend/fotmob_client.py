@@ -909,7 +909,10 @@ class FotMobClient:
 
         # ── 从 lineup 构建 player_id → name 补全映射 ─────────────────────
         player_name_map = {}
-        lineup_raw = content.get("lineup", {}).get("lineup", [])
+        # content["lineup"] 键存在但值为 None 时(该场比赛 FotMob 未提供阵容,
+        # 真实例子 match_id=4404667),.get(...,{}) 拿不到默认值——键存在就直接
+        # 返回 None,再 .get 就崩;用 `or {}` 兜底 None 与缺键两种情况。
+        lineup_raw = (content.get("lineup") or {}).get("lineup", [])
         for team_lineup in lineup_raw:
             for group in ["players", "bench"]:
                 for p in team_lineup.get(group, []):
@@ -1235,10 +1238,34 @@ class FotMobClient:
         每个分档(table_type)下是一份球队列表；xg 档额外含
         xg/xg_conceded/x_points/x_position，其它档这四列为 None。
         """
-        table_data = (
-            ((league_data.get("table") or [{}])[0].get("data", {}) or {})
-            .get("table", {})
-        ) or {}
+        data_node = ((league_data.get("table") or [{}])[0].get("data", {}) or {})
+        table_data = data_node.get("table", {}) or {}
+        if not table_data:
+            # 分组赛制赛季(如 K1 常规轮+冠军/保级组、J联赛 2026 过渡期东西分组)
+            # 没有 data.table,只有 data.tables[]——每个子表各带 leagueName 与
+            # 内层 table.{all,home,away,xg}。与主联赛同名的子表是总表,按普通
+            # table_type 发出(standings 查询消费 'all');分组子表的 table_type
+            # 加 ":组名" 后缀保留数据,绝不与总表混在同一 'all' 里(位次会互相
+            # 冲突)。没有总表的赛季(J1 2026 过渡赛)诚实地只有分组行。
+            # 名称比较必须归一化:真实响应里顶层 leagueName 与子表写法存在
+            # "K League 1" vs "K-League 1" 这类连字符/空格差异,严格相等会把
+            # 总表误判成分组表(2026-08-07 真实踩坑)。
+            def _norm(name) -> str:
+                return "".join(ch for ch in str(name or "").lower() if ch.isalnum())
+
+            main_name = _norm(data_node.get("leagueName"))
+            merged: dict = {}
+            for sub in data_node.get("tables") or []:
+                if not isinstance(sub, dict):
+                    continue
+                sub_name = str(sub.get("leagueName") or "").strip()
+                inner = sub.get("table") or {}
+                if not isinstance(inner, dict):
+                    continue
+                suffix = "" if _norm(sub_name) == main_name else f":{sub_name}"
+                for key, teams in inner.items():
+                    merged[f"{key}{suffix}"] = teams
+            table_data = merged
 
         mapped_keys = {
             "name", "shortName", "id", "pageUrl", "deduction", "ongoing",

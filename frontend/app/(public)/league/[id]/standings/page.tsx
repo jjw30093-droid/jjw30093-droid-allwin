@@ -1,71 +1,15 @@
-import { fetchLeagueOverview, type StandingRow } from "@/lib/api";
+import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionPath, serverGetOptional, type StandingsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
+import { StandingsTable } from "@/components/league/StandingsTable";
+import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
+import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./standings.module.css";
 
-const QUAL_LABELS: Record<string, string> = {
-  "#2AD572": "欧冠资格",
-  "#0046A7": "欧联资格",
-  "#02CCF0": "欧协联附加",
-  "#FF4646": "降级区",
-};
-
-function GoalDiff({ value }: { value: number }) {
-  const sign = value > 0 ? "+" : "";
-  const cls = value > 0 ? styles.gdPos : value < 0 ? styles.gdNeg : "";
-  return (
-    <span className={`${styles.num} ${cls}`}>
-      {sign}
-      {value}
-    </span>
-  );
-}
-
-function Row({ row, isChampion }: { row: StandingRow; isChampion: boolean }) {
-  return (
-    <tr className={isChampion ? styles.championRow : undefined}>
-      <td className={styles.rank}>
-        {row.qual_color && (
-          <span
-            className={styles.qualStripe}
-            style={{ background: row.qual_color }}
-          />
-        )}
-        <span className={styles.num}>{row.position}</span>
-      </td>
-      <td className={styles.team}>
-        <span className={styles.teamNameZh}>
-          {row.team_name_zh ?? `Team ${row.team_id}`}
-        </span>
-        {isChampion && (
-          <span
-            style={{
-              marginLeft: 8,
-              fontSize: 11,
-              color: "#2A1B06",
-              background: "var(--gold-grad)",
-              borderRadius: "var(--r-pill)",
-              padding: "2px 8px",
-              fontWeight: 700,
-            }}
-          >
-            冠军
-          </span>
-        )}
-      </td>
-      <td className={styles.num}>{row.played}</td>
-      <td className={`${styles.num} ${styles.wdl}`}>{row.wins}</td>
-      <td className={`${styles.num} ${styles.wdl}`}>{row.draws}</td>
-      <td className={`${styles.num} ${styles.wdl}`}>{row.losses}</td>
-      <td className={`${styles.num} ${styles.gf}`}>{row.goals_for}</td>
-      <td className={`${styles.num} ${styles.ga}`}>{row.goals_against}</td>
-      <td>
-        <GoalDiff value={row.goal_diff} />
-      </td>
-      <td className={`${styles.num} ${styles.points}`}>{row.points}</td>
-    </tr>
-  );
-}
-
+// 已迁移到 /api/v1/leagues/{id}/standings(联赛门禁 + TeamRef 中文名解析在服务端):
+// - 免费联赛(英超等):服务端匿名取数直接 SSR,公共 HTML 不因登录态变化;
+// - Pro 联赛(西甲/德甲/意甲/法甲):匿名取数被 401/403 挡下 → 渲染客户端
+//   会员加载器,浏览器带会话 cookie 重取;无权益时显示会员引导,不再渲染空表格。
 export default async function StandingsPage({
   params,
   searchParams,
@@ -76,81 +20,49 @@ export default async function StandingsPage({
   const { id } = await params;
   const { season: seasonParam } = await searchParams;
 
-  let data;
+  let data: StandingsResponse | null;
   try {
-    data = await fetchLeagueOverview(id, seasonParam);
-  } catch (err) {
+    data = await serverGetOptional<StandingsResponse>(
+      leagueSectionPath("standings", id, seasonParam)
+    );
+  } catch {
     return (
       <main className={styles.page}>
         <LeagueNav leagueId={id} active="standings" season={seasonParam} />
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
-          <p>
-            后端 serving API 未响应,请确认 backend/api_server.py 已启动。
-            <br />
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              {err instanceof Error ? err.message : String(err)}
-            </span>
-          </p>
+          <p>该联赛数据尚未同步，或数据服务暂时不可用。请稍后再试。</p>
         </div>
       </main>
     );
   }
 
-  const usedQualColors = Array.from(
-    new Set(data.standings.map((r) => r.qual_color).filter(Boolean))
-  ) as string[];
+  const leagueNameZh = await fetchLeagueNameZh(id);
+  // resolvedSeason = 后端实际返回的赛季(徽章展示"在看什么");seasonParam = 用户
+  // 显式选择(导航跨 tab 只带这个)——两者不能混用,否则一个 tab 的默认值会变成
+  // 其它 tab 的显式选择,导致点导航跳到用户没选过的赛季(见 docs/data-plan.md)。
+  const resolvedSeason = data?.season ?? seasonParam;
 
   return (
     <main className={styles.page}>
-      <LeagueNav leagueId={id} active="standings" season={data.season} />
+      <LeagueNav leagueId={id} active="standings" season={seasonParam} />
       <div className={styles.header}>
-        <h1 className={styles.title}>英超 · 排名榜</h1>
-        <span className={styles.seasonChip}>{data.season}</span>
+        <h1 className={styles.title}>{leagueNameZh} · 排名榜</h1>
       </div>
+      {data && (
+        <SeasonSwitcher
+          leagueId={id}
+          section="standings"
+          seasons={data.available_seasons}
+          selected={seasonParam}
+          resolved={resolvedSeason}
+        />
+      )}
 
-      <div className={styles.card}>
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>名次</th>
-                <th>球队</th>
-                <th>场次</th>
-                <th className={styles.wdl}>胜</th>
-                <th className={styles.wdl}>平</th>
-                <th className={styles.wdl}>负</th>
-                <th>进球</th>
-                <th>失球</th>
-                <th>净胜</th>
-                <th>积分</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.standings.map((row) => (
-                <Row
-                  key={row.team_id}
-                  row={row}
-                  isChampion={row.position === 1}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {usedQualColors.length > 0 && (
-        <div className={styles.legend}>
-          {usedQualColors.map((color) => (
-            <span key={color}>
-              <span
-                className={styles.legendDot}
-                style={{ background: color }}
-              />
-              {QUAL_LABELS[color] ?? color}
-            </span>
-          ))}
-        </div>
+      {data ? (
+        <StandingsTable rows={data.rows} />
+      ) : (
+        <MemberLeagueSection kind="standings" leagueId={id} season={seasonParam} />
       )}
     </main>
   );

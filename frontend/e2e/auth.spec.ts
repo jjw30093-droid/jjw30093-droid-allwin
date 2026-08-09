@@ -15,6 +15,10 @@ test("mock 微信登录 → 会员完整概率 → 非管理员被拒", async ({
   await expect(page.getByText("E2E会员").first()).toBeVisible();
   await expect(page.getByText("当前套餐").first()).toBeVisible();
   await expect(page.getByText(/pro/i).first()).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.getByTestId("mobile-bottom-nav").getByRole("link", { name: "我的" }),
+  ).toHaveAttribute("href", "/account");
 
   // 会员解锁:详情页出现完整三项概率(48/27/25)
   const id = seedMatchId();

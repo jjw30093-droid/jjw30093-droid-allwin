@@ -67,6 +67,7 @@ def import_gold(conn_platform, conn_core, dry_run: bool = False) -> dict:
         description="极简 baseline:l10 滚动 xG 估 λ,DC 低比分修正 ρ=-0.005274,isotonic 按类校准",
         params={"rho": -0.005274, "features": ["xg_for_l10", "xg_against_l10"], "n_goals": 10},
         train_range="2020/21–2024/25(EPL)",
+        applicable_league_ids=[47],
         metrics={
             "test_season": "2025/26",
             "rps": 0.2143,
@@ -80,7 +81,8 @@ def import_gold(conn_platform, conn_core, dry_run: bool = False) -> dict:
         """SELECT g.match_id, g.season, g.p_home, g.p_draw, g.p_away,
                   g.lambda_home, g.lambda_away, g.confidence, g.reason, g.updated_at,
                   m.Date AS match_date, m.kickoff_at_utc AS kickoff_at_utc,
-                  m.kickoff_precision AS kickoff_precision, m.kickoff_source AS kickoff_source
+                  m.kickoff_precision AS kickoff_precision, m.kickoff_source AS kickoff_source,
+                  m.League_ID AS league_id
            FROM gold_wdl_predictions g JOIN dim_match m ON m.Match_ID = g.match_id
            ORDER BY g.match_id"""
     ).fetchall()
@@ -123,6 +125,7 @@ def import_gold(conn_platform, conn_core, dry_run: bool = False) -> dict:
             kickoff_at_utc=ko,
             kickoff_precision=precision,
             kickoff_source=source,
+            league_id=r["league_id"],
             model_version_id=MODEL_ID,
             home_win=probs[0], draw=probs[1], away_win=probs[2],
             generated_at=_norm_ts(r["updated_at"]),

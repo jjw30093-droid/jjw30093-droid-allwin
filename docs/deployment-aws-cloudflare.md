@@ -183,7 +183,7 @@ release,不 sudo、不 systemctl、不碰真实 `/opt/allwin`。
 | 2 | URI Path starts with `/login` OR `/member` OR `/account` OR `/admin` OR `/studio` | **Bypass cache** | 携带会话 Cookie 的 SSR 页面 |
 | 3 | 请求带 `Cookie` 或 `Authorization` 头(任意路径) | **Bypass cache** | 兜底:任何带凭证的请求都不进共享缓存;响应带 `Set-Cookie` 同样不得缓存(Cloudflare 默认遵守) |
 | 4 | URI Path starts with `/_next/static` | Cache eligible,Edge TTL: respect origin | 内容寻址文件名,源站已发 `immutable, max-age=31536000` |
-| 5 | URI Path starts with `/brand` | Cache eligible,respect origin | 静态品牌资源 |
+| 5 | URI Path starts with `/brand` OR `/api/v1/media/team-crests/` | Cache eligible,respect origin | 静态品牌资源与带内容版本的本地队徽 |
 | 6 | 匿名公开页 / 公开 API(其余 `/api/v1/*` GET 与免费 SEO 页) | respect origin(源站按需下发 `s-maxage`) | 免费层可短缓存引流;是否缓存由应用显式声明,边缘不猜 |
 
 `/healthz` `/readyz` 不缓存(源站已发 `no-store`)。
@@ -299,6 +299,7 @@ source_health 等外部数据源健康状况塞进公网 readiness 判定——�
 
 ```
 ALLWIN_DATA_DIR=/opt/allwin/shared/data   # SQLite 数据目录(release 之间共享)
+ALLWIN_MEDIA_DIR=/var/lib/allwin/media    # 队徽 manifest/PNG 持久缓存,不随 release 删除
 S3_BACKUP_BUCKET=                          # 可选:备份 S3 bucket 名;为空则仅本地备份
 BACKUP_KEEP=14                             # 本地保留备份份数
 # AWS_ACCESS_KEY_ID= / AWS_SECRET_ACCESS_KEY= / AWS_DEFAULT_REGION=ap-northeast-1

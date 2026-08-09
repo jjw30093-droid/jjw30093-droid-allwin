@@ -35,6 +35,12 @@ from schema import GOLD_WDL_PREDICTIONS_COLUMNS, _quote
 
 TRAIN_SEASONS = ["2020/2021", "2021/2022", "2022/2023", "2023/2024", "2024/2025"]
 
+# dc-baseline-1.M.2 的训练范围是且仅是 EPL(model_versions.applicable_league_ids
+# =[47])。season 字符串在五大联赛间同名("2025/2026"),特征表如今可含多联赛,
+# 无联赛谓词的 train/test 划分会把其它联赛场次静默卷进来,联赛基准与 ρ 全部
+# 漂移(2026-08-07 审计缺陷 #4)。
+LEAGUE_ID = 47
+
 # 固化后的模型参数(ρ / isotonic 校准器 / 联赛基准)存这里,供 C2(对未来赛程
 # 出预测)加载复用,不重新拟合。模型文件不进 git(见 .gitignore 的 *.pkl)。
 ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
@@ -76,8 +82,10 @@ def load_features(conn) -> pd.DataFrame:
                dm.Home_Team_Name AS home_team_name, dm.Away_Team_Name AS away_team_name
         FROM int_match_features imf
         JOIN dim_match dm ON imf.match_id = dm.Match_ID
+        WHERE imf.league_id = ?
         """,
         conn,
+        params=(LEAGUE_ID,),
     )
     return df
 
@@ -268,7 +276,12 @@ def write_predictions(conn, test_df: pd.DataFrame) -> int:
     col_names = [name for name, _ in GOLD_WDL_PREDICTIONS_COLUMNS if name != "updated_at"]
     out = out[col_names].astype(object).where(pd.notnull(out[col_names]), None)
 
-    conn.execute("DELETE FROM gold_wdl_predictions WHERE season = ?", (TEST_SEASON,))
+    # league_id 谓词与 predict_wdl_future.py 的已修复缺陷同型:无谓词会把其它
+    # 联赛同名赛季的 gold 行连带删除(test_predict_wdl_future.py 论证的风险)。
+    conn.execute(
+        "DELETE FROM gold_wdl_predictions WHERE season = ? AND league_id = ?",
+        (TEST_SEASON, LEAGUE_ID),
+    )
     placeholders = ", ".join("?" for _ in col_names)
     cols_sql = ", ".join(_quote(n) for n in col_names)
     conn.executemany(

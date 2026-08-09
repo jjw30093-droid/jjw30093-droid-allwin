@@ -1,0 +1,10 @@
+/var/log/allwin/content.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su allwin allwin
+}

@@ -1,0 +1,52 @@
+{
+  "asset_version": 1,
+  "match_id": 5104968,
+  "surface": "homepage_feature",
+  "exports": [
+    {
+      "name": "match-5104968-1600x900",
+      "width": 1600,
+      "height": 900,
+      "usage": "homepage_desktop",
+      "svg_sha256": "0b82326f6d55463b420e36a64b4c510ab2e3266eefceb8d6247e0d463f9af57e",
+      "png_sha256": "cf8cd5cad43134102c0052bb168774d179213224b9e0c4b0c056a7e40bdad605"
+    },
+    {
+      "name": "match-5104968-1080x1350",
+      "width": 1080,
+      "height": 1350,
+      "usage": "homepage_mobile_and_social",
+      "svg_sha256": "b468fc251343699644fd49b2066ed967b43dacba3d12fdc187a9acd115ec8b07",
+      "png_sha256": "1a72b1f9952571025c7fc40cf6b4dbfe7f5e6bf339f92a5985bf24f3d48806cd"
+    }
+  ],
+  "source_bundle": "runtime/studio/match-5104968-analysis-bundle.json",
+  "source_bundle_hash": "c11a276b19d58190cc798dd150d3920664e96744a09d76c71e40557465ebb01a",
+  "source_bundle_file_sha256": "eaa3adffe31e250aadaa89697f804d9a413defaaff8c9d040cd31b1941118fea",
+  "data_cutoff_at": "2026-07-28T07:01:27Z",
+  "public_fields": {
+    "league": "挪威超",
+    "round": "第16轮",
+    "kickoff_beijing": "2026-08-01T01:00:00+08:00",
+    "home": "瓦勒伦加",
+    "away": "汉坎",
+    "top_outcome": "主胜",
+    "top_probability": 0.58,
+    "probability_source": "MARKET_BASELINE",
+    "home_form": ["W", "W", "L", "W", "D"],
+    "away_form": ["L", "L", "L", "D", "D"],
+    "home_xg": 24.03,
+    "away_xg": 20.2,
+    "home_xga": 26.38,
+    "away_xga": 24.8,
+    "home_rest_days": 5.2,
+    "away_rest_days": 5.1,
+    "odds_observation_count": 1
+  },
+  "locked_fields_in_public_asset": [],
+  "notes": [
+    "Only the highest public probability is rendered.",
+    "MARKET_BASELINE is an odds de-margining result, not an ALLWIN model forecast.",
+    "Missing data is not replaced with zero."
+  ]
+}

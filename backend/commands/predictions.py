@@ -1,12 +1,17 @@
-"""预测登记簿命令层(CLAUDE.md §9:不可覆盖账本)。
+"""预测登记簿命令层(CLAUDE.md §9)。
 
 状态机:draft → published → locked(is_official=1)→ [retracted]
         任何导入且无法证明赛前生成的历史 → legacy_unverified(永不 official)
-锁定与官方化的实质字段由 DB 触发器再兜底一层(migration 0001)。
 
-永久资格不变量(CLAUDE.md §9.1):快照一旦 official+locked+赛前发布,永久属于
+公开样本口径不变量(CLAUDE.md §9.1):快照一旦 official+locked+赛前发布,永久属于
 公开正式样本集合;retract 与 supersede 只是标注,不改变公开资格与评估分母。
 supersede 只能追加新版本且只允许在开球前创建;历史已锁定样本不受新规追溯影响。
+
+内容可编辑(migration 0007,用户明确要求):`edit_snapshot` 允许对任意状态、任意
+时刻(含已锁定/已开球/已结算)的快照直接修正概率等字段——DB 层此前拦截 UPDATE 的
+触发器已经移除,`edit_snapshot` 是唯一负责在编辑时写 `prediction_snapshot_edits`
+留痕的地方,不能绕过它直接对表 UPDATE。物理删除依旧被 `trg_pred_snap_no_delete`
+拦截,未受本次改动影响。
 
 kickoff 口径(CLAUDE.md §6.2.1):正式预测的赛前判定必须使用精确 UTC 开球时刻。
 kickoff_at_utc 缺失或只有日期(不含 'T' 时间部分)的快照禁止 publish/lock——
@@ -44,17 +49,49 @@ def get_or_create_model_version(
     trained_at: str | None = None,
     train_range: str | None = None,
     metrics: dict | None = None,
+    applicable_league_ids: list[int] | None = None,
 ) -> str:
     row = conn.execute("SELECT id FROM model_versions WHERE id=?", (model_id,)).fetchone()
     if row:
         return model_id
     conn.execute(
-        "INSERT INTO model_versions (id, algorithm, description, params_json, trained_at, train_range, metrics_json, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO model_versions (id, algorithm, description, params_json, trained_at, train_range, metrics_json, applicable_league_ids, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (model_id, algorithm, description, json.dumps(params or {}, ensure_ascii=False),
-         trained_at, train_range, json.dumps(metrics or {}, ensure_ascii=False), utc_now_iso()),
+         trained_at, train_range, json.dumps(metrics or {}, ensure_ascii=False),
+         json.dumps(applicable_league_ids, ensure_ascii=False) if applicable_league_ids is not None else None,
+         utc_now_iso()),
     )
     return model_id
+
+
+def _require_model_applicable_to_league(
+    conn: sqlite3.Connection, model_version_id: str, league_id: int | None, action: str
+) -> None:
+    """模型适用范围保护(CLAUDE.md §9;瑞典超接入新增,最小侵入)。
+
+    仅当快照在 register 时显式冻结了 league_id 才触发校验——历史/测试调用方
+    不传 league_id 时行为完全不变,不会因为这项新校验导致既有 publish/lock 回归。
+    一旦提供 league_id,模型必须在 applicable_league_ids 显式声明包含该联赛,
+    否则拒绝(含模型从未声明任何适用范围的情况,不隐式放行)。
+    """
+    if league_id is None:
+        return
+    row = conn.execute(
+        "SELECT applicable_league_ids FROM model_versions WHERE id=?", (model_version_id,)
+    ).fetchone()
+    applicable = None
+    if row is not None and _row_get(row, "applicable_league_ids"):
+        try:
+            applicable = set(json.loads(row["applicable_league_ids"]))
+        except (ValueError, TypeError):
+            applicable = None
+    if not applicable or league_id not in applicable:
+        raise PredictionError(
+            "model_unvalidated_for_league",
+            f"模型 {model_version_id} 未声明适用于联赛 {league_id},禁止{action}"
+            "(缺少适用范围声明的模型不得成为该联赛的正式预测)",
+        )
 
 
 def start_run(
@@ -107,6 +144,7 @@ def register_snapshot(
     away_win: float,
     kickoff_precision: str = "unknown",
     kickoff_source: str | None = None,
+    league_id: int | None = None,
     generated_at: str | None = None,
     run_id: str | None = None,
     input_cutoff_at: str | None = None,
@@ -123,6 +161,10 @@ def register_snapshot(
     provenance 在此冻结:此后 publish/lock 的精确性资格判断读取快照上冻结的值,
     不再依赖字符串形状。默认 unknown/None(保守:不可 publish/lock),调用方须显式
     传入可证明的 exact + source 才能进入正式赛前流程。
+
+    league_id 同级冻结(默认 None = 跳过模型适用范围校验,保持历史调用方零回归)。
+    显式传入后,publish/lock 会要求 model_version_id 在 applicable_league_ids
+    中声明包含该联赛,否则拒绝(见 _require_model_applicable_to_league)。
 
     写入前统一规范化(唯一真源 normalize_exact_kickoff):
       - kickoff_precision != 'exact':kickoff_at_utc 强制写 NULL——date_only/unknown
@@ -150,13 +192,13 @@ def register_snapshot(
     snap_id = new_uuid()
     conn.execute(
         """INSERT INTO prediction_snapshots
-           (id, run_id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source,
+           (id, run_id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source, league_id,
             model_version_id, generated_at,
             input_cutoff_at, input_snapshot_hash, prediction_hash,
             home_win, draw, away_win, expected_home_goals, expected_away_goals,
             confidence, visibility, status, is_official, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (snap_id, run_id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (snap_id, run_id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source, league_id,
          model_version_id, generated_at,
          input_cutoff_at, input_snapshot_hash,
          prediction_hash_of(match_id, model_version_id, (home_win, draw, away_win), generated_at),
@@ -236,6 +278,7 @@ def publish_snapshot(conn: sqlite3.Connection, snapshot_id: str, actor: str | No
         raise PredictionError("bad_state", f"仅 draft 可发布,当前 {row['status']}")
     _require_precise_kickoff(row, "发布")
     _require_pre_kickoff(row, "发布")
+    _require_model_applicable_to_league(conn, row["model_version_id"], _row_get(row, "league_id"), "发布")
     conn.execute(
         "UPDATE prediction_snapshots SET status='published', published_at=? WHERE id=?",
         (utc_now_iso(), snapshot_id),
@@ -250,6 +293,7 @@ def lock_snapshot(conn: sqlite3.Connection, snapshot_id: str, actor: str | None)
         raise PredictionError("bad_state", f"仅 published 可锁定,当前 {row['status']}")
     _require_precise_kickoff(row, "锁定")
     _require_pre_kickoff(row, "锁定")
+    _require_model_applicable_to_league(conn, row["model_version_id"], _row_get(row, "league_id"), "锁定")
     conn.execute(
         "UPDATE prediction_snapshots SET status='locked', locked_at=?, is_official=1 WHERE id=?",
         (utc_now_iso(), snapshot_id),
@@ -275,14 +319,15 @@ def supersede_snapshot(conn: sqlite3.Connection, old_id: str, actor: str | None,
     """
     old = _get_snapshot(conn, old_id)
     _require_pre_kickoff(old, "创建修正版(supersede)")
-    # 冻结的 provenance 一并继承到新版本:supersede 不能借"修正"洗白精度/来源,
-    # 新版本要成为 official 仍须在 publish/lock 通过同一套精确性门禁。
+    # 冻结的 provenance 一并继承到新版本:supersede 不能借"修正"洗白精度/来源/联赛范围,
+    # 新版本要成为 official 仍须在 publish/lock 通过同一套精确性与模型适用范围门禁。
     new_id = register_snapshot(
         conn,
         match_id=old["match_id"],
         kickoff_at_utc=old["kickoff_at_utc"],
         kickoff_precision=_row_get(old, "kickoff_precision", "unknown"),
         kickoff_source=_row_get(old, "kickoff_source"),
+        league_id=_row_get(old, "league_id"),
         model_version_id=new_kwargs.pop("model_version_id", old["model_version_id"]),
         **new_kwargs,
     )
@@ -290,6 +335,101 @@ def supersede_snapshot(conn: sqlite3.Connection, old_id: str, actor: str | None,
     write_audit(conn, "prediction.supersede", actor,
                 target_type="prediction_snapshot", target_id=old_id, detail={"new_id": new_id})
     return new_id
+
+
+def edit_snapshot(
+    conn: sqlite3.Connection,
+    snapshot_id: str,
+    actor: str | None,
+    *,
+    reason: str,
+    home_win: float | None = None,
+    draw: float | None = None,
+    away_win: float | None = None,
+    expected_home_goals: float | None = None,
+    expected_away_goals: float | None = None,
+    confidence: str | None = None,
+) -> dict:
+    """直接修正一条已存在的快照——任意状态、任意时刻(含已锁定/已开球/已结算)。
+
+    用户明确要求"随时可以更改":本函数不做 draft/published/locked 状态门禁,也不
+    做开球前/后门禁(那些是 publish_snapshot/lock_snapshot/supersede_snapshot 各自
+    的门禁,服务于"新建/发布/锁定"这几个不同的动作,与"修正已存在的内容"是两件事)。
+
+    只更新调用方显式传入(非 None)的字段。若三项概率里任一被传入,会与快照当前
+    (未被传入的)另外两项合并后重新校验"和为 1(容差 0.001)"——不允许改出一个
+    不合法的概率分布。
+
+    每次真正产生变化的编辑都会在 `prediction_snapshot_edits`(append-only,见
+    migration 0007)追加一行,记录改动前/后的值、操作者、原因、时间;`reason` 必须
+    非空。若调用方传入的字段值与当前值完全相同(no-op),仍要求提供非空 reason,
+    但不写历史行、不递增 edit_count——没有实质变化就不该产生一条"改了什么"的记录。
+
+    返回 {"edit_id": str|None, "changed_fields": [...], "edit_count": int}。
+    """
+    if not reason or not str(reason).strip():
+        raise PredictionError("bad_reason", "修正原因不能为空")
+    row = _get_snapshot(conn, snapshot_id)
+
+    candidates = {
+        "home_win": home_win, "draw": draw, "away_win": away_win,
+        "expected_home_goals": expected_home_goals, "expected_away_goals": expected_away_goals,
+        "confidence": confidence,
+    }
+    changed = {
+        k: v for k, v in candidates.items()
+        if v is not None and v != _row_get(row, k)
+    }
+    current_edit_count = _row_get(row, "edit_count", 0) or 0
+    if not changed:
+        return {"edit_id": None, "changed_fields": [], "edit_count": current_edit_count}
+
+    if any(k in changed for k in ("home_win", "draw", "away_win")):
+        merged_home = changed.get("home_win", row["home_win"])
+        merged_draw = changed.get("draw", row["draw"])
+        merged_away = changed.get("away_win", row["away_win"])
+        if abs(merged_home + merged_draw + merged_away - 1.0) >= 0.001:
+            raise PredictionError("bad_probabilities", "三项概率之和必须为 1(容差 0.001)")
+
+    before = {k: _row_get(row, k) for k in changed}
+    edit_id = new_uuid()
+    now = utc_now_iso()
+
+    conn.execute(
+        """INSERT INTO prediction_snapshot_edits
+           (id, snapshot_id, actor_user_id, reason, before_json, after_json, edited_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (edit_id, snapshot_id, actor, reason,
+         json.dumps(before, ensure_ascii=False, sort_keys=True),
+         json.dumps(changed, ensure_ascii=False, sort_keys=True), now),
+    )
+
+    new_hash = prediction_hash_of(
+        row["match_id"], row["model_version_id"],
+        (
+            changed.get("home_win", row["home_win"]),
+            changed.get("draw", row["draw"]),
+            changed.get("away_win", row["away_win"]),
+        ),
+        row["generated_at"],
+    )
+    set_clauses = ", ".join(f"{k}=?" for k in changed)
+    conn.execute(
+        f"UPDATE prediction_snapshots SET {set_clauses}, prediction_hash=?, "
+        f"last_edited_at=?, edit_count=edit_count+1 WHERE id=?",
+        (*changed.values(), new_hash, now, snapshot_id),
+    )
+    write_audit(
+        conn, "prediction.edit", actor,
+        target_type="prediction_snapshot", target_id=snapshot_id,
+        detail={"reason": reason, "before": before, "after": changed},
+    )
+
+    return {
+        "edit_id": edit_id,
+        "changed_fields": sorted(changed.keys()),
+        "edit_count": current_edit_count + 1,
+    }
 
 
 # ── 赛后结算 ───────────────────────────────────────────────

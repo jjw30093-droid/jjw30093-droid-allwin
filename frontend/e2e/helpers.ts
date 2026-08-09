@@ -14,6 +14,17 @@ export function seedMatchId(): number {
   return Number(m[1]);
 }
 
+/** 种子信息里的已锁定正式预测 id(seed_e2e.py 已 publish+lock)。 */
+export function seedSnapshotId(): string {
+  const txt = readFileSync(
+    resolve(__dirname, "../../data/e2e/seed_info.txt"),
+    "utf-8",
+  );
+  const m = txt.match(/snapshot_id=(\S+)/);
+  if (!m) throw new Error("seed_info.txt 缺 snapshot_id");
+  return m[1];
+}
+
 export function seedRedeemCode(): string {
   return readFileSync(
     resolve(__dirname, "../../data/e2e/redeem_code.txt"),

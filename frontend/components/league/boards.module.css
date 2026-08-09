@@ -1,0 +1,7 @@
+/* 榜单网格(球队数据榜 / 球员榜共用;由各页面模块迁入) */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}

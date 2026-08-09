@@ -4,6 +4,7 @@
  */
 
 import { API_BASE, clientFetch, type GetJson, type PostJson } from "@/lib/api-v1";
+import { formatBeijingDateTime } from "@/components/matches/zh";
 import type {
   DraftDetail,
   DraftOverrides,
@@ -11,6 +12,7 @@ import type {
   DraftSummary,
   ExportKind,
   ExportResult,
+  StudioProfileId,
   ScriptSection,
   SubtitleCue,
 } from "./types";
@@ -46,10 +48,14 @@ export const setDraftStatus = (draftId: string, status: DraftStatus) =>
     { method: "POST", body: { status } },
   );
 
-export const requestExport = (draftId: string, kind: ExportKind) =>
+export const requestExport = (
+  draftId: string,
+  kind: ExportKind,
+  profile: StudioProfileId,
+) =>
   clientFetch<ExportResult>(`/api/v1/studio/drafts/${draftId}/export`, {
     method: "POST",
-    body: { kind },
+    body: { kind, profile },
   });
 
 /** 服务端生成的导出文件(TXT/JSON/SRT):带 cookie 拉 blob 后客户端下载。 */
@@ -81,20 +87,15 @@ export function triggerDownload(href: string, filename: string): void {
 
 /* ── 展示与文件名工具 ─────────────────────────────────── */
 
-/** UTC ISO → 用户本地时区展示;纯日期(比赛日)如实标注 UTC。 */
+/** UTC ISO → 北京时间展示(函数名沿用 fmtUtc 未改,行为已修正——调用方
+ * SafeSceneCards.tsx 一直明确标注"北京时间 {fmtUtc(...)}",但此前实现用
+ * 的是浏览器本地时区,标签与实际展示的时区不一致;导出内容会烧录进图片/
+ * 字幕面向公开发布,标错时区是真实缺陷,不是风格选择)。
+ * 纯日期(比赛日,没有精确 kickoff)如实标注,不编造具体时刻。 */
 export function fmtUtc(iso: string | null | undefined): string {
   if (!iso) return "未知";
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return `${iso}(比赛日,UTC)`;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
+  return formatBeijingDateTime(iso) ?? iso;
 }
 
 /** 导出文件名统一携带 cutoff + 模型版本(SRT 内容本体不便携带,靠文件名与界面提示)。 */
@@ -104,11 +105,15 @@ export function exportFilename(
   ext: string,
   modelVersion: string | null | undefined,
   dataCutoffAt: string | null | undefined,
+  profileId = "internal-full-v1",
+  sourceHash?: string | null,
 ): string {
   const clean = (s: string) => s.replace(/[^0-9A-Za-z_.-]+/g, "-");
   const model = modelVersion ? clean(modelVersion) : "no-model";
   const cutoff = dataCutoffAt ? clean(dataCutoffAt.slice(0, 10)) : "no-cutoff";
-  return `allwin_${matchId}_${part}_cutoff-${cutoff}_${model}.${ext}`;
+  const profile = clean(profileId);
+  const source = sourceHash ? `_${clean(sourceHash.slice(0, 12))}` : "";
+  return `allwin_${profile}_${matchId}_${part}_cutoff-${cutoff}_${model}${source}.${ext}`;
 }
 
 /**

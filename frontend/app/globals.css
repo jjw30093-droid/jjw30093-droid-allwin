@@ -1,53 +1,117 @@
 :root {
-  /* gold */
-  --gold-hi: #fff1c6;
-  --gold-100: #f1ce78;
-  --gold-300: #edc163;
-  --gold-500: #d49e33;
-  --gold-700: #b77f20;
-  --gold-900: #875a13;
+  color-scheme: light;
+
+  /* 欧赢品牌色：深海蓝骨架 + 赛场青数据 + 荧光黄状态 */
+  --brand-navy: #0d2c3d;
+  --brand-teal: #087e78;
+  --brand-lime: #d7ed63;
+  --brand-red: #e0523d;
+  --brand-red-deep: #a9352a;
+  --brand-ice: #dceff0;
+  --brand-blue: #1d6f8b;
+  --paper: #f4f6f6;
+  --paper-bright: #ffffff;
+
+  /*
+   * 旧组件仍使用 gold token。先将其映射到新品牌色，保证全站渐进迁移，
+   * 后续新组件只使用 brand/accent token。
+   */
+  --gold-hi: #edf9f8;
+  --gold-100: #46b4ac;
+  --gold-300: #15948c;
+  --gold-500: #087e78;
+  --gold-700: #07635f;
+  --gold-900: #064d4a;
   --gold-grad: linear-gradient(
-    150deg,
-    #fff1c6 0%,
-    #f1ce78 24%,
-    #d49e33 50%,
-    #edc163 63%,
-    #b77f20 82%,
-    #875a13 100%
+    135deg,
+    #0b9189 0%,
+    #087e78 56%,
+    #075f5b 100%
   );
-  /* warm-black surfaces */
-  --bg: #0a0806;
-  --bg-2: #100b07;
-  --surface: #14100a;
-  --surface-2: #1a140c;
-  --border: #241c11;
-  --border-strong: #2e2413;
-  /* warm neutrals */
-  --ink: #f3ecdc;
-  --ink-2: #a79c87;
-  --ink-3: #948a75;
+  /* product surfaces */
+  --bg: var(--paper);
+  --bg-2: #e9eeee;
+  --surface: var(--paper-bright);
+  --surface-soft: #eef2f2;
+  --surface-2: #e8eeee;
+  --border: #d8e0e0;
+  --border-strong: #b8c6c6;
+  /* cool neutrals */
+  --ink: var(--brand-navy);
+  --ink-2: #40535d;
+  --ink-3: #6f7f86;
   /* semantic */
-  --win: #4e9a5b;
-  --loss: #c05437;
-  --draw: #8a8069;
+  --win: #287851;
+  --loss: #b83b2d;
+  --draw: #706c64;
   /* league qualification (real FotMob qual_color) */
   --q-ucl: #2ad572;
   --q-uel: #0046a7;
   --q-uecl: #02ccf0;
   --q-releg: #ff4646;
   /* rating color scale */
-  --rate-elite: #edc163;
-  --rate-good: #3a331f;
-  --rate-mid: #1a140c;
-  --rate-low: #2a2519;
+  --rate-elite: #087e78;
+  --rate-good: #a9d9d5;
+  --rate-mid: #e8eeee;
+  --rate-low: #d8e0e0;
   /* radius */
-  --r-card: 16px;
-  --r-control: 10px;
+  --r-card: 4px;
+  --r-control: 4px;
   --r-pill: 999px;
+  /* depth */
+  --shadow-card: none;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 深色模式仍是体育数据编辑部，不使用霓虹光晕或玻璃拟态。 */
+  --brand-navy: #061923;
+  --brand-teal: #45b9af;
+  --brand-lime: #d9ee67;
+  --brand-red: #ef7865;
+  --brand-red-deep: #ff9a88;
+  --brand-ice: #17343d;
+  --brand-blue: #69b6ce;
+  --paper: #07161e;
+  --paper-bright: #0d2029;
+  --gold-hi: #15353a;
+  --gold-100: #72cfc7;
+  --gold-300: #50bdb4;
+  --gold-500: #45b9af;
+  --gold-700: #84d8d0;
+  --gold-900: #b9eee9;
+  --gold-grad: linear-gradient(
+    135deg,
+    #6ed1c7 0%,
+    #45b9af 56%,
+    #2e958e 100%
+  );
+  --bg: var(--paper);
+  --bg-2: #0a1c25;
+  --surface: var(--paper-bright);
+  --surface-soft: #0b1d26;
+  --surface-2: #132b34;
+  --border: #203842;
+  --border-strong: #35515b;
+  --ink: #eef5f4;
+  --ink-2: #bdcbce;
+  --ink-3: #82969d;
+  --win: #68c994;
+  --loss: #ef7865;
+  --draw: #aaa79f;
+  --rate-elite: #45b9af;
+  --rate-good: #39716f;
+  --rate-mid: #173039;
+  --rate-low: #243d46;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
 }
 
 html,
@@ -62,6 +126,10 @@ body {
   font-family: var(--font-cn), "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 14.5px;
   line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .num {
@@ -71,4 +139,15 @@ body {
 
 a {
   color: inherit;
+}
+
+::selection {
+  background: var(--brand-lime);
+  color: #061923;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    transition: none;
+  }
 }

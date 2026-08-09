@@ -1,41 +1,14 @@
-import { fetchLeagueOverview, type TeamStatsRow } from "@/lib/api";
+import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionPath, serverGetOptional, type TeamStatsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
-import { LeaderboardCard, type LeaderboardRow } from "@/components/LeaderboardCard";
+import { TeamStatsBoards } from "@/components/league/TeamStatsBoards";
+import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
+import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./team-stats.module.css";
 
-// 只用免费字段(CLAUDE.md §3):射门/射正/控球/xG/xGOT。角球/黄红牌/零封/
-// BTTS 是付费字段,overview 本来就不返回,这里也没有取 betting endpoint。
-const METRICS: {
-  key: keyof TeamStatsRow;
-  title: string;
-  format: (v: number) => string;
-}[] = [
-  { key: "avg_total_shots", title: "场均射门榜", format: (v) => v.toFixed(1) },
-  { key: "avg_shots_on_target", title: "场均射正榜", format: (v) => v.toFixed(1) },
-  { key: "avg_possession", title: "控球率榜", format: (v) => `${v.toFixed(1)}%` },
-  { key: "avg_expected_goals", title: "场均 xG 榜", format: (v) => v.toFixed(2) },
-  {
-    key: "avg_expected_goals_on_target",
-    title: "场均 xGOT 榜",
-    format: (v) => v.toFixed(2),
-  },
-];
-
-function topRows(
-  teamStats: TeamStatsRow[],
-  metric: (typeof METRICS)[number]
-): LeaderboardRow[] {
-  return teamStats
-    .filter((t) => t[metric.key] !== null)
-    .sort((a, b) => (b[metric.key] as number) - (a[metric.key] as number))
-    .slice(0, 10)
-    .map((t, i) => ({
-      rank: i + 1,
-      name: t.team_name_zh ?? `Team ${t.team_id}`,
-      value: metric.format(t[metric.key] as number),
-    }));
-}
-
+// 已迁移到 /api/v1/leagues/{id}/team-stats(免费字段投影:射门/射正/控球/xG/xGOT;
+// 角球/红黄牌/零封/BTTS 是付费深度字段,响应里物理不存在,这里也没有)。
+// Pro 联赛的匿名请求被门禁挡下时走客户端会员加载器(见 standings 页同款说明)。
 export default async function TeamStatsPage({
   params,
   searchParams,
@@ -46,44 +19,50 @@ export default async function TeamStatsPage({
   const { id } = await params;
   const { season: seasonParam } = await searchParams;
 
-  let data;
+  let data: TeamStatsResponse | null;
   try {
-    data = await fetchLeagueOverview(id, seasonParam);
-  } catch (err) {
+    data = await serverGetOptional<TeamStatsResponse>(
+      leagueSectionPath("team-stats", id, seasonParam)
+    );
+  } catch {
     return (
       <main className={styles.page}>
         <LeagueNav leagueId={id} active="team-stats" season={seasonParam} />
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
-          <p>
-            后端 serving API 未响应,请确认 backend/api_server.py 已启动。
-            <br />
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              {err instanceof Error ? err.message : String(err)}
-            </span>
-          </p>
+          <p>该联赛数据尚未同步，或数据服务暂时不可用。请稍后再试。</p>
         </div>
       </main>
     );
   }
 
+  const leagueNameZh = await fetchLeagueNameZh(id);
+  // resolvedSeason = 后端实际返回的赛季(徽章展示"在看什么");seasonParam = 用户
+  // 显式选择(导航跨 tab 只带这个)——两者不能混用,否则一个 tab 的默认值会变成
+  // 其它 tab 的显式选择,导致点导航跳到用户没选过的赛季(见 docs/data-plan.md)。
+  const resolvedSeason = data?.season ?? seasonParam;
+
   return (
     <main className={styles.page}>
-      <LeagueNav leagueId={id} active="team-stats" season={data.season} />
+      <LeagueNav leagueId={id} active="team-stats" season={seasonParam} />
       <div className={styles.header}>
-        <h1 className={styles.title}>英超 · 球队数据榜</h1>
-        <span className={styles.seasonChip}>{data.season}</span>
+        <h1 className={styles.title}>{leagueNameZh} · 球队数据榜</h1>
       </div>
+      {data && (
+        <SeasonSwitcher
+          leagueId={id}
+          section="team-stats"
+          seasons={data.available_seasons}
+          selected={seasonParam}
+          resolved={resolvedSeason}
+        />
+      )}
 
-      <div className={styles.grid}>
-        {METRICS.map((metric) => (
-          <LeaderboardCard
-            key={metric.key}
-            title={metric.title}
-            rows={topRows(data.team_stats, metric)}
-          />
-        ))}
-      </div>
+      {data ? (
+        <TeamStatsBoards rows={data.rows} />
+      ) : (
+        <MemberLeagueSection kind="team-stats" leagueId={id} season={seasonParam} />
+      )}
     </main>
   );
 }

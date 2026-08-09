@@ -1,3 +1,6 @@
+/* 页面外壳样式。表格/图例样式已随 StandingsTable 迁至
+   components/league/StandingsTable.module.css(SSR 与客户端会员加载共用)。 */
+
 .page {
   max-width: 1140px;
   margin: 0 auto;
@@ -20,146 +23,6 @@
   text-wrap: balance;
 }
 
-.seasonChip {
-  font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  padding: 6px 14px;
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  overflow: hidden;
-}
-
-.tableWrap {
-  overflow-x: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 640px;
-}
-
-.table thead th {
-  background: var(--bg-2);
-  color: var(--ink-3);
-  font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  text-align: right;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.table thead th:nth-child(1),
-.table thead th:nth-child(2) {
-  text-align: left;
-}
-
-.table tbody td {
-  height: 54px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--border);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.rank {
-  text-align: left;
-  position: relative;
-  padding-left: 18px !important;
-}
-
-.qualStripe {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-}
-
-.team {
-  text-align: left;
-}
-
-.teamNameZh {
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.num {
-  font-family: var(--font-latin), system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.gf {
-  color: var(--win);
-}
-
-.ga {
-  color: var(--loss);
-}
-
-.gdPos {
-  color: var(--win);
-}
-
-.gdNeg {
-  color: var(--loss);
-}
-
-.points {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--gold-300);
-}
-
-.championRow td {
-  background: linear-gradient(
-    90deg,
-    rgba(237, 193, 99, 0.1) 0%,
-    rgba(237, 193, 99, 0.02) 60%
-  );
-}
-
-.badgeStrong td {
-  border-bottom: 1px solid var(--border-strong);
-}
-
-.legend {
-  margin-top: 14px;
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-.legendDot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  margin-right: 6px;
-}
-
 .errorBox {
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -175,9 +38,9 @@
   margin-bottom: 8px;
 }
 
-/* 移动端主动砍列(DESIGN.md §4 移动端规则):<640px 隐藏胜/平/负三列 */
 @media (max-width: 640px) {
-  .wdl {
-    display: none;
+  .page {
+    padding-inline: 12px;
+    overflow-x: clip;
   }
 }

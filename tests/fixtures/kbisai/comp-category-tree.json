@@ -1,0 +1,3333 @@
+{
+ "categorys": [
+  {
+   "children": [
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 1,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/da617cd58cd9cffaae0daec865457fb5.png",
+       "name": "世界杯"
+      },
+      {
+       "children": null,
+       "id": 120,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1fbbb4be3b47d9465c5badecc3122e07.png",
+       "name": "西甲"
+      },
+      {
+       "children": null,
+       "id": 82,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FhQJ6Efx6y06tkxX6WQla32yaJGB.png",
+       "name": "英超"
+      },
+      {
+       "children": null,
+       "id": 590,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/26/FohEDOSyyd6w-P63nWP1cl0YMe8a.png",
+       "name": "澳超"
+      },
+      {
+       "children": null,
+       "id": 542,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/21/FoJri3Lo7TyWOvnjhl54aToA7p20.png",
+       "name": "中超"
+      },
+      {
+       "children": null,
+       "id": 129,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0c6a25cd746e802296d9064b4504179d.png",
+       "name": "德甲"
+      },
+      {
+       "children": null,
+       "id": 108,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b38f4015a6b3309ad9462e6ce27ae99.png",
+       "name": "意甲"
+      },
+      {
+       "children": null,
+       "id": 142,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2024/09/04/FgZZPWZ_CwS8truZDyD-lu_5o0NT.png",
+       "name": "法甲"
+      },
+      {
+       "children": null,
+       "id": 46,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgdHJZb7dZvWc7xISO1s6t-4a8MO.png",
+       "name": "欧冠"
+      },
+      {
+       "children": null,
+       "id": 7306,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/99dcb9cff8bc7fe1dac0c5d5d5d9b61c.png",
+       "name": "江苏联"
+      },
+      {
+       "children": null,
+       "id": 555,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/fa7be2db9d1b05d5a90c5e25ac17f6c1.png",
+       "name": "足协杯"
+      },
+      {
+       "children": null,
+       "id": 6736,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bbe73e02dfd0737b98d16465ae014d9e.png",
+       "name": "亚精英赛"
+      },
+      {
+       "children": null,
+       "id": 614,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c48508454f43d926a553270b1b4ebcd7.png",
+       "name": "沙特联"
+      },
+      {
+       "children": null,
+       "id": 457,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/682287c83649a418bb66287d8cf084e2.png",
+       "name": "美职联"
+      }
+     ],
+     "id": 2,
+     "logo": null,
+     "name": "热门"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 2906,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FnLop3S1p3ihuwO-x6KseEXfXenQ.png",
+       "name": "欧国联"
+      },
+      {
+       "children": null,
+       "id": 46,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgdHJZb7dZvWc7xISO1s6t-4a8MO.png",
+       "name": "欧冠"
+      },
+      {
+       "children": null,
+       "id": 47,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fp71ft-KuPzEc6WetH-pq7oCeg8C.png",
+       "name": "欧联"
+      },
+      {
+       "children": null,
+       "id": 3265,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FuMjsyoKOCRE5Zs0BazSirbonFZo.png",
+       "name": "欧协联"
+      },
+      {
+       "children": null,
+       "id": 6736,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bbe73e02dfd0737b98d16465ae014d9e.png",
+       "name": "亚精英赛"
+      },
+      {
+       "children": null,
+       "id": 6737,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9a22d840df32761c127c5cd106203ccf.png",
+       "name": "亚冠二级"
+      },
+      {
+       "children": null,
+       "id": 45,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fq9K2XzTjD-EFmj-c0iRQwJULFGv.png",
+       "name": "欧洲杯"
+      },
+      {
+       "children": null,
+       "id": 490,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FjVkU-BnMe-XtNHTOCVKCuWDhlKG.png",
+       "name": "亚洲杯"
+      },
+      {
+       "children": null,
+       "id": 395,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2024/06/24/Fvm0n3SMDrjBSKBqRmdv1La28KTv.png",
+       "name": "美洲杯"
+      },
+      {
+       "children": null,
+       "id": 700,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/82edb795d6e4696d24d003d54a572447.png",
+       "name": "非洲杯"
+      },
+      {
+       "children": null,
+       "id": 7221,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ceac41ef85151074cdbfc87f09e1b8a9.png",
+       "name": "世俱杯"
+      }
+     ],
+     "id": 19,
+     "logo": null,
+     "name": "洲际"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 82,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FhQJ6Efx6y06tkxX6WQla32yaJGB.png",
+       "name": "英超"
+      },
+      {
+       "children": null,
+       "id": 98,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FvoERKrcJek31pVJUHsbxHbpOi-m.png",
+       "name": "英足总杯"
+      },
+      {
+       "children": null,
+       "id": 99,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fi4ZIcn96DnFGATInZpbiVmJwLVq.png",
+       "name": "英联杯"
+      },
+      {
+       "children": null,
+       "id": 120,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1fbbb4be3b47d9465c5badecc3122e07.png",
+       "name": "西甲"
+      },
+      {
+       "children": null,
+       "id": 125,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/22/FkqXsJ-SbvXgUx_Ca3zUKd2rR-gC.png",
+       "name": "国王杯"
+      },
+      {
+       "children": null,
+       "id": 108,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b38f4015a6b3309ad9462e6ce27ae99.png",
+       "name": "意甲"
+      },
+      {
+       "children": null,
+       "id": 114,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fg_FcwPJddfAAcWkDQrqLMxfK-Gv.png",
+       "name": "意杯"
+      },
+      {
+       "children": null,
+       "id": 129,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0c6a25cd746e802296d9064b4504179d.png",
+       "name": "德甲"
+      },
+      {
+       "children": null,
+       "id": 136,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1cded13e781ed1f7c2514a3413506960.png",
+       "name": "德国杯"
+      },
+      {
+       "children": null,
+       "id": 142,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2024/09/04/FgZZPWZ_CwS8truZDyD-lu_5o0NT.png",
+       "name": "法甲"
+      },
+      {
+       "children": null,
+       "id": 148,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/5598719801fa02e53b44827f791be316.png",
+       "name": "法国杯"
+      }
+     ],
+     "id": 31,
+     "logo": null,
+     "name": "欧洲"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 1,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/da617cd58cd9cffaae0daec865457fb5.png",
+       "name": "世界杯"
+      },
+      {
+       "children": null,
+       "id": 2,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c74920992c3b47b82b192e7a1993f2cb.png",
+       "name": "世欧预"
+      },
+      {
+       "children": null,
+       "id": 3,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/26/Fr7nTId2lF1fg3OxPGq1ZfCGCwU5.png",
+       "name": "世亚预"
+      },
+      {
+       "children": null,
+       "id": 4,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/61fc217820b8cdfaa11872fa211f40c5.png",
+       "name": "世南美预"
+      },
+      {
+       "children": null,
+       "id": 5,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0d27b2c1ad4aeacfbd3ca99f009e6beb.png",
+       "name": "世非预"
+      },
+      {
+       "children": null,
+       "id": 6,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b0e91bd19cd82090047a4c6879ce230b.png",
+       "name": "世中北美预"
+      },
+      {
+       "children": null,
+       "id": 9,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d7098499775871931e6d8deea2076a82.png",
+       "name": "世界杯附"
+      },
+      {
+       "children": null,
+       "id": 10,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FrpdbrBYB0xUKNUzEx75YrCHNDzx.png",
+       "name": "世俱杯(旧)"
+      },
+      {
+       "children": null,
+       "id": 11,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/153c5f134b8c7aa81c9203e62ccde398.png",
+       "name": "奥运男足"
+      },
+      {
+       "children": null,
+       "id": 12,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3fa888edc50d25cd0e3fe1b4ffab668a.png",
+       "name": "奥运女足"
+      },
+      {
+       "children": null,
+       "id": 13,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2b7d8c983f2558a02e395244f805cba8.png",
+       "name": "女世界杯"
+      }
+     ],
+     "id": 43,
+     "logo": null,
+     "name": "国际"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 542,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/21/FoJri3Lo7TyWOvnjhl54aToA7p20.png",
+       "name": "中超"
+      },
+      {
+       "children": null,
+       "id": 555,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/fa7be2db9d1b05d5a90c5e25ac17f6c1.png",
+       "name": "足协杯"
+      },
+      {
+       "children": null,
+       "id": 543,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/21/FqOtW3_7ayCKVI39D_sHyda2Ekj9.png",
+       "name": "中甲"
+      },
+      {
+       "children": null,
+       "id": 544,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b6025970c665a7640122d6b3d156b0b8.png",
+       "name": "中乙"
+      },
+      {
+       "children": null,
+       "id": 2918,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/26/FntiQ7Slmxwgqb0cv4Y2xnzk9B0x.png",
+       "name": "中冠"
+      },
+      {
+       "children": null,
+       "id": 554,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/215b433e45e5e452d7de704d6e42c750.png",
+       "name": "超级杯"
+      },
+      {
+       "children": null,
+       "id": 556,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/Fr2iOpzE1s5NXLTMdym9XkWKfUtb.png",
+       "name": "全运男足"
+      },
+      {
+       "children": null,
+       "id": 557,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1a3224dec69f9461641fbe040d10418d.png",
+       "name": "全运女足"
+      },
+      {
+       "children": null,
+       "id": 546,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/05fa1994b78712d7872a007d5c0bf262.jpg",
+       "name": "中女超"
+      },
+      {
+       "children": null,
+       "id": 3134,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b13e8b4c1cf4f6333ecc4f5131b7482.png",
+       "name": "中女甲"
+      },
+      {
+       "children": null,
+       "id": 1424,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/dad229facc3debe6b40c65a9b8b95de3.png",
+       "name": "中女锦"
+      },
+      {
+       "children": null,
+       "id": 7306,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/99dcb9cff8bc7fe1dac0c5d5d5d9b61c.png",
+       "name": "江苏联"
+      },
+      {
+       "children": null,
+       "id": 7334,
+       "logo": "https://cdn.sportnanoapi.com/football/competition/59a0f4a95de213efc67abf744d7e3f96.png",
+       "name": "明日之星冠军杯"
+      }
+     ],
+     "id": 55,
+     "logo": null,
+     "name": "中国"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 590,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/26/FohEDOSyyd6w-P63nWP1cl0YMe8a.png",
+       "name": "澳超"
+      },
+      {
+       "children": null,
+       "id": 602,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3391c527d7cfb37ff6f5c9c05042869b.png",
+       "name": "澳女联"
+      },
+      {
+       "children": null,
+       "id": 567,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fj7-jXM0HdmzK3Q9fi6HO1SlQE-s.png",
+       "name": "日职联"
+      },
+      {
+       "children": null,
+       "id": 7473,
+       "logo": "https://cdn.sportnanoapi.com/football/competition/0fb580bce0dd25298f777277ab60bcf1.png",
+       "name": "J2/J3联"
+      },
+      {
+       "children": null,
+       "id": 568,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FnB-LjO0DQTy4bACjFYVenZuFrSh.png",
+       "name": "日职乙"
+      },
+      {
+       "children": null,
+       "id": 577,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fu6sCgVQOiT0RK6yH3thIIZjkVl3.png",
+       "name": "天皇杯"
+      },
+      {
+       "children": null,
+       "id": 581,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fq-add1PL391afOpldzRLV-NJYG8.png",
+       "name": "韩K联"
+      },
+      {
+       "children": null,
+       "id": 614,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c48508454f43d926a553270b1b4ebcd7.png",
+       "name": "沙特联"
+      },
+      {
+       "children": null,
+       "id": 497,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/31778c5ab158dc7d7563f959aec7a303.png",
+       "name": "东南锦"
+      },
+      {
+       "children": null,
+       "id": 6903,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2eefb62be9e55efc74aee5bffc613ac6.png",
+       "name": "东盟锦标"
+      }
+     ],
+     "id": 66,
+     "logo": null,
+     "name": "亚洲"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 457,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/682287c83649a418bb66287d8cf084e2.png",
+       "name": "美职联"
+      },
+      {
+       "children": null,
+       "id": 465,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/324d7a463a24c4cd35ef83456a1b8d05.png",
+       "name": "墨西超"
+      },
+      {
+       "children": null,
+       "id": 435,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/5ad7bd885c64690f15f6971a2827190d.png",
+       "name": "巴西甲"
+      },
+      {
+       "children": null,
+       "id": 429,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/19bc08fd59288a5811c21c814dfd9c2a.png",
+       "name": "阿甲"
+      },
+      {
+       "children": null,
+       "id": 396,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/59bd81b686fe94b57f0e3c3ff2a28c45.png",
+       "name": "解放者杯"
+      },
+      {
+       "children": null,
+       "id": 398,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2341037b4e4eff9683c5c15fd188127e.png",
+       "name": "南美杯"
+      },
+      {
+       "children": null,
+       "id": 399,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fl1s3Mk70A5Ugj1EoqpnMbqaK4fg.png",
+       "name": "美冠杯"
+      },
+      {
+       "children": null,
+       "id": 3279,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/25/FqNtjq-UbrhE56vJN3CBA0x3xXrf.png",
+       "name": "联盟杯"
+      }
+     ],
+     "id": 75,
+     "logo": null,
+     "name": "美洲"
+    }
+   ],
+   "id": 1,
+   "logo": null,
+   "name": "重要"
+  },
+  {
+   "children": [
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 2,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c74920992c3b47b82b192e7a1993f2cb.png",
+       "name": "世欧预"
+      },
+      {
+       "children": null,
+       "id": 45,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fq9K2XzTjD-EFmj-c0iRQwJULFGv.png",
+       "name": "欧洲杯"
+      },
+      {
+       "children": null,
+       "id": 2906,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FnLop3S1p3ihuwO-x6KseEXfXenQ.png",
+       "name": "欧国联"
+      },
+      {
+       "children": null,
+       "id": 46,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgdHJZb7dZvWc7xISO1s6t-4a8MO.png",
+       "name": "欧冠"
+      },
+      {
+       "children": null,
+       "id": 47,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fp71ft-KuPzEc6WetH-pq7oCeg8C.png",
+       "name": "欧联"
+      },
+      {
+       "children": null,
+       "id": 3265,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FuMjsyoKOCRE5Zs0BazSirbonFZo.png",
+       "name": "欧协联"
+      },
+      {
+       "children": null,
+       "id": 49,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/01895dec7bc5fa4eb33aa43bd708ee14.png",
+       "name": "欧超杯"
+      },
+      {
+       "children": null,
+       "id": 60,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e5a939b8bc56f6ace74d6f1eda2a2459.png",
+       "name": "波罗杯"
+      },
+      {
+       "children": null,
+       "id": 2101,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e1eea1e1957a1df65d50f16d6b4fed1f.png",
+       "name": "超联杯"
+      },
+      {
+       "children": null,
+       "id": 989,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/8e42a593b763ea45384052ef778a50b9.png",
+       "name": "多塞纳杯"
+      },
+      {
+       "children": null,
+       "id": 78,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9fd560972f1f53385d150297b463fd93.png",
+       "name": "地中运"
+      },
+      {
+       "children": null,
+       "id": 2900,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/27c468743a8dfe8734b0ef43a6353cc4.png",
+       "name": "中东欧杯"
+      },
+      {
+       "children": null,
+       "id": 77,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/fd18fea857fdfad33df41c112d4455a1.png",
+       "name": "欧青联"
+      },
+      {
+       "children": null,
+       "id": 52,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ecfb1df6e8ff1892c3d9be4ba745f70c.png",
+       "name": "欧青U21"
+      },
+      {
+       "children": null,
+       "id": 51,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0f2d2e79833b106e3c0407d4c7131307.png",
+       "name": "欧青U21外"
+      },
+      {
+       "children": null,
+       "id": 53,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a6a98d7ce26efc8afe56aa744eebcefd.png",
+       "name": "欧青U19"
+      },
+      {
+       "children": null,
+       "id": 54,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/8b8af0306472b55b13a3d9164ceaba74.png",
+       "name": "欧青U17"
+      },
+      {
+       "children": null,
+       "id": 63,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7ca956e4854d53b254238d17498f581d.png",
+       "name": "北欧U17"
+      },
+      {
+       "children": null,
+       "id": 50,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/303be966c1e1d68a428129d78f818187.png",
+       "name": "女欧洲杯"
+      },
+      {
+       "children": null,
+       "id": 75,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/45c47fad4b3de71014c5173e34430fcc.png",
+       "name": "世女欧预"
+      },
+      {
+       "children": null,
+       "id": 55,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/07/FijDEA5JZqUYrdVIQCmxEycp2_12.png",
+       "name": "欧女冠"
+      },
+      {
+       "children": null,
+       "id": 56,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d5fcd3349b18dfb4e171868492c512a3.png",
+       "name": "女欧U19"
+      },
+      {
+       "children": null,
+       "id": 59,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fv_OmCws-pQ9NWl7WkUC3WfNMRL8.png",
+       "name": "女欧U17"
+      },
+      {
+       "children": null,
+       "id": 7201,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/31efb0f7ddac4c1457ab05da7e5b7fd2.png",
+       "name": "女欧国杯外"
+      },
+      {
+       "children": null,
+       "id": 5705,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/5620d8b08eaedc2f77d87196dee3c798.png",
+       "name": "梅杜林杯"
+      },
+      {
+       "children": null,
+       "id": 4546,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0eba1aa352cdf0baf14bd55c178b700c.png",
+       "name": "欧女国联"
+      },
+      {
+       "children": null,
+       "id": 2778,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0e2f9bb3712df32174feeca6b2440825.png",
+       "name": "女波罗杯"
+      }
+     ],
+     "id": 123,
+     "logo": null,
+     "name": "欧洲赛事"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 82,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FhQJ6Efx6y06tkxX6WQla32yaJGB.png",
+       "name": "英超"
+      },
+      {
+       "children": null,
+       "id": 98,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FvoERKrcJek31pVJUHsbxHbpOi-m.png",
+       "name": "英足总杯"
+      },
+      {
+       "children": null,
+       "id": 99,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fi4ZIcn96DnFGATInZpbiVmJwLVq.png",
+       "name": "英联杯"
+      },
+      {
+       "children": null,
+       "id": 103,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FiYTRdrDfw1vAq6M8f3S1TXcaxGy.png",
+       "name": "英社盾"
+      },
+      {
+       "children": null,
+       "id": 83,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fr0UQaUL5p-2OURDVkwQU5TrewfD.png",
+       "name": "英冠"
+      },
+      {
+       "children": null,
+       "id": 57,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fg-R8ynMD35BBFdKXbY3ZltsoRUQ.png",
+       "name": "酋长杯"
+      },
+      {
+       "children": null,
+       "id": 100,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/77ba314de2b78b96acbb57db11119189.png",
+       "name": "英锦赛"
+      },
+      {
+       "children": null,
+       "id": 101,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3fc20ca64df62c3f3ac177abd84328dc.png",
+       "name": "英足挑杯"
+      },
+      {
+       "children": null,
+       "id": 102,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6ac4f6d1b0155666138fb80313bb3551.png",
+       "name": "英青杯"
+      },
+      {
+       "children": null,
+       "id": 1148,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e0b3816ec3328511c798e07a58f57387.png",
+       "name": "英U23杯"
+      },
+      {
+       "children": null,
+       "id": 2737,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f1e6906909f5cdcb353a961e5c9064d7.png",
+       "name": "英U21杯"
+      },
+      {
+       "children": null,
+       "id": 84,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FltQq3hr98XONL0FghSYN0blbyn_.png",
+       "name": "英甲"
+      },
+      {
+       "children": null,
+       "id": 2930,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bdd491f627a0896fb75290cbfb8c6b8f.png",
+       "name": "曼市杯"
+      },
+      {
+       "children": null,
+       "id": 107,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FuPLMtpOH7VieziFV9TnnNheh-Bl.png",
+       "name": "英女杯"
+      },
+      {
+       "children": null,
+       "id": 106,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/00a9b6752ec2edbc557cfbe831f76748.png",
+       "name": "英女联杯"
+      },
+      {
+       "children": null,
+       "id": 105,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bce9d0b4824cf4845904a6b9ca3064a7.png",
+       "name": "英女足总"
+      },
+      {
+       "children": null,
+       "id": 85,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/67a530b2c82340aa15d70578e506deb2.png",
+       "name": "英乙"
+      },
+      {
+       "children": null,
+       "id": 86,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2127bc70f795b4c63e961bd222d34a68.png",
+       "name": "英议联"
+      },
+      {
+       "children": null,
+       "id": 87,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7e3e7d2c62732af4e66748d2b38cfb41.png",
+       "name": "英议南"
+      },
+      {
+       "children": null,
+       "id": 88,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/30e96c51dde16caf81ee7a618fa263b2.png",
+       "name": "英议北"
+      },
+      {
+       "children": null,
+       "id": 89,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4ba807160c5db596c605e059a8bca5b2.png",
+       "name": "英南超"
+      },
+      {
+       "children": null,
+       "id": 90,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a35b25ad8363009ac2b8af3dc18e96a8.png",
+       "name": "英北超"
+      },
+      {
+       "children": null,
+       "id": 91,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9a5a4ee65898088d09e1810cc453a2c7.png",
+       "name": "英依超"
+      },
+      {
+       "children": null,
+       "id": 1110,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f26f07e04057682051b61580da8b82eb.png",
+       "name": "英U23"
+      },
+      {
+       "children": null,
+       "id": 1126,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/71228dec5444f36dadb78ec6271663a9.png",
+       "name": "英乙U23"
+      },
+      {
+       "children": null,
+       "id": 97,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9b12aff7744422e0e85d7efd1182ba9c.png",
+       "name": "英乙U21"
+      },
+      {
+       "children": null,
+       "id": 96,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c616f80b214bcf23743a7d604184e010.png",
+       "name": "英U21"
+      },
+      {
+       "children": null,
+       "id": 2914,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f6ba2d1671ef84a7d1a2cc11291c7017.png",
+       "name": "英南超中"
+      },
+      {
+       "children": null,
+       "id": 92,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d62b0f397bfc18b2bb5b20de0812433c.png",
+       "name": "英女超"
+      },
+      {
+       "children": null,
+       "id": 95,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3dd892a355348a60ad19464c52232207.png",
+       "name": "英女冠"
+      },
+      {
+       "children": null,
+       "id": 93,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/79f654761c4326cd0d1ba45f20ad4d80.png",
+       "name": "英女南"
+      },
+      {
+       "children": null,
+       "id": 94,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e8308e55e4dfa61a7c52eade0e9c83c0.png",
+       "name": "英女北"
+      },
+      {
+       "children": null,
+       "id": 7200,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/34597d2662fec27c2edc21f67b679b98.png",
+       "name": "英协联杯"
+      },
+      {
+       "children": null,
+       "id": 7295,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4694cd1700d145523768f1c90f065f77.png",
+       "name": "骁龙杯"
+      },
+      {
+       "children": null,
+       "id": 3507,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6ec45325b4595a44725fc6ffce4d1870.png",
+       "name": "英足总瓶"
+      }
+     ],
+     "id": 151,
+     "logo": null,
+     "name": "英格兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 108,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b38f4015a6b3309ad9462e6ce27ae99.png",
+       "name": "意甲"
+      },
+      {
+       "children": null,
+       "id": 114,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fg_FcwPJddfAAcWkDQrqLMxfK-Gv.png",
+       "name": "意杯"
+      },
+      {
+       "children": null,
+       "id": 117,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FlK3ryBryMs8mGWhOPxX2RN9KU-B.png",
+       "name": "意超杯"
+      },
+      {
+       "children": null,
+       "id": 109,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/aed17489efef04d8cbfc7ffaae36cef7.png",
+       "name": "意乙"
+      },
+      {
+       "children": null,
+       "id": 116,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FvED59DBwJcg2zjscQDh-jc19lda.png",
+       "name": "维亚杯"
+      },
+      {
+       "children": null,
+       "id": 110,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ed94e6389456957de772c629b5338ac9.png",
+       "name": "意丙"
+      },
+      {
+       "children": null,
+       "id": 112,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b0ee786578f1e9c7c648c9536197b452.png",
+       "name": "意青联甲"
+      },
+      {
+       "children": null,
+       "id": 3141,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FugzpC8KWTWUG9DfK6lOa_kVGtOJ.png",
+       "name": "意青乙"
+      },
+      {
+       "children": null,
+       "id": 113,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7dcdc6283d257e22561967512c067339.png",
+       "name": "意女甲"
+      },
+      {
+       "children": null,
+       "id": 118,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b3548f31e651d84741f3c9ca751b157.png",
+       "name": "意丙杯"
+      },
+      {
+       "children": null,
+       "id": 119,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7b2eee2e5baa916c5a6f2e0e53f11075.png",
+       "name": "意青杯"
+      },
+      {
+       "children": null,
+       "id": 3181,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/67ebf5ecd9424c96b9fd4aef9ae38f53.png",
+       "name": "意青超杯"
+      },
+      {
+       "children": null,
+       "id": 3333,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e6a120bdc502248932f3e7ac2b01faef.png",
+       "name": "意青联丙"
+      }
+     ],
+     "id": 186,
+     "logo": null,
+     "name": "意大利"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 151,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/05/31/FqlJq8i8YPYm9FbP9SVBdHHpj7ye.png",
+       "name": "葡超"
+      },
+      {
+       "children": null,
+       "id": 155,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FuwnFnf_uUTBrnV-7W7T5cG9Kphk.png",
+       "name": "葡杯"
+      },
+      {
+       "children": null,
+       "id": 156,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/91dc4676aa2d3e8130cb1ae9fddc01c3.png",
+       "name": "葡联杯"
+      },
+      {
+       "children": null,
+       "id": 157,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FqKPV_blfvRcUke3HM2UWVWRmmgL.png",
+       "name": "葡超杯"
+      },
+      {
+       "children": null,
+       "id": 152,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/07/Fr1RpKygNdLJBSbTH3F1PwX3ruEx.png",
+       "name": "葡甲"
+      },
+      {
+       "children": null,
+       "id": 16,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FioUfBb4xfYMEReLy-Ej0Buooxfj.png",
+       "name": "加夫杯"
+      },
+      {
+       "children": null,
+       "id": 2915,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0b3d4c605b5a516dd91b09b6719e453e.png",
+       "name": "葡U23"
+      },
+      {
+       "children": null,
+       "id": 2168,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/247fcca743e7e569273bada29406c231.png",
+       "name": "葡青联U19"
+      },
+      {
+       "children": null,
+       "id": 154,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f0270467b072401f50b7d40d804d893d.png",
+       "name": "葡青U17"
+      },
+      {
+       "children": null,
+       "id": 3386,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FriIHZCJrBPUvI69kysVm1hqpCI2.png",
+       "name": "葡U23杯"
+      },
+      {
+       "children": null,
+       "id": 3433,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/06bcd06b2f563fad256f4d0cac049b52.png",
+       "name": "葡TA联"
+      },
+      {
+       "children": null,
+       "id": 3442,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d1593a2a14286abee143bf6e78bb5385.png",
+       "name": "葡女超杯"
+      },
+      {
+       "children": null,
+       "id": 3280,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1eeed5cc6cb5d265da8998024bedcb13.png",
+       "name": "葡乙"
+      }
+     ],
+     "id": 200,
+     "logo": null,
+     "name": "葡萄牙"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 129,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0c6a25cd746e802296d9064b4504179d.png",
+       "name": "德甲"
+      },
+      {
+       "children": null,
+       "id": 136,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1cded13e781ed1f7c2514a3413506960.png",
+       "name": "德国杯"
+      },
+      {
+       "children": null,
+       "id": 139,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fh9bky2xv-21vu62skypQ8T6R2At.png",
+       "name": "德超杯"
+      },
+      {
+       "children": null,
+       "id": 130,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/eab6e349cf5811408c0628a774724869.png",
+       "name": "德乙"
+      },
+      {
+       "children": null,
+       "id": 141,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f29b38f160f87ae86df31cee1982066f.jpg",
+       "name": "德电信杯"
+      },
+      {
+       "children": null,
+       "id": 131,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4275e652e6c64d896869dc9519f4e654.png",
+       "name": "德丙"
+      },
+      {
+       "children": null,
+       "id": 132,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1cf5e8ba05dee5692bc70c2e0117d926.png",
+       "name": "德地区"
+      },
+      {
+       "children": null,
+       "id": 134,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ec44dabefbda5c783b6c9b2aee7cefda.png",
+       "name": "德U19"
+      },
+      {
+       "children": null,
+       "id": 133,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/82665ad7ed9758e84eecaeff3500bb9b.png",
+       "name": "德U17"
+      },
+      {
+       "children": null,
+       "id": 135,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fkg-0Ydwf7_mbvxDSjmT6l9gaUmZ.png",
+       "name": "德女甲"
+      },
+      {
+       "children": null,
+       "id": 137,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9383d3b8e37548ea1813758a544df5e1.png",
+       "name": "德青杯"
+      },
+      {
+       "children": null,
+       "id": 138,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e777f4513cca9920a534d26256481ee0.png",
+       "name": "德女杯"
+      },
+      {
+       "children": null,
+       "id": 1951,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d5266d300db1a6d91a6836f43d79c7d1.png",
+       "name": "德女乙"
+      },
+      {
+       "children": null,
+       "id": 6907,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a61e5aba66cc64e601701c19c7324e2d.png",
+       "name": "德青联H"
+      }
+     ],
+     "id": 214,
+     "logo": null,
+     "name": "德国"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 120,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1fbbb4be3b47d9465c5badecc3122e07.png",
+       "name": "西甲"
+      },
+      {
+       "children": null,
+       "id": 125,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/22/FkqXsJ-SbvXgUx_Ca3zUKd2rR-gC.png",
+       "name": "国王杯"
+      },
+      {
+       "children": null,
+       "id": 126,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/22/FksbfKxJhSzsgYrhSiCG-owJZkrW.png",
+       "name": "西超杯"
+      },
+      {
+       "children": null,
+       "id": 121,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/07/FjtG-tMjbwZnLF57eDB-CrFvdQOg.png",
+       "name": "西乙"
+      },
+      {
+       "children": null,
+       "id": 3284,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/156f6b6aaf6e209e06f7f3ff907c5ae0.png",
+       "name": "西协甲"
+      },
+      {
+       "children": null,
+       "id": 122,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c14b0ad725bebac7e260632159ff38f0.png",
+       "name": "西协乙"
+      },
+      {
+       "children": null,
+       "id": 124,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f31c9ba221ee646ff14f6980a4c938ea.png",
+       "name": "西女甲"
+      },
+      {
+       "children": null,
+       "id": 123,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fj77k1kWTaVoBdWYld3QGeb04Vk7.png",
+       "name": "西室内足"
+      },
+      {
+       "children": null,
+       "id": 7178,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b2823d5766b7e44ab14609f5b82bd8a7.png",
+       "name": "西甲希望杯"
+      },
+      {
+       "children": null,
+       "id": 1822,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c9680a9056548c27d9e51ff02ae9f052.png",
+       "name": "加泰杯"
+      },
+      {
+       "children": null,
+       "id": 3180,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6eb582bfe00636b0c72a77c632431d40.png",
+       "name": "西女超杯"
+      },
+      {
+       "children": null,
+       "id": 128,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/fd2a0576fe029ed5736599ec23c1cb95.png",
+       "name": "西协杯"
+      },
+      {
+       "children": null,
+       "id": 1679,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/dba98abc4e543a1fba59bf3319f3702b.png",
+       "name": "西协丙"
+      },
+      {
+       "children": null,
+       "id": 3277,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/091b235900cb511650f379cbc56c1476.png",
+       "name": "甘伯杯"
+      },
+      {
+       "children": null,
+       "id": 2000,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/57e39f68527bc1f974452038fa7b0ee1.png",
+       "name": "皇后杯"
+      }
+     ],
+     "id": 229,
+     "logo": null,
+     "name": "西班牙"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 142,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2024/09/04/FgZZPWZ_CwS8truZDyD-lu_5o0NT.png",
+       "name": "法甲"
+      },
+      {
+       "children": null,
+       "id": 148,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/5598719801fa02e53b44827f791be316.png",
+       "name": "法国杯"
+      },
+      {
+       "children": null,
+       "id": 150,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FhoTWZulS34G032aPqpshVT_z-y3.png",
+       "name": "法超杯"
+      },
+      {
+       "children": null,
+       "id": 143,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FtjrBMUasMcFAlT97hmCXlWjx2px.png",
+       "name": "法乙"
+      },
+      {
+       "children": null,
+       "id": 144,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fkd0ECNzRgwXjSxNjVJ8VXZXrhzo.png",
+       "name": "法全联"
+      },
+      {
+       "children": null,
+       "id": 145,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgyiQKVGn8ZGf3_gOShHi9v3G2P7.png",
+       "name": "法全乙"
+      },
+      {
+       "children": null,
+       "id": 147,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/cfc96f08cc4e76de4e6ab6497f29a6bc.png",
+       "name": "法U19"
+      },
+      {
+       "children": null,
+       "id": 146,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/77fee77817894c4bda8453826fa61af2.png",
+       "name": "法女甲"
+      },
+      {
+       "children": null,
+       "id": 3290,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e3c33861eafbd7e438142163f10b5ae2.png",
+       "name": "法女乙"
+      },
+      {
+       "children": null,
+       "id": 15,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d2e8bd4b3f540e6fc78a7313b7b19c34.png",
+       "name": "土伦杯"
+      },
+      {
+       "children": null,
+       "id": 3404,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4963eff562986fbba3ea6abb9e38c6df.png",
+       "name": "苏地杯"
+      }
+     ],
+     "id": 245,
+     "logo": null,
+     "name": "法国"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 279,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FvJLYp8XoKGiN2WpihPLG0yjOZTg.png",
+       "name": "冰岛超"
+      },
+      {
+       "children": null,
+       "id": 280,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FoFZZTo2fTVvq_pOyE-cF26OMllQ.png",
+       "name": "冰岛甲"
+      },
+      {
+       "children": null,
+       "id": 282,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e5e63da79fcd2bebbd7cb8bf1c1d0274.jpg",
+       "name": "冰岛乙"
+      },
+      {
+       "children": null,
+       "id": 281,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/22/FhkrrdOm4oGezXN4Zu9Bv1sKWY36.png",
+       "name": "冰女超"
+      },
+      {
+       "children": null,
+       "id": 283,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/838e8afb1ca34354ac209f53d90c3a43.jpg",
+       "name": "冰女甲"
+      },
+      {
+       "children": null,
+       "id": 284,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f360f7ac2d137c41101d13ef1329696f.jpg",
+       "name": "冰岛杯"
+      },
+      {
+       "children": null,
+       "id": 285,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/25c82cc2d05fb0eaa4bbfd9bee5fcef3.png",
+       "name": "冰联杯"
+      },
+      {
+       "children": null,
+       "id": 289,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/cb4dbc31003c9a3b74b7ea19addddff2.png",
+       "name": "冰超杯"
+      },
+      {
+       "children": null,
+       "id": 288,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/571e0f7e2d992e738adff8b1bd43a521.jpg",
+       "name": "冰岛锦"
+      },
+      {
+       "children": null,
+       "id": 292,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/cc59006503c2f973fb252ee4fabc96a1.png",
+       "name": "冰岛锦B"
+      },
+      {
+       "children": null,
+       "id": 2789,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e98c7d07dc5eac92a458100b21386bb7.png",
+       "name": "冰联杯B"
+      },
+      {
+       "children": null,
+       "id": 2203,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0f02cadc0b02f93af6ce44f837c22606.png",
+       "name": "冰岛季前杯"
+      },
+      {
+       "children": null,
+       "id": 290,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6613123ad558751c7e7a12e0ca598823.png",
+       "name": "雷克锦"
+      },
+      {
+       "children": null,
+       "id": 287,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/Fip9rwBgG09QXbnDuCNtbfXnNnGe.png",
+       "name": "冰女杯"
+      },
+      {
+       "children": null,
+       "id": 286,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/31b3b31a1c2f8a370206f111127c0dbd.jpg",
+       "name": "冰女联杯"
+      },
+      {
+       "children": null,
+       "id": 291,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/fef5dc61544bb07640deddaaf58c15bd.png",
+       "name": "雷克女锦"
+      },
+      {
+       "children": null,
+       "id": 2193,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b78f7d5936ffe72525aee91834b1266.png",
+       "name": "冰法女锦"
+      }
+     ],
+     "id": 257,
+     "logo": null,
+     "name": "冰岛"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 158,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FvB28jsHQkWLUlWXwAB-kgz7gpMs.png",
+       "name": "苏超"
+      },
+      {
+       "children": null,
+       "id": 165,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/eefcb931a53e8505e956fd20678918f6.png",
+       "name": "苏总杯"
+      },
+      {
+       "children": null,
+       "id": 166,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f14b14ac3b458b9247f7d53946cdaf0d.png",
+       "name": "苏联杯"
+      },
+      {
+       "children": null,
+       "id": 159,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpW7W0QNBB6SPRsJ75RBRQ0uyx1M.png",
+       "name": "苏冠"
+      },
+      {
+       "children": null,
+       "id": 160,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FuVWitVjtKV_518ft8Tz2g8_BA1S.png",
+       "name": "苏甲"
+      },
+      {
+       "children": null,
+       "id": 161,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FnOV7V0CZQO-RkRqQC9Ok8zxLDwL.png",
+       "name": "苏乙"
+      },
+      {
+       "children": null,
+       "id": 1357,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3ca80bf2455bd9ae062f499f2b68e469.jpg",
+       "name": "苏后备"
+      },
+      {
+       "children": null,
+       "id": 162,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4ebc782b1557e4c7c89545b5aa4c109f.png",
+       "name": "苏高联"
+      },
+      {
+       "children": null,
+       "id": 164,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FsrN6CQ0M9eXkiz03S3V48Y54gxa.png",
+       "name": "苏女超"
+      },
+      {
+       "children": null,
+       "id": 167,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/71e6b805f82b58c1219b9018b3512d8b.png",
+       "name": "苏挑杯"
+      }
+     ],
+     "id": 275,
+     "logo": null,
+     "name": "苏格兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 238,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpHQ4QZUUhcSvWioAaeRYroGTEnT.png",
+       "name": "俄超"
+      },
+      {
+       "children": null,
+       "id": 243,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ef2ae668cf55ffeea60c3d551bdfb1b1.png",
+       "name": "俄杯"
+      },
+      {
+       "children": null,
+       "id": 244,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpMl0rxFNLSxcJe7FF6l_AyQT6OJ.png",
+       "name": "俄超杯"
+      },
+      {
+       "children": null,
+       "id": 239,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/57d43a43dee9fea54bd82b2ae1ed7581.png",
+       "name": "俄甲"
+      },
+      {
+       "children": null,
+       "id": 240,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ae083f103ad23631393f0915f3e3b1f6.png",
+       "name": "俄乙"
+      },
+      {
+       "children": null,
+       "id": 7282,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6cc001d431fa7d8ebd051636cef64ed3.png",
+       "name": "俄乙A"
+      },
+      {
+       "children": null,
+       "id": 7283,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/010fb9ddd41da46a1c245e86f9f38d92.png",
+       "name": "俄乙B"
+      },
+      {
+       "children": null,
+       "id": 241,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/dcbda66eb9f9ffd1e180d4c64e9bff70.png",
+       "name": "俄青联"
+      },
+      {
+       "children": null,
+       "id": 242,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d7f953e5dfddf8b5720febd26eca4d5f.png",
+       "name": "俄女超"
+      }
+     ],
+     "id": 286,
+     "logo": null,
+     "name": "俄罗斯"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 175,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/66b24b09759356277ac913d6f2589f26.png",
+       "name": "比甲"
+      },
+      {
+       "children": null,
+       "id": 182,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7063f8886a3f01ada5989a5b75c3c077.png",
+       "name": "比利时杯"
+      },
+      {
+       "children": null,
+       "id": 183,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0c6f4b1f15de186be807b6cdf8a33605.png",
+       "name": "比超杯"
+      },
+      {
+       "children": null,
+       "id": 176,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1b93dc3409361629c3a576bf5ce8a602.png",
+       "name": "比乙"
+      },
+      {
+       "children": null,
+       "id": 1163,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/29e00411da32f33f125a48da4c25bc80.png",
+       "name": "比业余"
+      },
+      {
+       "children": null,
+       "id": 178,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/be313d9e187a7543ccd470125a0d2365.png",
+       "name": "比U21"
+      },
+      {
+       "children": null,
+       "id": 179,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/65bca02699b9b783c7baf997acdf5c4c.png",
+       "name": "比女超"
+      },
+      {
+       "children": null,
+       "id": 180,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FqjB1Z36WauNH66Ua888vHy-PfGt.png",
+       "name": "比女甲"
+      }
+     ],
+     "id": 296,
+     "logo": null,
+     "name": "比利时"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 253,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d689469c37d09b5697d954d1994b93c9.png",
+       "name": "乌克超"
+      },
+      {
+       "children": null,
+       "id": 256,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/84aea7bb18fb760eea18dba836559310.png",
+       "name": "乌克兰杯"
+      },
+      {
+       "children": null,
+       "id": 257,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/75d35a27bf2239e40ba8230edade3f03.png",
+       "name": "乌超杯"
+      },
+      {
+       "children": null,
+       "id": 254,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/66e5dd5308f349aeeb06134ff2648591.png",
+       "name": "乌克甲"
+      },
+      {
+       "children": null,
+       "id": 1670,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/101759df9367e44dd566cf6b868b85bf.png",
+       "name": "乌克U19"
+      },
+      {
+       "children": null,
+       "id": 255,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bac4af61758b34720dab210cc4d65c10.png",
+       "name": "乌克青"
+      }
+     ],
+     "id": 305,
+     "logo": null,
+     "name": "乌克兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 315,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpA8dH3E8CwwBpokzMAmOjvSpiAZ.png",
+       "name": "土超"
+      },
+      {
+       "children": null,
+       "id": 325,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/140b07a7645a6f58c20c39e2a22d476b.png",
+       "name": "土杯"
+      },
+      {
+       "children": null,
+       "id": 328,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FrrK-PynSMbl7e0h2j5_Ot6M1QbC.png",
+       "name": "土超杯"
+      },
+      {
+       "children": null,
+       "id": 316,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d09a3b1ab92ce378a5277b79a98dac59.png",
+       "name": "土甲"
+      },
+      {
+       "children": null,
+       "id": 317,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7f608d54aa96242c120f9a52493058a2.png",
+       "name": "土乙"
+      },
+      {
+       "children": null,
+       "id": 318,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1f3c62060af1acca43eb60840ca61f67.png",
+       "name": "土丙"
+      },
+      {
+       "children": null,
+       "id": 323,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Ft7yTYdEOUsbc1PyoZp3AbfqG2hZ.png",
+       "name": "土女甲"
+      }
+     ],
+     "id": 312,
+     "logo": null,
+     "name": "土耳其"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 168,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpR0sfuS0WjtiDbbr3xFXpoBfdVQ.png",
+       "name": "荷甲"
+      },
+      {
+       "children": null,
+       "id": 173,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9bbacfe2202a2caa2f29607d758b3f54.png",
+       "name": "荷兰杯"
+      },
+      {
+       "children": null,
+       "id": 169,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a808c778b477ba6dd32d5290b9d133cc.png",
+       "name": "荷乙"
+      },
+      {
+       "children": null,
+       "id": 174,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ec938f367d772648d3346e1cb96fb74d.png",
+       "name": "荷超杯"
+      },
+      {
+       "children": null,
+       "id": 1727,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b144281dba1195428989af50e55259a5.jpg",
+       "name": "荷丙"
+      },
+      {
+       "children": null,
+       "id": 1730,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FlBbcRlzFgIdwDLqq6IWGes0uidi.png",
+       "name": "荷女甲"
+      }
+     ],
+     "id": 320,
+     "logo": null,
+     "name": "荷兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 219,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FrFLFOJ-gjuwX3Z31MXpKhcCGnxa.png",
+       "name": "奥甲"
+      },
+      {
+       "children": null,
+       "id": 223,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/07/FoGS6V0SIYL2_af0CxcXM_-sY4U-.png",
+       "name": "奥地利杯"
+      },
+      {
+       "children": null,
+       "id": 220,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/8f8bc56bdfd14c69ff4f32eb297e87cf.png",
+       "name": "奥乙"
+      },
+      {
+       "children": null,
+       "id": 221,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d08bb583cf7ebc4fe5f3bd9a249c89a1.png",
+       "name": "奥丙"
+      },
+      {
+       "children": null,
+       "id": 222,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2ba8698b79439589fdd2b0f7218d8b07.jpg",
+       "name": "奥女甲"
+      }
+     ],
+     "id": 327,
+     "logo": null,
+     "name": "奥地利"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 224,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FgqWZhXyZcJP16XCtcQckoIU4cFi.png",
+       "name": "瑞士超"
+      },
+      {
+       "children": null,
+       "id": 227,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9be46b717fad6d632b37c9f8b0155a0e.png",
+       "name": "瑞士杯"
+      },
+      {
+       "children": null,
+       "id": 225,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3bc421ead71f85324bfedb08a565ad23.png",
+       "name": "瑞士挑"
+      },
+      {
+       "children": null,
+       "id": 226,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/Fl7w6jFcpHx1SuPqtGylu8rG5KRf.png",
+       "name": "瑞士甲"
+      }
+     ],
+     "id": 333,
+     "logo": null,
+     "name": "瑞士"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 209,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FhdaeXB-xS3drv1xYeFr5TC_RcDP.png",
+       "name": "丹麦超"
+      },
+      {
+       "children": null,
+       "id": 210,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/90f0e3d0c2b3d1d11df55d7d4a012f16.png",
+       "name": "丹麦甲"
+      },
+      {
+       "children": null,
+       "id": 211,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fj_wdFwEZHMKaaWEhwFgh-PPD2-2.png",
+       "name": "丹麦乙"
+      },
+      {
+       "children": null,
+       "id": 215,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4f16c818875d9fcb6867c7bdc89be7eb.jpg",
+       "name": "丹后备"
+      },
+      {
+       "children": null,
+       "id": 214,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c2b3b66598b4275cf8db4ab111f6d481.png",
+       "name": "丹麦U19"
+      },
+      {
+       "children": null,
+       "id": 1711,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4aca7bde8dd27315481a279888defe50.png",
+       "name": "丹麦U17"
+      },
+      {
+       "children": null,
+       "id": 213,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/116ff9b094a41880ed30d7b137cf4147.png",
+       "name": "丹女超"
+      },
+      {
+       "children": null,
+       "id": 212,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/92271d976f4fc3ed5fed0b5fdf9ee6c1.png",
+       "name": "丹女甲"
+      },
+      {
+       "children": null,
+       "id": 3491,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3c67a30faff54c19653db441dbe7b46d.png",
+       "name": "丹未来杯U21"
+      },
+      {
+       "children": null,
+       "id": 2775,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/43f539b25abbefed08ee54259cedb9c8.png",
+       "name": "丹丙A"
+      },
+      {
+       "children": null,
+       "id": 217,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FlExVmrG2aDpSNxCQUiaZXNkXit8.png",
+       "name": "丹麦杯"
+      },
+      {
+       "children": null,
+       "id": 218,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9b72e31dac81715466cd580a448cf823.jpg",
+       "name": "丹女杯"
+      }
+     ],
+     "id": 338,
+     "logo": null,
+     "name": "丹麦"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 184,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3e3f563e0ed76160f7d6ad6401a4bca7.png",
+       "name": "瑞典超"
+      },
+      {
+       "children": null,
+       "id": 185,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/18c4076fb0c4bb2925f7c39f9ef3ceb2.png",
+       "name": "瑞典超甲"
+      },
+      {
+       "children": null,
+       "id": 186,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/db8c32fba6d3773eb031b2d2d9fc7664.png",
+       "name": "瑞典甲"
+      },
+      {
+       "children": null,
+       "id": 187,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d8c3a872ed202d996f0c8731ee09bc39.png",
+       "name": "瑞典乙"
+      },
+      {
+       "children": null,
+       "id": 188,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/892c8e101abe557fad5495d12df5b631.png",
+       "name": "瑞青超U21"
+      },
+      {
+       "children": null,
+       "id": 190,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/84e63529ab66b4e1008f56f34bd9051a.png",
+       "name": "瑞典女超"
+      },
+      {
+       "children": null,
+       "id": 191,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/411ae1bf081d1674ca6091f8c59a266f.jpg",
+       "name": "瑞典女甲"
+      },
+      {
+       "children": null,
+       "id": 1909,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/91cdda6e482f58d1015d19d3b6b66e52.png",
+       "name": "瑞典女乙"
+      },
+      {
+       "children": null,
+       "id": 192,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/07/Fm93yYQLzrlbMFeNMc38nKz92z8Q.png",
+       "name": "瑞典杯"
+      },
+      {
+       "children": null,
+       "id": 194,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ebe4eff0bb5dfb5dead17c24644e44db.png",
+       "name": "瑞典女杯"
+      }
+     ],
+     "id": 351,
+     "logo": null,
+     "name": "瑞典"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 245,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/cfd8f0e2a4a9c9579abacbfd4159db0b.png",
+       "name": "波兰甲"
+      },
+      {
+       "children": null,
+       "id": 246,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b480a16cd74497a00b3a40f81690efcf.png",
+       "name": "波兰乙"
+      },
+      {
+       "children": null,
+       "id": 247,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a0371cae016f535937b347bcea8f3432.png",
+       "name": "波兰丙"
+      },
+      {
+       "children": null,
+       "id": 249,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c3b53c041f5f204d9d21d3e689f5fac4.png",
+       "name": "波青联"
+      },
+      {
+       "children": null,
+       "id": 248,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a127acdf32a1662fd89c1ec023aab20e.png",
+       "name": "波女超"
+      },
+      {
+       "children": null,
+       "id": 250,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/edd5e920d47637766076d28b8c1c0195.png",
+       "name": "波兰杯"
+      },
+      {
+       "children": null,
+       "id": 252,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/390abf939f7ca60b2531a656063baaa0.png",
+       "name": "波超杯"
+      }
+     ],
+     "id": 362,
+     "logo": null,
+     "name": "波兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 308,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/57f3b41deeb08e04495378ed52ab4fdf.png",
+       "name": "匈甲"
+      },
+      {
+       "children": null,
+       "id": 309,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/edb29edebbaa39a097578cbc51b46b13.png",
+       "name": "匈乙"
+      },
+      {
+       "children": null,
+       "id": 838,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/33c9a75a8bfe862f97de654b71db9dc8.png",
+       "name": "匈U19"
+      },
+      {
+       "children": null,
+       "id": 310,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f8b8666884a55965be85c74b6f2d290d.png",
+       "name": "匈女甲"
+      },
+      {
+       "children": null,
+       "id": 312,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ce761be7f6f038eda655c205254c5991.png",
+       "name": "匈杯"
+      }
+     ],
+     "id": 370,
+     "logo": null,
+     "name": "匈牙利"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 228,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FhDRIH7tCV8HGKDooebiCW5c-NHA.png",
+       "name": "爱超"
+      },
+      {
+       "children": null,
+       "id": 231,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4792aa3d90b1afdded4e9da3ba722be7.png",
+       "name": "爱足杯"
+      },
+      {
+       "children": null,
+       "id": 229,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f1b3042fcdec297fa74519f2c7eccffd.png",
+       "name": "爱甲"
+      },
+      {
+       "children": null,
+       "id": 3354,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c5b4f8ad4ee22bfad9ebc324b350c9f4.png",
+       "name": "爱总统杯"
+      },
+      {
+       "children": null,
+       "id": 7261,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0e80b3426de584b91ba9021e2d984ac4.png",
+       "name": "爱女超杯"
+      },
+      {
+       "children": null,
+       "id": 1981,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a9444a08d2035f8a28f126112ddfb3f4.png",
+       "name": "爱伦高杯"
+      }
+     ],
+     "id": 376,
+     "logo": null,
+     "name": "爱尔兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 258,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/180658ba9cbe7cc2e16f74055ef60672.png",
+       "name": "捷甲"
+      },
+      {
+       "children": null,
+       "id": 259,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/529b2a49c763bc4349fdf9b0f94742f7.png",
+       "name": "捷乙"
+      },
+      {
+       "children": null,
+       "id": 260,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/399fdcf6d58e3ed5086ad401ee1bfbf8.png",
+       "name": "捷丙"
+      },
+      {
+       "children": null,
+       "id": 263,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9f3ed1ce238c76a26ddf7044e3ab8299.png",
+       "name": "捷U19"
+      },
+      {
+       "children": null,
+       "id": 262,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/8a6ea0da633cd16f06d686b36454a89c.png",
+       "name": "捷女甲"
+      },
+      {
+       "children": null,
+       "id": 264,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e418b0f41368ff180330d44338ce2049.png",
+       "name": "捷克杯"
+      },
+      {
+       "children": null,
+       "id": 67,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ee7375d43041d954287674482f1275db.png",
+       "name": "捷TIP杯"
+      }
+     ],
+     "id": 383,
+     "logo": null,
+     "name": "捷克"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 296,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FoSIFZlAGYLbqJBra819bkNhQyKL.png",
+       "name": "白俄超"
+      },
+      {
+       "children": null,
+       "id": 297,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ae2236179f3e502a3d7c4c77f82cedb2.png",
+       "name": "白俄甲"
+      },
+      {
+       "children": null,
+       "id": 2045,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/78585c0a7be9932885d0a525369d46dc.png",
+       "name": "白俄后备"
+      },
+      {
+       "children": null,
+       "id": 298,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpiwBlDWkZpA5aDlBecSznQruyFm.png",
+       "name": "白俄女超"
+      },
+      {
+       "children": null,
+       "id": 299,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/04c7db4de0acf5b988471ce5641f8747.png",
+       "name": "白俄杯"
+      },
+      {
+       "children": null,
+       "id": 2728,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/794c4ddecef181ab489be5127dd38ab7.png",
+       "name": "白俄超杯"
+      }
+     ],
+     "id": 391,
+     "logo": null,
+     "name": "白俄罗斯"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 266,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/519eafa8e825d45e8ff4e48ab9797d2f.png",
+       "name": "希腊超"
+      },
+      {
+       "children": null,
+       "id": 267,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FvaG96Kyra7V5O8ast89x0vqyOww.png",
+       "name": "希腊甲"
+      },
+      {
+       "children": null,
+       "id": 3021,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/cba3edbed20f9b3862001ecfadde2f41.png",
+       "name": "希腊乙"
+      },
+      {
+       "children": null,
+       "id": 269,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1bf163c9c97591667d1da9330b17140d.png",
+       "name": "希腊杯"
+      },
+      {
+       "children": null,
+       "id": 2166,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a5a778222054ef4d251965bc2dcb3894.png",
+       "name": "希业余杯"
+      }
+     ],
+     "id": 398,
+     "logo": null,
+     "name": "希腊"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 303,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/feccabd0bdfaf75201cf0e866c49707f.png",
+       "name": "威超"
+      },
+      {
+       "children": null,
+       "id": 3008,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bc45fb2ee55dc5b8f9326de52a9a949f.png",
+       "name": "威冠联"
+      },
+      {
+       "children": null,
+       "id": 306,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e88b53a65a192452fbfee2f2be670f61.png",
+       "name": "威杯"
+      },
+      {
+       "children": null,
+       "id": 307,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/280a446ec3d51935ca7f73f2bf762cac.png",
+       "name": "威联杯"
+      }
+     ],
+     "id": 404,
+     "logo": null,
+     "name": "威尔士"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 195,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/29/FmeayPGYerw5psNKymPI8UMvuwaz.png",
+       "name": "芬超"
+      },
+      {
+       "children": null,
+       "id": 196,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9267ee08759fdc25c89d3e4642303522.png",
+       "name": "芬甲"
+      },
+      {
+       "children": null,
+       "id": 3352,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c0fcd344aa4e2eff023f1e055afb918a.png",
+       "name": "芬甲联杯"
+      },
+      {
+       "children": null,
+       "id": 2957,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ddcbfd13df8f0efa5965a6237a801d26.png",
+       "name": "芬K杯"
+      },
+      {
+       "children": null,
+       "id": 197,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ebaaa1dd253d35d64b79237ac20b1d38.png",
+       "name": "芬乙"
+      },
+      {
+       "children": null,
+       "id": 198,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fq6ibut54okuOnbKtHrvS8634hSw.png",
+       "name": "芬女超"
+      },
+      {
+       "children": null,
+       "id": 199,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/07/Fu6-MzCkN9FEmEpLzKQh63_lkzYO.png",
+       "name": "芬兰杯"
+      },
+      {
+       "children": null,
+       "id": 200,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c53d25c8ddb7d4643dd95a122e59af24.png",
+       "name": "芬联杯"
+      }
+     ],
+     "id": 409,
+     "logo": null,
+     "name": "芬兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 201,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3846a13443fce5ec322369d88f642df7.png",
+       "name": "挪超"
+      },
+      {
+       "children": null,
+       "id": 202,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FmNUJEgp9gkqQMGmXpZPY6Ii2m14.png",
+       "name": "挪甲"
+      },
+      {
+       "children": null,
+       "id": 1952,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/efb2eecb5210fc88039b93f8c99f56ce.png",
+       "name": "挪女甲"
+      },
+      {
+       "children": null,
+       "id": 203,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6750264b5e27a1158257bc1210d46e9e.png",
+       "name": "挪乙"
+      },
+      {
+       "children": null,
+       "id": 1740,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/479457ed962ded49638d64a03eb39b6e.png",
+       "name": "挪丙"
+      },
+      {
+       "children": null,
+       "id": 205,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ffe154d4d460788bd5a3e46d2c65dd79.png",
+       "name": "挪女超"
+      },
+      {
+       "children": null,
+       "id": 206,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e5eb78a8955acd3d6ab7badb1bace986.png",
+       "name": "挪威杯"
+      },
+      {
+       "children": null,
+       "id": 207,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9f2daf365a664e509e5bfc6279ec552c.png",
+       "name": "女挪威杯"
+      },
+      {
+       "children": null,
+       "id": 1758,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/934d8103933f0c7d11ed4c008bedc8ce.png",
+       "name": "挪威U19"
+      }
+     ],
+     "id": 418,
+     "logo": null,
+     "name": "挪威"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 270,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/275fbebeca574500a79c9ad931e49d37.png",
+       "name": "罗甲"
+      },
+      {
+       "children": null,
+       "id": 271,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/484e577e79960be6becc45ab3dd12ae3.png",
+       "name": "罗乙"
+      },
+      {
+       "children": null,
+       "id": 272,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4a0209224a7b4d963e0f39fcf73d8f7e.png",
+       "name": "罗杯"
+      },
+      {
+       "children": null,
+       "id": 273,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FjS0EIarVvFpAQyQrzMsDPKnQCQJ.png",
+       "name": "罗超杯"
+      }
+     ],
+     "id": 428,
+     "logo": null,
+     "name": "罗马尼亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 233,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/16dba5d4a1a1af3fc06fddb844a1a0d9.png",
+       "name": "北爱超"
+      },
+      {
+       "children": null,
+       "id": 234,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1593af6ca3148ca14be33ee1f7a52e2b.png",
+       "name": "北爱冠"
+      },
+      {
+       "children": null,
+       "id": 235,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ad049a55bd7d4ab2cc2720d058be4f45.png",
+       "name": "北爱联杯"
+      },
+      {
+       "children": null,
+       "id": 237,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/02c3515a11d4959dc25a8f39050c0a87.png",
+       "name": "北爱杯"
+      }
+     ],
+     "id": 433,
+     "logo": null,
+     "name": "北爱尔兰"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 275,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FhKwLMsDYchAfMuiRyXnYkeCtOZB.png",
+       "name": "斯伐超"
+      },
+      {
+       "children": null,
+       "id": 276,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FoB6zs7nW3-TbvZj99CTERef6_-O.png",
+       "name": "斯伐甲"
+      },
+      {
+       "children": null,
+       "id": 277,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FtdlwfzxgXwI8CW6NQXXz0xoQ1nz.png",
+       "name": "斯伐杯"
+      }
+     ],
+     "id": 438,
+     "logo": null,
+     "name": "斯洛伐克"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 293,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgKREQurTrK8AjrkU3uQyTPXdPlU.png",
+       "name": "拉脱超"
+      },
+      {
+       "children": null,
+       "id": 294,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/dafc885b4bf6235f36cd516aa7793df6.png",
+       "name": "拉脱甲"
+      },
+      {
+       "children": null,
+       "id": 295,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ab38c0986888efe61bcdf7db80e5700f.png",
+       "name": "拉脱杯"
+      }
+     ],
+     "id": 442,
+     "logo": null,
+     "name": "拉脱维亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 300,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f5ce0a916fb4eb1455a00313a83cbd8a.png",
+       "name": "立陶甲"
+      },
+      {
+       "children": null,
+       "id": 301,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fm5U4I_8VUT0Zv7ezE7DjEwYyqMm.png",
+       "name": "立陶乙"
+      },
+      {
+       "children": null,
+       "id": 302,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/8ef356643795845570e77cca1269ade4.png",
+       "name": "立陶杯"
+      }
+     ],
+     "id": 446,
+     "logo": null,
+     "name": "立陶宛"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 330,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b9bfe8624aff65b2eee29962961d457c.png",
+       "name": "克亚联"
+      },
+      {
+       "children": null,
+       "id": 331,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/be0b4a1d0728b01fe157e778b764986e.png",
+       "name": "克亚杯"
+      },
+      {
+       "children": null,
+       "id": 1667,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4ad19c2112f17b154b078244459069b2.png",
+       "name": "克亚甲"
+      },
+      {
+       "children": null,
+       "id": 3019,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7e037c4a802daaffba323aaae6ff9297.png",
+       "name": "克亚乙"
+      }
+     ],
+     "id": 450,
+     "logo": null,
+     "name": "克罗地亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 332,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/38c435a724b4ab69e11ed2b65ed923bb.png",
+       "name": "保甲"
+      },
+      {
+       "children": null,
+       "id": 333,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/89f869f2ec7f8e424d5b0abadc7778e4.png",
+       "name": "保乙"
+      },
+      {
+       "children": null,
+       "id": 334,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FhuC2X0_L-Ngc6TsrV19hgX2tNDn.png",
+       "name": "保杯"
+      },
+      {
+       "children": null,
+       "id": 335,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FkOHXyUe5u_uwQVk3NW0-V4RGt64.png",
+       "name": "保超杯"
+      }
+     ],
+     "id": 455,
+     "logo": null,
+     "name": "保加利亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 336,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FlCgQJMcha8zsgYlehnheLH4t9I_.png",
+       "name": "斯亚甲"
+      },
+      {
+       "children": null,
+       "id": 337,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0f71e47cbe82fa3b3fbab15a5a015918.png",
+       "name": "斯亚乙"
+      },
+      {
+       "children": null,
+       "id": 338,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/54fcddd0d78da261e1225810a3a4831b.png",
+       "name": "斯亚杯"
+      }
+     ],
+     "id": 460,
+     "logo": null,
+     "name": "斯洛文尼亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 340,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FlF2RaRygWgW641sC8rPeyOF9M6M.png",
+       "name": "塞浦甲"
+      },
+      {
+       "children": null,
+       "id": 341,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/24896ee4c6526356cc127852413ea3b4.jpg",
+       "name": "塞浦乙"
+      },
+      {
+       "children": null,
+       "id": 342,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bf17532e3e77363d8d1874e9007104f6.png",
+       "name": "塞浦杯"
+      },
+      {
+       "children": null,
+       "id": 343,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a88fd5c6331c1bed1770dc5164617def.png",
+       "name": "塞浦超杯"
+      }
+     ],
+     "id": 464,
+     "logo": null,
+     "name": "塞浦路斯"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 344,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgPAeshXEGEHhZehmdT9_BaZKR4E.png",
+       "name": "塞尔超"
+      },
+      {
+       "children": null,
+       "id": 345,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/14c0fe418966f38de7fb573148830ed6.png",
+       "name": "塞尔甲"
+      },
+      {
+       "children": null,
+       "id": 346,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/FnJOI6Iceb-ufrk1wslZLIf-72cx.png",
+       "name": "塞尔杯"
+      }
+     ],
+     "id": 469,
+     "logo": null,
+     "name": "塞尔维亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 347,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Ft-dGbFRYY1gk02nm0nt6MiYtLlX.png",
+       "name": "以超"
+      },
+      {
+       "children": null,
+       "id": 7179,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/67cd5b772d4ca2ea9d6e006a39adf858.png",
+       "name": "以女联杯"
+      },
+      {
+       "children": null,
+       "id": 348,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1a376e9186a7276a0ce8a7e048c210a8.png",
+       "name": "以甲"
+      },
+      {
+       "children": null,
+       "id": 349,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9eb9b32c753c77d3282d5937887bcc34.png",
+       "name": "以乙"
+      },
+      {
+       "children": null,
+       "id": 350,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgbCWR0hBxvv5Wy4oh4B9RLwhixg.png",
+       "name": "以女甲"
+      },
+      {
+       "children": null,
+       "id": 351,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/55d826dc58a5ef261a6211e24fbfa397.png",
+       "name": "以杯"
+      },
+      {
+       "children": null,
+       "id": 352,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/43435f06767df25225b8cd00864e47de.png",
+       "name": "以超杯"
+      },
+      {
+       "children": null,
+       "id": 353,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2f65d7defd9a08eb1b9576c534ef1e7c.png",
+       "name": "以图杯"
+      },
+      {
+       "children": null,
+       "id": 2768,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3b77ca214d345a948c69c53147249ce3.png",
+       "name": "以超级杯"
+      }
+     ],
+     "id": 473,
+     "logo": null,
+     "name": "以色列"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 354,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f361f10ba0acb33c61ecfb45bdf028b1.png",
+       "name": "阿尔巴超"
+      },
+      {
+       "children": null,
+       "id": 355,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/FkQCegcgv9IeAO7pft3mSZhVAs6W.png",
+       "name": "阿尔巴杯"
+      },
+      {
+       "children": null,
+       "id": 1704,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/cc08aa2d8ed4ebb3ded20f09b51d2d86.png",
+       "name": "阿尔巴甲"
+      }
+     ],
+     "id": 483,
+     "logo": null,
+     "name": "阿尔巴尼亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 356,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b2db315c601e35550890342833f2b693.png",
+       "name": "哈萨超"
+      },
+      {
+       "children": null,
+       "id": 357,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/29d9b5a07b9ef4c89588e271a263027d.png",
+       "name": "哈萨甲"
+      },
+      {
+       "children": null,
+       "id": 358,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3da730dd9fcdd1805a5e384bb84e21bf.png",
+       "name": "哈萨杯"
+      },
+      {
+       "children": null,
+       "id": 6829,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c4afa0eaaef379a6aa6e286b67646c01.png",
+       "name": "哈萨克联杯"
+      }
+     ],
+     "id": 487,
+     "logo": null,
+     "name": "哈萨克斯坦"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 370,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/4e9bbe69138e2dce52b250649b110435.png",
+       "name": "亚美超"
+      },
+      {
+       "children": null,
+       "id": 371,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/57920ff59333c93f50109a187ab695a2.png",
+       "name": "亚美甲"
+      },
+      {
+       "children": null,
+       "id": 372,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b50eec3a92f99fea4c725c9b22e9674c.png",
+       "name": "亚美杯"
+      }
+     ],
+     "id": 492,
+     "logo": null,
+     "name": "亚美尼亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 373,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/08/Ft5kwg1yVhgV0S3n8e8kpXn2WHQy.png",
+       "name": "黑山甲"
+      },
+      {
+       "children": null,
+       "id": 1094,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/29b1251f61244ebcf12e48a981352209.png",
+       "name": "黑山乙"
+      },
+      {
+       "children": null,
+       "id": 374,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2a6536559d9b8e29200899ea0a4b42c3.png",
+       "name": "黑山杯"
+      }
+     ],
+     "id": 496,
+     "logo": null,
+     "name": "黑山"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 359,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ad5a890a4cfddc49c056c3fd2153d7ad.png",
+       "name": "波黑甲"
+      },
+      {
+       "children": null,
+       "id": 360,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/607698221c2f3ed8b83e3bd6de650975.png",
+       "name": "波黑杯"
+      }
+     ],
+     "id": 500,
+     "logo": null,
+     "name": "波黑"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 377,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/f87840cc6ca7a63e5753952289bbbd17.png",
+       "name": "马耳乙"
+      },
+      {
+       "children": null,
+       "id": 376,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/31423264009a25be136905e38c7aaab3.png",
+       "name": "马耳女甲"
+      },
+      {
+       "children": null,
+       "id": 379,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/09/23/Ftys3YWqH-bKHoeP5J3NWtyxvjKh.png",
+       "name": "马耳他杯"
+      },
+      {
+       "children": null,
+       "id": 378,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/46c99efee429f85d33159f3bfb99817f.png",
+       "name": "马耳超杯"
+      },
+      {
+       "children": null,
+       "id": 380,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/dc5a4a2bf6179d00e5414a181b6bf6af.png",
+       "name": "AME杯"
+      }
+     ],
+     "id": 503,
+     "logo": null,
+     "name": "马耳他"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 361,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c9c624c99f42be9d4c4f39a4477f02f4.png",
+       "name": "爱沙甲"
+      },
+      {
+       "children": null,
+       "id": 362,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/dde44558274f5fa146c8856817409989.png",
+       "name": "爱沙乙"
+      },
+      {
+       "children": null,
+       "id": 363,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/54682367263f0ab8456e5891ce3c9ee4.png",
+       "name": "爱沙乙B"
+      },
+      {
+       "children": null,
+       "id": 1899,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c7f8c789a426a024275b806be308493d.png",
+       "name": "爱沙女杯"
+      },
+      {
+       "children": null,
+       "id": 364,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/138031c10fd46dbd72b62b96ebd887ac.png",
+       "name": "爱沙女甲冠"
+      },
+      {
+       "children": null,
+       "id": 365,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bbb5c3267b3d41b6eef2f5bf06942bce.png",
+       "name": "爱沙杯"
+      },
+      {
+       "children": null,
+       "id": 366,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/7eab07ec462fae1795d690d3f76de27c.png",
+       "name": "爱沙冬锦"
+      },
+      {
+       "children": null,
+       "id": 5550,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ec4a51e231df3e7ce69941953a88ecdd.png",
+       "name": "利沃冬联"
+      }
+     ],
+     "id": 509,
+     "logo": null,
+     "name": "爱沙尼亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 2864,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3327c2c68c6d56156e31851de51c8316.png",
+       "name": "摩尔女锦"
+      },
+      {
+       "children": null,
+       "id": 367,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1bcaa47c464c8cc9fd7f4bf870947193.png",
+       "name": "摩尔甲"
+      },
+      {
+       "children": null,
+       "id": 368,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ba6300f43eb47e725a2ea11b375c307c.png",
+       "name": "摩尔乙"
+      },
+      {
+       "children": null,
+       "id": 369,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9410e4164c4cd4375ad085c662194002.png",
+       "name": "摩尔杯"
+      }
+     ],
+     "id": 518,
+     "logo": null,
+     "name": "摩尔多瓦"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 381,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fs-yUELABiAcl8YixMk0N9LCgA-l.png",
+       "name": "卢森甲"
+      },
+      {
+       "children": null,
+       "id": 382,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0c99d7d21c904bd99faf03232998c537.png",
+       "name": "卢森杯"
+      }
+     ],
+     "id": 523,
+     "logo": null,
+     "name": "卢森堡"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 6196,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/football-default.png",
+       "name": "法羅女超杯"
+      },
+      {
+       "children": null,
+       "id": 383,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/aab2cb22ab51ad87e4eb116fdcdfcbb3.png",
+       "name": "法罗超"
+      },
+      {
+       "children": null,
+       "id": 384,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FhSDMrruER2fBdJagBZQ93k8kfYw.png",
+       "name": "法罗杯"
+      }
+     ],
+     "id": 526,
+     "logo": null,
+     "name": "法罗群岛"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 385,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/Fi5hGCU8pFayFsQyTq2OVEtVQcqX.png",
+       "name": "格鲁甲"
+      },
+      {
+       "children": null,
+       "id": 386,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3093b55e2e81347318968d072ada1ff3.png",
+       "name": "格鲁乙"
+      },
+      {
+       "children": null,
+       "id": 387,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/ba1ac87bcf05d4971d3fff7fd2dda9bf.png",
+       "name": "格鲁杯"
+      }
+     ],
+     "id": 530,
+     "logo": null,
+     "name": "格鲁吉亚"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 388,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/13a36fa20933b15646030ae4fac85d20.png",
+       "name": "阿塞超"
+      },
+      {
+       "children": null,
+       "id": 389,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FrBzefSXI7aY07HSn-5Ae3SWWcsK.png",
+       "name": "阿塞杯"
+      }
+     ],
+     "id": 534,
+     "logo": null,
+     "name": "阿塞拜疆"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 390,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1aa59da643d145a3a9a94dbfa79fcbf7.png",
+       "name": "北马其甲"
+      },
+      {
+       "children": null,
+       "id": 391,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/78543361af6077cef2c773c67e61926b.png",
+       "name": "北马其乙"
+      },
+      {
+       "children": null,
+       "id": 392,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FngFgWG0TBU9JNk8waJfEbPTstWG.png",
+       "name": "北马其杯"
+      }
+     ],
+     "id": 537,
+     "logo": null,
+     "name": "北马其顿"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 1629,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/a247a3b5ff3ec53e53e8d5dcd431acd5.png",
+       "name": "安道超杯"
+      },
+      {
+       "children": null,
+       "id": 393,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FjXUnNZ_v4Hx1GRA1xQ7t7nko4l5.png",
+       "name": "安道超"
+      },
+      {
+       "children": null,
+       "id": 394,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0400fcd63707f5c6d07ea7d30213c749.png",
+       "name": "安道杯"
+      }
+     ],
+     "id": 541,
+     "logo": null,
+     "name": "安道尔"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 3443,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/8ba61215224bb792664c9ea0e5574947.png",
+       "name": "圣马超杯"
+      },
+      {
+       "children": null,
+       "id": 1659,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/e2cc93ac6ff7120ddd2975868419fa8f.png",
+       "name": "圣马杯"
+      },
+      {
+       "children": null,
+       "id": 1207,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/12deaf99a402272bdac4e13c4519ed11.png",
+       "name": "圣马甲"
+      }
+     ],
+     "id": 545,
+     "logo": null,
+     "name": "圣马力诺"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 1885,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/31cb85f29ca79c98b4e43390f3f9ff29.png",
+       "name": "科索沃超"
+      }
+     ],
+     "id": 549,
+     "logo": null,
+     "name": "科索沃"
+    },
+    {
+     "children": [
+      {
+       "children": null,
+       "id": 1677,
+       "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/d7b3bdfe5c777677d2f171e00c6dfeb4.png",
+       "name": "直布超"
+      }
+     ],
+     "id": 551,
+     "logo": null,
+     "name": "直布罗陀"
+    }
+   ],
+   "id": 122,
+   "logo": null,
+   "name": "欧洲"
+  }
+ ],
+ "tops": [
+  {
+   "id": 120,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/1fbbb4be3b47d9465c5badecc3122e07.png",
+   "name": "西甲"
+  },
+  {
+   "id": 82,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FhQJ6Efx6y06tkxX6WQla32yaJGB.png",
+   "name": "英超"
+  },
+  {
+   "id": 590,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/26/FohEDOSyyd6w-P63nWP1cl0YMe8a.png",
+   "name": "澳超"
+  },
+  {
+   "id": 542,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/21/FoJri3Lo7TyWOvnjhl54aToA7p20.png",
+   "name": "中超"
+  },
+  {
+   "id": 108,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/6b38f4015a6b3309ad9462e6ce27ae99.png",
+   "name": "意甲"
+  },
+  {
+   "id": 129,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/0c6a25cd746e802296d9064b4504179d.png",
+   "name": "德甲"
+  },
+  {
+   "id": 142,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2024/09/04/FgZZPWZ_CwS8truZDyD-lu_5o0NT.png",
+   "name": "法甲"
+  },
+  {
+   "id": 7306,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/99dcb9cff8bc7fe1dac0c5d5d5d9b61c.png",
+   "name": "江苏联"
+  },
+  {
+   "id": 46,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FgdHJZb7dZvWc7xISO1s6t-4a8MO.png",
+   "name": "欧冠"
+  },
+  {
+   "id": 47,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fp71ft-KuPzEc6WetH-pq7oCeg8C.png",
+   "name": "欧联"
+  },
+  {
+   "id": 3265,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FuMjsyoKOCRE5Zs0BazSirbonFZo.png",
+   "name": "欧协联"
+  },
+  {
+   "id": 555,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/fa7be2db9d1b05d5a90c5e25ac17f6c1.png",
+   "name": "足协杯"
+  },
+  {
+   "id": 2906,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FnLop3S1p3ihuwO-x6KseEXfXenQ.png",
+   "name": "欧国联"
+  },
+  {
+   "id": 6736,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/bbe73e02dfd0737b98d16465ae014d9e.png",
+   "name": "亚精英赛"
+  },
+  {
+   "id": 151,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/05/31/FqlJq8i8YPYm9FbP9SVBdHHpj7ye.png",
+   "name": "葡超"
+  },
+  {
+   "id": 168,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/24/FpR0sfuS0WjtiDbbr3xFXpoBfdVQ.png",
+   "name": "荷甲"
+  },
+  {
+   "id": 201,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3846a13443fce5ec322369d88f642df7.png",
+   "name": "挪超"
+  },
+  {
+   "id": 195,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/29/FmeayPGYerw5psNKymPI8UMvuwaz.png",
+   "name": "芬超"
+  },
+  {
+   "id": 614,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/c48508454f43d926a553270b1b4ebcd7.png",
+   "name": "沙特联"
+  },
+  {
+   "id": 457,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/682287c83649a418bb66287d8cf084e2.png",
+   "name": "美职联"
+  },
+  {
+   "id": 567,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fj7-jXM0HdmzK3Q9fi6HO1SlQE-s.png",
+   "name": "日职联"
+  },
+  {
+   "id": 581,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/Fq-add1PL391afOpldzRLV-NJYG8.png",
+   "name": "韩K联"
+  },
+  {
+   "id": 543,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2025/03/21/FqOtW3_7ayCKVI39D_sHyda2Ekj9.png",
+   "name": "中甲"
+  },
+  {
+   "id": 544,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/b6025970c665a7640122d6b3d156b0b8.png",
+   "name": "中乙"
+  },
+  {
+   "id": 2918,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2022/08/26/FntiQ7Slmxwgqb0cv4Y2xnzk9B0x.png",
+   "name": "中冠"
+  },
+  {
+   "id": 98,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FvoERKrcJek31pVJUHsbxHbpOi-m.png",
+   "name": "英足总杯"
+  },
+  {
+   "id": 130,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/eab6e349cf5811408c0628a774724869.png",
+   "name": "德乙"
+  },
+  {
+   "id": 568,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/2023/08/03/FnB-LjO0DQTy4bACjFYVenZuFrSh.png",
+   "name": "日职乙"
+  },
+  {
+   "id": 6737,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/9a22d840df32761c127c5cd106203ccf.png",
+   "name": "亚冠二级"
+  },
+  {
+   "id": 465,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/324d7a463a24c4cd35ef83456a1b8d05.png",
+   "name": "墨西超"
+  },
+  {
+   "id": 602,
+   "logo": "https://cdn.kbisai.com/kanbisai/football/eventlogo/3391c527d7cfb37ff6f5c9c05042869b.png",
+   "name": "澳女联"
+  }
+ ]
+}

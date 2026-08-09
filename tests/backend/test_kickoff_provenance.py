@@ -67,14 +67,17 @@ class TestMigrationProvenance:
         finally:
             core.close()
 
-    def test_locked_provenance_immutable_trigger(self, platform):
-        import sqlite3
+    def test_locked_provenance_now_editable(self, platform):
+        """trg_pred_snap_locked_provenance_immutable 已被 migration 0007(2026-08-05)
+        移除——锁定快照的 kickoff provenance 现在也允许直接编辑,与其它实质字段
+        一致(见 test_migrations.py::test_locked_snapshot_editable_but_not_deletable_at_db_layer)。"""
         sid = _insert_snapshot(platform, match_id=1, kickoff="2099-01-01T14:00:00Z",
                                precision="exact", source="fotmob:fixtures",
                                status="locked", is_official=1, locked=True)
-        with pytest.raises(sqlite3.IntegrityError):
-            platform.execute("UPDATE prediction_snapshots SET kickoff_precision='date_only' WHERE id=?",
-                             (sid,))
+        platform.execute("UPDATE prediction_snapshots SET kickoff_precision='date_only' WHERE id=?",
+                         (sid,))
+        row = platform.execute("SELECT kickoff_precision FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert row["kickoff_precision"] == "date_only"
 
 
 class TestRepairTool:

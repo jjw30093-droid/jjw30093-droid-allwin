@@ -59,13 +59,14 @@ function FullBar({ p }: { p: Extract<Prediction, { tier: "full" }> }) {
       )}
       <p className={styles.hash}>
         预测指纹 <span className="num">{p.prediction_hash.slice(0, 16)}…</span>
-        (锁定后不可修改,可与公开战绩页比对)
+        (随当前概率内容变化,可与公开战绩页比对;修正记录见公开战绩页)
       </p>
     </div>
   );
 }
 
 function FreeView({ p }: { p: Extract<Prediction, { tier: "free" }> }) {
+  const isMarket = p.meta.probability_source === "MARKET_BASELINE";
   return (
     <div>
       <div className={styles.freeTop}>
@@ -73,7 +74,7 @@ function FreeView({ p }: { p: Extract<Prediction, { tier: "free" }> }) {
         <span className={`${styles.freePct} num`}>{pct(p.top_probability)}</span>
       </div>
       <p className={styles.freeNote}>
-        免费层仅展示模型最高一项概率;另外两项概率不在本响应中下发。
+        免费层仅展示{isMarket ? "市场去水基线" : "模型"}最高一项概率;另外两项概率不在本响应中下发。
       </p>
       <p className={styles.upgrade}>
         <Link href="/pricing" className={styles.upgradeLink}>
@@ -134,6 +135,14 @@ export function PredictionCard({
     <div>
       {p.tier === "full" ? <FullBar p={p} /> : <FreeView p={p} />}
       <dl className={styles.metaGrid}>
+        <div>
+          <dt>概率来源</dt>
+          <dd>
+            {p.meta.probability_source === "MARKET_BASELINE"
+              ? "MARKET_BASELINE（1X2 去水）"
+              : p.meta.probability_source}
+          </dd>
+        </div>
         <div>
           <dt>模型版本</dt>
           <dd className="num">{p.meta.model_version_id}</dd>

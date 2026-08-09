@@ -36,8 +36,9 @@ T0_PLUS_5MIN = _iso(NOW + timedelta(minutes=5))
 T1 = _iso(NOW + timedelta(minutes=20))          # ≥15 分钟 → 第二轮 due
 KICKOFF = NOW + timedelta(hours=24)             # 窗口内(2–72h 档,间隔 15 分钟)
 KICKOFF_ISO = _iso(KICKOFF)
-_BJ = KICKOFF + timedelta(hours=8)              # NowGoal 日程为北京墙上时间
-JS_TUPLE = f"{_BJ.year},{_BJ.month - 1},{_BJ.day},{_BJ.hour:02d},{_BJ.minute:02d},00"
+# NowGoal 日程行内 kickoff 字段本身是 UTC(2026-07-21 真实 titan_id=2912218 交叉
+# 验证,见 entity_resolution.py 模块 docstring),不做时区转换。
+JS_TUPLE = f"{KICKOFF.year},{KICKOFF.month - 1},{KICKOFF.day},{KICKOFF.hour:02d},{KICKOFF.minute:02d},00"
 
 MATCH_ID = 7001
 TITAN = "888001"

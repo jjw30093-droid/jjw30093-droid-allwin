@@ -55,10 +55,16 @@ export const LEAGUE_ZH: Record<number, string> = {
   55: "意甲",
   54: "德甲",
   53: "法甲",
+  59: "挪威超",
+  67: "瑞典超",
+  223: "日职联",
+  9080: "韩K联",
+  113: "澳超",
 };
 
 export const ENTITLEMENT_ZH: Record<string, string> = {
   "league:epl": "英超联赛数据",
+  "league:lottery": "竞彩常见联赛数据(日职联/韩K联/澳超/北欧)",
   "league:top5": "五大联赛数据",
   "prediction:top_probability": "模型最高一项概率",
   "prediction:full_wdl": "完整胜平负三项概率",
@@ -94,7 +100,76 @@ export function formatPrice(cents: number, currency: string): string {
   return `${amount} ${currency}`;
 }
 
-/** ISO UTC 的确定性回退文本(SSR/水合一致;本地时区展示交给 LocalTime) */
-export function utcFallback(iso: string): string {
-  return `${iso.replace("T", " ").replace(/Z$/, "")} UTC`;
+/* ── 北京时间(UTC+8,固定无夏令时)展示 ──────────────────────────────
+ * 中文足球用户默认按北京时间找比赛(CLAUDE.md §11.2)。北京时间是固定
+ * UTC+8 偏移,纯算术换算即可,不依赖 Intl/ICU 时区数据库,任何运行时都
+ * 不会出错(不像 LocalTime.tsx 的浏览器本地时区那样需要水合后才能定)。
+ *
+ * 绝不对 date_only 值(如 "2026-08-21",只精确到日、没有 kickoff 时刻)
+ * 做换算——那样会凭空捏造一个从未来源提供过的具体时刻,误导用户去
+ * 错误的钟点蹲比赛(CLAUDE.md §6.2.1)。所有函数对 date_only/非法输入
+ * 统一返回 null,调用方必须显式处理"没有精确时刻"这个分支,不能假装
+ * 总能拿到一个时间。 */
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const HAS_TZ_RE = /[Zz]|[+-]\d{2}:?\d{2}$/;
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** 精确 UTC 时刻(含时分)→ 毫秒;date_only 或无法解析一律 null,不猜测。 */
+function toExactEpochMs(iso: string): number | null {
+  if (DATE_ONLY_RE.test(iso)) return null;
+  const normalized = HAS_TZ_RE.test(iso) ? iso : `${iso}Z`;
+  const ms = Date.parse(normalized);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+interface BeijingParts {
+  year: number;
+  month: number; // 1-12
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+/** 用固定 +8h 偏移量在 UTC getters 上读出"北京墙上时间"的日期时间分量,
+ * 不使用 toLocaleString/Intl.DateTimeFormat(避免依赖运行时 ICU 数据)。 */
+function toBeijingParts(iso: string): BeijingParts | null {
+  const ms = toExactEpochMs(iso);
+  if (ms === null) return null;
+  const shifted = new Date(ms + BEIJING_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+  };
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** "2026-08-07T17:00:00Z" → "2026-08-08 01:00"(注意日期会跨天)。
+ * date_only 输入返回 null——调用方需要另外处理"没有精确时刻"的展示。 */
+export function formatBeijingDateTime(iso: string): string | null {
+  const p = toBeijingParts(iso);
+  if (!p) return null;
+  return `${p.year}-${pad2(p.month)}-${pad2(p.day)} ${pad2(p.hour)}:${pad2(p.minute)}`;
+}
+
+/** "2026-08-07T17:00:00Z" → "8月8日 01:00"(中文短格式,同样会跨天)。 */
+export function formatBeijingZh(iso: string): string | null {
+  const p = toBeijingParts(iso);
+  if (!p) return null;
+  return `${p.month}月${p.day}日 ${pad2(p.hour)}:${pad2(p.minute)}`;
+}
+
+/** 精确 kickoff 对应的北京自然日"YYYY-MM-DD",供按天分组/排序使用。
+ * date_only 输入返回 null(那种输入本身就没有"精确北京日"这个概念——
+ * 来源只给了 UTC 自然日,不等于北京自然日,不能悄悄拿 UTC 日期顶替)。 */
+export function beijingDateKey(iso: string): string | null {
+  const p = toBeijingParts(iso);
+  if (!p) return null;
+  return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
 }

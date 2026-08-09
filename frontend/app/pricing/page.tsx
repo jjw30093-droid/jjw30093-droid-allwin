@@ -5,7 +5,7 @@ import { RedeemBox } from "@/components/trust/RedeemBox";
 import styles from "./pricing.module.css";
 
 export const metadata: Metadata = {
-  title: "会员 — 欧赢 allwin",
+  title: "会员 — 欧赢 ALLWIN",
   description:
     "免费 / Pro / Premium 套餐权益对比与价格。当前未接线上支付,通过兑换码或管理员开通。",
 };

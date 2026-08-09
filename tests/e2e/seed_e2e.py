@@ -1,6 +1,6 @@
-"""E2E 种子:构建 data/e2e 独立测试数据目录(绝不触碰真实 data/platform.db / odds.db)。
+"""E2E 种子:构建 data/e2e 独立测试数据目录(绝不触碰真实 data/*.db sidecar)。
 
-- allwin.db 用符号链接接入(E2E 期间 API 对 core 只读);
+- allwin.db 在确认源 WAL 为空后复制到隔离目录(E2E API 不再打开真实 core);
 - platform/odds 每次重建并迁移;
 - 种子内容:
   * admin:密码登录账号 e2e-admin / e2e-password-123;
@@ -23,7 +23,9 @@ FotMob/NowGoal 观测到的精确开球时间,只是测试环境为了让 publis
 """
 
 import os
+import shutil
 import sys
+import hashlib
 from datetime import date
 from pathlib import Path
 
@@ -57,6 +59,89 @@ def _pick_future_epl_match(core_conn):
     ).fetchone()
 
 
+def _e2e_style_profile(match: dict, cutoff: str) -> dict:
+    """Studio UI-only synthetic style rows; never presented as provider data."""
+
+    def team(side: str, values: dict[str, float]) -> dict:
+        ref = match[side]
+        labels = {
+            "possession": ("控球率", "%", "higher"),
+            "accurate_passes": ("准确传球", "次/场", "higher"),
+            "final_third_wins": ("前场夺回", "次/场", "higher"),
+            "xg_per_match": ("xG", "/场", "higher"),
+            "shots_on_target": ("射正", "次/场", "higher"),
+            "box_touches_per_match": ("禁区触球", "次/场", "higher"),
+            "corners_per_match": ("角球", "次/场", "higher"),
+            "accurate_crosses": ("准确传中", "次/场", "higher"),
+            "set_piece_goals": ("定位球进球", "球", "higher"),
+            "xga_per_match": ("xGA", "/场", "lower"),
+            "tackles": ("抢断", "次/场", "higher"),
+            "clearances": ("解围", "次/场", "higher"),
+        }
+        metrics = {}
+        for index, (key, value) in enumerate(values.items(), 1):
+            label, unit, direction = labels[key]
+            decimals = 2 if key in {"xg_per_match", "xga_per_match"} else 1
+            display = (
+                f"{int(value)}{unit}"
+                if key == "set_piece_goals"
+                else f"{value:.{decimals}f}{unit}"
+            )
+            metrics[key] = {
+                "key": key,
+                "label": label,
+                "value": value,
+                "display": display,
+                "unit": unit,
+                "rank": index,
+                "rank_total": 20,
+                "direction": direction,
+                "source_stat": f"e2e_{key}",
+                "source_value": value,
+                "conversion": "direct",
+            }
+        return {
+            "team_id": ref["team_id"],
+            "name": ref["name"],
+            "provider_name": ref["name"],
+            "crest_url": ref.get("crest_url"),
+            "played": 10,
+            "metrics": metrics,
+            "missing_metrics": [],
+        }
+
+    home_values = {
+        "possession": 54.1, "accurate_passes": 430.2, "final_third_wins": 4.1,
+        "xg_per_match": 1.82, "shots_on_target": 5.8, "box_touches_per_match": 31.4,
+        "corners_per_match": 6.2, "accurate_crosses": 5.9, "set_piece_goals": 4,
+        "xga_per_match": 1.12, "tackles": 15.8, "clearances": 20.1,
+    }
+    away_values = {
+        "possession": 47.3, "accurate_passes": 351.4, "final_third_wins": 3.2,
+        "xg_per_match": 1.31, "shots_on_target": 4.2, "box_touches_per_match": 23.8,
+        "corners_per_match": 4.7, "accurate_crosses": 4.8, "set_piece_goals": 6,
+        "xga_per_match": 1.46, "tackles": 17.2, "clearances": 27.5,
+    }
+    digest = hashlib.sha256(f"e2e:{match['match_id']}".encode()).hexdigest()
+    return {
+        "profile_version": "team-style-v1",
+        "match_id": match["match_id"],
+        "league_id": match["league_id"],
+        "league_name_zh": "英超",
+        "season": match["season"],
+        "data_cutoff_at": cutoff,
+        "source_hash": digest,
+        "teams": {
+            "home": team("home", home_values),
+            "away": team("away", away_values),
+        },
+        "recent_form": {
+            "home": ["W", "D", "W", "W", "L"],
+            "away": ["L", "D", "W", "L", "D"],
+        },
+    }
+
+
 def main() -> int:
     E2E_DIR.mkdir(parents=True, exist_ok=True)
     for name in ("platform.db", "odds.db"):
@@ -64,10 +149,19 @@ def main() -> int:
             p = E2E_DIR / f"{name}{suffix}"
             if p.exists():
                 p.unlink()
-    link = E2E_DIR / "allwin.db"
-    if link.is_symlink() or link.exists():
-        link.unlink()
-    link.symlink_to(ROOT / "data" / "allwin.db")
+    core_source = ROOT / "data" / "allwin.db"
+    core_source_wal = ROOT / "data" / "allwin.db-wal"
+    if core_source_wal.exists() and core_source_wal.stat().st_size > 0:
+        print(
+            "真实 core WAL 非空,拒绝生成可能不一致的 E2E 副本",
+            file=sys.stderr,
+        )
+        return 1
+    core_copy = E2E_DIR / "allwin.db"
+    if core_copy.is_symlink() or core_copy.exists():
+        core_copy.unlink()
+    shutil.copyfile(core_source, core_copy)
+    core_copy.chmod(0o600)
 
     os.environ["ALLWIN_DATA_DIR"] = str(E2E_DIR)
 
@@ -81,6 +175,8 @@ def main() -> int:
     from backend.commands.redeem import create_redeem_codes
     from backend.commands.subscriptions import grant_subscription
     from backend.db.connections import connect_ro, connect_rw, tx
+    from backend.queries.matches import match_by_id
+    from backend.studio.team_style import record_team_style_profile
 
     conn = connect_rw("platform")
     core = connect_ro("core")
@@ -137,6 +233,15 @@ def main() -> int:
             pred.publish_snapshot(conn, snap_id, actor=admin_id)
         with tx(conn):
             pred.lock_snapshot(conn, snap_id, actor=admin_id)
+
+        style_match = match_by_id(core, match["Match_ID"])
+        if style_match is None:
+            raise RuntimeError("E2E style match missing")
+        with tx(conn):
+            record_team_style_profile(
+                conn,
+                _e2e_style_profile(style_match, generated_at),
+            )
 
         with tx(conn):
             codes = create_redeem_codes(

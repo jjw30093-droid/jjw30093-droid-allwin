@@ -142,8 +142,30 @@ draft 与 legacy_unverified **永不对外**。
 
 ### 3.6 联赛门禁
 
-`league:epl`(free 含英超 47);`league:top5`(pro/premium 含 53/54/55/87)。
+`league:epl`(free 含英超 47);`league:top5`(pro/premium 含 53/54/55/87);
+`league:lottery`(free/pro/premium 均含,2026-07-21 瑞典超接入新增,当前只有
+67 = Allsvenskan;为未来中国竞彩常见非五大联赛预留同一档位)。
 未命中 → 匿名 401 / 已登录 403,`detail.code="membership_required"`。
+
+## 3.7 模型适用联赛范围保护(2026-07-21 瑞典超接入新增)
+
+`dc-baseline-1.M.2` 训练范围为 EPL(见 §1),不得被误发布为其它联赛的正式预测。
+`model_versions.applicable_league_ids`(JSON 数组,如 `[47]`)声明模型验证过的
+联赛;`prediction_snapshots.league_id` 在 `register_snapshot` 时冻结(与
+`kickoff_precision` 同级 provenance,锁定后不可改)。校验是 **opt-in**:快照未
+显式传 `league_id`(历史/既有调用方)完全不受影响;一旦传入,`publish_snapshot`/
+`lock_snapshot` 要求 `model_version_id` 在 `applicable_league_ids` 显式包含该
+联赛,否则拒绝(`PredictionError.reason='model_unvalidated_for_league'`),
+`supersede_snapshot` 继承旧版本的 `league_id`,不能借"修正"绕过。
+
+当前 `dc-baseline-1.M.2` 的 `applicable_league_ids=[47]`(`import_gold_predictions.py`
+写入)。瑞典超(67)目前没有任何模型声明适用,因此:未开展赛前预测生成,
+`/matches/{id}/prediction` 对瑞典超比赛如实返回 `available=false`,不进入公开
+track record 与正式付费概率接口。后续若要为瑞典超训练专用模型,建议:
+多赛季 walk-forward 交叉验证(而非单赛季拆分)、以真实收盘赔率去水后的隐含概率
+作为基线(而非历史频率基线)、逐项记录公司集合/去水公式/缺失规则/RPS 口径
+(参考 §2 的评估纪律),训练完成后显式设置 `applicable_league_ids` 包含 67 才允许
+进入正式发布流程——本轮不训练仓促模型,只做范围保护。
 
 ## 4. 类型生成链
 
@@ -151,3 +173,22 @@ Pydantic(`backend/api/schemas.py`)为单一真源 →
 `python -m backend.cli.export_openapi`(写 `frontend/lib/openapi.json`)→
 `cd frontend && npm run gen:api`(openapi-typescript 生成 `lib/api-types.ts`)。
 不手写第二套相互漂移的 schema。
+
+## 附:2026-08-07 市场基线研究口径(研究态,非正式评估)
+
+docs/audits/multileague-point-in-time-model-v1.md 完成了 §2.1b 要求的可复现
+市场基线:公司集合(Pinnacle/Bet365/Macauslot 分列,不聚合)、proportional
+去水、last-pre-kickoff 快照规则(full_timeline)与 summary_latest(无时间戳,
+不称 closing)、缺失/overround 剔除规则、配对样本、RPS 公式,全部固化在
+`backend/models/research/market_baseline.py` 与其永久测试。研究结论:五折
+season-forward 配对比较中,现有及新候选自有模型均不优于任何市场基线
+(F2–F5 显著)。"模型优于/劣于收盘盘口"的公开表述仍然禁止;正式评估口径
+(prediction_evaluations)依旧 0 样本、状态不变。
+
+**2026-08-07 对抗性复核补充**:①仅 Pinnacle 的 last-pre-kickoff 快照有
+证据支撑"收盘"表述(快照-开球间隔 p99=0.75h);Macauslot 的同规则选出的
+快照 22.4% 在开球 24 小时以前(最长 19.3 天),"模型优于/劣于收盘盘口"的
+禁令对 Macauslot 场景应理解为"该公司本身就没有可信的收盘证据",不是单纯
+套用同一条禁令。②配对比较逐位复核后从 22 补全到 29 个(此前一处编排
+门槛 bug 错误跳过了 F1 的 dc/hgb/lr×summary_latest 三个可算比较,已修复,
+遗漏方向对模型更不利)。详见审计文档 §5/§6.2/§0。

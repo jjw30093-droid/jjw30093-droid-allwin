@@ -35,6 +35,12 @@ export type PostJson<P extends keyof paths> = paths[P] extends { post: infer G }
 
 export type MeResponse = GetJson<"/api/v1/me">;
 export type LeagueInfo = GetJson<"/api/v1/leagues">[number];
+export type StandingsResponse = GetJson<"/api/v1/leagues/{league_id}/standings">;
+export type StandingRow = StandingsResponse["rows"][number];
+export type LeagueFixturesResponse = GetJson<"/api/v1/leagues/{league_id}/fixtures">;
+export type TeamStatsResponse = GetJson<"/api/v1/leagues/{league_id}/team-stats">;
+export type TeamSeasonStatRow = TeamStatsResponse["rows"][number];
+export type PlayersResponse = GetJson<"/api/v1/leagues/{league_id}/players">;
 export type MatchListResponse = GetJson<"/api/v1/matches">;
 export type MatchSummary = MatchListResponse["matches"][number];
 export type MatchDetailResponse = GetJson<"/api/v1/matches/{match_id}">;
@@ -42,6 +48,23 @@ export type PredictionResponse = GetJson<"/api/v1/matches/{match_id}/prediction"
 export type TrackRecordResponse = GetJson<"/api/v1/track-record">;
 export type AuthMethodsResponse = GetJson<"/api/v1/auth/methods">;
 export type PasswordLoginResponse = PostJson<"/api/v1/auth/password/login">;
+
+/* ── 联赛分区路径(服务端 SSR 与客户端会员加载器共用;不能定义在
+ * "use client" 模块里——client 模块的导出对服务端组件是不可调用的引用) ── */
+
+export type LeagueSectionKind = "standings" | "fixtures" | "team-stats" | "players";
+
+export function leagueSectionPath(
+  kind: LeagueSectionKind,
+  leagueId: string,
+  season?: string,
+): string {
+  const params = new URLSearchParams();
+  if (kind === "fixtures") params.set("limit", "400");
+  if (season) params.set("season", season);
+  const qs = params.toString();
+  return `/api/v1/leagues/${leagueId}/${kind}${qs ? `?${qs}` : ""}`;
+}
 
 /* ── 服务端(RSC)读取:匿名公开数据 ───────────────────── */
 
@@ -114,8 +137,10 @@ function fallbackErrorBody(status: number): ApiErrorBody {
 }
 
 /** 非 JSON、空 body、畸形 JSON 时的安全回退:code 按状态码,details=null,
- * 绝不再次抛出(如 JSON.parse 的 SyntaxError)。 */
-function parseErrorBody(status: number, raw: unknown): ApiErrorBody {
+ * 绝不再次抛出(如 JSON.parse 的 SyntaxError)。导出给 lib/api.ts 的
+ * legacy fetcher 复用——legacy /api/league/* 端点与 v1 共用同一个统一错误
+ * 契约(backend/api/app.py 装配说明),不需要第二套解析逻辑。 */
+export function parseErrorBody(status: number, raw: unknown): ApiErrorBody {
   if (
     raw !== null &&
     typeof raw === "object" &&
@@ -133,7 +158,7 @@ function parseErrorBody(status: number, raw: unknown): ApiErrorBody {
   return fallbackErrorBody(status);
 }
 
-async function safeParseJsonError(res: Response): Promise<unknown> {
+export async function safeParseJsonError(res: Response): Promise<unknown> {
   const isJson = res.headers.get("content-type")?.includes("application/json");
   if (!isJson) return null;
   try {

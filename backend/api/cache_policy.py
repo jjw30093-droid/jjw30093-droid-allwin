@@ -43,8 +43,11 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/v1/model/metrics"),
         ("GET", "/api/v1/leagues/{league_id}/standings"),
         ("GET", "/api/v1/leagues/{league_id}/fixtures"),
+        ("GET", "/api/v1/leagues/{league_id}/team-stats"),
+        ("GET", "/api/v1/leagues/{league_id}/players"),
         ("GET", "/api/v1/matches"),
         ("GET", "/api/v1/matches/{match_id}"),
+        ("GET", "/api/v1/media/team-crests/{provider}/{provider_team_id}.png"),
     }
 )
 

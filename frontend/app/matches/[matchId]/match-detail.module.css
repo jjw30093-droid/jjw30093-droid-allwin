@@ -4,6 +4,44 @@
   padding: 32px 20px 64px;
 }
 
+.contextNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.contextNav > span {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.contextNav a {
+  color: var(--gold-300);
+  text-decoration: none;
+}
+
+.staleNotice {
+  margin: 10px 0 0;
+  color: var(--loss);
+  font-size: 13px;
+}
+
+@media (max-width: 620px) {
+  .contextNav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .contextNav > span {
+    justify-content: flex-start;
+  }
+}
+
 /* ── 头部 ── */
 
 .header {
@@ -32,12 +70,24 @@
   border-color: var(--gold-700);
 }
 
+.chipStale {
+  color: var(--loss);
+  border-color: var(--loss);
+}
+
 .teamsRow {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
   text-align: center;
+}
+
+.teamBlock {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 8px;
 }
 
 .teamName {
@@ -68,6 +118,13 @@
   text-align: center;
   font-size: 13px;
   color: var(--ink-3);
+}
+
+.dataStateLine {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-2);
 }
 
 /* ── 分区 ── */

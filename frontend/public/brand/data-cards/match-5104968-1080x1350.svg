@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350" role="img" aria-labelledby="title desc">
+  <title id="title">瓦勒伦加对汉坎真实赛前数据图卡</title>
+  <desc id="desc">挪威超第16轮竖版数据图卡，公开市场基线主胜58%，并比较近期战绩、赛季xG、xGA和休息时间。</desc>
+
+  <rect width="1080" height="1350" fill="#F4F6F6"/>
+  <rect x="0" y="0" width="18" height="1350" fill="#087E78"/>
+  <rect x="18" y="0" width="8" height="1350" fill="#D7ED63"/>
+
+  <g font-family="PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif">
+    <text x="76" y="86" fill="#0D2C3D" font-size="36" font-weight="900" letter-spacing="-2">欧赢</text>
+    <text x="174" y="84" fill="#087E78" font-size="20" font-weight="800" letter-spacing="5">ALLWIN</text>
+    <text x="1004" y="84" fill="#087E78" font-size="17" font-weight="800" text-anchor="end" letter-spacing="2">MATCHDAY DATA</text>
+    <line x1="76" y1="128" x2="1004" y2="128" stroke="#B8C6C6" stroke-width="2"/>
+
+    <text x="76" y="195" fill="#087E78" font-size="18" font-weight="800" letter-spacing="2">挪威超 · 2026赛季 · 第16轮</text>
+    <text x="76" y="236" fill="#6F7F86" font-size="19">08月01日 01:00 · 北京时间</text>
+    <text x="76" y="330" fill="#0D2C3D" font-size="66" font-weight="900" letter-spacing="-4">瓦勒伦加</text>
+    <text x="472" y="326" fill="#6F7F86" font-size="26" font-weight="600">VS</text>
+    <text x="548" y="330" fill="#0D2C3D" font-size="66" font-weight="900" letter-spacing="-4">汉坎</text>
+
+    <rect x="76" y="388" width="928" height="264" rx="4" fill="#0D2C3D"/>
+    <text x="112" y="436" fill="#D7ED63" font-size="18" font-weight="800" letter-spacing="2">公开概率 · MARKET BASELINE</text>
+    <text x="112" y="544" fill="#FFFFFF" font-size="38" font-weight="800">主胜</text>
+    <text x="292" y="574" fill="#FFFFFF" font-size="116" font-weight="900" letter-spacing="-7">58%</text>
+    <line x1="698" y1="438" x2="698" y2="604" stroke="#42606E" stroke-width="2"/>
+    <text x="736" y="480" fill="#C8D4D8" font-size="20">1X2 赔率去水结果</text>
+    <text x="736" y="526" fill="#8FA4AD" font-size="17">市场基线</text>
+    <text x="736" y="558" fill="#8FA4AD" font-size="17">不是自有模型预测</text>
+    <text x="736" y="606" fill="#D7ED63" font-size="17">公开页只展示最高一项</text>
+
+    <rect x="76" y="688" width="928" height="443" rx="4" fill="#FFFFFF" stroke="#D8E0E0" stroke-width="2"/>
+    <text x="112" y="740" fill="#6F7F86" font-size="18" font-weight="700">近5场</text>
+    <text x="328" y="740" fill="#0D2C3D" font-size="23" font-weight="800">瓦勒伦加</text>
+    <text x="746" y="740" fill="#0D2C3D" font-size="23" font-weight="800">汉坎</text>
+
+    <g transform="translate(328,774)">
+      <circle cx="17" cy="17" r="17" fill="#087E78"/><text x="17" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">胜</text>
+      <circle cx="62" cy="17" r="17" fill="#087E78"/><text x="62" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">胜</text>
+      <circle cx="107" cy="17" r="17" fill="#E0523D"/><text x="107" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">负</text>
+      <circle cx="152" cy="17" r="17" fill="#087E78"/><text x="152" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">胜</text>
+      <circle cx="197" cy="17" r="17" fill="#93A2A7"/><text x="197" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">平</text>
+    </g>
+    <g transform="translate(746,774)">
+      <circle cx="17" cy="17" r="17" fill="#E0523D"/><text x="17" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">负</text>
+      <circle cx="62" cy="17" r="17" fill="#E0523D"/><text x="62" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">负</text>
+      <circle cx="107" cy="17" r="17" fill="#E0523D"/><text x="107" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">负</text>
+      <circle cx="152" cy="17" r="17" fill="#93A2A7"/><text x="152" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">平</text>
+      <circle cx="197" cy="17" r="17" fill="#93A2A7"/><text x="197" y="23" fill="#FFFFFF" font-size="16" font-weight="800" text-anchor="middle">平</text>
+    </g>
+
+    <line x1="112" y1="842" x2="968" y2="842" stroke="#D8E0E0" stroke-width="2"/>
+    <text x="112" y="914" fill="#6F7F86" font-size="19">赛季累计 xG</text>
+    <text x="328" y="920" fill="#087E78" font-size="38" font-weight="900">24.03</text>
+    <text x="746" y="920" fill="#0D2C3D" font-size="38" font-weight="900">20.20</text>
+
+    <text x="112" y="988" fill="#6F7F86" font-size="19">赛季累计 xGA</text>
+    <text x="328" y="994" fill="#0D2C3D" font-size="34" font-weight="800">26.38</text>
+    <text x="746" y="994" fill="#0D2C3D" font-size="34" font-weight="800">24.80</text>
+
+    <text x="112" y="1062" fill="#6F7F86" font-size="19">开球前休息</text>
+    <text x="328" y="1067" fill="#0D2C3D" font-size="26" font-weight="800">5.2天</text>
+    <text x="746" y="1067" fill="#0D2C3D" font-size="26" font-weight="800">5.1天</text>
+
+    <line x1="76" y1="1180" x2="1004" y2="1180" stroke="#B8C6C6" stroke-width="2"/>
+    <text x="76" y="1232" fill="#0D2C3D" font-size="22" font-weight="800">数据有出处，判断有记录。</text>
+    <text x="76" y="1274" fill="#6F7F86" font-size="16">数据截止：2026/07/28 15:01（北京时间）</text>
+    <text x="76" y="1305" fill="#6F7F86" font-size="16">来源：FotMob / NowGoal · 赔率系统观测：1个点</text>
+    <text x="1004" y="1232" fill="#087E78" font-size="18" font-weight="800" text-anchor="end">查看完整比赛分析 →</text>
+    <text x="1004" y="1274" fill="#6F7F86" font-size="15" text-anchor="end">数据分析不构成投注建议</text>
+  </g>
+</svg>

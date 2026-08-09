@@ -1,0 +1,11 @@
+[Unit]
+Description=Check allwin content health every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=false
+Unit=allwin-content-health.service
+
+[Install]
+WantedBy=timers.target

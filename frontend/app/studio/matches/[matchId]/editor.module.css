@@ -101,6 +101,88 @@
   margin-bottom: 14px;
 }
 
+.profileBar {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) auto;
+  gap: 14px 24px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface);
+}
+
+.profileBar > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.profileBar strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.profileBar span {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.profileTabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg-2);
+}
+
+.profileTab,
+.profileTabActive {
+  min-height: 38px;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.profileTabActive {
+  color: #06201e;
+  background: #65e3d1;
+  font-weight: 800;
+}
+
+.profileTab:disabled,
+.profileTabActive:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.profileUnavailable {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--loss);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .profileBar {
+    grid-template-columns: 1fr;
+  }
+
+  .profileTabs {
+    overflow-x: auto;
+  }
+
+  .profileTab,
+  .profileTabActive {
+    white-space: nowrap;
+  }
+}
+
 /* ── 布局 ─────────────────────────────────────────────── */
 
 .layout {
@@ -267,6 +349,38 @@
   color: var(--ink-3);
   margin: 0;
   line-height: 1.6;
+}
+
+.safeCheck {
+  padding: 13px 14px;
+  border-left: 4px solid #31cdb9;
+  background: color-mix(in srgb, #31cdb9 9%, var(--surface));
+}
+
+.safeCheck strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.safeCheck p {
+  margin: 5px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.safeCopy,
+.safeText {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  color: var(--ink-2);
+  background: var(--bg-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
 }
 
 .input,

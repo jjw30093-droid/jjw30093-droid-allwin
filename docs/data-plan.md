@@ -23,7 +23,44 @@
 赔率层新增第二个 provider（kbisai，AES-256-CBC + Protobuf 双协议）并已对本周末
 挪超/瑞超 + 英超第一轮共 25 场目标比赛完成真实身份解析（16/25 成功，9 场诚实
 标记为暂不可解析——见 §7 本轮记录）与完整赔率变化序列采集（320 条真实变化点）。
-NowGoal 一侧的赔率层（`silver_odds_moves` 起）仍是结构性空表，见 §4。
+
+2026-08-06 更新（历史赔率两轮回填 + 旧资产整合 + kickoff 回填，见
+`docs/current-state.md` §25）：五大联赛 10,735 场已完赛比赛的赔率覆盖达到
+**10,492 场 = 97.7%**（2,156 场完整时间线 + 8,336 场初盘/临场两点摘要）；
+`silver_odds_moves` 首次产出真实数据（1,477,750 行,来自 NowGoal 历史回填的
+734,812 条 bronze 快照）；已完赛比赛 `kickoff_at_utc` 从 0 行回填至全量
+（`fotmob:leagues`,precision=exact）。"NowGoal 赔率层结构性空表"的说法自此作废。
+
+2026-08-07 更新（J1/韩K联/澳超接入，见 `docs/current-state.md` §26/§27）：
+三联赛 FotMob 全量 ingest 2,050 场（逐场明细+精确 kickoff+53 队中文名）并上线
+网站（league:lottery 免费档）；历史赔率经全量复核后导入
+`bronze_legacy_odds_summary` 10,856 行，已完赛 2,050 场中 88.3% 有 Bet365
+初盘/临场两点（来源实证为 NowGoal，AH 线符号与 canonical 一致未取反）。
+
+2026-08-07 二次更新（缺口补齐 + J1 新赛季，见 `docs/current-state.md`
+§28）：旧库覆盖边界之外的 240 场用 NowGoal archive 实爬补齐 208 场（1,248
+行，零失败），赔率覆盖升至 **2,018/2,050 = 98.4%**；剩余 32 场（澳超三季
+季后赛 12 场 + J1 2026 冠军系列赛 20 场）是 archive 本身不收录附加赛的真实
+来源边界。另：FotMob 已切换 J1 默认赛季为 `2026/2027`（跨年制过渡落地），
+新赛季 380 场未开赛赛程已接入，首轮 2026-08-07 开赛。
+
+2026-08-08 更新（挪超/瑞超已完赛比赛 + 历史赔率回补 + 32 队中文名双重
+验证，见 `docs/current-state.md` §30）：上面 §2 矩阵记录的"59/67 全 0 完赛"
+已作废——两联赛 2026 赛季已完赛比赛全量 ingest（挪超 123/123、瑞超
+119/119，0 失败），`fact_league_table` 刷新为当前真实积分榜；32 支球队
+中文名从 0/32 补齐到 32/32（`qwen_max_websearch_verified`，双重验证过程中
+纠正了 2 处真实的翻译幻觉——`Start` 被误译成另一支球队 Stabæk 的中文名、
+`Örgryte` 被误译成另一个城市/球队 Örebro 的中文名，均已用 WebSearch 独立
+核实修正）。历史赔率：新建通用 `backend/cli/ingest_nowgoal_season_odds.py`
+（NowGoal season-archive，curl_cffi + 住宅代理，独立于生产实时轮询路径），
+挪超 123/123 场、瑞超 104/119 场解析为 `auto_ok` 并写入两点摘要
+（`source=nowgoal_archive_refetch`，无需新迁移）；瑞超原有的 4 条
+`needs_review` xref 已诚实修复 3 条（根因是队名别名不折叠变音符，不是
+kickoff 判定问题），第 4 场留给生产轮询链路在临近开球时自然拾取。
+`docs/current-state.md` §29 记录的"58/67 无历史 fact 表"（第 138 行 #1）
+在 fact 表层面已解决；下方第 161 行"挪超/瑞超比赛级 fact 表回填路径"
+同步关闭。**未接入定时增量**——`scheduler.step1_ingest_newly_finished`
+仍硬编码 `(47,'2026/2027')`，两联赛后续新增的已完赛比赛不会被自动抓取。
 
 ---
 
@@ -42,6 +79,9 @@ NowGoal 一侧的赔率层（`silver_odds_moves` 起）仍是结构性空表，�
 | 54 德甲 | 2142 (1836/**306**) | 7 | **306/306 exact**(本轮新增) | 540/6季 | 9287/**仅1季** | 全 6 季 | 0/27 |
 | 59 挪超 | 118 (0/118) | 1(`"2026"`) | 118/118 exact(`fotmob:fixtures`) | 80/1季 | 0 | 0 | 0/16 |
 | **67 瑞超** | **121 (0/121)** | 1(`"2026"`，本轮首次接入) | **121/121 exact**(`fotmob:fixtures`，本轮新增) | 0(未回填) | 0 | 0 | 0/16 |
+| **223 日职联** | **960 (960/0)** | 3(`2024/2025/2026`，2026-08-07 首次接入) | 960/960 exact(`fotmob:match_details`) | 280/3季(2026 为过渡期东西分组赛,只有 `all:组名` 行、无总表——赛制事实,非缺数) | 30399/3季 | 0 | **26/26** |
+| **9080 韩K联** | **582 (582/0)** | 3(`2024/2025/2026`，同轮接入) | 582/582 exact(同上) | 240/3季(2024/2025 为常规+冠军/保级组复合结构,总表在 `all`、分组在 `all:组名`) | 18714/3季 | 0 | **14/14** |
+| **113 澳超** | **508 (508/0)** | 3(`2023/2024`–`2025/2026`，同轮接入) | 508/508 exact(同上) | 185/3季 | 17743/3季 | 0 | **13/13** |
 
 比赛级 fact 表（只对已完赛场次有意义）：47/53/54/55/87 各自与该联赛"完赛"行数基本一致；59/67 全 0（全部未开赛）。**本轮新增的 380(87)+380(55)+306(53)+306(54)+121(67) = 1493 行 upcoming 全部经 `backend/ingest/ingest_future_fixtures.py`（已加赛季身份校验，见 §7 本轮记录）写入，status 只出现 `NotStarted`，未出现 `Cancelled`/`InPlay`。**
 
@@ -51,19 +91,27 @@ NowGoal 一侧的赔率层（`silver_odds_moves` 起）仍是结构性空表，�
 
 `prediction_snapshots` 760 = 380 `draft` + 380 `legacy_unverified`，**`is_official=0` 且 `locked_at IS NULL` 的行数 = 760/760**。**生产环境目前没有一条正式(`is_official=1` 且已锁定)预测样本** —— 不得把这 760 读成"已有公开战绩"。`model_versions` 只有一条 `dc-baseline-1.M.2`，`applicable_league_ids=[47]`。
 
-### `data/odds.db` — 赔率层（as-of 本轮 kbisai 接入后）
+### `data/odds.db` — 赔率层（as-of 2026-08-06 历史回填 + 旧资产整合后）
 
 | 表 | 行数 | 说明 |
 |---|---|---|
-| `dim_team_alias` | 225 | 178 五大联赛种子 + 16 挪超自动播种 + 9 手工播种 NowGoal 拼写 + 22 本轮新增（i18n 同步产生） |
-| `dim_team_xref` | 6 | 生产 launchd `nowgoal_snapshot` 轮询在后台产生，非本轮直接写入 |
-| `dim_match_xref` | **20**(nowgoal 4 / kbisai **16**) | 同一 `fotmob_match_id` 可同时有两个 provider 的行（UNIQUE 是 `(provider, fotmob_match_id)`）；kbisai 16 行全部为本轮真实身份解析产物，见 §3/§7 |
-| `bronze_ng_odds_snap` | 6 | nowgoal，生产轮询后台产生 |
-| `bronze_fm_lineup_snap` | 7 | 本轮周末挪超 7 场，见 §7 |
-| `bronze_fm_sideline_snap` | 14 | 同上，每场 2 行(主客各一) |
-| **`bronze_kbisai_odds_point`** | **320** | 本轮新表(`odds/0003`)，kbisai 完整赔率变化序列，见 §3 |
-| `silver_odds_moves` / `silver_event_moves` / `gold_move_cooccurrence` | 0 | 结构性阻塞，见 §4 |
+| `dim_team_alias` | 225 | 178 五大联赛种子 + 16 挪超自动播种 + 9 手工播种 NowGoal 拼写 + 22（i18n 同步产生） |
+| `dim_team_xref` | 6 | 生产 launchd `nowgoal_snapshot` 轮询在后台产生 |
+| `dim_match_xref` | **2,181**(nowgoal 2,165 / kbisai 16) | 2,156 行为 NowGoal 历史回填实体解析产物(auto_ok,confidence 0.95/0.75 按证据类型) |
+| `bronze_ng_odds_snap` | **734,871** | 734,812 行历史回填(2,156 场完整赛前时间线,中位数 326 观测点/场) + 生产轮询少量 |
+| `bronze_fm_lineup_snap` | 7 | 周末挪超 7 场 |
+| `bronze_fm_sideline_snap` | 14 | 同上 |
+| `bronze_kbisai_odds_point` | 320 | kbisai 完整赔率变化序列 |
+| **`bronze_legacy_odds_summary`** | **74,863** | 本轮新表(`odds/0004`):旧项目初盘/临场两点摘要,8,336 场(asset_a 7,938 / asset_b_footballdata 4,955 / asset_b_nowgoal 91),方向缺陷已在入库时修正(19.6% 的 1x2 主客反转、footballdata AH 线符号取反) |
+| **`silver_odds_moves`** | **1,477,750** | **首次产出真实数据**(从历史回填 bronze 快照逐序列 diff 得出) |
+| `silver_event_moves` / `gold_move_cooccurrence` | 0 | 历史回填只有赔率、无阵容/伤停快照(archive 端点不提供),结构性诚实为空;live 链路见 §4 |
 | `poll_state` / `source_health` | 9 / 9 | 生产轮询后台产生 |
+
+覆盖口径(五大联赛已完赛 10,735 场):完整时间线 2,156 + 两点摘要 8,336 =
+**10,492 场(97.7%)**;仍无覆盖 243 场(113 场两侧来源均无 + 130 场旧资产
+`match_name` 无法安全对齐主客方向,已写 review 文件待人工,绝不带病入库)。
+API `/api/v1/matches/{id}/odds` 以 `coverage_tier` 区分 `full_timeline` /
+`open_close_only`,前端对两点摘要只出表格不画走势图。
 
 挪超 7 场周末比赛涉及的 14 支球队，其 FotMob 拼写与 NowGoal 真实拼写均已验证能解析到同一 `canonical_team_id`（见 §7 D-2026-08-04-1）——这是 `entity_resolution.py`(NowGoal 专用)`auto_ok` 六道门中的第一道。**kbisai 走的是完全独立的身份解析实现**（`backend/ingest/kbisai_match_resolution.py`，kickoff 精确匹配为主、CJK 队名为消歧/定向确认信号，不复用/不修改 `entity_resolution.py`）——见 §3。
 
@@ -159,3 +207,41 @@ as-of 2026-07-30T17:31Z（已落后现实 5 天，不代表当前状态）：59 
 - **D-2026-08-05-2**：`ingest_future_fixtures.py` 原本没有赛季身份校验，若 FotMob 尚未发布某联赛的目标赛季，`league_matches()` 可能静默返回另一个（通常是已完结的）赛季数据，被当成目标赛季写进 `dim_match`。本轮照抄 `backfill_season_tables._verify_identity` 加了 `_verify_season_identity`（校验 `details.id`/`selectedSeason`），不一致抛 `SeasonIdentityError` 拒绝落库，不静默降级。
 - **D-2026-08-05-3**（本轮诚实负结果，非缺陷）：kbisai 身份解析对本轮 25 场真实目标只解析出 16 场，9 场 fail-closed，原因**不是代码 bug**：(a) 瑞典超本周末 8 场比赛里有 3 对(6 场)在同一时刻开球（`2026-08-09T12:00Z`/`14:30Z`、`2026-08-10T17:00Z`各一对），`dim_team_alias` 对瑞超 0/16 覆盖，无法消歧；(b) 3 场英超比赛(赫尔城vs曼联、布伦特福德vs热刺、曼城vs伯恩茅斯)kbisai 用的是队伍全称（如"曼彻斯特联"/"曼彻斯特城"）而 `dim_team_alias` 只存了常见简称（"曼联"/"曼城"），单一别名字符串精确匹配对不上。两种情况匹配器都正确 fail-closed（不猜测），已记录进 §5-4 作为后续改进方向。
 - **D-2026-08-05-4**（本轮诚实负结果，非缺陷）：英超第一轮(kickoff T-17~20d)10 场比赛均可通过 `futureMatch_b` 发现并成功身份解析，但三个目标公司(36\*/澳\*/平\*)在采集时点均未发布任何赔率（`fetch_match_all_odds` 返回的 15 家公司里不含这三家；其它公司如 5/6/11/14/15/20 已有真实数据）。如实记 0 行，未改用其它公司替代、未扩大采集范围。见 §5-9（需临近开球时重新采集确认）。
+
+---
+
+## 附:2026-08-07 覆盖数字以 data_coverage.py 重跑为准
+
+本文件 §2 的覆盖矩阵是手工查询的历史快照,动态数字已落后(如五大联赛现为
+每联赛 7 个赛季分区、J1 2026 完赛 200 场、EPL 2025/26 有 48 场无赔率)。
+自本日起,任何覆盖数字以只读 CLI 重跑为准:
+
+    python -m backend.cli.data_coverage --json coverage.json --md coverage.md
+
+(deterministic,复跑 sha256 一致;联赛×赛季×公司三档赔率覆盖、特征与
+正式预测覆盖全量输出;详见 docs/audits/multileague-point-in-time-model-v1.md §1。)
+
+## 附二:2026-08-07 多联赛 PIT 建模研究(五大联赛)
+
+`docs/audits/multileague-point-in-time-model-v1.md` 完成了五大联赛严格
+point-in-time 数据集(10,734 场,dataset_hash
+`172d4428455465ac77bff6d57fa45e170938aa08edca24d8ce49fbbbf7cda0c0`)、可复现
+市场基线(Pinnacle/Bet365/Macauslot 分列 + 旧资产 summary_latest)、五折
+season-forward 模型研究(freq/DC/LR/HGB)与对抗性复核。结论:LR 候选跨折
+稳定优于频率与 DC 基线,但**全部候选在配对样本上均不优于市场基线**
+(F2–F5 显著)。新增可重复入口 `backend/cli/run_multileague_research.py`
+(三只读库 + output-dir 一条命令跑完全套研究产物)。判定:
+`MULTI_LEAGUE_POINT_IN_TIME_MODEL_RESEARCH_COMPLETE`,
+`READY_FOR_SHADOW_PREDICTION_DESIGN`(有条件,未开始 shadow 实现)。
+
+2026-08-08 更新(J1/韩K联/澳超接入建模研究,见
+`docs/audits/multileague-jka-integration-v1.md`):上面「J1/韩K联/澳超本轮
+只报覆盖、未混训」的表述已过期。实测特征数据质量(精确开球率、xG 覆盖)
+与五大联赛无法区分,原排除理由不成立。已扩展 `run_multileague_research.py`
+支持 `--leagues all8`(八联赛 + 按 kickoff_at_utc 绝对时间折叠,与五大联赛
+`--leagues big5` 赛季字符串折叠物理隔离)。真实结论:混训(pooled lr +
+per-league 温度校准)相对「该联赛单独训练」在 J1、澳超上统计显著更优,
+K1 方向一致但未显著;相对该联赛历史频率基线,三个联赛在当前样本量下
+均未达统计显著(如实标注为功效不足,非阳性结论)。**未完成的关键前置项**:
+五大联赛保护侧检验(池化后是否劣化)。判定范围与五大联赛研究相同,均
+不涉及生产模型注册与预测上线。

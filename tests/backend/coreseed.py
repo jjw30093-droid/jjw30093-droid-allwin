@@ -22,6 +22,29 @@ def seed_core_schema(conn):
             goals_for INTEGER, goals_against INTEGER, goal_diff INTEGER, points INTEGER,
             deduction INTEGER, qual_color TEXT, xg REAL, xg_conceded REAL, x_points REAL, x_position INTEGER)"""
     )
+    # 混合表:免费字段(射门/射正/控球/xG/xGOT)与付费字段(角球/牌/零封/BTTS)
+    # 同表——布景两类都造,测试才能证明 API 只投影免费字段
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS silver_team_season_stats (
+            League_ID INTEGER, Season TEXT, Team_ID INTEGER, matches_played INTEGER,
+            avg_total_shots REAL, avg_shots_on_target REAL, avg_possession REAL,
+            avg_corners REAL, avg_fouls REAL, avg_yellow_cards REAL,
+            avg_expected_goals REAL, avg_expected_goals_non_penalty REAL,
+            avg_expected_goals_open_play REAL, avg_expected_goals_set_play REAL,
+            avg_expected_goals_on_target REAL, avg_touches_opp_box REAL,
+            clean_sheets INTEGER, btts_matches INTEGER, btts_pct REAL,
+            updated_at TEXT, avg_red_cards REAL)"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS fact_season_player_stats (
+            League_ID INTEGER, Season TEXT, stat_name TEXT, Player_ID TEXT, Player_Name TEXT,
+            Team_ID INTEGER, Team_Name TEXT, rank INTEGER, value REAL, extra_json TEXT)"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS dim_player_i18n (
+            Player_ID TEXT, name_en TEXT, name_zh TEXT, name_zh_short TEXT,
+            source TEXT, model TEXT, confidence REAL, needs_review INTEGER, updated_at TEXT)"""
+    )
 
 
 def insert_match(conn, match_id, league_id=47, season="2026/2027", date="2027-04-01",
@@ -52,6 +75,32 @@ def seed_basic_core(data_dir):
         "INSERT INTO fact_league_table (League_ID, Season, table_type, Team_ID, Team_Name, position,"
         " played, wins, draws, losses, goals_for, goals_against, goal_diff, points, qual_color)"
         " VALUES (47,'2025/2026','all',1001,'Arsenal',1,38,28,6,4,88,29,59,90,'#2AD572')"
+    )
+    # 球队赛季统计:47 与 87 各一行;付费字段(角球/牌/零封/BTTS)造出显眼的
+    # 哨兵值,免费投影测试全 JSON 扫描它们绝不能出现
+    for lid, season, tid in ((47, "2025/2026", 1001), (87, "2025/2026", 2001)):
+        conn.execute(
+            "INSERT INTO silver_team_season_stats (League_ID, Season, Team_ID, matches_played,"
+            " avg_total_shots, avg_shots_on_target, avg_possession, avg_expected_goals,"
+            " avg_expected_goals_on_target, avg_corners, avg_yellow_cards, avg_red_cards,"
+            " clean_sheets, btts_matches, btts_pct)"
+            " VALUES (?, ?, ?, 38, 15.2, 6.1, 58.3, 2.11, 1.87, 777.7, 888.8, 999.9, 21, 17, 44.7)",
+            (lid, season, tid),
+        )
+    # 球员榜:47 一条带中文映射,87 一条无映射(回退英文名)
+    conn.execute(
+        "INSERT INTO fact_season_player_stats (League_ID, Season, stat_name, Player_ID,"
+        " Player_Name, Team_ID, Team_Name, rank, value)"
+        " VALUES (47,'2025/2026','goals','p100','Test Striker',1001,'Arsenal',1,27.0)"
+    )
+    conn.execute(
+        "INSERT INTO fact_season_player_stats (League_ID, Season, stat_name, Player_ID,"
+        " Player_Name, Team_ID, Team_Name, rank, value)"
+        " VALUES (87,'2025/2026','goals','p200','Laliga Striker',2001,'Barcelona',1,30.0)"
+    )
+    conn.execute(
+        "INSERT INTO dim_player_i18n (Player_ID, name_en, name_zh, name_zh_short)"
+        " VALUES ('p100','Test Striker','测试前锋全名','测试前锋')"
     )
     conn.commit()
     conn.close()

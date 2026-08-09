@@ -1,6 +1,7 @@
 """P0.9/P0.10 测试:analysis_bundle、Studio 草稿/导出、埋点。"""
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,15 +20,21 @@ ORIGIN = {"Origin": "http://localhost:3000"}
 
 @pytest.fixture
 def seeded(data_dir):
+    kickoff = (
+        datetime.now(timezone.utc) + timedelta(days=3)
+    ).replace(microsecond=0)
+    kickoff_at_utc = kickoff.isoformat().replace("+00:00", "Z")
+
     seed_basic_core(data_dir)
     conn = connect_rw("platform")
     get_or_create_model_version(conn, "m-studio", "dixon-coles")
     sid = register_snapshot(
-        conn, match_id=9001, kickoff_at_utc="2027-04-01T14:30:00Z",
+        conn, match_id=9001, kickoff_at_utc=kickoff_at_utc,
         kickoff_precision="exact", kickoff_source="fotmob:fixtures",
         model_version_id="m-studio", home_win=0.48, draw=0.29, away_win=0.23,
         expected_home_goals=1.6, expected_away_goals=1.0, status="draft",
     )
+    assert kickoff > datetime.now(timezone.utc)
     publish_snapshot(conn, sid, actor=None)
     conn.close()
     return data_dir
@@ -217,6 +224,74 @@ class TestDraftsAndExports:
                    json={"username": "other-admin", "password": "pass-12345678"},
                    headers={"x-real-ip": fresh_ip + "1"})
         assert other.get(job["download_url"]).status_code == 404
+
+    def test_douyin_safe_export_physically_excludes_full_bundle_fields(
+        self, app, seeded, fresh_ip
+    ):
+        client = _analyst_client(app, fresh_ip)
+        created = client.post(
+            "/api/v1/studio/drafts",
+            json={"match_id": 9001},
+            headers=_csrf(client),
+        ).json()
+        draft_id = created["draft_id"]
+        conn = connect_rw("platform")
+        row = conn.execute(
+            "SELECT bundle_json FROM content_drafts WHERE id=?", (draft_id,)
+        ).fetchone()
+        bundle = json.loads(row["bundle_json"])
+        bundle["social_profiles"] = {
+            "douyin-safe-v1": {
+                "profile_id": "douyin-safe-v1",
+                "profile_version": 1,
+                "source_hash": "abc123",
+                "data_cutoff_at": "2026-07-20T00:00:00Z",
+                "match": {
+                    "match_id": 9001,
+                    "league_name": "测试联赛",
+                    "season": "2026",
+                    "round": "1",
+                    "kickoff_at_utc": "2026-08-01T12:00:00Z",
+                    "home": {"team_id": 1, "name": "甲队", "crest_url": None},
+                    "away": {"team_id": 2, "name": "乙队", "crest_url": None},
+                },
+                "scenes": [],
+                "script_sections": [
+                    {"id": "opening", "title": "开场", "text": "两队打法数据拆解。"}
+                ],
+                "subtitle_cues": [
+                    {"start": 0.0, "end": 2.5, "text": "两队打法数据拆解。"}
+                ],
+                "titles": ["两队打法差在哪？"],
+                "xiaohongshu_text": "从控球与禁区触球看比赛方式。",
+                "wechat_summary": "赛季球队风格摘要。",
+                "source_note": "真实赛季统计。",
+            }
+        }
+        conn.execute(
+            "UPDATE content_drafts SET bundle_json=? WHERE id=?",
+            (json.dumps(bundle, ensure_ascii=False), draft_id),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.post(
+            f"/api/v1/studio/drafts/{draft_id}/export",
+            json={"kind": "json", "profile": "douyin-safe-v1"},
+            headers=_csrf(client),
+        )
+        assert response.status_code == 200, response.text
+        exported = client.get(response.json()["download_url"]).text
+        assert '"profile"' in exported
+        for key in (
+            "prediction_member",
+            "prediction_public",
+            "odds_timeline",
+            "market_baseline",
+            "probability_source",
+        ):
+            assert key not in exported
+        assert "0.48" not in exported
 
 
 class TestAnalytics:

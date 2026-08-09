@@ -9,6 +9,7 @@ scikit-learn
 httpx
 argon2-cffi
 dashscope
+cryptography
 
 # dev/test
 pytest

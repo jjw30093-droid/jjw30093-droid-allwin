@@ -104,9 +104,9 @@ frontend/
 
 | 库 | 文件 | 内容 | migration |
 |---|---|---|---|
-| core | `data/allwin.db` | FotMob Bronze(dim_match/dim_player/fact_*)、i18n、int_match_features、Silver 五表、gold_wdl_predictions | `backend/migrations/core/`(现有表不破坏性重建,暂无迁移文件) |
+| core | `data/allwin.db` | FotMob Bronze(dim_match/dim_player/fact_*)、i18n、int_match_features、Silver 五表、gold_wdl_predictions；离线验证但尚未真实迁移的 schedule identity/state/observation/current/rest-lineage v1 | `core/0001`～`0003`；现有表不破坏性重建，0003 尚未应用真实库 |
 | platform | `data/platform.db` | users/auth_identities/auth_sessions/oauth_states/device_login_requests/account_links;roles/plans/plan_entitlements/products/subscriptions/redeem_codes;预测登记簿六表;favorites/content_drafts/export_jobs;job_runs/audit_logs/analytics_events | `platform/0001_init.sql`(含锁定触发器)+ `0002_seed.sql` |
-| odds | `data/odds.db` | dim_team_xref/dim_team_alias/dim_match_xref;bronze_ng_odds_snap/bronze_fm_lineup_snap/bronze_fm_sideline_snap;silver_odds_moves/silver_event_moves/gold_move_cooccurrence;source_health | `odds/0001_init.sql` |
+| odds | `data/odds.db` | dim_team_xref/dim_team_alias/dim_match_xref;bronze_ng_odds_snap/bronze_fm_lineup_snap/bronze_fm_sideline_snap;silver_odds_moves/silver_event_moves/gold_move_cooccurrence;source_health;poll_state | `odds/0001_init.sql`～`0002_poll_state.sql` |
 
 连接纪律(`backend/db/connections.py`,CLAUDE.md §5.3):
 

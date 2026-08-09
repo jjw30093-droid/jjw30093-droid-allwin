@@ -1,13 +1,11 @@
 """FotMob 阵容 / 伤停快照 Provider Adapter。
 
 - 纯提取函数(extract_*)只吃 match_details 的 pageProps dict,离线可测;
-- 真实抓取 fetch_match_payload 延迟 import fotmob_client(该模块 import 时
-  就要求 THORDATA_PROXY 环境变量,缺失时这里抛清晰异常,不让整个包 import 失败);
+- 真实抓取 fetch_match_payload 延迟 import fotmob_client；模块 import 本身不读
+  代理配置，默认 live client 构造时才按"已有环境 → 缺失时加载 .env"解析;
 - FotMob 不声明阵容/伤停的来源更新时间 → source_updated_at 恒 None,不得编造
   (CLAUDE.md §6.2;SSR 页面另有 5~20 分钟 CDN 缓存,观察时间只能算 observed_at)。
 """
-
-import os
 
 
 def _player_brief(p: dict) -> dict:
@@ -72,23 +70,35 @@ def extract_sideline_snapshot(payload: dict, team_id) -> dict:
     return {"team_id": team_id, "sidelined": sidelined}
 
 
+def extract_prematch_details(payload: dict, match_id) -> dict:
+    """从同一份 match_details payload 定向提取 Referee/Temperature/Wind_Speed 三个
+    dim_match 列(裁判/天气赛前数据能力实测,本轮任务)。
+
+    复用 FotMobClient.parse_match_dim 的裁判(3 级 fallback)/天气解析逻辑,不重复
+    实现、不产生第二份互相漂移的解析代码。proxy="" 离线构造,不触发任何凭证解析
+    (parse_match_dim 本身也不读取任何实例状态,是纯函数式的方法)。
+
+    只返回这 3 个字段——status/kickoff/比分等其余 dim_match 列由
+    ingest_future_fixtures.py / ingest_match.py 各自的写路径负责,调用方(narrow
+    UPDATE)绝不覆盖。缺失字段如实为 None,不编造(CLAUDE.md §6.2.1)。
+    """
+    from backend.fotmob_client import FotMobClient
+
+    row = FotMobClient(proxy="").parse_match_dim(payload, match_id=match_id)
+    return {
+        "Referee": row.get("Referee"),
+        "Temperature": row.get("Temperature"),
+        "Wind_Speed": row.get("Wind_Speed"),
+    }
+
+
 def fetch_match_payload(match_id):
     """真实抓取 match_details 的 pageProps(经 ThorData 住宅代理)。
 
-    fotmob_client 在模块 import 时就读 os.environ["THORDATA_PROXY"],
-    所以必须延迟 import,并在缺失时抛出可读异常。
+    延迟 import 不触发凭证读取；FotMobClient() 只在这个默认 live 构造点解析
+    THORDATA_PROXY。已有环境变量时不会读取 .env，缺失时才尝试一次 dotenv，
+    最终仍缺失则由 client 抛出不含凭证值的 RuntimeError。
     """
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv()   # fotmob_client 也依赖 .env,先加载再判断,避免误判缺配置
-    except ImportError:
-        pass
-    if not os.environ.get("THORDATA_PROXY"):
-        raise RuntimeError(
-            "THORDATA_PROXY 未配置:FotMob 抓取需要 ThorData 住宅代理凭证"
-            "(写入 .env,勿硬编码;离线场景请改用已存 payload 调 extract_* 函数)。"
-        )
     from backend.fotmob_client import FotMobClient
 
     client = FotMobClient()

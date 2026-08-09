@@ -35,8 +35,15 @@ def data_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def app(data_dir):
+def app(data_dir, monkeypatch):
+    from backend import api_server
     from backend.api.app import create_app
+    from backend.db.paths import db_path
+
+    # backend.api_server.DB_PATH 是 legacy 兼容层的模块级历史常量。测试进程
+    # 可能在 ALLWIN_DATA_DIR 指向 tmp_path 之前就导入它，因此每个 app fixture
+    # 都必须显式绑定到当前动态 core DB，再装配包含 legacy routes 的主 app。
+    monkeypatch.setattr(api_server, "DB_PATH", db_path("core"))
 
     return create_app(make_settings())
 

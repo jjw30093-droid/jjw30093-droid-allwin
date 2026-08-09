@@ -13,7 +13,15 @@
   kickoff 必须真实包含时间部分(`_parse_nowgoal_wall_clock`,拒绝把纯日期当午夜),
   |diff| ≤ 30 分钟。任一侧不满足 → kickoff_diff_seconds 记 NULL 且强制 needs_review
   (不再因 diff is None 放行;也不再因 core 侧缺来源而静默放行)。NowGoal 日程按
-  timezone=8 请求,行内 kickoff 是北京墙上时间,-8h 转 UTC。
+  timezone=8 请求决定**返回哪个北京日期的日程**(用于 `date=` 查询参数选日,
+  已用真实数据验证:FotMob kickoff→Asia/Shanghai 换算出的北京日期确实能查到目标场次),
+  但**行内 kickoff 字段本身是 UTC,不需要再转换**——2026-07-21 用真实比赛
+  交叉验证发现:Match_ID=5107547(Västerås SK vs Örgryte,FotMob 真实
+  kickoff_at_utc='2026-07-24T17:00:00Z')对应的 NowGoal titan_id=2912218 行内
+  kickoff 原始值为 '2026-07-24 17:00:00'——与 UTC 时刻逐位相同,而不是北京时间
+  (北京时间应为次日 '2026-07-25 01:00:00')。此前假设"-8h 转 UTC"未经真实比对,
+  仅按请求参数名推测,现有真实证据(confidence=1.0 身份唯一匹配 + kickoff_diff
+  恰为 -28800 秒即整 8 小时,不是随机噪声)判定该假设有误,已改正。
 - team xref 冲突显式化 + 事务一致:比赛 xref 的占用检查与 team xref 冲突检查
   都在同一个 `BEGIN IMMEDIATE` 事务内完成(消除检查-写入之间的竞态窗口)。冲突则
   整场降级 needs_review 且不写任何 team xref;相同映射幂等复用,不覆盖既有
@@ -49,7 +57,6 @@ from backend.db.util import normalize_exact_kickoff, parse_strict_utc, utc_now_i
 PROVIDER = "nowgoal"
 AUTO_OK_THRESHOLD = 0.9
 KICKOFF_TOLERANCE_SECONDS = 1800   # ±30 分钟
-NOWGOAL_TZ_OFFSET_HOURS = 8
 
 # NowGoal 墙上时间专用格式:必须真实含时间部分('YYYY-MM-DD HH:MM[:SS]'),
 # 纯日期('YYYY-MM-DD')不匹配——避免 datetime.fromisoformat 把纯日期悄悄当成当天午夜。
@@ -316,12 +323,16 @@ def _parse_nowgoal_wall_clock(value) -> datetime | None:
 
 
 def _kickoff_diff_seconds(schedule_row: dict, cand: sqlite3.Row) -> int | None:
-    """NowGoal 行 kickoff(北京墙上时间)与 core **精确** kickoff 的差值秒数。
+    """NowGoal 行 kickoff 与 core **精确** kickoff 的差值秒数。
 
     充要条件(缺一即 None,交由上层强制 needs_review,不编造 §6.2.1):
       - core 侧通过统一验证器 normalize_exact_kickoff(exact + 真实非空来源 + 可解析);
       - NowGoal 侧 kickoff 真实包含时间部分且可解析(_parse_nowgoal_wall_clock,
         拒绝把纯日期悄悄当成午夜)。
+
+    NowGoal 行内 kickoff 字段本身就是 UTC(见模块 docstring 的真实交叉验证记录,
+    2026-07-21:Match_ID=5107547 与 titan_id=2912218 逐位一致),不做时区转换;
+    若响应本身带显式时区,直接转 UTC 比较。
     """
     core_normalized = normalize_exact_kickoff(
         _row_get(cand, "kickoff_at_utc"),
@@ -336,10 +347,7 @@ def _kickoff_diff_seconds(schedule_row: dict, cand: sqlite3.Row) -> int | None:
     ng_local = _parse_nowgoal_wall_clock(schedule_row.get("kickoff"))
     if ng_local is None:
         return None
-    if ng_local.tzinfo is None:
-        ng_utc = ng_local.replace(tzinfo=timezone.utc) - timedelta(hours=NOWGOAL_TZ_OFFSET_HOURS)
-    else:
-        ng_utc = ng_local.astimezone(timezone.utc)
+    ng_utc = ng_local.replace(tzinfo=timezone.utc) if ng_local.tzinfo is None else ng_local.astimezone(timezone.utc)
     return int((ng_utc - core_dt).total_seconds())
 
 

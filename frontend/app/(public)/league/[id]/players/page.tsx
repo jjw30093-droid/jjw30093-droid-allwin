@@ -1,16 +1,14 @@
-import { fetchLeagueOverview } from "@/lib/api";
+import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionPath, serverGetOptional, type PlayersResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
-import { LeaderboardCard, type LeaderboardRow } from "@/components/LeaderboardCard";
+import { PlayerBoards } from "@/components/league/PlayerBoards";
+import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
+import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./players.module.css";
 
-const STAT_ORDER = ["goals", "goal_assist", "expected_goals", "expected_goalsontarget", "rating"];
-
-const INTEGER_STATS = new Set(["goals", "goal_assist"]);
-
-function formatValue(statKey: string, value: number): string {
-  return INTEGER_STATS.has(statKey) ? String(Math.round(value)) : value.toFixed(2);
-}
-
+// 已迁移到 /api/v1/leagues/{id}/players(5 个免费维度:进球/助攻/xG/xGOT/评分,
+// 服务端完成中文名解析与 top10 截取)。
+// Pro 联赛的匿名请求被门禁挡下时走客户端会员加载器(见 standings 页同款说明)。
 export default async function PlayersPage({
   params,
   searchParams,
@@ -21,49 +19,50 @@ export default async function PlayersPage({
   const { id } = await params;
   const { season: seasonParam } = await searchParams;
 
-  let data;
+  let data: PlayersResponse | null;
   try {
-    data = await fetchLeagueOverview(id, seasonParam);
-  } catch (err) {
+    data = await serverGetOptional<PlayersResponse>(
+      leagueSectionPath("players", id, seasonParam)
+    );
+  } catch {
     return (
       <main className={styles.page}>
         <LeagueNav leagueId={id} active="players" season={seasonParam} />
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
-          <p>
-            后端 serving API 未响应,请确认 backend/api_server.py 已启动。
-            <br />
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              {err instanceof Error ? err.message : String(err)}
-            </span>
-          </p>
+          <p>该联赛数据尚未同步，或数据服务暂时不可用。请稍后再试。</p>
         </div>
       </main>
     );
   }
 
-  const statKeys = STAT_ORDER.filter((k) => data.player_leaderboards[k]);
+  const leagueNameZh = await fetchLeagueNameZh(id);
+  // resolvedSeason = 后端实际返回的赛季(徽章展示"在看什么");seasonParam = 用户
+  // 显式选择(导航跨 tab 只带这个)——两者不能混用,否则一个 tab 的默认值会变成
+  // 其它 tab 的显式选择,导致点导航跳到用户没选过的赛季(见 docs/data-plan.md)。
+  const resolvedSeason = data?.season ?? seasonParam;
 
   return (
     <main className={styles.page}>
-      <LeagueNav leagueId={id} active="players" season={data.season} />
+      <LeagueNav leagueId={id} active="players" season={seasonParam} />
       <div className={styles.header}>
-        <h1 className={styles.title}>英超 · 球员数据榜</h1>
-        <span className={styles.seasonChip}>{data.season}</span>
+        <h1 className={styles.title}>{leagueNameZh} · 球员数据榜</h1>
       </div>
+      {data && (
+        <SeasonSwitcher
+          leagueId={id}
+          section="players"
+          seasons={data.available_seasons}
+          selected={seasonParam}
+          resolved={resolvedSeason}
+        />
+      )}
 
-      <div className={styles.grid}>
-        {statKeys.map((statKey) => {
-          const board = data.player_leaderboards[statKey];
-          const rows: LeaderboardRow[] = board.entries.map((e) => ({
-            rank: e.rank,
-            name: e.player_name_zh_short ?? e.player_name_zh ?? e.Player_Name ?? e.player_id,
-            subtitle: e.team_name_zh ?? e.Team_Name,
-            value: formatValue(statKey, e.value),
-          }));
-          return <LeaderboardCard key={statKey} title={board.label_zh} rows={rows} />;
-        })}
-      </div>
+      {data ? (
+        <PlayerBoards boards={data.boards} />
+      ) : (
+        <MemberLeagueSection kind="players" leagueId={id} season={seasonParam} />
+      )}
     </main>
   );
 }

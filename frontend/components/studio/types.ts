@@ -71,6 +71,99 @@ export type ExportKind =
 /** side="client"(PNG,前端 DOM 生成)/ side="server"(txt/json/srt)判别联合。 */
 export type ExportResult = PostJson<"/api/v1/studio/drafts/{draft_id}/export">;
 
+export type StudioProfileId = "douyin-safe-v1" | "internal-full-v1";
+
+export interface SafeMetricSide {
+  value: number;
+  display: string;
+  rank: number;
+  rank_total: number;
+}
+
+export interface SafeMetricPair {
+  key: string;
+  label: string;
+  unit: string;
+  direction: "higher" | "lower";
+  home: SafeMetricSide;
+  away: SafeMetricSide;
+}
+
+export interface SafeScene {
+  id: SafeSceneId;
+  index: string;
+  label: string;
+  title: string;
+  metrics: SafeMetricPair[];
+  conclusions: string[];
+  recent_form?: { home: string[]; away: string[] };
+  risk_notes?: string[];
+  cta?: string;
+}
+
+export interface DouyinSafeProfile {
+  profile_id: "douyin-safe-v1";
+  profile_version: number;
+  source_hash: string;
+  data_cutoff_at: string;
+  match: {
+    match_id: number;
+    league_name: string;
+    season: string;
+    round?: string | null;
+    kickoff_at_utc?: string | null;
+    home: { team_id: number; name: string; crest_url?: string | null };
+    away: { team_id: number; name: string; crest_url?: string | null };
+  };
+  scenes: SafeScene[];
+  script_sections: ScriptSection[];
+  subtitle_cues: SubtitleCue[];
+  titles: string[];
+  xiaohongshu_text: string;
+  wechat_summary: string;
+  source_note: string;
+}
+
+export type SafeSceneId =
+  | "cover"
+  | "possession"
+  | "threat"
+  | "width"
+  | "defense"
+  | "summary";
+
+export const SAFE_SCENES: ReadonlyArray<{
+  id: SafeSceneId;
+  label: string;
+}> = [
+  { id: "cover", label: "比赛封面" },
+  { id: "possession", label: "控球与组织" },
+  { id: "threat", label: "禁区威胁" },
+  { id: "width", label: "边路与定位球" },
+  { id: "defense", label: "无球与防守" },
+  { id: "summary", label: "对位总结" },
+];
+
+/** 后端为兼容历史草稿将 social_profiles 声明为宽 dict；这里做运行时窄化。 */
+export function douyinSafeProfile(
+  bundle: AnalysisBundle,
+): DouyinSafeProfile | null {
+  const value = bundle.social_profiles?.["douyin-safe-v1"] as
+    | Partial<DouyinSafeProfile>
+    | undefined;
+  if (
+    !value ||
+    value.profile_id !== "douyin-safe-v1" ||
+    !Array.isArray(value.scenes) ||
+    value.scenes.length !== 6 ||
+    !value.match ||
+    typeof value.source_hash !== "string"
+  ) {
+    return null;
+  }
+  return value as DouyinSafeProfile;
+}
+
 /** 六段式竖屏场景(顺序即导出顺序)。 */
 export const SCENES = [
   { id: "hook", label: "开场钩子" },

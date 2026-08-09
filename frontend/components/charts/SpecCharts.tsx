@@ -111,8 +111,11 @@ function xgCompareOption(d: Record<string, unknown>): EChartsOption {
 
 export function summarize(spec: ChartSpec): string {
   const d = spec.data;
-  if (spec.type === "probability_bar")
-    return `模型概率:主胜 ${Math.round(Number(d.home) * 100)}%,平局 ${Math.round(Number(d.draw) * 100)}%,客胜 ${Math.round(Number(d.away) * 100)}%`;
+  if (spec.type === "probability_bar") {
+    const label =
+      d.probability_source === "MARKET_BASELINE" ? "市场去水基线" : "模型概率";
+    return `${label}:主胜 ${Math.round(Number(d.home) * 100)}%,平局 ${Math.round(Number(d.draw) * 100)}%,客胜 ${Math.round(Number(d.away) * 100)}%`;
+  }
   if (spec.type === "form_compare")
     return `近期战绩:${d.home_name} ${(d.home as string[]).join("")} / ${d.away_name} ${(d.away as string[]).join("")}`;
   if (spec.type === "xg_compare")

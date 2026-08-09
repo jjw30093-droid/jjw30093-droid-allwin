@@ -56,7 +56,7 @@ def _strip_sql_comments(sql: str) -> str:
 
 def migration_files(migrations_dir: Path) -> list[tuple[int, str, Path]]:
     if not migrations_dir.is_dir():
-        return []
+        raise ValueError(f"{migrations_dir} migration manifest 不存在")
     out = []
     for p in sorted(migrations_dir.glob("*.sql")):
         m = _FILENAME_RE.match(p.name)
@@ -64,9 +64,76 @@ def migration_files(migrations_dir: Path) -> list[tuple[int, str, Path]]:
             raise ValueError(f"非法迁移文件名(应为 NNNN_name.sql): {p.name}")
         out.append((int(m.group(1)), p.name, p))
     versions = [v for v, _, _ in out]
+    if not versions:
+        raise ValueError(
+            f"{migrations_dir} 迁移版本必须从 1 开始连续; manifest 为空"
+        )
     if len(set(versions)) != len(versions):
         raise ValueError(f"{migrations_dir} 存在重复版本号")
+    if versions and versions != list(range(1, max(versions) + 1)):
+        raise ValueError(
+            f"{migrations_dir} 迁移版本必须从 1 开始连续且不得缺号"
+        )
     return out
+
+
+def _manifest_identities(
+    available: list[tuple[int, str, Path]],
+) -> dict[int, tuple[str, str]]:
+    return {
+        version: (
+            name,
+            hashlib.sha256(
+                path.read_text(encoding="utf-8").encode("utf-8")
+            ).hexdigest(),
+        )
+        for version, name, path in available
+    }
+
+
+def _read_applied_readonly(path: Path) -> dict[int, tuple[str, str]]:
+    """Read the ledger without creating a DB, WAL, SHM, or metadata table."""
+
+    if not path.exists():
+        return {}
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        has_meta = conn.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type='table' AND name='schema_migrations'"
+        ).fetchone()
+        if has_meta is None:
+            return {}
+        return {
+            row[0]: (row[1], row[2])
+            for row in conn.execute(
+                "SELECT version, name, checksum FROM schema_migrations"
+            )
+        }
+    finally:
+        conn.close()
+
+
+def _validate_applied_identities(
+    applied: dict[int, tuple[str, str]],
+    manifest: dict[int, tuple[str, str]],
+) -> None:
+    """Migration identity is the exact (version, filename, checksum) triple."""
+
+    for version, (applied_name, applied_checksum) in applied.items():
+        expected = manifest.get(version)
+        if expected is None:
+            raise RuntimeError(
+                "migration ledger contains a version absent from manifest"
+            )
+        expected_name, expected_checksum = expected
+        if applied_name != expected_name:
+            raise RuntimeError("migration identity filename mismatch")
+        if applied_checksum != expected_checksum:
+            raise RuntimeError(
+                f"已应用迁移 {expected_name} 的内容发生改动(checksum 漂移)。"
+                "禁止篡改历史迁移;请新增迁移文件。"
+            )
 
 
 def _open(path: Path) -> sqlite3.Connection:
@@ -74,7 +141,14 @@ def _open(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path, timeout=30, isolation_level=None)
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA recursive_triggers = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
+    if (
+        conn.execute("PRAGMA foreign_keys").fetchone()[0] != 1
+        or conn.execute("PRAGMA recursive_triggers").fetchone()[0] != 1
+    ):
+        conn.close()
+        raise RuntimeError("SQLite safety pragmas could not be enabled")
     return conn
 
 
@@ -98,23 +172,19 @@ def apply_all(
     """应用 db_name 的全部未应用迁移,返回新应用的数量。"""
     path = Path(db_file) if db_file else db_path(db_name)
     mdir = Path(migrations_dir) if migrations_dir else MIGRATIONS_ROOT / db_name
+    available = migration_files(mdir)
+    manifest = _manifest_identities(available)
+    applied = _read_applied_readonly(path)
+    _validate_applied_identities(applied, manifest)
+
     conn = _open(path)
     try:
         _ensure_meta(conn)
-        applied = {
-            row[0]: (row[1], row[2])
-            for row in conn.execute("SELECT version, name, checksum FROM schema_migrations")
-        }
         count = 0
-        for version, name, p in migration_files(mdir):
+        for version, name, p in available:
             sql = p.read_text(encoding="utf-8")
             checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
             if version in applied:
-                if applied[version][1] != checksum:
-                    raise RuntimeError(
-                        f"[{db_name}] 已应用迁移 {name} 的内容发生改动(checksum 漂移)。"
-                        "禁止篡改历史迁移;请新增迁移文件。"
-                    )
                 continue
             statements = split_statements(sql)
             conn.execute("BEGIN IMMEDIATE")
@@ -148,28 +218,22 @@ def status(db_name: str, db_file: Path | str | None = None) -> dict:
     path = Path(db_file) if db_file else db_path(db_name)
     mdir = MIGRATIONS_ROOT / db_name
     available = migration_files(mdir)
-    checksums_by_version = {v: hashlib.sha256(p.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
-                             for v, _, p in available}
-    applied_names: dict[int, str] = {}
-    applied_checksums: dict[int, str] = {}
-    if path.exists():
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-        try:
-            has_meta = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
-            ).fetchone()
-            if has_meta:
-                for v, name, checksum in conn.execute(
-                    "SELECT version, name, checksum FROM schema_migrations"
-                ):
-                    applied_names[v] = name
-                    applied_checksums[v] = checksum
-        finally:
-            conn.close()
+    manifest = _manifest_identities(available)
+    applied = _read_applied_readonly(path)
+    for version, (applied_name, _) in applied.items():
+        expected = manifest.get(version)
+        if expected is None:
+            raise RuntimeError(
+                "migration ledger contains a version absent from manifest"
+            )
+        if applied_name != expected[0]:
+            raise RuntimeError("migration identity filename mismatch")
+    applied_names = {version: identity[0] for version, identity in applied.items()}
     pending = [name for v, name, _ in available if v not in applied_names]
     checksum_drift = [
-        applied_names[v] for v, current in checksums_by_version.items()
-        if v in applied_checksums and applied_checksums[v] != current
+        applied_name
+        for version, (applied_name, applied_checksum) in applied.items()
+        if applied_checksum != manifest[version][1]
     ]
     return {
         "db": db_name, "path": str(path), "applied": len(applied_names),

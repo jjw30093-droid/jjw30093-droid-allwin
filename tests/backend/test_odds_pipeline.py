@@ -31,10 +31,12 @@ QUERY_DATE = (date.today() + timedelta(days=7)).isoformat()
 NEXT_DATE = (date.today() + timedelta(days=8)).isoformat()
 
 
-def _ng_kickoff(d: str, hour_beijing: int = 22) -> str:
-    """core kickoff 固定为 {d}T14:00:00Z(UTC 14:00)= 北京 22:00;
-    NowGoal 日程行按 timezone=8 给北京墙上时间。此助手生成与之一致的 NowGoal kickoff。"""
-    return f"{d} {hour_beijing:02d}:00:00"
+def _ng_kickoff(d: str, hour_utc: int = 14) -> str:
+    """core kickoff 固定为 {d}T14:00:00Z(UTC 14:00)。NowGoal 日程行 kickoff 字段
+    本身就是 UTC(2026-07-21 真实 titan_id=2912218 交叉验证,见
+    entity_resolution.py 模块 docstring),此助手生成与之一致的 NowGoal kickoff
+    (不做时区转换)。"""
+    return f"{d} {hour_utc:02d}:00:00"
 
 # (Match_ID, Date, home_id, home_name, away_id, away_name)
 CORE_MATCHES = [
@@ -285,7 +287,7 @@ class TestEntityResolutionSafety:
 
     def test_5_kickoff_diff_over_tolerance_needs_review(self, odds_conn, core_db):
         seed_team_aliases(odds_conn, core_db)
-        # 北京 19:00 = UTC 11:00,与 core 14:00Z 差 3 小时 > 30 分钟
+        # NowGoal kickoff UTC 19:00,与 core 14:00Z 差 5 小时 > 30 分钟
         r = resolve_match(odds_conn, core_db, _arsenal_row(kickoff=_ng_kickoff(QUERY_DATE, 19)))
         assert r["review_status"] == "needs_review"
 
@@ -890,13 +892,14 @@ class TestSourceHealth:
 # ── CLI 离线单轮采集(端到端) ────────────────────────────────────────────
 
 
-def _js_date_tuple(date_str: str, hour_beijing: int = 22) -> str:
-    """core kickoff 14:00Z → 北京 22:00 同日;JS Date 元组月份 0 基。"""
+def _js_date_tuple(date_str: str, hour_utc: int = 14) -> str:
+    """core kickoff 14:00Z 同日;JS Date 元组月份 0 基。NowGoal 行内 kickoff 字段
+    本身就是 UTC(见 _ng_kickoff 说明),不做时区转换。"""
     y, m, d = date_str.split("-")
-    return f"{int(y)},{int(m) - 1},{int(d)},{hour_beijing:02d},00,00"
+    return f"{int(y)},{int(m) - 1},{int(d)},{hour_utc:02d},00,00"
 
 
-def _dynamic_poll_fixture(tmp_path, kickoff_hour_beijing: int = 22) -> Path:
+def _dynamic_poll_fixture(tmp_path, kickoff_hour_utc: int = 14) -> Path:
     """把静态 fixture 的开球元组改写成与 core kickoff 一致(或指定偏移)的动态版本。
 
     实体解析现在做 kickoff 差值校验(±30min),静态旧日期会被正确降级
@@ -904,9 +907,9 @@ def _dynamic_poll_fixture(tmp_path, kickoff_hour_beijing: int = 22) -> Path:
     """
     fixture = json.loads((FIXTURES / "poll_fixture.json").read_text(encoding="utf-8"))
     sched = fixture["schedule_data"]
-    sched = sched.replace("2026,7,15,19,30,00", _js_date_tuple(QUERY_DATE, kickoff_hour_beijing))
-    sched = sched.replace("2026,7,15,22,00,00", _js_date_tuple(QUERY_DATE, kickoff_hour_beijing))
-    sched = sched.replace("2026,7,15,20,00,00", _js_date_tuple(NEXT_DATE, kickoff_hour_beijing))
+    sched = sched.replace("2026,7,15,19,30,00", _js_date_tuple(QUERY_DATE, kickoff_hour_utc))
+    sched = sched.replace("2026,7,15,22,00,00", _js_date_tuple(QUERY_DATE, kickoff_hour_utc))
+    sched = sched.replace("2026,7,15,20,00,00", _js_date_tuple(NEXT_DATE, kickoff_hour_utc))
     fixture["schedule_data"] = sched
     p = tmp_path / "poll_fixture_dynamic.json"
     p.write_text(json.dumps(fixture, ensure_ascii=False), encoding="utf-8")
@@ -967,9 +970,9 @@ class TestPollCliOffline:
         """安全校验:NowGoal 开球时间与 core 精确 kickoff 相差 >30min → 不得 auto_ok。"""
         from backend.cli.poll_nowgoal import main
 
-        # 北京 19:00(= core 11:00Z)vs core kickoff 14:00Z → 差 3 小时
+        # NowGoal kickoff UTC 19:00 vs core kickoff 14:00Z → 差 5 小时
         rc = main(["--date", QUERY_DATE, "--offline-fixture",
-                   str(_dynamic_poll_fixture(tmp_path, kickoff_hour_beijing=19))])
+                   str(_dynamic_poll_fixture(tmp_path, kickoff_hour_utc=19))])
         assert rc == 0
         statuses = {r["provider_match_id"]: r["review_status"] for r in odds_conn.execute(
             "SELECT provider_match_id, review_status FROM dim_match_xref")}

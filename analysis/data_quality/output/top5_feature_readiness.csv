@@ -1,0 +1,211 @@
+league_id,league_name,season,feature_family,completed_match_count,covered_match_count,match_coverage_rate_pct,applicable_record_count,non_null_record_count,applicable_record_coverage_rate_pct,required_field_count,optional_field_count,minimum_required_field_coverage_pct,critical_anomaly_count,high_anomaly_count,readiness,reason
+47,EPL,2020/2021,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+47,EPL,2020/2021,defensive_duel_passing,380,380,100.0,211816,185155,87.4131,18,4,74.6884,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 74.7%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2020/2021,goalkeeper_advanced,380,380,100.0,9180,6891,75.0654,9,3,97.5163,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.5%)
+47,EPL,2020/2021,physical,380,0,0.0,62358,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+47,EPL,2020/2021,player_attacking_xg_xa,380,380,100.0,38512,24856,64.5409,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 64.5% 参考,建议按字段精细过滤"
+47,EPL,2020/2021,shot_xg,380,380,100.0,152766,102015,66.7786,15,8,99.4737,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.5%)
+47,EPL,2020/2021,standard_match,380,380,100.0,225671,192289,85.2077,18,14,81.4246,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 81.4%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2021/2022,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+47,EPL,2021/2022,defensive_duel_passing,380,380,100.0,213884,186631,87.258,18,4,73.9045,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 73.9%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2021/2022,goalkeeper_advanced,380,380,100.0,9156,6865,74.9782,9,3,97.1166,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.1%)
+47,EPL,2021/2022,physical,380,0,0.0,62910,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+47,EPL,2021/2022,player_attacking_xg_xa,380,380,100.0,38888,25516,65.6141,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 65.6% 参考,建议按字段精细过滤"
+47,EPL,2021/2022,shot_xg,380,380,100.0,157720,106766,67.6934,15,8,99.6728,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+47,EPL,2021/2022,standard_match,380,380,100.0,232585,198239,85.2329,18,14,72.6092,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 72.6%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2022/2023,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+47,EPL,2022/2023,defensive_duel_passing,380,380,100.0,232650,200620,86.2325,18,4,69.8061,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 69.8%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2022/2023,goalkeeper_advanced,380,380,100.0,9240,6941,75.119,9,3,96.6234,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+47,EPL,2022/2023,physical,380,0,0.0,68070,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+47,EPL,2022/2023,player_attacking_xg_xa,380,380,100.0,42300,26402,62.4161,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.4% 参考,建议按字段精细过滤"
+47,EPL,2022/2023,shot_xg,380,380,100.0,163600,106993,65.3991,15,8,97.8947,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.9%)
+47,EPL,2022/2023,standard_match,380,380,100.0,244319,207336,84.8628,18,14,66.8489,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 66.8%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2023/2024,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+47,EPL,2023/2024,defensive_duel_passing,380,380,100.0,233288,201399,86.3306,18,4,68.7382,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 68.7%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2023/2024,goalkeeper_advanced,380,380,100.0,9312,6996,75.1289,9,3,98.7113,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 98.7%)
+47,EPL,2023/2024,physical,380,0,0.0,68280,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+47,EPL,2023/2024,player_attacking_xg_xa,380,380,100.0,42416,27478,64.7822,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 64.8% 参考,建议按字段精细过滤"
+47,EPL,2023/2024,shot_xg,380,380,100.0,170690,115005,67.3765,15,8,99.2105,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.2%)
+47,EPL,2023/2024,standard_match,380,380,100.0,246589,213606,86.6243,18,14,85.0329,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 85.0%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2024/2025,context,380,,,26600,18370,69.0602,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 69.1% 参考,建议按字段精细过滤"
+47,EPL,2024/2025,defensive_duel_passing,380,380,100.0,237534,204820,86.2277,18,4,66.9538,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 67.0%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2024/2025,goalkeeper_advanced,380,380,100.0,9240,7588,82.1212,9,3,96.8831,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.9%)
+47,EPL,2024/2025,physical,380,0,0.0,69402,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+47,EPL,2024/2025,player_attacking_xg_xa,380,380,100.0,43188,27285,63.1773,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 63.2% 参考,建议按字段精细过滤"
+47,EPL,2024/2025,shot_xg,380,380,100.0,167205,112640,67.3664,15,8,99.7066,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+47,EPL,2024/2025,standard_match,380,380,100.0,248289,222634,89.6673,18,14,91.2164,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.2%)
+47,EPL,2025/2026,context,380,,,26600,18240,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+47,EPL,2025/2026,defensive_duel_passing,380,380,100.0,235950,203842,86.392,18,4,67.1515,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 67.2%,处于中等区间,建议按字段/赛季过滤后使用"
+47,EPL,2025/2026,goalkeeper_advanced,380,380,100.0,9204,7644,83.0508,9,3,97.5228,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.5%)
+47,EPL,2025/2026,physical,380,0,0.0,68952,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+47,EPL,2025/2026,player_attacking_xg_xa,380,380,100.0,42900,27262,63.5478,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 63.5% 参考,建议按字段精细过滤"
+47,EPL,2025/2026,shot_xg,380,380,100.0,163944,109824,66.9887,15,8,99.6542,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+47,EPL,2025/2026,standard_match,380,380,100.0,246407,221561,89.9167,18,14,91.2026,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.2%)
+53,Ligue1,2020/2021,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+53,Ligue1,2020/2021,defensive_duel_passing,380,380,100.0,236060,204500,86.6305,18,4,72.1808,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 72.2%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2020/2021,goalkeeper_advanced,380,380,100.0,9216,6908,74.9566,9,3,96.6146,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+53,Ligue1,2020/2021,physical,380,0,0.0,68988,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+53,Ligue1,2020/2021,player_attacking_xg_xa,380,379,99.7368,42920,26402,61.5144,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 61.5% 参考,建议按字段精细过滤"
+53,Ligue1,2020/2021,shot_xg,380,379,99.7368,158668,100792,63.5238,15,8,99.7078,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+53,Ligue1,2020/2021,standard_match,380,380,100.0,245742,210350,85.5979,18,14,85.5454,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 85.5%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2021/2022,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+53,Ligue1,2021/2022,defensive_duel_passing,380,380,100.0,236566,203326,85.949,18,4,70.2223,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 70.2%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2021/2022,goalkeeper_advanced,380,380,100.0,9288,6973,75.0754,9,3,96.6408,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+53,Ligue1,2021/2022,physical,380,0,0.0,69162,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+53,Ligue1,2021/2022,player_attacking_xg_xa,380,380,100.0,43012,26680,62.0292,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.0% 参考,建议按字段精细过滤"
+53,Ligue1,2021/2022,shot_xg,380,380,100.0,160833,103033,64.0621,15,8,98.4211,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 98.4%)
+53,Ligue1,2021/2022,standard_match,380,380,100.0,246054,208991,84.937,18,14,71.7713,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 71.8%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2022/2023,context,380,,,25840,17480,67.6471,0,34,,0,2,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+53,Ligue1,2022/2023,defensive_duel_passing,380,380,100.0,236962,205088,86.5489,18,4,69.78,0,2,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 69.8%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2022/2023,goalkeeper_advanced,380,380,100.0,9240,6949,75.2056,9,3,96.6234,0,2,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+53,Ligue1,2022/2023,physical,380,0,0.0,69246,0,0.0,0,6,,0,2,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+53,Ligue1,2022/2023,player_attacking_xg_xa,380,380,100.0,43084,27306,63.3785,0,4,,0,2,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 63.4% 参考,建议按字段精细过滤"
+53,Ligue1,2022/2023,shot_xg,380,380,100.0,162699,105187,64.6513,15,8,96.5789,0,2,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+53,Ligue1,2022/2023,standard_match,380,380,100.0,245287,208696,85.0824,18,14,65.0209,0,2,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 65.0%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2023/2024,context,306,,,20808,14076,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+53,Ligue1,2023/2024,defensive_duel_passing,306,306,100.0,193028,167060,86.547,18,4,69.0563,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 69.1%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2023/2024,goalkeeper_advanced,306,306,100.0,7416,5591,75.391,9,3,97.7346,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.7%)
+53,Ligue1,2023/2024,physical,306,0,0.0,56352,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+53,Ligue1,2023/2024,player_attacking_xg_xa,306,306,100.0,35096,22756,64.8393,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 64.8% 参考,建议按字段精细过滤"
+53,Ligue1,2023/2024,shot_xg,306,305,99.6732,133961,87470,65.2951,15,8,96.732,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.7%)
+53,Ligue1,2023/2024,standard_match,306,306,100.0,200330,172246,85.9811,18,14,83.3538,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 83.4%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2024/2025,context,306,,,21420,14688,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+53,Ligue1,2024/2025,defensive_duel_passing,306,306,100.0,193490,166718,86.1636,18,4,66.6629,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 66.7%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2024/2025,goalkeeper_advanced,306,306,100.0,7416,6098,82.2276,9,3,96.9256,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.9%)
+53,Ligue1,2024/2025,physical,306,0,0.0,56478,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+53,Ligue1,2024/2025,player_attacking_xg_xa,306,306,100.0,35180,22199,63.1012,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 63.1% 参考,建议按字段精细过滤"
+53,Ligue1,2024/2025,shot_xg,306,306,100.0,133104,88398,66.4127,15,8,99.3464,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.3%)
+53,Ligue1,2024/2025,standard_match,306,306,100.0,200863,175180,87.2137,18,14,91.703,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.7%)
+53,Ligue1,2025/2026,context,306,,,21420,14688,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+53,Ligue1,2025/2026,defensive_duel_passing,306,306,100.0,193248,166262,86.0356,18,4,66.826,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 66.8%,处于中等区间,建议按字段/赛季过滤后使用"
+53,Ligue1,2025/2026,goalkeeper_advanced,306,306,100.0,7488,6224,83.1197,9,3,96.9551,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.0%)
+53,Ligue1,2025/2026,physical,306,0,0.0,56448,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+53,Ligue1,2025/2026,player_attacking_xg_xa,306,306,100.0,35136,22007,62.6338,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.6% 参考,建议按字段精细过滤"
+53,Ligue1,2025/2026,shot_xg,306,306,100.0,132544,87723,66.1841,15,8,99.6732,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+53,Ligue1,2025/2026,standard_match,306,306,100.0,200376,179376,89.5197,18,14,91.8899,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.9%)
+54,Bundesliga,2020/2021,context,306,,,20808,14076,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+54,Bundesliga,2020/2021,defensive_duel_passing,306,306,100.0,190344,164858,86.6106,18,4,72.7577,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 72.8%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2020/2021,goalkeeper_advanced,306,306,100.0,7428,5572,75.0135,9,3,96.6074,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+54,Bundesliga,2020/2021,physical,306,0,0.0,55626,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+54,Bundesliga,2020/2021,player_attacking_xg_xa,306,306,100.0,34608,21963,63.4622,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 63.5% 参考,建议按字段精细过滤"
+54,Bundesliga,2020/2021,shot_xg,306,306,100.0,131309,85034,64.7587,15,8,99.0196,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.0%)
+54,Bundesliga,2020/2021,standard_match,306,306,100.0,197533,168565,85.3351,18,14,91.8671,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.9%)
+54,Bundesliga,2021/2022,context,306,,,20808,14076,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+54,Bundesliga,2021/2022,defensive_duel_passing,306,306,100.0,193050,166845,86.4258,18,4,71.6353,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 71.6%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2021/2022,goalkeeper_advanced,306,306,100.0,7392,5544,75.0,9,3,97.0779,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.1%)
+54,Bundesliga,2021/2022,physical,306,0,0.0,56346,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+54,Bundesliga,2021/2022,player_attacking_xg_xa,306,306,100.0,35100,22737,64.7778,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 64.8% 参考,建议按字段精细过滤"
+54,Bundesliga,2021/2022,shot_xg,306,306,100.0,134936,88746,65.769,15,8,99.686,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+54,Bundesliga,2021/2022,standard_match,306,306,100.0,198835,169155,85.0731,18,14,91.8113,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.8%)
+54,Bundesliga,2022/2023,context,306,,,20808,14076,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+54,Bundesliga,2022/2023,defensive_duel_passing,306,306,100.0,195030,168186,86.236,18,4,69.938,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 69.9%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2022/2023,goalkeeper_advanced,306,306,100.0,7380,5565,75.4065,9,3,97.8862,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.9%)
+54,Bundesliga,2022/2023,physical,306,0,0.0,56880,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+54,Bundesliga,2022/2023,player_attacking_xg_xa,306,306,100.0,35460,22603,63.7422,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 63.7% 参考,建议按字段精细过滤"
+54,Bundesliga,2022/2023,shot_xg,306,306,100.0,134789,87545,64.9497,15,8,96.0784,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.1%)
+54,Bundesliga,2022/2023,standard_match,306,306,100.0,201486,170222,84.4833,18,14,65.0095,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 65.0%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2023/2024,context,306,,,20808,14076,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+54,Bundesliga,2023/2024,defensive_duel_passing,306,306,100.0,196064,168718,86.0525,18,4,70.1526,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 70.2%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2023/2024,goalkeeper_advanced,306,306,100.0,7368,5545,75.2579,9,3,97.8827,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.9%)
+54,Bundesliga,2023/2024,physical,306,0,0.0,57156,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+54,Bundesliga,2023/2024,player_attacking_xg_xa,306,306,100.0,35648,23535,66.0205,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 66.0% 参考,建议按字段精细过滤"
+54,Bundesliga,2023/2024,shot_xg,306,306,100.0,140507,93760,66.7298,15,8,97.3856,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.4%)
+54,Bundesliga,2023/2024,standard_match,306,306,100.0,202325,173259,85.634,18,14,84.8914,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 84.9%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2024/2025,context,306,,,21420,14688,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+54,Bundesliga,2024/2025,defensive_duel_passing,306,306,100.0,195932,168260,85.8767,18,4,68.5268,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 68.5%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2024/2025,goalkeeper_advanced,306,306,100.0,7464,6177,82.7572,9,3,97.5884,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.6%)
+54,Bundesliga,2024/2025,physical,306,0,0.0,57168,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+54,Bundesliga,2024/2025,player_attacking_xg_xa,306,306,100.0,35624,22919,64.3358,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 64.3% 参考,建议按字段精细过滤"
+54,Bundesliga,2024/2025,shot_xg,306,306,100.0,136486,91294,66.8889,15,8,99.6732,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+54,Bundesliga,2024/2025,standard_match,306,306,100.0,202344,174340,86.1602,18,14,91.2888,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.3%)
+54,Bundesliga,2025/2026,context,306,,,21420,14688,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+54,Bundesliga,2025/2026,defensive_duel_passing,306,306,100.0,196570,169072,86.0111,18,4,67.9687,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 68.0%,处于中等区间,建议按字段/赛季过滤后使用"
+54,Bundesliga,2025/2026,goalkeeper_advanced,306,306,100.0,7440,6188,83.172,9,3,97.9032,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.9%)
+54,Bundesliga,2025/2026,physical,306,0,0.0,57330,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+54,Bundesliga,2025/2026,player_attacking_xg_xa,306,306,100.0,35740,23507,65.7722,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 65.8% 参考,建议按字段精细过滤"
+54,Bundesliga,2025/2026,shot_xg,306,306,100.0,137743,92872,67.4241,15,8,99.3464,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.3%)
+54,Bundesliga,2025/2026,standard_match,306,306,100.0,202873,182155,89.7877,18,14,91.1983,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 91.2%)
+55,SerieA,2020/2021,context,380,,,25840,17434,67.469,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.5% 参考,建议按字段精细过滤"
+55,SerieA,2020/2021,defensive_duel_passing,380,379,99.7368,238524,206548,86.5942,18,4,72.957,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 73.0%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2020/2021,goalkeeper_advanced,380,379,99.7368,9240,6934,75.0433,9,3,96.6234,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.6%)
+55,SerieA,2020/2021,physical,380,0,0.0,69672,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+55,SerieA,2020/2021,player_attacking_xg_xa,380,379,99.7368,43368,26926,62.0873,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.1% 参考,建议按字段精细过滤"
+55,SerieA,2020/2021,shot_xg,380,380,100.0,164488,106213,64.5719,15,8,99.2105,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.2%)
+55,SerieA,2020/2021,standard_match,380,380,100.0,265847,222149,83.5627,18,14,84.8178,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 84.8%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2021/2022,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+55,SerieA,2021/2022,defensive_duel_passing,380,380,100.0,240790,208208,86.4687,18,4,72.4075,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 72.4%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2021/2022,goalkeeper_advanced,380,380,100.0,9264,6950,75.0216,9,3,97.5389,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.5%)
+55,SerieA,2021/2022,physical,380,0,0.0,70302,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+55,SerieA,2021/2022,player_attacking_xg_xa,380,380,100.0,43780,27237,62.2133,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.2% 参考,建议按字段精细过滤"
+55,SerieA,2021/2022,shot_xg,380,380,100.0,168486,109722,65.1223,15,8,99.6277,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.6%)
+55,SerieA,2021/2022,standard_match,380,380,100.0,266169,222293,83.5157,18,14,73.1285,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 73.1%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2022/2023,context,381,,,25908,17526,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+55,SerieA,2022/2023,defensive_duel_passing,381,381,100.0,245168,211631,86.3208,18,4,71.6888,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 71.7%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2022/2023,goalkeeper_advanced,381,381,100.0,9264,7010,75.6693,9,3,97.0207,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.0%)
+55,SerieA,2022/2023,physical,381,0,0.0,71496,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+55,SerieA,2022/2023,player_attacking_xg_xa,381,381,100.0,44576,27919,62.6324,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.6% 参考,建议按字段精细过滤"
+55,SerieA,2022/2023,shot_xg,381,381,100.0,168236,108469,64.4743,15,8,96.8504,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.9%)
+55,SerieA,2022/2023,standard_match,381,381,100.0,276705,232055,83.8637,18,14,67.0657,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 67.1%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2023/2024,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+55,SerieA,2023/2024,defensive_duel_passing,380,380,100.0,245014,210605,85.9563,18,4,70.4858,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 70.5%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2023/2024,goalkeeper_advanced,380,380,100.0,9276,7025,75.7331,9,3,97.4127,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.4%)
+55,SerieA,2023/2024,physical,380,0,0.0,71460,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+55,SerieA,2023/2024,player_attacking_xg_xa,380,380,100.0,44548,27687,62.1509,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.2% 参考,建议按字段精细过滤"
+55,SerieA,2023/2024,shot_xg,380,380,100.0,168278,108604,64.5384,15,8,95.7895,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 95.8%)
+55,SerieA,2023/2024,standard_match,380,380,100.0,275075,232160,84.3988,18,14,84.7954,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 84.8%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2024/2025,context,380,,,26600,18240,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+55,SerieA,2024/2025,defensive_duel_passing,380,380,100.0,244596,210240,85.954,18,4,68.5915,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 68.6%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2024/2025,goalkeeper_advanced,380,380,100.0,9228,7599,82.3472,9,3,97.2692,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.3%)
+55,SerieA,2024/2025,physical,380,0,0.0,71322,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+55,SerieA,2024/2025,player_attacking_xg_xa,380,380,100.0,44472,27038,60.7978,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 60.8% 参考,建议按字段精细过滤"
+55,SerieA,2024/2025,shot_xg,380,380,100.0,164628,107186,65.108,15,8,99.4737,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.5%)
+55,SerieA,2024/2025,standard_match,380,380,100.0,273999,233447,85.1999,18,14,92.2436,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 92.2%)
+55,SerieA,2025/2026,context,380,,,26600,18240,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+55,SerieA,2025/2026,defensive_duel_passing,380,380,100.0,245454,211107,86.0067,18,4,68.2621,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 68.3%,处于中等区间,建议按字段/赛季过滤后使用"
+55,SerieA,2025/2026,goalkeeper_advanced,380,380,100.0,9252,7660,82.7929,9,3,95.3307,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 95.3%)
+55,SerieA,2025/2026,physical,380,0,0.0,71568,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+55,SerieA,2025/2026,player_attacking_xg_xa,380,380,100.0,44628,27247,61.0536,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 61.1% 参考,建议按字段精细过滤"
+55,SerieA,2025/2026,shot_xg,380,380,100.0,165889,108427,65.3612,15,8,99.7368,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+55,SerieA,2025/2026,standard_match,380,380,100.0,274847,243368,88.5467,18,14,92.5805,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 92.6%)
+87,LaLiga,2020/2021,context,380,,,25840,17480,67.6471,0,34,,0,2,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+87,LaLiga,2020/2021,defensive_duel_passing,380,380,100.0,238524,206471,86.5619,18,4,73.0493,0,2,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 73.0%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2020/2021,goalkeeper_advanced,380,380,100.0,9180,6902,75.1852,9,3,97.1242,0,2,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.1%)
+87,LaLiga,2020/2021,physical,380,0,0.0,69642,0,0.0,0,6,,0,2,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+87,LaLiga,2020/2021,player_attacking_xg_xa,380,380,100.0,43368,25653,59.1519,0,4,,0,2,NOT_READY,"该 family 无 REQUIRED 字段可下钻,整体字段均值仅 59.2%"
+87,LaLiga,2020/2021,shot_xg,380,380,100.0,153642,94015,61.191,15,8,99.4737,0,2,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.5%)
+87,LaLiga,2020/2021,standard_match,380,380,100.0,260408,222038,85.2654,18,14,84.7185,0,2,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 84.7%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2021/2022,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+87,LaLiga,2021/2022,defensive_duel_passing,380,380,100.0,242836,210390,86.6387,18,4,73.2017,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 73.2%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2021/2022,goalkeeper_advanced,380,380,100.0,9216,6919,75.076,9,3,96.7448,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.7%)
+87,LaLiga,2021/2022,physical,380,0,0.0,70836,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+87,LaLiga,2021/2022,player_attacking_xg_xa,380,380,100.0,44152,27084,61.3426,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 61.3% 参考,建议按字段精细过滤"
+87,LaLiga,2021/2022,shot_xg,380,380,100.0,161777,102087,63.1035,15,8,99.7368,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+87,LaLiga,2021/2022,standard_match,380,380,100.0,266271,225151,84.5571,18,14,71.1431,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 71.1%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2022/2023,context,380,,,25840,17480,67.6471,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.6% 参考,建议按字段精细过滤"
+87,LaLiga,2022/2023,defensive_duel_passing,380,379,99.7368,242704,209595,86.3583,18,4,71.0569,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 71.1%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2022/2023,goalkeeper_advanced,380,379,99.7368,9228,6938,75.1842,9,3,97.1391,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.1%)
+87,LaLiga,2022/2023,physical,380,0,0.0,70806,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+87,LaLiga,2022/2023,player_attacking_xg_xa,380,379,99.7368,44128,27410,62.1148,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.1% 参考,建议按字段精细过滤"
+87,LaLiga,2022/2023,shot_xg,380,380,100.0,164823,105436,63.9692,15,8,97.8947,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.9%)
+87,LaLiga,2022/2023,standard_match,380,380,100.0,266225,225368,84.6532,18,14,67.7809,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 67.8%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2023/2024,context,380,,,25840,17434,67.469,0,34,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 67.5% 参考,建议按字段精细过滤"
+87,LaLiga,2023/2024,defensive_duel_passing,380,379,99.7368,243826,210566,86.3591,18,4,69.6743,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 69.7%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2023/2024,goalkeeper_advanced,380,379,99.7368,9252,6950,75.1189,9,3,97.0169,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.0%)
+87,LaLiga,2023/2024,physical,380,0,0.0,71124,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+87,LaLiga,2023/2024,player_attacking_xg_xa,380,379,99.7368,44332,27601,62.2598,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.3% 参考,建议按字段精细过滤"
+87,LaLiga,2023/2024,shot_xg,380,380,100.0,164936,105501,63.9648,15,8,97.8947,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 97.9%)
+87,LaLiga,2023/2024,standard_match,380,380,100.0,266333,228546,85.8121,18,14,83.2964,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 83.3%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2024/2025,context,380,,,26600,18240,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+87,LaLiga,2024/2025,defensive_duel_passing,380,380,100.0,244860,211415,86.3412,18,4,70.1977,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 70.2%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2024/2025,goalkeeper_advanced,380,380,100.0,9240,7612,82.381,9,3,96.3636,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.4%)
+87,LaLiga,2024/2025,physical,380,0,0.0,71400,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+87,LaLiga,2024/2025,player_attacking_xg_xa,380,380,100.0,44520,27029,60.712,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 60.7% 参考,建议按字段精细过滤"
+87,LaLiga,2024/2025,shot_xg,380,380,100.0,163231,105358,64.5453,15,8,99.7242,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+87,LaLiga,2024/2025,standard_match,380,380,100.0,268503,233697,87.037,18,14,92.6891,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 92.7%)
+87,LaLiga,2025/2026,context,380,,,26600,18240,68.5714,0,35,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 68.6% 参考,建议按字段精细过滤"
+87,LaLiga,2025/2026,defensive_duel_passing,380,380,100.0,246202,212708,86.3957,18,4,69.1359,0,0,READY_WITH_FILTERS,"REQUIRED 字段最低覆盖率 69.1%,处于中等区间,建议按字段/赛季过滤后使用"
+87,LaLiga,2025/2026,goalkeeper_advanced,380,380,100.0,9144,7592,83.0271,9,3,96.8504,0,0,READY,全部 9 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 96.9%)
+87,LaLiga,2025/2026,physical,380,0,0.0,71718,0,0.0,0,6,,0,0,NOT_READY,"全量 0.0% 覆盖(已用真实数据确认);成因 UNVERIFIED——疑似解析器 camelCase key 未做下划线别名,未证实为来源从不提供,本轮未修改 backend/fotmob_client.py,建议后续单独做 payload→parser 字段映射审计"
+87,LaLiga,2025/2026,player_attacking_xg_xa,380,380,100.0,44764,27795,62.0923,0,4,,0,0,READY_WITH_FILTERS,"该 family 无 REQUIRED 字段可下钻,以整体字段均值 62.1% 参考,建议按字段精细过滤"
+87,LaLiga,2025/2026,shot_xg,380,380,100.0,167209,109550,65.5168,15,8,99.7368,0,0,READY,全部 15 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 99.7%)
+87,LaLiga,2025/2026,standard_match,380,380,100.0,269237,239319,88.8879,18,14,92.7717,0,0,READY,全部 18 个 REQUIRED 字段覆盖率均 >= 90.0%(最低 92.8%)

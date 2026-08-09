@@ -15,8 +15,16 @@ rolling 特征口径:
     历史,快照是 NULL,走 compute_lambda() 已有的 λ=μ 兜底逻辑,不是本脚本
     新写的分支。
 
-只对 dim_match 里 Season='2026/2027' 且 status='NotStarted' 的场次出预测,
-不碰任何已完赛数据,也不给这些场次填任何比分/xG。
+只对 dim_match 里 Season='2026/2027' 且 status='NotStarted' 且
+League_ID=FUTURE_LEAGUE_ID 的场次出预测,不碰任何已完赛数据,也不给这些场次
+填任何比分/xG。
+
+⚠️ 联赛边界:wdl_baseline_params.pkl 是只用英超历史拟合的基准参数
+(mu_home/mu_away/league_avg_xg_for 等),对其它联赛没有意义——即使那些联赛
+在 dim_match 里也有 Season='2026/2027' 的行、也有真实 xG 历史、也能让
+compute_confidence() 标成 'normal',输出仍然是用错误联赛基准算出的假预测。
+League_ID 谓词因此不是"可选的性能优化",是防止把非英超比赛的预测写进永久
+公开预测账本(CLAUDE.md §9.1:official+locked 之后不可删除)的唯一防线。
 
 用法:
     python backend/models/predict_wdl_future.py
@@ -42,10 +50,11 @@ from models.build_wdl_baseline import (
 from models.features.build_match_features import _load_raw, _extract_stats, _build_team_match_long
 
 FUTURE_SEASON = "2026/2027"
+FUTURE_LEAGUE_ID = 47  # wdl_baseline_params.pkl 只用英超历史拟合,见上方模块 docstring 的联赛边界说明。
 SNAPSHOT_WINDOWS = [5, 10]
 
 
-def load_future_fixtures(conn) -> pd.DataFrame:
+def load_future_fixtures(conn, league_id: int = FUTURE_LEAGUE_ID) -> pd.DataFrame:
     return pd.read_sql_query(
         """
         SELECT Match_ID AS match_id, League_ID AS league_id, Season AS season,
@@ -53,10 +62,10 @@ def load_future_fixtures(conn) -> pd.DataFrame:
                Home_Team_ID AS home_team_id, Away_Team_ID AS away_team_id,
                Home_Team_Name AS home_team_name, Away_Team_Name AS away_team_name
         FROM dim_match
-        WHERE Season = ? AND status = 'NotStarted'
+        WHERE Season = ? AND status = 'NotStarted' AND League_ID = ?
         """,
         conn,
-        params=(FUTURE_SEASON,),
+        params=(FUTURE_SEASON, league_id),
     )
 
 
@@ -125,7 +134,7 @@ def compute_confidence(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def write_predictions(conn, df: pd.DataFrame) -> int:
+def write_predictions(conn, df: pd.DataFrame, league_id: int = FUTURE_LEAGUE_ID) -> int:
     out = df[
         [
             "match_id", "league_id", "season", "lambda_home", "lambda_away",
@@ -138,7 +147,12 @@ def write_predictions(conn, df: pd.DataFrame) -> int:
     col_names = [name for name, _ in GOLD_WDL_PREDICTIONS_COLUMNS if name != "updated_at"]
     out = out[col_names].astype(object).where(pd.notnull(out[col_names]), None)
 
-    conn.execute("DELETE FROM gold_wdl_predictions WHERE season = ?", (FUTURE_SEASON,))
+    # league_id 谓词:见模块 docstring 的"联赛边界"说明——没有它,这一行会
+    # 删掉/覆盖其它联赛已经写入 gold_wdl_predictions 的正式记录。
+    conn.execute(
+        "DELETE FROM gold_wdl_predictions WHERE season = ? AND league_id = ?",
+        (FUTURE_SEASON, league_id),
+    )
     placeholders = ", ".join("?" for _ in col_names)
     cols_sql = ", ".join(_quote(n) for n in col_names)
     conn.executemany(
@@ -167,7 +181,10 @@ def main() -> None:
     conn = get_connection()
     try:
         fixtures = load_future_fixtures(conn)
-        print(f"\ndim_match 里 Season={FUTURE_SEASON} 且 status='NotStarted' 的场次: {len(fixtures)}")
+        print(
+            f"\ndim_match 里 Season={FUTURE_SEASON} 且 status='NotStarted' 且 "
+            f"League_ID={FUTURE_LEAGUE_ID} 的场次: {len(fixtures)}"
+        )
 
         team_ids_needed = set(fixtures["home_team_id"]) | set(fixtures["away_team_id"])
         snapshots = compute_team_snapshots(conn, team_ids_needed)

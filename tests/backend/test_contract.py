@@ -14,6 +14,7 @@
 """
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -224,10 +225,56 @@ class TestUnifiedErrorContractRuntime:
         r = client.get("/api/league/not-an-int/overview")
         _assert_unified_error_body(r, expect_code="VALIDATION_ERROR")
 
-    def test_legacy_400_invalid_season(self, client):
-        r = client.get("/api/league/47/matches?season=not-a-real-season")
+    def test_legacy_400_invalid_season(
+        self, client, app, data_dir,
+    ):
+        from backend import api_server
+
+        sentinel_league_id = 987654
+        sentinel_season = "2099/2100"
+        temp_core = data_dir / "allwin.db"
+        assert Path(api_server.DB_PATH).resolve() == temp_core.resolve()
+        assert temp_core.is_relative_to(data_dir)
+
+        conn = sqlite3.connect(temp_core)
+        try:
+            conn.execute(
+                "INSERT INTO dim_match "
+                "(Match_ID, Season, League_ID, Date, status) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    987654001,
+                    sentinel_season,
+                    sentinel_league_id,
+                    "2099-08-01",
+                    "NotStarted",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        real_shm = PROJECT_ROOT / "data" / "allwin.db-shm"
+        real_shm_before = (
+            (real_shm.stat().st_size, real_shm.stat().st_mtime_ns)
+            if real_shm.exists()
+            else None
+        )
+
+        r = client.get(
+            f"/api/league/{sentinel_league_id}/matches"
+            "?season=not-a-real-season"
+        )
         body = _assert_unified_error_body(r, expect_code="invalid_season")
         assert body["details"] is None
+        assert sentinel_season in body["message"]
+        assert body["message"].endswith(f"['{sentinel_season}']")
+        real_shm_after = (
+            (real_shm.stat().st_size, real_shm.stat().st_mtime_ns)
+            if real_shm.exists()
+            else None
+        )
+        assert real_shm_after == real_shm_before
 
     def test_legacy_membership_required_401_dict_detail_preserved(self, client):
         """dict-shaped HTTPException(detail={code,message,entitlement}):code 不丢失,

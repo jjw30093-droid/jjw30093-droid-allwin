@@ -12,10 +12,9 @@ match_details()(那是给"已发生的比赛"抓统计/事件/阵容用的,未�
 现有的 ingest_league.py/ingest_match.py 正常流程回填。
 
 status 取值:
-    库里目前只有 'Finish' 一个值(全部完赛场次),FotMob 赛程 JSON 的 status
-    只有 started/finished/cancelled 三个布尔字段,没有 match_details() 那种
-    reason.short 文本可以直接复用。所以这里新增三个语义不重复的值(不是
-    随手新造,是真的没有可复用的旧枚举):
+    与 fotmob_client.derive_match_status()(match_details 详情页读的是同一个
+    status 对象形状:started/finished/cancelled)共用同一份判定,两条 ingest
+    路径结构上不可能漂移:
         finished  -> 'Finish'    (与现有完赛语义完全一致,复用同一个值)
         cancelled -> 'Cancelled'
         started 且未 finished -> 'InPlay'
@@ -24,6 +23,11 @@ status 取值:
 
 幂等:按 Match_ID 用 INSERT OR REPLACE(upsert),风格与 ingest_match.py 对
 dim_match 的写法一致,可重复爬。
+
+赛季身份校验:响应的 details.id/selectedSeason 必须与请求的 league_id/season
+完全一致(同 backend/cli/backfill_season_tables.py::_verify_identity),不一致
+抛 SeasonIdentityError、不落一行库。防的是来源尚未发布目标赛季时静默返回
+另一个赛季的数据,被当成目标赛季写进 dim_match。
 
 用法:
     python backend/ingest/ingest_future_fixtures.py --league-id 47 --season 2026/2027
@@ -37,23 +41,57 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db import get_connection
 from db.util import normalize_utc_iso
-from fotmob_client import FotMobClient
+from fotmob_client import FotMobClient, derive_match_status
 from ingest_match import _upsert
 from schema import DIM_MATCH_COLUMNS
 
+# 与 parse_match_dim(match_details 详情页)共用同一个判定函数,见上方模块 docstring。
+_status_from_fixture = derive_match_status
 
-def _status_from_fixture(status_obj: dict) -> str:
-    if status_obj.get("finished"):
-        return "Finish"
-    if status_obj.get("cancelled"):
-        return "Cancelled"
-    if status_obj.get("started"):
-        return "InPlay"
-    return "NotStarted"
+
+class SeasonIdentityError(RuntimeError):
+    """league_matches() 响应的 details.id/selectedSeason 与请求参数不一致。
+
+    FotMob 在某个联赛尚未发布下一赛季赛程时,`&season=` 请求参数可能被忽略、
+    静默返回当前/上一个已发布赛季的数据。不校验的话,这些行会被当成目标赛季
+    写进 dim_match(例如把已完赛的 2025/2026 整季误标成 Season='2026/2027'),
+    这正是 docs/data-plan.md 记录的"跨联赛/跨赛季污染"风险——必须拒绝写库,
+    不能静默降级成"写入了但赛季标错"。
+    """
+
+
+def _verify_season_identity(data: dict, league_id: int, season: str) -> None:
+    """与 backend/cli/backfill_season_tables.py::_verify_identity 同一口径
+    (details.id 必须等于请求的 league_id,selectedSeason 必须等于请求的 season)。
+    不同点:那里按赛季循环、宁可跳过单个赛季也要继续;这里一次调用只处理一个
+    (league_id, season),不一致就是这次调用唯一目的失败,直接抛异常。"""
+    details = data.get("details") or {}
+    observed_id = details.get("id")
+    try:
+        observed_id = int(observed_id)
+    except (TypeError, ValueError):
+        raise SeasonIdentityError(
+            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
+            f"details.id 无法解析为整数: {observed_id!r}"
+        )
+    if observed_id != league_id:
+        raise SeasonIdentityError(
+            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
+            f"details.id={observed_id} 与请求的 league_id 不一致——来源很可能还没有 "
+            f"这个赛季的数据,拒绝落库"
+        )
+    observed_season = details.get("selectedSeason") or details.get("season")
+    if observed_season != season:
+        raise SeasonIdentityError(
+            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
+            f"selectedSeason={observed_season!r} 与请求的 season 不一致——来源很可能还没有 "
+            f"这个赛季的数据,拒绝落库"
+        )
 
 
 def fetch_fixture_rows(client: FotMobClient, league_id: int, season: str) -> list:
     data = client.league_matches(league_id, season)
+    _verify_season_identity(data, league_id, season)
     raw = (data.get("fixtures", {}) or {}).get("allMatches") or []
 
     rows = []
@@ -61,7 +99,12 @@ def fetch_fixture_rows(client: FotMobClient, league_id: int, season: str) -> lis
         status_obj = m.get("status", {}) or {}
         status = _status_from_fixture(status_obj)
         if status == "Finish":
-            continue  # 已完赛场次交给现有流程(ingest_league.py)按完整比赛处理
+            # 已完赛场次交给现有流程(ingest_league.py)按完整比赛处理。
+            # 已知限制:ingest_league 路径不写 kickoff_at_utc,所以已完赛比赛的
+            # 精确开球时刻不会经由本模块补上——历史回填由
+            # backend/cli/backfill_kickoff_from_fotmob.py 按 (League_ID, Season)
+            # 分区批量处理(同一响应、每分区一个请求)。
+            continue
 
         home = m.get("home") or {}
         away = m.get("away") or {}
@@ -138,7 +181,12 @@ def main() -> None:
     args = parser.parse_args()
 
     client = FotMobClient()
-    rows = fetch_fixture_rows(client, args.league_id, args.season)
+    try:
+        rows = fetch_fixture_rows(client, args.league_id, args.season)
+    except SeasonIdentityError as e:
+        print(f"\n拒绝落库(赛季身份校验未通过): {e}")
+        print("如实报告:来源可能尚未发布这个赛季,不重试、不改用其它赛季猜测。")
+        raise SystemExit(1)
     print(f"抓到未开赛场次: {len(rows)} (league_id={args.league_id}, season={args.season})")
 
     conn = get_connection()

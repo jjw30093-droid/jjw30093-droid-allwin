@@ -47,6 +47,9 @@ test("Studio 导出 PNG:signature + 实际像素尺寸 + JSON/SRT", async ({ pag
   await page.waitForURL("**/studio/matches/**");
   await expect(page.getByText("导出").first()).toBeVisible();
 
+  // 旧版完整分析导出契约继续存在；安全版另由 studio-safe.spec.ts 验收。
+  await page.getByRole("button", { name: "内部完整分析版" }).click();
+
   // 场景卡内容:数据截止 + 模型版本(导出画面自带,防"文件名对了内容没带")
   await expect(page.getByText(/数据截止/).first()).toBeVisible();
   await expect(page.getByText(/模型版本/).first()).toBeVisible();

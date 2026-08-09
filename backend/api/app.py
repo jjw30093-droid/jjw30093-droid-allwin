@@ -65,6 +65,7 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
     # v1 数据/产品/预测/admin/studio 路由(分文件,逐步装配)
     for module_name in (
         "routes_public",
+        "routes_media",
         "routes_member",
         "routes_admin",
         "routes_admin_odds",

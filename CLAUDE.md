@@ -365,7 +365,7 @@ premium:
 
 ## 9. 预测完整性与模型评估
 
-### 9.1 不可覆盖的预测登记簿
+### 9.1 可编辑但强制留痕的预测登记簿
 
 现有 `gold_wdl_predictions` 是模型当前产物，不是公开历史账本。正式记录使用 `platform.db` 中的：
 
@@ -385,27 +385,31 @@ match_id / model_version_id / generated_at / published_at / locked_at
 input_cutoff_at / input_snapshot_hash / prediction_hash
 home_win / draw / away_win / expected_home_goals / expected_away_goals
 confidence / visibility / status / is_official
+last_edited_at / edit_count
 ```
 
 规则：
 
 - 三项概率在容差内等于 1。
 - 开球后生成的预测不得进入正式赛前统计。
-- 锁定后禁止 UPDATE 概率；修正必须追加新版本并保留旧版本。
+- 锁定后的概率等预测内容允许直接编辑，但必须经统一的 `edit_snapshot` 写入
+  `prediction_snapshot_edits`（修正前后值、操作者、原因、时间），不得绕过留痕
+  直接 UPDATE；`prediction_snapshot_edits` 本身 append-only，不可再改或删。
 - 删除只允许撤回状态，不允许物理删除正式预测。
 - 公开 track record 默认展示全部正式样本。
 - 每日正式预测 manifest 生成稳定 hash，可上传 S3 版本桶；启用 Object Lock 时优先 governance 模式。
 
-正式样本集合具有永久资格不变量：
+正式样本集合具有公开样本口径不变量：
 
-- 一条快照一旦满足 `is_official=1`、`locked_at IS NOT NULL` 且 `published_at < kickoff_at_utc`，就永久属于公开正式样本集合；
+- 一条快照一旦满足 `is_official=1`、`locked_at IS NOT NULL` 且 `published_at < kickoff_at_utc`，就永久属于公开正式样本集合，这条资格判据只看是否曾经合格地锁定过，不因内容后续被编辑而改变；
 - `status='retracted'`、`superseded_by`、管理员撤回或后续修正版不得使旧样本从公开列表、manifest 或评估分母中消失；
-- 修正版必须追加为新快照，旧版和新版均可查询并显示修正链；
-- 开球后禁止创建 supersede 版本；
+- 修正版可以追加为新快照（`supersede`，旧版和新版均可查询并显示修正链），也可以直接编辑已有快照（`edit_snapshot`，留痕但不产生新记录）；两种机制并存，互不替代；
+- 开球后禁止创建 supersede 版本；直接编辑不受开球/结算前后限制；
 - 赛后撤回只能作为公开说明和审计状态，不能改变评估资格；
-- track record 和 evaluation 查询不得使用 `status` 或 `superseded_by` 选择性排除已经成为正式样本的记录。
+- track record 和 evaluation 查询不得使用 `status` 或 `superseded_by` 选择性排除已经成为正式样本的记录；
+- 内容修正必须通过 `edit_snapshot` 留痕，修正历史（次数、最近时间）在公开战绩页可查，不得静默覆盖。
 
-任何能让已经公开的失败预测退出指标分母的实现都属于 P0 数据完整性缺陷。
+任何能让已经公开的失败预测从公开列表或指标分母中消失的实现都属于 P0 数据完整性缺陷；未经留痕直接覆盖正式预测内容同样属于 P0 数据完整性缺陷。
 
 历史 `gold_wdl_predictions` 如果无法证明生成时间早于开球，只能导入为 `legacy_unverified` 或 draft，不能冒充正式历史战绩。
 
@@ -500,7 +504,7 @@ GET  /api/v1/admin/...
 ### 11.2 设计纪律
 
 - `DESIGN.md` 是视觉系统真源；现有用户对该文件的未提交修改必须保留。
-- 中文默认，时间按用户时区显示，数据库统一 UTC。
+- 中文默认，面向中文用户默认按北京时间（UTC+8）展示比赛/预测/赔率等赛程相关时间戳，数据库统一 UTC；账户、运维等非赛程语境可按用户本地时区展示。
 - 响应式以手机为第一优先；窄屏主动减少列，不缩小到不可读。
 - 图表必须有文字摘要、单位、时间范围、空状态和数据更新时间。
 - 不用假倒计时、虚构在线人数、诱导弹窗或赌场式视觉语言。
@@ -643,7 +647,7 @@ schedule_sync
 - pytest；
 - 权限矩阵测试；
 - 免费 DTO 不含受限字段；
-- 锁定预测不可修改；
+- 锁定预测的物理删除仍被拒绝；内容编辑必须经 `edit_snapshot` 留痕（`prediction_snapshot_edits` 正确写入，`edit_count`/`last_edited_at` 更新）；
 - OAuth state、设备扫码一次性消费、会话撤销与 CSRF 测试；
 - 数据源不可用时的降级测试。
 
@@ -686,15 +690,17 @@ schedule_sync
 - `CLAUDE.md`：长期架构与纪律。
 - `DESIGN.md`：视觉系统。
 - `docs/current-state.md`：可更新的真实当前状态。
+- `docs/data-plan.md`：数据层单一真源——联赛 × 数据层覆盖、验证状态、依赖排序计划。
 - `docs/architecture.md`：模块、数据库和运行拓扑。
 - `docs/auth-wechat.md`：公众号后台配置、OAuth、扫码登录和账号恢复。
 - `docs/data-sources.md`：来源、验证状态、时间粒度、降级方式。
 - `docs/model-api-contract.md`：模型输入输出和评估口径。
 - `docs/prediction-integrity.md`：锁定、哈希、撤回和公开战绩规则。
 - `docs/deployment-aws-cloudflare.md`：东京 AWS、Nginx、systemd、Cloudflare、备份和回滚。
+- `docs/audits/`：逐模块独立复核报告，`docs/current-state.md` 的证据层。
 - `README.md`：安装、开发、测试和常用命令。
 
-动态进度、服务器 IP、真实域名、用户数量、数据行数和临时排期不得写入本文件。
+动态进度、服务器 IP、真实域名、用户数量、数据行数和临时排期不得写入本文件。数据层覆盖与排期只写 `docs/data-plan.md`。
 
 ## 17. 绝对禁止
 
@@ -705,7 +711,7 @@ schedule_sync
 - 把 paid 字段下发后用 CSS 遮挡。
 - 让公开缓存响应因 Cookie 或用户身份混用。
 - 在 API 请求内训练模型或执行长跑批。
-- 事后覆盖、删除或挑选正式预测。
+- 物理删除或选择性隐藏正式预测（内容编辑允许，但必须经 `edit_snapshot` 留痕，见 §9.1）。
 - 把 DEMO 战绩表现成真实结果。
 - 网络验证失败时编造成功结论。
 - 为满足测试而删除测试、降低断言或跳过 build。
@@ -718,7 +724,7 @@ schedule_sync
 1. 实现与本文件的架构边界一致；
 2. 原有功能和用户改动未被破坏；
 3. migration、测试、构建和必要冒烟实际运行；
-4. 权限、缓存、预测锁定和认证安全测试通过；
+4. 权限、缓存、预测锁定/编辑留痕和认证安全测试通过；
 5. 文档描述与真实代码一致；
 6. 所有无法验证的外部能力明确标记 `UNVERIFIED`；
 7. 最终汇报列出真实命令、退出码、失败项和未完成项，以及仍需用户提供的外部凭证。

@@ -72,6 +72,8 @@ export function SceneCard({
   const label = SCENES.find((s) => s.id === scene)?.label ?? scene;
   const pm = bundle.prediction_member;
   const pp = bundle.prediction_public;
+  const probabilityLabel =
+    bundle.probability_source === "MARKET_BASELINE" ? "市场去水基线" : "模型";
 
   const maxCharts = height >= 1600 ? 3 : 2;
   const chartSpecs = bundle.chart_specs.slice(0, maxCharts);
@@ -127,12 +129,12 @@ export function SceneCard({
           </div>
         )}
         <p className={styles.sceneText}>{sec("probability")}</p>
-        <p className={styles.probNote}>模型概率是赛前估计,不是定论。</p>
+        <p className={styles.probNote}>{probabilityLabel}概率是赛前估计,不是定论。</p>
       </>
     ) : pp ? (
       <>
         <div className={styles.topOnly}>
-          <div className={styles.probLabel}>模型最高概率结果</div>
+          <div className={styles.probLabel}>{probabilityLabel}最高概率结果</div>
           <div className={styles.probNumBig}>
             {OUTCOME_ZH[pp.top_outcome]} {pct(pp.top_probability)}
           </div>
@@ -141,7 +143,7 @@ export function SceneCard({
       </>
     ) : (
       <p className={styles.emptyText}>
-        该场比赛暂无已发布的模型概率,此场景导出前请确认是否保留。
+        该场比赛暂无可靠概率,此场景导出前请确认是否保留。
       </p>
     );
   } else if (scene === "evidence") {
@@ -229,7 +231,7 @@ export function SceneCard({
       <div className={styles.body}>{body}</div>
       <footer className={styles.foot}>
         <span>数据截止:{fmtUtc(bundle.data_cutoff_at)}</span>
-        <span>模型版本:{bundle.model_version ?? "无"}</span>
+        <span>概率来源:{bundle.probability_source} · 版本:{bundle.model_version ?? "无"}</span>
       </footer>
     </div>
   );

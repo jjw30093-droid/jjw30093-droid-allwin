@@ -5,6 +5,7 @@
 *.sqlite
 *.sqlite3
 data/
+runtime/
 .venv/
 __pycache__/
 *.pyc

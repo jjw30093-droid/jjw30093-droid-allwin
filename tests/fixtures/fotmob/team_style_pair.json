@@ -1,0 +1,112 @@
+{
+  "home": {
+    "details": {
+      "id": 8007,
+      "name": "Vålerenga",
+      "latestSeason": "2026",
+      "primaryLeagueId": 59
+    },
+    "stats": {
+      "teamId": 8007,
+      "primaryLeagueId": 59,
+      "primarySeasonId": 30202,
+      "tournamentSeasons": [
+        {
+          "tournamentId": "30202",
+          "parentLeagueId": "59",
+          "season": "2026"
+        }
+      ],
+      "teams": [
+        {"stat":"possession_percentage_team","participant":{"teamId":8007,"rank":9,"value":49.3}},
+        {"stat":"accurate_pass_team","participant":{"teamId":8007,"rank":10,"value":357.9}},
+        {"stat":"poss_won_att_3rd_team","participant":{"teamId":8007,"rank":15,"value":2.9}},
+        {"stat":"expected_goals_team","participant":{"teamId":8007,"rank":5,"value":24.0}},
+        {"stat":"ontarget_scoring_att_team","participant":{"teamId":8007,"rank":3,"value":5.6}},
+        {"stat":"touches_in_opp_box_team","participant":{"teamId":8007,"rank":5,"value":452}},
+        {"stat":"big_chance_team","participant":{"teamId":8007,"rank":10,"value":28}},
+        {"stat":"corner_taken_team","participant":{"teamId":8007,"rank":2,"value":100}},
+        {"stat":"accurate_cross_team","participant":{"teamId":8007,"rank":4,"value":6.3}},
+        {"stat":"_set_piece_goals_team","participant":{"teamId":8007,"rank":9,"value":3}},
+        {"stat":"expected_goals_conceded_team","participant":{"teamId":8007,"rank":13,"value":26.4}},
+        {"stat":"total_tackle_team","participant":{"teamId":8007,"rank":2,"value":18.7}},
+        {"stat":"effective_clearance_team","participant":{"teamId":8007,"rank":4,"value":29.1}},
+        {"stat":"clean_sheet_team","participant":{"teamId":8007,"rank":11,"value":2}}
+      ]
+    },
+    "table": [
+      {
+        "data": {
+          "leagueId": 59,
+          "table": {
+            "all": [
+              {"id":8007,"played":14},{"id":8448,"played":14},
+              {"id":8402,"played":15},{"id":8478,"played":14},
+              {"id":8608,"played":15},{"id":8468,"played":14},
+              {"id":9991,"played":14},{"id":9992,"played":14},
+              {"id":9993,"played":14},{"id":9994,"played":14},
+              {"id":9995,"played":14},{"id":9996,"played":14},
+              {"id":9997,"played":14},{"id":9998,"played":14},
+              {"id":9999,"played":14},{"id":10000,"played":14}
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "away": {
+    "details": {
+      "id": 8448,
+      "name": "Hamarkameratene",
+      "latestSeason": "2026",
+      "primaryLeagueId": 59
+    },
+    "stats": {
+      "teamId": 8448,
+      "primaryLeagueId": 59,
+      "primarySeasonId": 30202,
+      "tournamentSeasons": [
+        {
+          "tournamentId": "30202",
+          "parentLeagueId": "59",
+          "season": "2026"
+        }
+      ],
+      "teams": [
+        {"stat":"possession_percentage_team","participant":{"teamId":8448,"rank":11,"value":46.1}},
+        {"stat":"accurate_pass_team","participant":{"teamId":8448,"rank":11,"value":352.0}},
+        {"stat":"poss_won_att_3rd_team","participant":{"teamId":8448,"rank":16,"value":2.6}},
+        {"stat":"expected_goals_team","participant":{"teamId":8448,"rank":10,"value":20.2}},
+        {"stat":"ontarget_scoring_att_team","participant":{"teamId":8448,"rank":10,"value":4.1}},
+        {"stat":"touches_in_opp_box_team","participant":{"teamId":8448,"rank":12,"value":339}},
+        {"stat":"big_chance_team","participant":{"teamId":8448,"rank":9,"value":31}},
+        {"stat":"corner_taken_team","participant":{"teamId":8448,"rank":15,"value":55}},
+        {"stat":"accurate_cross_team","participant":{"teamId":8448,"rank":5,"value":6.0}},
+        {"stat":"_set_piece_goals_team","participant":{"teamId":8448,"rank":2,"value":6}},
+        {"stat":"expected_goals_conceded_team","participant":{"teamId":8448,"rank":9,"value":24.8}},
+        {"stat":"total_tackle_team","participant":{"teamId":8448,"rank":16,"value":12.1}},
+        {"stat":"effective_clearance_team","participant":{"teamId":8448,"rank":9,"value":27.5}},
+        {"stat":"clean_sheet_team","participant":{"teamId":8448,"rank":13,"value":1}}
+      ]
+    },
+    "table": [
+      {
+        "data": {
+          "leagueId": 59,
+          "table": {
+            "all": [
+              {"id":8007,"played":14},{"id":8448,"played":14},
+              {"id":8402,"played":15},{"id":8478,"played":14},
+              {"id":8608,"played":15},{"id":8468,"played":14},
+              {"id":9991,"played":14},{"id":9992,"played":14},
+              {"id":9993,"played":14},{"id":9994,"played":14},
+              {"id":9995,"played":14},{"id":9996,"played":14},
+              {"id":9997,"played":14},{"id":9998,"played":14},
+              {"id":9999,"played":14},{"id":10000,"played":14}
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

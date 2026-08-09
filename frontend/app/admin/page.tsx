@@ -34,6 +34,7 @@ type CodesCreateResp = PostJson<"/api/v1/admin/redeem-codes">;
 
 type PredictionsResp = GetJson<"/api/v1/admin/predictions">;
 type PublishUpcomingResp = PostJson<"/api/v1/admin/predictions/publish-upcoming">;
+type EditPredictionResp = PostJson<"/api/v1/admin/predictions/{snapshot_id}/edit">;
 
 type XrefResp = GetJson<"/api/v1/admin/xref">;
 
@@ -514,6 +515,11 @@ function PredictionsTab() {
   const [retractFor, setRetractFor] = useState<string | null>(null);
   const [retractReason, setRetractReason] = useState("");
   const [lockOnPublish, setLockOnPublish] = useState(true);
+  const [editFor, setEditFor] = useState<string | null>(null);
+  const [editHomeWin, setEditHomeWin] = useState("");
+  const [editDraw, setEditDraw] = useState("");
+  const [editAwayWin, setEditAwayWin] = useState("");
+  const [editReason, setEditReason] = useState("");
 
   const load = useCallback(async (status: string) => {
     setLoading(true);
@@ -580,6 +586,51 @@ function PredictionsTab() {
       await load(statusFilter);
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "撤回失败") });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openEdit = (p: PredictionsResp["predictions"][number]) => {
+    setEditFor(p.id);
+    setEditHomeWin(String(p.home_win));
+    setEditDraw(String(p.draw));
+    setEditAwayWin(String(p.away_win));
+    setEditReason("");
+  };
+
+  const onEdit = async (id: string) => {
+    const reason = editReason.trim();
+    if (reason.length < 2) {
+      setMsg({ kind: "err", text: "修正原因至少 2 个字符" });
+      return;
+    }
+    const home_win = Number(editHomeWin);
+    const draw = Number(editDraw);
+    const away_win = Number(editAwayWin);
+    if ([home_win, draw, away_win].some((v) => Number.isNaN(v))) {
+      setMsg({ kind: "err", text: "概率必须是数字" });
+      return;
+    }
+    setBusyId(id);
+    setMsg(null);
+    try {
+      const r = await clientFetch<EditPredictionResp>(
+        `/api/v1/admin/predictions/${id}/edit`,
+        { method: "POST", body: { home_win, draw, away_win, reason } },
+      );
+      setMsg({
+        kind: "ok",
+        text:
+          r.changed_fields.length > 0
+            ? `已修正 ${shortId(id)}(${r.changed_fields.join("、")}),累计修正 ${r.edit_count} 次`
+            : `${shortId(id)} 未产生实质变化,未记录修正`,
+      });
+      setEditFor(null);
+      setEditReason("");
+      await load(statusFilter);
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "修正失败") });
     } finally {
       setBusyId(null);
     }
@@ -670,6 +721,7 @@ function PredictionsTab() {
                 <th>主/平/客</th>
                 <th>模型版本</th>
                 <th>发布 / 锁定</th>
+                <th>修正</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -703,6 +755,17 @@ function PredictionsTab() {
                     <br />
                     {fmtLocal(p.locked_at)}
                   </td>
+                  <td className="num">
+                    {p.edit_count > 0 ? (
+                      <>
+                        已修正 {p.edit_count} 次
+                        <br />
+                        <span className={styles.dim}>{fmtLocal(p.last_edited_at)}</span>
+                      </>
+                    ) : (
+                      <span className={styles.dim}>未修正</span>
+                    )}
+                  </td>
                   <td>
                     <div className={styles.inlineForm}>
                       {p.status === "draft" && (
@@ -726,11 +789,69 @@ function PredictionsTab() {
                             act(
                               p.id,
                               "lock",
-                              `确认锁定预测 ${shortId(p.id)}?锁定后概率不可再修改。`,
+                              `确认锁定预测 ${shortId(p.id)}?锁定后即计入公开正式战绩;仍可通过"编辑"修正,修正会留下公开可查的记录。`,
                             )
                           }
                         >
                           锁定
+                        </button>
+                      )}
+                      {editFor === p.id ? (
+                        <div className={styles.inlineForm}>
+                          <input
+                            className={`${styles.input} ${styles.inputNarrow}`}
+                            type="number"
+                            step="0.0001"
+                            placeholder="主胜"
+                            value={editHomeWin}
+                            onChange={(e) => setEditHomeWin(e.target.value)}
+                          />
+                          <input
+                            className={`${styles.input} ${styles.inputNarrow}`}
+                            type="number"
+                            step="0.0001"
+                            placeholder="平局"
+                            value={editDraw}
+                            onChange={(e) => setEditDraw(e.target.value)}
+                          />
+                          <input
+                            className={`${styles.input} ${styles.inputNarrow}`}
+                            type="number"
+                            step="0.0001"
+                            placeholder="客胜"
+                            value={editAwayWin}
+                            onChange={(e) => setEditAwayWin(e.target.value)}
+                          />
+                          <input
+                            className={styles.input}
+                            placeholder="修正原因(必填)"
+                            value={editReason}
+                            onChange={(e) => setEditReason(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className={styles.btnPrimary}
+                            disabled={busyId === p.id}
+                            onClick={() => onEdit(p.id)}
+                          >
+                            确认修正
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.btnGhost}
+                            onClick={() => setEditFor(null)}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.btnGhost}
+                          disabled={busyId === p.id}
+                          onClick={() => openEdit(p)}
+                        >
+                          编辑
                         </button>
                       )}
                       {p.status !== "retracted" &&

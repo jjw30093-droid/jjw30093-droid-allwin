@@ -9,52 +9,35 @@
 // MatchRow.Match_Round 声明为非空,而 wdl-predictions 的同源字段声明可空)——
 // 生成类型按 backend/api_server.py 真实返回值精确建模,消除了这一不一致。
 import { serverApiBase } from "./api-base";
-import type { GetJson } from "./api-v1";
+import {
+  ApiError,
+  parseErrorBody,
+  safeParseJsonError,
+  serverGet,
+  type GetJson,
+  type LeagueInfo,
+} from "./api-v1";
+
+/**
+ * 旧 /league/[id]/* 页面的联赛中文名标题:唯一真源仍是后端 LEAGUE_META
+ * (经 /api/v1/leagues 暴露),不在前端另建一份联赛名单——这些页面此前把标题写死成
+ * "英超",瑞典超接入后才暴露(CLAUDE.md §11.1:旧页面须保留且接入新导航/API)。
+ * 查不到时退化为 "联赛 {id}",不假装是英超。
+ */
+export async function fetchLeagueNameZh(leagueId: string): Promise<string> {
+  const leagues = await serverGet<LeagueInfo[]>("/api/v1/leagues");
+  const found = leagues.find((l) => String(l.league_id) === leagueId);
+  return found?.name_zh ?? `联赛 ${leagueId}`;
+}
 
 function seasonQuery(season?: string): string {
   return season ? `?season=${encodeURIComponent(season)}` : "";
 }
 
-export type LeagueOverview = GetJson<"/api/league/{league_id}/overview">;
-export type StandingRow = LeagueOverview["standings"][number];
-// 免费字段(CLAUDE.md §3):射门/射正/控球/xG/xGOT。角球/黄红牌/零封/BTTS
-// 是付费字段,不在 overview 里返回,这里也就没有对应字段——不是漏写。
-export type TeamStatsRow = LeagueOverview["team_stats"][number];
-export type PlayerLeaderboard = LeagueOverview["player_leaderboards"][string];
-export type PlayerLeaderboardEntry = PlayerLeaderboard["entries"][number];
-
-export async function fetchLeagueOverview(
-  leagueId: string,
-  season?: string
-): Promise<LeagueOverview> {
-  const url = `${serverApiBase()}/api/league/${leagueId}/overview${seasonQuery(season)}`;
-
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`serving API ${res.status}: ${body}`);
-  }
-  return res.json();
-}
-
-// 赛程/结果(免费层)。只有对阵/比分/日期/轮次/status,不含任何概率字段
-// ——概率是付费概率卡页(wdl-predictions)的事,这里没有、也不该有。
-export type LeagueMatchesResponse = GetJson<"/api/league/{league_id}/matches">;
-export type MatchRow = LeagueMatchesResponse["matches"][number];
-
-export async function fetchLeagueMatches(
-  leagueId: string,
-  season?: string
-): Promise<LeagueMatchesResponse> {
-  const url = `${serverApiBase()}/api/league/${leagueId}/matches${seasonQuery(season)}`;
-
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`serving API ${res.status}: ${body}`);
-  }
-  return res.json();
-}
+// 说明:排名/赛程/球队榜/球员榜四个页面已迁移到 /api/v1/leagues/{id}/*
+// (standings / fixtures / team-stats / players,见 lib/api-v1.ts 与
+// components/league/*)。legacy /api/league/{id}/overview 与 /matches 的
+// fetcher 已随之删除;后端兼容层端点本身仍保留(deprecated,不再扩展)。
 
 // WDL 概率卡(付费核心,CLAUDE.md §3)。三种 JSON 形状物理上互斥(后端
 // LegacyWdlUpcomingMatch / LiveLockedMatch / LiveFullMatch 判别联合,各自
@@ -81,8 +64,12 @@ export async function fetchWdlPredictions(
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`serving API ${res.status}: ${body}`);
+    // legacy 端点与 v1 共用同一套统一错误契约({code, message, details}),
+    // 抛类型化 ApiError 而不是裸 Error——调用方(概率卡页)需要按 code
+    // 区分"该赛季没有预测数据"(invalid_season)与真实故障,不能把两者都
+    // 显示成同一句"数据服务暂时不可用"(那是编造的故障声明)。
+    const raw = await safeParseJsonError(res);
+    throw new ApiError(res.status, parseErrorBody(res.status, raw));
   }
   return res.json();
 }

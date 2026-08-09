@@ -70,7 +70,15 @@ def _admin_free_client(app, ip, username="audit-admin"):
     return c
 
 
-def _seed_prediction(match_id, home_win, draw, away_win, kickoff="2027-04-01T14:30:00Z"):
+def _seed_prediction(match_id, home_win, draw, away_win, kickoff=None):
+    if kickoff is None:
+        kickoff_dt = (
+            datetime.now(timezone.utc) + timedelta(days=3)
+        ).replace(microsecond=0)
+        kickoff = kickoff_dt.isoformat().replace("+00:00", "Z")
+    else:
+        kickoff_dt = datetime.fromisoformat(kickoff.replace("Z", "+00:00"))
+
     conn = connect_rw("platform")
     get_or_create_model_version(conn, "m-cache", "dixon-coles")
     sid = register_snapshot(
@@ -79,6 +87,7 @@ def _seed_prediction(match_id, home_win, draw, away_win, kickoff="2027-04-01T14:
         model_version_id="m-cache", home_win=home_win, draw=draw, away_win=away_win,
         expected_home_goals=1.5, expected_away_goals=1.1, status="draft",
     )
+    assert kickoff_dt > datetime.now(timezone.utc)
     publish_snapshot(conn, sid, actor=None)
     conn.close()
 

@@ -59,7 +59,7 @@ def official_samples(
         f"""SELECT s.id, s.match_id, s.kickoff_at_utc, s.model_version_id,
                    s.generated_at, s.published_at, s.locked_at, s.prediction_hash,
                    s.home_win, s.draw, s.away_win, s.confidence, s.status,
-                   s.superseded_by,
+                   s.superseded_by, s.edit_count, s.last_edited_at,
                    (SELECT p.id FROM prediction_snapshots p
                      WHERE p.superseded_by = s.id LIMIT 1) AS correction_of,
                    o.home_goals, o.away_goals, o.outcome

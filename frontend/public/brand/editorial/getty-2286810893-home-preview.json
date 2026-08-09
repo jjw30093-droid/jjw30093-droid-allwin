@@ -1,0 +1,21 @@
+{
+  "asset_id": "getty-2286810893-home-preview",
+  "source_file": "local upload: gettyimages-2286810893-2048x2048.jpg",
+  "source_sha256": "de93bf12a50d593ab0528715fcd6993c0d487f2957a9a1d31b61a2f82293a67a",
+  "source_dimensions": {
+    "width": 2048,
+    "height": 1385
+  },
+  "output_file": "getty-2286810893-home-preview.webp",
+  "output_sha256": "5e4a45f1c8bc719125fa728f32ed53c0640a19e3c239a117488ce89f7c1fab9d",
+  "output_dimensions": {
+    "width": 1600,
+    "height": 1082
+  },
+  "output_bytes": 168666,
+  "processing": "deterministic resize, light sharpening, WebP quality 82",
+  "watermark_preserved": true,
+  "credit_preserved": "Alex Pantling - FIFA / Getty Images",
+  "license_status": "UNVERIFIED_LOCAL_PREVIEW_ONLY",
+  "production_requirement": "Replace with an original licensed for website use before deployment."
+}

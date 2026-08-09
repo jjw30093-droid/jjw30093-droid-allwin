@@ -1,0 +1,42 @@
+{
+ "16": {
+  "statusMatchOdds": [
+   {
+    "changeTime": 1785419298,
+    "goingTime": "91",
+    "oddsInfo": [
+     "4.3",
+     "3.5",
+     "0.01",
+     "1"
+    ],
+    "score": "2-1",
+    "statusId": 4
+   },
+   {
+    "changeTime": 1785419280,
+    "goingTime": "91",
+    "oddsInfo": [
+     "4.3",
+     "3.5",
+     "0.01",
+     "0"
+    ],
+    "score": "2-1",
+    "statusId": 4
+   },
+   {
+    "changeTime": 1785419259,
+    "goingTime": "91",
+    "oddsInfo": [
+     "4.15",
+     "3.5",
+     "0.02",
+     "0"
+    ],
+    "score": "2-1",
+    "statusId": 4
+   }
+  ]
+ }
+}

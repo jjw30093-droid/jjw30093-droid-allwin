@@ -41,16 +41,23 @@ from schema import FEATURE_ROLLING_STATS, FEATURE_WINDOWS, INT_MATCH_FEATURES_CO
 DECAY_RATE = 0.0015
 
 
-def _load_raw(conn) -> tuple:
+def _load_raw(conn, league_id: int) -> tuple:
+    # League_ID 谓词是硬防线,不是可选项(2026-08-07 审计):此前无谓词版本
+    # 依赖"只有 EPL 有 Period='All' stats"这个隐式前提兜底,J1/K1/澳超与
+    # 五大联赛全量接入后该前提已失效——今天无谓词重跑会把 8 个联赛 12,785
+    # 场混进同一张特征表,rolling 与联赛基准全部被污染,且悄悄改变
+    # dc-baseline-1.M.2 已发布指标的输入。与 predict_wdl_future.py 的
+    # League 谓词防线(见其 docstring)同一条纪律。
     matches = pd.read_sql_query(
         """
         SELECT Match_ID AS match_id, Date AS match_date, Season AS season,
                League_ID AS league_id, Home_Team_ID AS home_team_id,
                Away_Team_ID AS away_team_id, home_score, away_score
         FROM dim_match
-        WHERE status = 'Finish'
+        WHERE status = 'Finish' AND League_ID = ?
         """,
         conn,
+        params=(league_id,),
     )
 
     team_stats = pd.read_sql_query(
@@ -58,9 +65,10 @@ def _load_raw(conn) -> tuple:
         SELECT fts.Match_ID AS match_id, fts.Team_ID AS team_id, fts.extra_json
         FROM fact_team_match_stats fts
         JOIN dim_match dm ON fts.Match_ID = dm.Match_ID
-        WHERE fts.Period = 'All' AND dm.status = 'Finish'
+        WHERE fts.Period = 'All' AND dm.status = 'Finish' AND dm.League_ID = ?
         """,
         conn,
+        params=(league_id,),
     )
     return matches, team_stats
 
@@ -185,11 +193,14 @@ def build_features_df(matches: pd.DataFrame, team_stats: pd.DataFrame) -> pd.Dat
     return out
 
 
-def write_features(conn, df: pd.DataFrame) -> int:
+def write_features(conn, df: pd.DataFrame, league_id: int) -> int:
     col_names = [name for name, _ in INT_MATCH_FEATURES_COLUMNS if name != "updated_at"]
     df = df[col_names].astype(object).where(pd.notnull(df[col_names]), None)
 
-    conn.execute("DELETE FROM int_match_features")
+    # 只清重建目标联赛的行:无谓词 DELETE 会把其它联赛已构建的特征连带清空
+    # (与 predict_wdl_future.py 已修复、test_predict_wdl_future.py 回归保护的
+    # gold DELETE 缺陷同型)。
+    conn.execute("DELETE FROM int_match_features WHERE league_id = ?", (league_id,))
     placeholders = ", ".join("?" for _ in col_names)
     cols_sql = ", ".join(_quote(n) for n in col_names)
     conn.executemany(
@@ -201,15 +212,16 @@ def write_features(conn, df: pd.DataFrame) -> int:
     return len(df)
 
 
-def build_match_features() -> None:
+def build_match_features(league_id: int = 47) -> None:
+    """默认仍为 EPL(47)——dc-baseline-1.M.2 的训练输入范围;其它联赛需显式传参。"""
     conn = get_connection()
     try:
-        matches, team_stats = _load_raw(conn)
-        print(f"dim_match 完赛场次: {len(matches)}")
+        matches, team_stats = _load_raw(conn, league_id)
+        print(f"dim_match 完赛场次(League {league_id}): {len(matches)}")
         print(f"fact_team_match_stats(Period=All)行数: {len(team_stats)}")
 
         features_df = build_features_df(matches, team_stats)
-        n = write_features(conn, features_df)
+        n = write_features(conn, features_df, league_id)
         print(f"int_match_features 写入行数: {n}")
     finally:
         conn.close()

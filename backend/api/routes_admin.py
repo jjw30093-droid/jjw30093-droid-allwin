@@ -25,6 +25,7 @@ from .schemas import (
     AdminPredictionsResponse,
     AdminUsersResponse,
     AuditLogsResponse,
+    EditPredictionResponse,
     GrantResultDTO,
     OkDTO,
     PublishUpcomingResponse,
@@ -182,7 +183,8 @@ def list_predictions(
     limit = max(1, min(limit, 500))
     rows = conn.execute(
         """SELECT id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at,
-                  locked_at, status, is_official, visibility, home_win, draw, away_win, confidence
+                  locked_at, status, is_official, visibility, home_win, draw, away_win, confidence,
+                  edit_count, last_edited_at
            FROM prediction_snapshots WHERE (?='' OR status=?)
            ORDER BY kickoff_at_utc, match_id LIMIT ? OFFSET ?""",
         (status, status, limit, offset),
@@ -248,6 +250,43 @@ def retract_prediction(
     _no_store(response)
     _prediction_action(conn, retract_snapshot, snapshot_id, ctx.user_id, reason=body.reason)
     return {"status": "ok"}
+
+
+class EditPredictionBody(BaseModel):
+    reason: str = Field(min_length=2, max_length=500)
+    home_win: float | None = None
+    draw: float | None = None
+    away_win: float | None = None
+    expected_home_goals: float | None = None
+    expected_away_goals: float | None = None
+    confidence: str | None = None
+
+
+@router.post("/predictions/{snapshot_id}/edit", response_model=EditPredictionResponse)
+def edit_prediction(
+    snapshot_id: str,
+    body: EditPredictionBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    """直接修正一条预测(任意状态、任意时刻,含已锁定/已开球——见 CLAUDE.md §9.1)。
+
+    每次真正产生变化的修正都会写入 prediction_snapshot_edits(append-only),
+    不是静默覆盖;结果里的 changed_fields 为空表示这次调用没有产生实质变化。
+    """
+    from backend.commands.predictions import PredictionError, edit_snapshot
+
+    _no_store(response)
+    kwargs = {
+        k: v for k, v in body.model_dump().items() if k != "reason"
+    }
+    try:
+        with tx(conn):
+            result = edit_snapshot(conn, snapshot_id, ctx.user_id, reason=body.reason, **kwargs)
+    except PredictionError as e:
+        raise HTTPException(status_code=409, detail={"code": e.reason, "message": str(e)})
+    return result
 
 
 class PublishUpcomingBody(BaseModel):

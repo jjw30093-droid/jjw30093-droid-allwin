@@ -49,6 +49,8 @@ from backend.api.schemas import (
     LeagueWdlPredictionsResponse,
     error_responses,
 )
+from backend.media.team_crests import resolve_team_crest_url
+from backend.queries.teams import display_name_for_team, team_display_map
 
 app = FastAPI(title="allwin serving API")
 
@@ -133,8 +135,11 @@ def _resolve_season(conn: sqlite3.Connection, league_id: int, season: Optional[s
 
 
 def _team_i18n_map(conn: sqlite3.Connection) -> dict:
-    rows = conn.execute("SELECT Team_ID, name_zh FROM dim_team_i18n").fetchall()
-    return {r["Team_ID"]: r["name_zh"] for r in rows}
+    display = team_display_map(conn)
+    return {
+        team_id: display_name_for_team(team_id, display=display)
+        for team_id in display
+    }
 
 
 def _player_i18n_map(conn: sqlite3.Connection) -> dict:
@@ -182,6 +187,7 @@ def league_overview(league_id: int, season: Optional[str] = None):
             team_id = d.pop("Team_ID")
             d["team_id"] = team_id
             d["team_name_zh"] = team_zh.get(team_id)
+            d["crest_url"] = resolve_team_crest_url("fotmob", team_id)
             standings.append(d)
 
         league_summary_row = conn.execute(

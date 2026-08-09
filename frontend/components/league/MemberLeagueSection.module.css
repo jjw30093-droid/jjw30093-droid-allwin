@@ -1,0 +1,87 @@
+/* 会员联赛数据客户端加载器:骨架屏 / 引导态 / 错误态 */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 24px;
+}
+
+.skelLine {
+  height: 14px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.skelLine:nth-child(2) {
+  width: 80%;
+}
+
+.skelLine:nth-child(3) {
+  width: 60%;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.gateBox {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  padding: 40px 32px;
+  text-align: center;
+}
+
+.gateTitle {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.gateText {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  margin: 0 0 20px;
+}
+
+.gateActions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btnPrimary {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.btnSecondary {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  background: transparent;
+  cursor: pointer;
+}

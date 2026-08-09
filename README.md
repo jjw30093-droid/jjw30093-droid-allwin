@@ -202,7 +202,9 @@ cd frontend && npm run lint && npm run typecheck && npm run test && npm run buil
 
 | 文档 | 内容 |
 |---|---|
+| [docs/data-plan.md](docs/data-plan.md) | 数据层单一真源:联赛 × 数据层覆盖矩阵、验证状态、依赖排序前向计划 |
 | [docs/auth-wechat.md](docs/auth-wechat.md) | 公众号配置、OAuth/扫码流程、会话与 CSRF、Mock 用法、fail-fast |
 | [docs/data-sources.md](docs/data-sources.md) | FotMob/NowGoal 能力与验证状态、轮询、hash-diff、时间戳纪律、降级 |
 | [docs/model-api-contract.md](docs/model-api-contract.md) | 模型输入输出、评估口径、free/pro DTO 差异 |
 | [docs/prediction-integrity.md](docs/prediction-integrity.md) | 登记簿、锁定不可改、撤回、manifest、legacy 导入 |
+| [docs/operations/](docs/operations/) | 日常采集/内容管线 runbook(fresh-daily-content、kbisai-live-scores、team-crest-sync) |

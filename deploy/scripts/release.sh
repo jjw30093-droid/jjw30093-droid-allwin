@@ -182,6 +182,9 @@ do_build() {
 
   bash "$RELEASE_DIR/deploy/scripts/check_browser_bundle.sh" "$RELEASE_DIR/frontend" \
     || die "浏览器构建产物含 127.0.0.1/localhost API 地址;检查 shared/.env 的 NEXT_PUBLIC_API_BASE(生产应留空)与残留的 frontend/.env.local"
+  "$RELEASE_DIR/.venv/bin/python" "$RELEASE_DIR/scripts/verify_next_assets.py" \
+    --frontend "$RELEASE_DIR/frontend" \
+    || die "Next 构建 HTML/manifest 引用了不存在的静态资源"
 }
 
 # ── 阶段 3:migration 前先备份(备份失败 = 发布失败,绝不带病迁移) ────
@@ -258,6 +261,9 @@ business_smoke() {
     || { log "业务冒烟失败:/api/v1/products 非可解析 JSON"; return 1; }
   curl -sf "http://127.0.0.1:$LIVE_API_PORT/api/v1/matches" | "$release_py" -m json.tool >/dev/null \
     || { log "业务冒烟失败:/api/v1/matches 非可解析 JSON"; return 1; }
+  "$release_py" "$RELEASE_DIR/scripts/verify_next_assets.py" \
+    --base-url "http://127.0.0.1:$LIVE_WEB_PORT" \
+    || { log "业务冒烟失败:核心页面或 CSS/JS 静态资源不可用"; return 1; }
 
   for i in $(seq 1 "$BUSINESS_SMOKE_RETRIES"); do
     if curl -sf "http://127.0.0.1:$LIVE_WEB_PORT/" | grep -qF -- "$SMOKE_HTML_MARKER"; then

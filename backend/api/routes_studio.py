@@ -15,6 +15,11 @@ from backend.db.connections import connect_ro, tx
 from backend.db.paths import data_dir
 from backend.db.util import new_uuid, utc_now_iso
 from backend.studio.bundle import build_analysis_bundle, render_srt, render_txt
+from backend.studio.team_style import (
+    DOUYIN_SAFE_PROFILE,
+    TeamStyleError,
+    assert_safe_content,
+)
 
 from .deps import (
     NO_STORE,
@@ -41,6 +46,7 @@ router = APIRouter(
 )
 
 EXPORT_KINDS = ("png_1080x1920", "png_1080x1350", "txt", "json", "srt")
+STUDIO_PROFILES = (DOUYIN_SAFE_PROFILE, "internal-full-v1")
 
 
 def require_analyst(ctx: AuthContext = Depends(require_user)) -> AuthContext:
@@ -211,6 +217,8 @@ def set_draft_status(
 
 class ExportBody(BaseModel):
     kind: str
+    # 兼容旧 API 调用方；新版 Studio UI 总是显式发送默认 douyin-safe-v1。
+    profile: str = "internal-full-v1"
 
 
 @router.post("/drafts/{draft_id}/export", response_model=StudioExportResponse)
@@ -224,9 +232,20 @@ def export_draft(
     _no_store(response)
     if body.kind not in EXPORT_KINDS:
         raise HTTPException(status_code=400, detail=f"kind 需为 {EXPORT_KINDS}")
+    if body.profile not in STUDIO_PROFILES:
+        raise HTTPException(status_code=400, detail=f"profile 需为 {STUDIO_PROFILES}")
     row = _get_draft(conn, draft_id, ctx.user_id)
     bundle = json.loads(row["bundle_json"])
     overrides = json.loads(row["overrides_json"])
+    safe_profile = None
+    if body.profile == DOUYIN_SAFE_PROFILE:
+        safe_profile = bundle.get("social_profiles", {}).get(DOUYIN_SAFE_PROFILE)
+        if not isinstance(safe_profile, dict):
+            raise HTTPException(status_code=409, detail="抖音安全版数据尚未生成")
+        try:
+            assert_safe_content(safe_profile)
+        except TeamStyleError:
+            raise HTTPException(status_code=409, detail="抖音安全版安全门禁未通过") from None
     job_id = new_uuid()
     now = utc_now_iso()
 
@@ -237,20 +256,43 @@ def export_draft(
                 "INSERT INTO export_jobs (id, user_id, draft_id, match_id, kind, status, meta_json, created_at, finished_at)"
                 " VALUES (?, ?, ?, ?, ?, 'succeeded', ?, ?, ?)",
                 (job_id, ctx.user_id, draft_id, row["match_id"], body.kind,
-                 json.dumps({"side": "client", "bundle_hash": bundle.get("bundle_hash")}), now, now),
+                 json.dumps({
+                     "side": "client",
+                     "bundle_hash": bundle.get("bundle_hash"),
+                     "profile_id": body.profile,
+                 }), now, now),
             )
         return {"job_id": job_id, "side": "client",
                 "data_cutoff_at": bundle.get("data_cutoff_at"),
-                "model_version": bundle.get("model_version")}
+                "model_version": bundle.get("model_version"),
+                "profile_id": body.profile}
 
     if body.kind == "txt":
-        content = render_txt(bundle, overrides)
+        if safe_profile is not None:
+            content = "# 45—60秒球队打法口播稿\n\n" + "\n\n".join(
+                f"## {section['title']}\n{section['text']}"
+                for section in safe_profile["script_sections"]
+            ) + "\n"
+        else:
+            content = render_txt(bundle, overrides)
         ext = "txt"
     elif body.kind == "srt":
-        content = render_srt(bundle, overrides)
+        content = (
+            render_srt(safe_profile, {"subtitle_cues": safe_profile["subtitle_cues"]})
+            if safe_profile is not None
+            else render_srt(bundle, overrides)
+        )
         ext = "srt"
     else:
-        content = json.dumps({"bundle": bundle, "overrides": overrides}, ensure_ascii=False, indent=1)
+        content = json.dumps(
+            (
+                {"profile": safe_profile}
+                if safe_profile is not None
+                else {"bundle": bundle, "overrides": overrides}
+            ),
+            ensure_ascii=False,
+            indent=1,
+        )
         ext = "json"
 
     export_dir = data_dir() / "exports"
@@ -262,12 +304,16 @@ def export_draft(
             "INSERT INTO export_jobs (id, user_id, draft_id, match_id, kind, status, file_path, meta_json, created_at, finished_at)"
             " VALUES (?, ?, ?, ?, ?, 'succeeded', ?, ?, ?, ?)",
             (job_id, ctx.user_id, draft_id, row["match_id"], body.kind, str(file_path),
-             json.dumps({"bundle_hash": bundle.get("bundle_hash")}), now, now),
+             json.dumps({
+                 "bundle_hash": bundle.get("bundle_hash"),
+                 "profile_id": body.profile,
+             }), now, now),
         )
     return {"job_id": job_id, "side": "server",
             "download_url": f"/api/v1/studio/exports/{job_id}/download",
             "data_cutoff_at": bundle.get("data_cutoff_at"),
-            "model_version": bundle.get("model_version")}
+            "model_version": bundle.get("model_version"),
+            "profile_id": body.profile}
 
 
 @router.get(

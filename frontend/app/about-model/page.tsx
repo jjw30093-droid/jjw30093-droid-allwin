@@ -5,7 +5,7 @@ import { LocalTime } from "@/components/trust/LocalTime";
 import styles from "./about-model.module.css";
 
 export const metadata: Metadata = {
-  title: "模型说明 — 欧赢 allwin",
+  title: "模型说明 — 欧赢 ALLWIN",
   description:
     "预测模型的通俗说明:数据来源、特征、Dixon-Coles + isotonic 校准原理、walk-forward 评估方法、各项指标解释与已知局限。",
 };

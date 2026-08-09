@@ -1,0 +1,2293 @@
+{
+ "content": {
+  "buzz": null,
+  "h2h": {
+   "matches": [
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "59",
+      "name": "Eliteserien",
+      "pageUrl": "/leagues/59/overview/eliteserien"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#5104919",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "1 - 1",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2026-05-25T17:15:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2026-05-25T17:15:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "59",
+      "name": "Eliteserien",
+      "pageUrl": "/leagues/59/overview/eliteserien"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#4695554",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "0 - 0",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2025-10-26T16:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2025-10-26T16:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "finished": false,
+     "home": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "league": {
+      "id": "59",
+      "name": "Eliteserien",
+      "pageUrl": "/leagues/59/overview/eliteserien"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#4695367",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "3 - 1",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2025-04-21T15:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2025-04-21T15:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "59",
+      "name": "Eliteserien",
+      "pageUrl": "/leagues/59/overview/eliteserien"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#4385518",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "0 - 1",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2024-12-01T16:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2024-12-01T16:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "finished": false,
+     "home": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "league": {
+      "id": "59",
+      "name": "Eliteserien",
+      "pageUrl": "/leagues/59/overview/eliteserien"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#4385425",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "1 - 0",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2024-04-28T15:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2024-04-28T15:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "finished": false,
+     "home": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "league": {
+      "id": "489",
+      "name": "Club Friendlies",
+      "pageUrl": "/leagues/489/overview/club-friendlies"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#4404013",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "2 - 0",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2024-03-08T12:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2024-03-08T12:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "489",
+      "name": "Club Friendlies",
+      "pageUrl": "/leagues/489/overview/club-friendlies"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#3256049",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "1 - 3",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2020-02-09T12:15:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2020-02-09T12:15:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "203",
+      "name": "1. Divisjon",
+      "pageUrl": "/leagues/203/overview/1-divisjon"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#2149041",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "2 - 1",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2016-09-27T17:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2016-09-27T17:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "finished": false,
+     "home": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "league": {
+      "id": "203",
+      "name": "1. Divisjon",
+      "pageUrl": "/leagues/203/overview/1-divisjon"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#2149115",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "1 - 2",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2016-04-30T13:30:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2016-04-30T13:30:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "finished": false,
+     "home": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "league": {
+      "id": "203",
+      "name": "1. Divisjon",
+      "pageUrl": "/leagues/203/overview/1-divisjon"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#1625672",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "0 - 1",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2014-11-02T11:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2014-11-02T11:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "203",
+      "name": "1. Divisjon",
+      "pageUrl": "/leagues/203/overview/1-divisjon"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#1625536",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "0 - 1",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2014-04-14T17:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2014-04-14T17:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "203",
+      "name": "Adeccoligaen",
+      "pageUrl": "/leagues/203/overview/adeccoligaen"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#1378777",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "0 - 0",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2013-09-14T13:30:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2013-09-14T13:30:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "finished": false,
+     "home": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "league": {
+      "id": "203",
+      "name": "Adeccoligaen",
+      "pageUrl": "/leagues/203/overview/adeccoligaen"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#1378691",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "1 - 2",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2013-04-22T17:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2013-04-22T17:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "489",
+      "name": "Club Friendlies",
+      "pageUrl": "/leagues/489/overview/club-friendlies"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#1434221",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "2 - 2",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2013-04-01T16:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2013-04-01T16:00:00.000Z"
+     }
+    },
+    {
+     "away": {
+      "id": "8417",
+      "name": "Fredrikstad"
+     },
+     "finished": false,
+     "home": {
+      "id": "8609",
+      "name": "Sandefjord"
+     },
+     "league": {
+      "id": "489",
+      "name": "Club Friendlies",
+      "pageUrl": "/leagues/489/overview/club-friendlies"
+     },
+     "matchUrl": "/matches/fredrikstad-vs-sandefjord/2eazfo#1173059",
+     "status": {
+      "awarded": false,
+      "cancelled": false,
+      "finished": true,
+      "reason": {
+       "long": "Full-Time",
+       "longKey": "finished",
+       "short": "FT",
+       "shortKey": "fulltime_short"
+      },
+      "scoreStr": "0 - 3",
+      "started": true,
+      "timezone": "UTC",
+      "utcTime": "2012-03-08T14:00:00.000Z"
+     },
+     "time": {
+      "timezone": "UTC",
+      "utcTime": "2012-03-08T14:00:00.000Z"
+     }
+    }
+   ],
+   "summary": [
+    7,
+    4,
+    4
+   ]
+  },
+  "hasPlayoff": false,
+  "lineup": {
+   "availableFilters": [
+    "marketValue",
+    "age",
+    "country"
+   ],
+   "awayTeam": {
+    "averageStarterAge": 23.7,
+    "coach": {
+     "age": 47,
+     "countryCode": "SWE",
+     "countryName": "Sweden",
+     "firstName": "Andreas",
+     "id": 27932,
+     "isCoach": true,
+     "lastName": "Tegström",
+     "name": "Andreas Tegström",
+     "primaryTeamId": 8609,
+     "primaryTeamName": "Sandefjord",
+     "usualPlayingPositionId": null
+    },
+    "formation": "4-1-4-1",
+    "id": 8609,
+    "lastMatch": {
+     "awayScore": 3,
+     "awayTeamId": 8402,
+     "awayTeamName": "Bodø/Glimt",
+     "homeScore": 0,
+     "homeTeamId": 8609,
+     "homeTeamName": "Sandefjord",
+     "matchDate": "2026-07-26T17:00:00",
+     "matchId": 5104955
+    },
+    "name": "Sandefjord",
+    "starters": [
+     {
+      "age": 27,
+      "countryCode": "SYR",
+      "countryName": "Syria",
+      "firstName": "Elias",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.1,
+       "y": 0.5
+      },
+      "id": 1049254,
+      "lastName": "Hadaya",
+      "marketValue": 470242,
+      "name": "Elias Hadaya",
+      "positionId": 11,
+      "rankings": null,
+      "shirtNumber": "30",
+      "usualPlayingPositionId": 0,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 1,
+       "x": 0.5,
+       "y": 0.1
+      }
+     },
+     {
+      "age": 23,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Fredrik Carson",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.385,
+       "x": 0.292,
+       "y": 0.875
+      },
+      "id": 1169328,
+      "lastName": "Pedersen",
+      "marketValue": 723798,
+      "name": "Fredrik Carson Pedersen",
+      "positionId": 32,
+      "rankings": null,
+      "shirtNumber": "4",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.125,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 21,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Rasmus",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.292,
+       "y": 0.625
+      },
+      "id": 1281389,
+      "lastName": "Holten",
+      "marketValue": 425441,
+      "name": "Rasmus Holten",
+      "positionId": 34,
+      "rankings": null,
+      "shirtNumber": "13",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.375,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 26,
+      "countryCode": "BEL",
+      "countryName": "Belgium",
+      "firstName": "Xander",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.385,
+       "x": 0.292,
+       "y": 0.375
+      },
+      "id": 911592,
+      "lastName": "Lambrix",
+      "marketValue": 254983,
+      "name": "Xander Lambrix",
+      "positionId": 36,
+      "rankings": null,
+      "shirtNumber": "44",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.625,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 22,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Vetle Walle",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.385,
+       "x": 0.292,
+       "y": 0.125
+      },
+      "id": 1256210,
+      "lastName": "Egeli",
+      "marketValue": 1193027,
+      "name": "Vetle Walle Egeli",
+      "positionId": 38,
+      "rankings": null,
+      "shirtNumber": "3",
+      "shortName": "Walle Egeli",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.875,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 25,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Sander",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.485,
+       "y": 0.5
+      },
+      "id": 965796,
+      "isCaptain": true,
+      "lastName": "Mørk",
+      "marketValue": 427880,
+      "name": "Sander Mørk",
+      "positionId": 65,
+      "rankings": null,
+      "shirtNumber": "6",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 1,
+       "x": 0.5,
+       "y": 0.485
+      }
+     },
+     {
+      "age": 24,
+      "countryCode": "BEL",
+      "countryName": "Belgium",
+      "firstName": "Evangelos",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.385,
+       "x": 0.678,
+       "y": 0.875
+      },
+      "id": 1073446,
+      "lastName": "Patoulidis",
+      "marketValue": 1048844,
+      "name": "Evangelos Patoulidis",
+      "positionId": 82,
+      "rankings": null,
+      "shirtNumber": "7",
+      "usualPlayingPositionId": 3,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.125,
+       "y": 0.678
+      }
+     },
+     {
+      "age": 20,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Edvard Sundbø",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.193,
+       "x": 0.678,
+       "y": 0.625
+      },
+      "id": 1436906,
+      "lastName": "Pettersen",
+      "marketValue": 1088168,
+      "name": "Edvard Sundbø Pettersen",
+      "positionId": 84,
+      "rankings": null,
+      "shirtNumber": "14",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.375,
+       "y": 0.678
+      }
+     },
+     {
+      "age": 25,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Marcus",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.385,
+       "x": 0.678,
+       "y": 0.375
+      },
+      "id": 1145005,
+      "lastName": "Melchior",
+      "marketValue": 409785,
+      "name": "Marcus Melchior",
+      "positionId": 86,
+      "rankings": null,
+      "shirtNumber": "20",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.625,
+       "y": 0.678
+      }
+     },
+     {
+      "age": 19,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Bendik",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.385,
+       "x": 0.678,
+       "y": 0.125
+      },
+      "id": 1675412,
+      "lastName": "Berntsen",
+      "marketValue": 745052,
+      "name": "Bendik Berntsen",
+      "positionId": 88,
+      "rankings": null,
+      "shirtNumber": "19",
+      "usualPlayingPositionId": 3,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.875,
+       "y": 0.678
+      }
+     },
+     {
+      "age": 24,
+      "countryCode": "SWE",
+      "countryName": "Sweden",
+      "firstName": "Nikolaj",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.212,
+       "x": 0.89,
+       "y": 0.5
+      },
+      "id": 1199736,
+      "lastName": "Möller",
+      "marketValue": 510320,
+      "name": "Nikolaj Möller",
+      "positionId": 115,
+      "rankings": null,
+      "shirtNumber": "11",
+      "usualPlayingPositionId": 3,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 1,
+       "x": 0.5,
+       "y": 0.89
+      }
+     }
+    ],
+    "subs": [
+     {
+      "age": 22,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Alf Lukas",
+      "id": 1377040,
+      "lastName": "Grønneberg",
+      "marketValue": 208638,
+      "name": "Alf Lukas Grønneberg",
+      "rankings": null,
+      "shirtNumber": "1",
+      "usualPlayingPositionId": 0
+     },
+     {
+      "age": 22,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Håkon",
+      "id": 1263483,
+      "lastName": "Krogelien",
+      "marketValue": 238531,
+      "name": "Håkon Krogelien",
+      "rankings": null,
+      "shirtNumber": "16",
+      "usualPlayingPositionId": 1
+     },
+     {
+      "age": 18,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Henrik Barstad",
+      "id": 1669661,
+      "lastName": "Skretteberg",
+      "name": "Henrik Barstad Skretteberg",
+      "rankings": null,
+      "shirtNumber": "31",
+      "usualPlayingPositionId": 1
+     },
+     {
+      "age": 22,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Martin",
+      "id": 1452369,
+      "lastName": "Hellan",
+      "marketValue": 290308,
+      "name": "Martin Hellan",
+      "rankings": null,
+      "shirtNumber": "2",
+      "usualPlayingPositionId": 1
+     },
+     {
+      "age": 19,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Jakob Jakobsen",
+      "id": 1678714,
+      "lastName": "Swift",
+      "name": "Jakob Jakobsen Swift",
+      "rankings": null,
+      "shirtNumber": "21",
+      "usualPlayingPositionId": 2
+     },
+     {
+      "age": 19,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Daniel",
+      "id": 1414892,
+      "lastName": "Skaarud",
+      "name": "Daniel Skaarud",
+      "rankings": null,
+      "shirtNumber": "32",
+      "usualPlayingPositionId": 3
+     },
+     {
+      "age": 18,
+      "countryCode": "GHA",
+      "countryName": "Ghana",
+      "firstName": "Foster",
+      "id": 1925123,
+      "lastName": "Apetorgbor",
+      "marketValue": 628745,
+      "name": "Foster Apetorgbor",
+      "rankings": null,
+      "shirtNumber": "17",
+      "usualPlayingPositionId": 3
+     },
+     {
+      "age": 26,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Jakob Maslø",
+      "id": 938028,
+      "lastName": "Dunsby",
+      "marketValue": 910809,
+      "name": "Jakob Maslø Dunsby",
+      "rankings": null,
+      "shirtNumber": "27",
+      "usualPlayingPositionId": 3
+     },
+     {
+      "age": 21,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Sebastian Holm",
+      "id": 1376639,
+      "lastName": "Mathisen",
+      "marketValue": 539713,
+      "name": "Sebastian Holm Mathisen",
+      "rankings": null,
+      "shirtNumber": "24",
+      "usualPlayingPositionId": 3
+     }
+    ],
+    "totalStarterMarketValue": 7297540,
+    "unavailable": [
+     {
+      "age": 21,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Filip",
+      "id": 1321587,
+      "lastName": "Loftesnes-Bjune",
+      "marketValue": 965588,
+      "name": "Filip Loftesnes-Bjune",
+      "positionId": 1000,
+      "unavailability": {
+       "expectedReturn": "Early September 2026",
+       "injuryId": 69,
+       "type": "injury"
+      }
+     }
+    ]
+   },
+   "homeTeam": {
+    "averageStarterAge": 24.7,
+    "coach": {
+     "age": 33,
+     "countryCode": "DEN",
+     "countryName": "Denmark",
+     "firstName": "Casper",
+     "id": 287248,
+     "isCoach": true,
+     "lastName": "Røjkjær",
+     "name": "Casper Røjkjær",
+     "primaryTeamId": 8417,
+     "primaryTeamName": "Fredrikstad",
+     "usualPlayingPositionId": null
+    },
+    "formation": "3-4-2-1",
+    "id": 8417,
+    "lastMatch": {
+     "awayScore": 0,
+     "awayTeamId": 8417,
+     "awayTeamName": "Fredrikstad",
+     "homeScore": 4,
+     "homeTeamId": 8422,
+     "homeTeamName": "Rosenborg",
+     "matchDate": "2026-07-27T19:00:00",
+     "matchId": 5104956
+    },
+    "name": "Fredrikstad",
+    "starters": [
+     {
+      "age": 21,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Martin",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.1,
+       "y": 0.5
+      },
+      "id": 1555515,
+      "lastName": "Børsheim",
+      "marketValue": 1361377,
+      "name": "Martin Børsheim",
+      "positionId": 11,
+      "rankings": null,
+      "shirtNumber": "77",
+      "usualPlayingPositionId": 0,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 1,
+       "x": 0.5,
+       "y": 0.1
+      }
+     },
+     {
+      "age": 34,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Simen",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.292,
+       "y": 0.79
+      },
+      "id": 157888,
+      "isCaptain": true,
+      "lastName": "Rafn",
+      "marketValue": 190619,
+      "name": "Simen Rafn",
+      "positionId": 33,
+      "rankings": null,
+      "shirtNumber": "5",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.29,
+       "x": 0.21,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 25,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Fredrik",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.292,
+       "y": 0.5
+      },
+      "id": 1136641,
+      "lastName": "Holmé",
+      "marketValue": 209492,
+      "name": "Fredrik Holmé",
+      "positionId": 35,
+      "rankings": null,
+      "shirtNumber": "4",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.29,
+       "x": 0.5,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 27,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Ulrik",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.292,
+       "y": 0.21
+      },
+      "id": 839973,
+      "lastName": "Fredriksen",
+      "marketValue": 578206,
+      "name": "Ulrik Fredriksen",
+      "positionId": 37,
+      "rankings": null,
+      "shirtNumber": "12",
+      "usualPlayingPositionId": 1,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.29,
+       "x": 0.79,
+       "y": 0.292
+      }
+     },
+     {
+      "age": 27,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Daniel",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.485,
+       "y": 0.875
+      },
+      "id": 736684,
+      "lastName": "Eid",
+      "marketValue": 444190,
+      "name": "Daniel Eid",
+      "positionId": 62,
+      "rankings": null,
+      "shirtNumber": "16",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.125,
+       "y": 0.485
+      }
+     },
+     {
+      "age": 22,
+      "countryCode": "DEN",
+      "countryName": "Denmark",
+      "firstName": "Oskar",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.485,
+       "y": 0.625
+      },
+      "id": 1436939,
+      "lastName": "Öhlenschlaeger",
+      "marketValue": 2268731,
+      "name": "Oskar Öhlenschlaeger",
+      "positionId": 64,
+      "rankings": null,
+      "shirtNumber": "20",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.375,
+       "y": 0.485
+      }
+     },
+     {
+      "age": 21,
+      "countryCode": "SWE",
+      "countryName": "Sweden",
+      "firstName": "Max",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.485,
+       "y": 0.375
+      },
+      "id": 1430375,
+      "lastName": "Nilsson",
+      "marketValue": 1102200,
+      "name": "Max Nilsson",
+      "positionId": 66,
+      "rankings": null,
+      "shirtNumber": "14",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.625,
+       "y": 0.485
+      }
+     },
+     {
+      "age": 19,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Fanuel",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.485,
+       "y": 0.125
+      },
+      "id": 1377104,
+      "lastName": "Yrga-Alem",
+      "name": "Fanuel Yrga-Alem",
+      "positionId": 68,
+      "rankings": null,
+      "shirtNumber": "19",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.25,
+       "x": 0.875,
+       "y": 0.485
+      }
+     },
+     {
+      "age": 20,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Benjamin Thoresen",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.193,
+       "x": 0.678,
+       "y": 0.7
+      },
+      "id": 1250883,
+      "lastName": "Faraas",
+      "marketValue": 558170,
+      "name": "Benjamin Thoresen Faraas",
+      "positionId": 84,
+      "rankings": null,
+      "shirtNumber": "7",
+      "usualPlayingPositionId": 2,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.4,
+       "x": 0.3,
+       "y": 0.678
+      }
+     },
+     {
+      "age": 29,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Johannes",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.678,
+       "y": 0.3
+      },
+      "id": 537936,
+      "lastName": "Nuñez",
+      "marketValue": 561508,
+      "name": "Johannes Nuñez",
+      "positionId": 86,
+      "rankings": null,
+      "shirtNumber": "10",
+      "usualPlayingPositionId": 3,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 0.4,
+       "x": 0.7,
+       "y": 0.678
+      }
+     },
+     {
+      "age": 22,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Henrik Langaas",
+      "horizontalLayout": {
+       "height": 0.25,
+       "width": 0.192,
+       "x": 0.87,
+       "y": 0.5
+      },
+      "id": 1256204,
+      "lastName": "Skogvold",
+      "marketValue": 1351293,
+      "name": "Henrik Langaas Skogvold",
+      "positionId": 105,
+      "rankings": null,
+      "shirtNumber": "23",
+      "usualPlayingPositionId": 3,
+      "verticalLayout": {
+       "height": 0.192,
+       "width": 1,
+       "x": 0.5,
+       "y": 0.87
+      }
+     }
+    ],
+    "subs": [
+     {
+      "age": 32,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Øystein",
+      "id": 255965,
+      "lastName": "Øvretveit",
+      "marketValue": 160062,
+      "name": "Øystein Øvretveit",
+      "rankings": null,
+      "shirtNumber": "1",
+      "usualPlayingPositionId": 0
+     },
+     {
+      "age": 20,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Joachim",
+      "id": 1639621,
+      "lastName": "Nysveen",
+      "marketValue": 377370,
+      "name": "Joachim Nysveen",
+      "rankings": null,
+      "shirtNumber": "26",
+      "usualPlayingPositionId": 1
+     },
+     {
+      "age": 19,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Jonathan Vonheim",
+      "id": 1377329,
+      "lastName": "Norbye",
+      "name": "Jonathan Vonheim Norbye",
+      "rankings": null,
+      "shirtNumber": "18",
+      "usualPlayingPositionId": 1
+     },
+     {
+      "age": 30,
+      "countryCode": "GHA",
+      "countryName": "Ghana",
+      "firstName": "Solomon",
+      "id": 936341,
+      "lastName": "Owusu",
+      "marketValue": 320841,
+      "name": "Solomon Owusu",
+      "rankings": null,
+      "shirtNumber": "28",
+      "usualPlayingPositionId": 1
+     },
+     {
+      "age": 21,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Aleksander",
+      "id": 1268414,
+      "lastName": "Andresen",
+      "marketValue": 787024,
+      "name": "Aleksander Andresen",
+      "rankings": null,
+      "shirtNumber": "3",
+      "usualPlayingPositionId": 2
+     },
+     {
+      "age": 22,
+      "countryCode": "POL",
+      "countryName": "Poland",
+      "firstName": "Jakub",
+      "id": 1631259,
+      "lastName": "Jezierski",
+      "marketValue": 283591,
+      "name": "Jakub Jezierski",
+      "rankings": null,
+      "shirtNumber": "21",
+      "usualPlayingPositionId": 2
+     },
+     {
+      "age": 29,
+      "countryCode": "GHA",
+      "countryName": "Ghana",
+      "firstName": "Leonard",
+      "id": 1128263,
+      "lastName": "Owusu",
+      "marketValue": 390244,
+      "name": "Leonard Owusu",
+      "rankings": null,
+      "shirtNumber": "24",
+      "usualPlayingPositionId": 2
+     },
+     {
+      "age": 20,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Salim",
+      "id": 1631802,
+      "lastName": "Laghzaoui",
+      "marketValue": 1404264,
+      "name": "Salim Laghzaoui",
+      "rankings": null,
+      "shirtNumber": "9",
+      "usualPlayingPositionId": 2
+     },
+     {
+      "age": 18,
+      "countryCode": "USA",
+      "countryName": "USA",
+      "firstName": "Gabriel",
+      "id": 1746764,
+      "lastName": "Wesseh",
+      "name": "Gabriel Wesseh",
+      "rankings": null,
+      "shirtNumber": "29",
+      "usualPlayingPositionId": 3
+     }
+    ],
+    "totalStarterMarketValue": 8625786,
+    "unavailable": [
+     {
+      "age": 28,
+      "countryCode": "SWE",
+      "countryName": "Sweden",
+      "firstName": "Samuel Leach",
+      "id": 737084,
+      "lastName": "Holm",
+      "marketValue": 521226,
+      "name": "Samuel Leach Holm",
+      "unavailability": {
+       "expectedReturn": "Doubtful",
+       "injuryId": 130,
+       "type": "injury"
+      }
+     },
+     {
+      "age": 26,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Sigurd",
+      "id": 1070258,
+      "lastName": "Kvile",
+      "marketValue": 447717,
+      "name": "Sigurd Kvile",
+      "positionId": 1000,
+      "unavailability": {
+       "expectedReturn": "Out for season",
+       "injuryId": 14,
+       "type": "injury"
+      }
+     },
+     {
+      "age": 29,
+      "countryCode": "NOR",
+      "countryName": "Norway",
+      "firstName": "Sondre",
+      "id": 538279,
+      "lastName": "Sørløkk",
+      "marketValue": 460341,
+      "name": "Sondre Sørløkk",
+      "positionId": 1000,
+      "unavailability": {
+       "expectedReturn": "Early August 2026",
+       "injuryId": 21,
+       "type": "injury"
+      }
+     }
+    ]
+   },
+   "lineupType": "lastStarting11",
+   "matchId": 5104961,
+   "source": "lastStartingLineups"
+  },
+  "liveticker": false,
+  "matchFacts": {
+   "QAData": [],
+   "countryCode": "NOR",
+   "events": {
+    "eventTypes": [
+     "Injuries"
+    ],
+    "events": [],
+    "ongoing": true,
+    "penaltyShootoutEvents": null
+   },
+   "highlights": null,
+   "infoBox": {
+    "Attendance": null,
+    "Match Date": {
+     "isDateCorrect": true,
+     "timezone": "UTC",
+     "utcTime": "2026-08-01T14:00:00.000Z"
+    },
+    "Referee": {
+     "country": "Norway",
+     "countryCode": "NOR",
+     "imgUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/nor.png",
+     "text": "Mischa Kellerhals"
+    },
+    "Stadium": {
+     "capacity": 12565,
+     "city": "Fredrikstad",
+     "country": "Norway",
+     "lat": 59.21306014,
+     "long": 10.928134918,
+     "name": "Nye Fredrikstad Stadion",
+     "surface": "artificial turf"
+    },
+    "Tournament": {
+     "id": 59,
+     "leagueName": "Eliteserien",
+     "link": "/leagues/59/overview/eliteserien",
+     "parentLeagueId": 59,
+     "round": "16",
+     "roundName": "16"
+    },
+    "legInfo": null
+   },
+   "insights": [
+    {
+     "color": "#f13c26",
+     "defaultText": "Have scored {0} goals in their last {1} matches",
+     "localizedTextId": "insights_goals_team",
+     "playerId": null,
+     "priority": 1338,
+     "statValues": [
+      {
+       "name": null,
+       "type": "integer",
+       "value": 2
+      },
+      {
+       "name": null,
+       "type": "integer",
+       "value": 5
+      }
+     ],
+     "teamId": 8417,
+     "text": "Have scored 2 goals in their last 5 matches",
+     "type": "team"
+    },
+    {
+     "color": "#f13c26",
+     "defaultText": "{0} haven't lost to {1} in their last {2} meetings ({3}W, {4}D).",
+     "localizedTextId": "h2h_undefeated",
+     "playerId": null,
+     "priority": 9,
+     "statValues": [
+      {
+       "name": "Fredrikstad",
+       "type": "team",
+       "value": 8417
+      },
+      {
+       "name": "Sandefjord",
+       "type": "team",
+       "value": 8609
+      },
+      {
+       "name": null,
+       "type": "integer",
+       "value": 7
+      },
+      {
+       "name": null,
+       "type": "integer",
+       "value": 5
+      },
+      {
+       "name": null,
+       "type": "integer",
+       "value": 2
+      }
+     ],
+     "teamId": 8417,
+     "text": "Fredrikstad haven't lost to Sandefjord in their last 7 meetings (5W, 2D).",
+     "type": "team"
+    },
+    {
+     "color": "#f13c26",
+     "defaultText": "Haven't scored in their last {0} matches",
+     "localizedTextId": "insights_goalless_team",
+     "playerId": null,
+     "priority": 9,
+     "statValues": [
+      {
+       "name": null,
+       "type": "integer",
+       "value": 3
+      }
+     ],
+     "teamId": 8417,
+     "text": "Haven't scored in their last 3 matches",
+     "type": "team"
+    },
+    {
+     "color": "#104070",
+     "defaultText": "Have scored {0} goals in their last {1} matches",
+     "localizedTextId": "insights_goals_team",
+     "playerId": null,
+     "priority": 1338,
+     "statValues": [
+      {
+       "name": null,
+       "type": "integer",
+       "value": 5
+      },
+      {
+       "name": null,
+       "type": "integer",
+       "value": 5
+      }
+     ],
+     "teamId": 8609,
+     "text": "Have scored 5 goals in their last 5 matches",
+     "type": "team"
+    },
+    {
+     "color": "#104070",
+     "defaultText": "Haven't kept a clean sheet in {0} matches",
+     "localizedTextId": "insights_not_clean_sheet",
+     "playerId": null,
+     "priority": 8,
+     "statValues": [
+      {
+       "name": null,
+       "type": "integer",
+       "value": 6
+      }
+     ],
+     "teamId": 8609,
+     "text": "Haven't kept a clean sheet in 6 matches",
+     "type": "team"
+    },
+    {
+     "color": "#104070",
+     "defaultText": "Haven't won a match in {0} attempts",
+     "localizedTextId": "insights_not_won_team",
+     "playerId": null,
+     "priority": 8,
+     "statValues": [
+      {
+       "name": null,
+       "type": "integer",
+       "value": 6
+      }
+     ],
+     "teamId": 8609,
+     "text": "Haven't won a match in 6 attempts",
+     "type": "team"
+    }
+   ],
+   "matchId": 5104961,
+   "matchInsightsConfig": {
+    "hasBettingInsight": true,
+    "languages": [
+     "en",
+     "nb",
+     "de",
+     "es",
+     "fr",
+     "it",
+     "ar",
+     "pt-BR"
+    ],
+    "urlTemplate": "https://data.fotmob.com/generated-match-insights/59/5104961/matchinsights_{lang}.json"
+   },
+   "playerOfTheMatch": {},
+   "poll": {
+    "oddspoll": {
+     "AwayTeam": "Sandefjord",
+     "AwayTeamId": 8609,
+     "Facts": [
+      {
+       "DefaultLabel": "Who will win?",
+       "DefaultLabels": [
+        "1",
+        "x",
+        "2"
+       ],
+       "DefaultTemplate": "{0} and {1} have drawn their last {2} matches against each other.",
+       "Icon": "poll_teams",
+       "LabelTemplates": [
+        "label_1",
+        "label_x",
+        "label_2"
+       ],
+       "OddsType": "1x2",
+       "StatValues": [
+        "home_team",
+        "away_team",
+        "2"
+       ],
+       "TextLabelId": "who_will_win",
+       "TextTemplateId": "h2h_draw_streak_v2",
+       "defaultText": "Fredrikstad and Sandefjord have drawn their last 2 matches against each other."
+      },
+      {
+       "DefaultLabel": "Will both teams score?",
+       "DefaultLabels": [
+        "yes",
+        "no"
+       ],
+       "DefaultTemplate": "{0} have scored in their last {1} away matches.",
+       "Icon": "poll_goal",
+       "LabelTemplates": [
+        "label_yes",
+        "label_no"
+       ],
+       "OddsType": "bts",
+       "StatValues": [
+        "away_team",
+        "6"
+       ],
+       "TextLabelId": "both_score",
+       "TextTemplateId": "goalstreak_team_away",
+       "defaultText": "Sandefjord have scored in their last 6 away matches."
+      },
+      {
+       "DefaultLabel": "Will there be more than 2.5 goals?",
+       "DefaultLabels": [
+        "yes",
+        "no"
+       ],
+       "DefaultTemplate": "{0} haven't scored in their last {1} matches.",
+       "Icon": "poll_glove",
+       "LabelTemplates": [
+        "label_yes",
+        "label_no"
+       ],
+       "OddsType": "ou",
+       "StatValues": [
+        "home_team",
+        "3"
+       ],
+       "TextLabelId": "over_under",
+       "TextTemplateId": "goalless_team",
+       "defaultText": "Fredrikstad haven't scored in their last 3 matches."
+      },
+      {
+       "DefaultLabel": "Double chance",
+       "DefaultLabels": [
+        "1x",
+        "12",
+        "x2"
+       ],
+       "DefaultTemplate": "{0} haven't won a match in {1} attempts.",
+       "Icon": "poll_stat_down",
+       "LabelTemplates": [
+        "label_1x",
+        "label_12",
+        "label_x2"
+       ],
+       "OddsType": "dc",
+       "StatValues": [
+        "home_team",
+        "5"
+       ],
+       "TextLabelId": "double_chance",
+       "TextTemplateId": "not_won_team",
+       "defaultText": "Fredrikstad haven't won a match in 5 attempts."
+      }
+     ],
+     "HomeTeam": "Fredrikstad",
+     "HomeTeamId": 8417,
+     "MatchId": 5104961,
+     "PollName": "oddspoll-match-5104961"
+    },
+    "renderToTop": true
+   },
+   "teamForm": [
+    [
+     {
+      "away": {
+       "id": "8448",
+       "isOurTeam": false,
+       "name": "Hamarkameratene"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-06-20T12:00:00.000Z"
+      },
+      "home": {
+       "id": "8417",
+       "isOurTeam": true,
+       "name": "Fredrikstad"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8448_xsmall.png",
+      "linkToMatch": "/matches/fredrikstad-vs-hamarkameratene/2coi4x#5795266",
+      "result": 0,
+      "resultString": "D",
+      "score": "1 - 1",
+      "teamPageUrl": "/teams/8448/overview/hamarkameratene",
+      "tooltipText": {
+       "awayScore": "1",
+       "awayTeam": "Hamarkameratene",
+       "awayTeamId": 8448,
+       "homeScore": "1",
+       "homeTeam": "Fredrikstad",
+       "homeTeamId": 8417,
+       "timezone": "UTC",
+       "utcTime": "2026-06-20T12:00:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8417",
+       "isOurTeam": true,
+       "name": "Fredrikstad"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-04T12:00:00.000Z"
+      },
+      "home": {
+       "id": "8007",
+       "isOurTeam": false,
+       "name": "Vålerenga"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8007_xsmall.png",
+      "linkToMatch": "/matches/valerenga-vs-fredrikstad/28b66t#5895053",
+      "result": -1,
+      "resultString": "L",
+      "score": "3 - 1",
+      "teamPageUrl": "/teams/8007/overview/valerenga",
+      "tooltipText": {
+       "awayScore": "1",
+       "awayTeam": "Fredrikstad",
+       "awayTeamId": 8417,
+       "homeScore": "3",
+       "homeTeam": "Vålerenga",
+       "homeTeamId": 8007,
+       "timezone": "UTC",
+       "utcTime": "2026-07-04T12:00:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8476",
+       "isOurTeam": false,
+       "name": "Lillestrøm"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-11T12:00:00.000Z"
+      },
+      "home": {
+       "id": "8417",
+       "isOurTeam": true,
+       "name": "Fredrikstad"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8476_xsmall.png",
+      "linkToMatch": "/matches/fredrikstad-vs-lillestrom/2cymu7#5104939",
+      "result": -1,
+      "resultString": "L",
+      "score": "0 - 2",
+      "teamPageUrl": "/teams/8476/overview/lillestrom",
+      "tooltipText": {
+       "awayScore": "2",
+       "awayTeam": "Lillestrøm",
+       "awayTeamId": 8476,
+       "homeScore": "0",
+       "homeTeam": "Fredrikstad",
+       "homeTeamId": 8417,
+       "timezone": "UTC",
+       "utcTime": "2026-07-11T12:00:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8417",
+       "isOurTeam": true,
+       "name": "Fredrikstad"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-17T17:15:00.000Z"
+      },
+      "home": {
+       "id": "8402",
+       "isOurTeam": false,
+       "name": "Bodø/Glimt"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8402_xsmall.png",
+      "linkToMatch": "/matches/bodoglimt-vs-fredrikstad/2c7wb3#5104946",
+      "result": -1,
+      "resultString": "L",
+      "score": "1 - 0",
+      "teamPageUrl": "/teams/8402/overview/bodoglimt",
+      "tooltipText": {
+       "awayScore": "0",
+       "awayTeam": "Fredrikstad",
+       "awayTeamId": 8417,
+       "homeScore": "1",
+       "homeTeam": "Bodø/Glimt",
+       "homeTeamId": 8402,
+       "timezone": "UTC",
+       "utcTime": "2026-07-17T17:15:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8417",
+       "isOurTeam": true,
+       "name": "Fredrikstad"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-27T17:00:00.000Z"
+      },
+      "home": {
+       "id": "8422",
+       "isOurTeam": false,
+       "name": "Rosenborg"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8422_xsmall.png",
+      "linkToMatch": "/matches/fredrikstad-vs-rosenborg/2cf40y#5104956",
+      "result": -1,
+      "resultString": "L",
+      "score": "4 - 0",
+      "teamPageUrl": "/teams/8422/overview/rosenborg",
+      "tooltipText": {
+       "awayScore": "0",
+       "awayTeam": "Fredrikstad",
+       "awayTeamId": 8417,
+       "homeScore": "4",
+       "homeTeam": "Rosenborg",
+       "homeTeamId": 8422,
+       "timezone": "UTC",
+       "utcTime": "2026-07-27T17:00:00.000Z"
+      }
+     }
+    ],
+    [
+     {
+      "away": {
+       "id": "8417",
+       "isOurTeam": false,
+       "name": "Fredrikstad"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-05-25T17:15:00.000Z"
+      },
+      "home": {
+       "id": "8609",
+       "isOurTeam": true,
+       "name": "Sandefjord"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8417_xsmall.png",
+      "linkToMatch": "/matches/fredrikstad-vs-sandefjord/2eazfo#5104919",
+      "result": 0,
+      "resultString": "D",
+      "score": "1 - 1",
+      "teamPageUrl": "/teams/8417/overview/fredrikstad",
+      "tooltipText": {
+       "awayScore": "1",
+       "awayTeam": "Fredrikstad",
+       "awayTeamId": 8417,
+       "homeScore": "1",
+       "homeTeam": "Sandefjord",
+       "homeTeamId": 8609,
+       "timezone": "UTC",
+       "utcTime": "2026-05-25T17:15:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8609",
+       "isOurTeam": true,
+       "name": "Sandefjord"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-05-30T14:00:00.000Z"
+      },
+      "home": {
+       "id": "9917",
+       "isOurTeam": false,
+       "name": "Molde"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/9917_xsmall.png",
+      "linkToMatch": "/matches/sandefjord-vs-molde/2u6j3i#5104926",
+      "result": -1,
+      "resultString": "L",
+      "score": "2 - 1",
+      "teamPageUrl": "/teams/9917/overview/molde",
+      "tooltipText": {
+       "awayScore": "1",
+       "awayTeam": "Sandefjord",
+       "awayTeamId": 8609,
+       "homeScore": "2",
+       "homeTeam": "Molde",
+       "homeTeamId": 9917,
+       "timezone": "UTC",
+       "utcTime": "2026-05-30T14:00:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8448",
+       "isOurTeam": false,
+       "name": "Hamarkameratene"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-12T15:00:00.000Z"
+      },
+      "home": {
+       "id": "8609",
+       "isOurTeam": true,
+       "name": "Sandefjord"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8448_xsmall.png",
+      "linkToMatch": "/matches/hamarkameratene-vs-sandefjord/2emb2q#5104945",
+      "result": 0,
+      "resultString": "D",
+      "score": "2 - 2",
+      "teamPageUrl": "/teams/8448/overview/hamarkameratene",
+      "tooltipText": {
+       "awayScore": "2",
+       "awayTeam": "Hamarkameratene",
+       "awayTeamId": 8448,
+       "homeScore": "2",
+       "homeTeam": "Sandefjord",
+       "homeTeamId": 8609,
+       "timezone": "UTC",
+       "utcTime": "2026-07-12T15:00:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8609",
+       "isOurTeam": true,
+       "name": "Sandefjord"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-18T16:00:00.000Z"
+      },
+      "home": {
+       "id": "8478",
+       "isOurTeam": false,
+       "name": "Viking"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8478_xsmall.png",
+      "linkToMatch": "/matches/viking-vs-sandefjord/2exa9t#5104952",
+      "result": -1,
+      "resultString": "L",
+      "score": "2 - 1",
+      "teamPageUrl": "/teams/8478/overview/viking",
+      "tooltipText": {
+       "awayScore": "1",
+       "awayTeam": "Sandefjord",
+       "awayTeamId": 8609,
+       "homeScore": "2",
+       "homeTeam": "Viking",
+       "homeTeamId": 8478,
+       "timezone": "UTC",
+       "utcTime": "2026-07-18T16:00:00.000Z"
+      }
+     },
+     {
+      "away": {
+       "id": "8402",
+       "isOurTeam": false,
+       "name": "Bodø/Glimt"
+      },
+      "date": {
+       "timezone": "UTC",
+       "utcTime": "2026-07-26T15:00:00.000Z"
+      },
+      "home": {
+       "id": "8609",
+       "isOurTeam": true,
+       "name": "Sandefjord"
+      },
+      "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8402_xsmall.png",
+      "linkToMatch": "/matches/bodoglimt-vs-sandefjord/2e5igf#5104955",
+      "result": -1,
+      "resultString": "L",
+      "score": "0 - 3",
+      "teamPageUrl": "/teams/8402/overview/bodoglimt",
+      "tooltipText": {
+       "awayScore": "3",
+       "awayTeam": "Bodø/Glimt",
+       "awayTeamId": 8402,
+       "homeScore": "0",
+       "homeTeam": "Sandefjord",
+       "homeTeamId": 8609,
+       "timezone": "UTC",
+       "utcTime": "2026-07-26T15:00:00.000Z"
+      }
+     }
+    ]
+   ],
+   "topPlayers": {
+    "awayTopPlayers": [],
+    "homeTopPlayers": []
+   },
+   "topScorers": {
+    "awayPlayer": {
+     "fullName": "Evangelos Patoulidis",
+     "lastName": "Patoulidis",
+     "matchesWithRating": 14,
+     "playerId": 1073446,
+     "position": 3,
+     "stats": {
+      "expectedGoals": 1.937600016593933,
+      "gamesPlayed": 14,
+      "goalAssist": 0,
+      "goals": 3,
+      "minsPlayed": 979,
+      "minsPlayedGoal": 326,
+      "motm": 0,
+      "ontargetScoringAtt": 1.25,
+      "playerRating": 7.01
+     }
+    },
+    "homePlayer": {
+     "fullName": "Daniel Eid",
+     "lastName": "Eid",
+     "matchesWithRating": 13,
+     "playerId": 736684,
+     "position": 2,
+     "stats": {
+      "expectedGoals": 1.1588000059127808,
+      "gamesPlayed": 13,
+      "goalAssist": 2,
+      "goals": 2,
+      "minsPlayed": 1146,
+      "minsPlayedGoal": 573,
+      "motm": 2,
+      "ontargetScoringAtt": 1.5,
+      "playerRating": 7.11
+     }
+    },
+    "section": "Top scorers",
+    "sectionId": 6,
+    "statsOrder": [
+     "playerRating",
+     "goals",
+     "expectedGoals",
+     "goalAssist",
+     "minsPlayedGoal",
+     "ontargetScoringAtt",
+     "motm",
+     "gamesPlayed",
+     "minsPlayed"
+    ]
+   }
+  },
+  "momentum": false,
+  "playerStats": null,
+  "shotmap": {
+   "Periods": {
+    "All": []
+   },
+   "shots": []
+  },
+  "stats": null,
+  "superlive": {
+   "showSuperLive": false,
+   "superLiveUrl": null
+  },
+  "table": {
+   "countryCode": "NOR",
+   "leagueId": "59",
+   "parentLeagueId": 59,
+   "teams": [
+    8417,
+    8609
+   ],
+   "tournamentNameForUrl": "Eliteserien",
+   "url": "https://data.fotmob.com/tables.ext.59.fot.gz"
+  },
+  "weather": {
+   "apiUsed": "forecast",
+   "cloudCover": 35,
+   "defaultTitle": "Windy",
+   "description": "Partly Cloudy/Wind",
+   "iconCode": 24,
+   "lastUpdated": "2026-07-30T14:00:06Z",
+   "localizedKey": "weather_condition_windy",
+   "precipChance": 24,
+   "precipitation": 0,
+   "relativeHumidity": 63,
+   "snow": 0,
+   "temperature": 18,
+   "windDirectionCardinal": "SW",
+   "windSpeed": 9
+  }
+ },
+ "general": {
+  "awayTeam": {
+   "id": 8609,
+   "name": "Sandefjord"
+  },
+  "countryCode": "NOR",
+  "coverageLevel": "lower",
+  "finished": false,
+  "gender": "male",
+  "homeTeam": {
+   "id": 8417,
+   "name": "Fredrikstad"
+  },
+  "leagueId": 59,
+  "leagueName": "Eliteserien",
+  "leagueRoundName": "16",
+  "matchId": "5104961",
+  "matchName": "Fredrikstad-vs-Sandefjord_Sat, Aug 1, 2026, 14:00 UTC",
+  "matchRound": "16",
+  "matchTimeUTC": "Sat, Aug 1, 2026, 14:00 UTC",
+  "matchTimeUTCDate": "2026-08-01T14:00:00.000Z",
+  "parentLeagueId": 59,
+  "started": false,
+  "teamColors": {
+   "darkMode": {
+    "away": "#035db8",
+    "home": "#f13c26"
+   },
+   "fontDarkMode": {
+    "away": "rgba(255, 255, 255, 1.0)",
+    "home": "rgba(255, 255, 255, 1.0)"
+   },
+   "fontLightMode": {
+    "away": "rgba(255, 255, 255, 1.0)",
+    "home": "rgba(255, 255, 255, 1.0)"
+   },
+   "lightMode": {
+    "away": "#104070",
+    "home": "#f13c26"
+   }
+  }
+ },
+ "header": {
+  "events": null,
+  "status": {
+   "cancelled": false,
+   "finished": false,
+   "halfs": {},
+   "numberOfAwayRedCards": 0,
+   "numberOfHomeRedCards": 0,
+   "started": false,
+   "timezone": "UTC",
+   "utcTime": "2026-08-01T14:00:00.000Z"
+  },
+  "teams": [
+   {
+    "id": 8417,
+    "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8417_small.png",
+    "name": "Fredrikstad",
+    "pageUrl": "/teams/8417/overview/fredrikstad",
+    "score": 0
+   },
+   {
+    "id": 8609,
+    "imageUrl": "https://images.fotmob.com/image_resources/logo/teamlogo/8609_small.png",
+    "name": "Sandefjord",
+    "pageUrl": "/teams/8609/overview/sandefjord",
+    "score": 0
+   }
+  ]
+ }
+}

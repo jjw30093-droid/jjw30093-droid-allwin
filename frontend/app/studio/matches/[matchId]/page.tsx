@@ -16,6 +16,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import { StudioGate } from "@/components/studio/StudioGate";
 import { SceneCard } from "@/components/studio/SceneCards";
+import { SafeSceneCard } from "@/components/studio/SafeSceneCards";
 import {
   buildSubtitleCues,
   createDraft,
@@ -31,20 +32,24 @@ import {
 } from "@/components/studio/api";
 import {
   SCENES,
+  SAFE_SCENES,
   STATUS_ZH,
+  douyinSafeProfile,
   type DraftDetail,
   type DraftOverrides,
   type DraftStatus,
   type EvidenceItem,
   type SceneId,
+  type SafeSceneId,
   type ScriptSection,
+  type StudioProfileId,
 } from "@/components/studio/types";
 import styles from "./editor.module.css";
 
 const PREVIEW_SCALE = 0.24;
 
 interface PngJob {
-  scene: SceneId;
+  scene: SceneId | SafeSceneId;
   width: 1080;
   height: 1920 | 1350;
 }
@@ -131,6 +136,9 @@ function Editor({
   const [notice, setNotice] = useState<string | null>(null);
 
   const [activeScene, setActiveScene] = useState<SceneId>("hook");
+  const [activeSafeScene, setActiveSafeScene] = useState<SafeSceneId>("cover");
+  const [profileId, setProfileId] =
+    useState<StudioProfileId>("douyin-safe-v1");
   const [exportBusy, setExportBusy] = useState<string | null>(null);
   const [pngQueue, setPngQueue] = useState<PngJob[]>([]);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -246,7 +254,7 @@ function Editor({
         const ok = await doSave();
         if (!ok) return;
       }
-      const res = await requestExport(draft.id, kind);
+      const res = await requestExport(draft.id, kind, profileId);
       if (res.side !== "server" || !res.download_url)
         throw new Error("后端未返回下载地址");
       await downloadServerExport(
@@ -255,8 +263,10 @@ function Editor({
           draft.match_id,
           kind,
           kind,
-          res.model_version,
+          profileId === "douyin-safe-v1" ? null : res.model_version,
           res.data_cutoff_at,
+          profileId,
+          douyinSafeProfile(draft.bundle)?.source_hash,
         ),
       );
       setNotice(
@@ -289,10 +299,16 @@ function Editor({
       await requestExport(
         draft.id,
         height === 1920 ? "png_1080x1920" : "png_1080x1350",
+        profileId,
       );
-      const scenes: SceneId[] = all
-        ? SCENES.map((s) => s.id)
-        : [activeScene];
+      const scenes: Array<SceneId | SafeSceneId> =
+        profileId === "douyin-safe-v1"
+          ? all
+            ? SAFE_SCENES.map((s) => s.id)
+            : [activeSafeScene]
+          : all
+            ? SCENES.map((s) => s.id)
+            : [activeScene];
       setPngQueue(scenes.map((scene) => ({ scene, width: 1080, height })));
     } catch (err) {
       setNotice(`导出失败:${errMessage(err)}`);
@@ -318,7 +334,8 @@ function Editor({
           width: job.width,
           height: job.height,
           pixelRatio: 1,
-          backgroundColor: "#0a0806",
+          backgroundColor:
+            profileId === "douyin-safe-v1" ? "#061724" : "#0a0806",
         });
         if (cancelled) return;
         triggerDownload(
@@ -327,8 +344,12 @@ function Editor({
             draft.match_id,
             `${job.scene}_${job.width}x${job.height}`,
             "png",
-            draft.bundle.model_version,
+            profileId === "douyin-safe-v1"
+              ? null
+              : draft.bundle.model_version,
             draft.bundle.data_cutoff_at,
+            profileId,
+            douyinSafeProfile(draft.bundle)?.source_hash,
           ),
         );
       } catch (err) {
@@ -343,7 +364,7 @@ function Editor({
     return () => {
       cancelled = true;
     };
-  }, [pngQueue, draft]);
+  }, [pngQueue, draft, profileId]);
 
   useEffect(() => {
     if (
@@ -406,6 +427,9 @@ function Editor({
   }
 
   const bundle = draft.bundle;
+  const safeProfile = douyinSafeProfile(bundle);
+  const safeMode = profileId === "douyin-safe-v1" && safeProfile !== null;
+  const currentScenes = safeMode ? SAFE_SCENES : SCENES;
   const m = bundle.match;
   const liveOverrides: DraftOverrides = {
     title,
@@ -497,26 +521,73 @@ function Editor({
 
       {notice && <div className={styles.notice}>{notice}</div>}
 
+      <div className={styles.profileBar} aria-label="传播模式">
+        <div>
+          <strong>传播模式</strong>
+          <span>安全版物理排除赛果概率与交易信息字段</span>
+        </div>
+        <div className={styles.profileTabs}>
+          <button
+            type="button"
+            className={safeMode ? styles.profileTabActive : styles.profileTab}
+            disabled={!safeProfile || busy}
+            onClick={() => {
+              setProfileId("douyin-safe-v1");
+              setActiveSafeScene("cover");
+            }}
+          >
+            抖音安全版（默认）
+          </button>
+          <button
+            type="button"
+            className={!safeMode ? styles.profileTabActive : styles.profileTab}
+            disabled={busy}
+            onClick={() => {
+              setProfileId("internal-full-v1");
+              setActiveScene("hook");
+            }}
+          >
+            内部完整分析版
+          </button>
+        </div>
+        {!safeProfile && (
+          <p className={styles.profileUnavailable}>
+            当前历史草稿没有球队打法画像，请先用 daily-content replay 刷新素材后新建草稿。
+          </p>
+        )}
+      </div>
+
       <div className={styles.layout}>
         <div className={styles.previewCol}>
-          <h2 className={styles.sectionTitle}>竖屏场景预览(1080×1920)</h2>
+          <h2 className={styles.sectionTitle}>
+            {safeMode ? "球队打法拆解 · 六张预览" : "内部完整分析 · 六张预览"}
+          </h2>
           <div className={styles.previewStrip}>
-            {SCENES.map((sc) => (
+            {currentScenes.map((sc) => {
+              const selected = safeMode
+                ? activeSafeScene === sc.id
+                : activeScene === sc.id;
+              return (
               <div
                 key={sc.id}
                 role="button"
                 tabIndex={0}
-                aria-pressed={activeScene === sc.id}
+                aria-pressed={selected}
                 className={
-                  activeScene === sc.id
+                  selected
                     ? styles.previewCardActive
                     : styles.previewCard
                 }
-                onClick={() => setActiveScene(sc.id)}
+                onClick={() =>
+                  safeMode
+                    ? setActiveSafeScene(sc.id as SafeSceneId)
+                    : setActiveScene(sc.id as SceneId)
+                }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setActiveScene(sc.id);
+                    if (safeMode) setActiveSafeScene(sc.id as SafeSceneId);
+                    else setActiveScene(sc.id as SceneId);
                   }
                 }}
               >
@@ -532,17 +603,25 @@ function Editor({
                     className={styles.previewInner}
                     style={{ transform: `scale(${PREVIEW_SCALE})` }}
                   >
-                    <SceneCard
-                      bundle={bundle}
-                      overrides={liveOverrides}
-                      draftTitle={draft.title}
-                      scene={sc.id}
-                      height={1920}
-                    />
+                    {safeMode ? (
+                      <SafeSceneCard
+                        profile={safeProfile}
+                        scene={sc.id as SafeSceneId}
+                        height={1920}
+                      />
+                    ) : (
+                      <SceneCard
+                        bundle={bundle}
+                        overrides={liveOverrides}
+                        draftTitle={draft.title}
+                        scene={sc.id as SceneId}
+                        height={1920}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
 
           <div className={styles.exportCard}>
@@ -578,6 +657,16 @@ function Editor({
                   ? `生成中(剩 ${pngQueue.length} 张)…`
                   : "PNG 全部六张 1080×1920"}
               </button>
+              <button
+                type="button"
+                className={styles.exportBtn}
+                disabled={busy}
+                onClick={() => pngExport(1350, true)}
+              >
+                {exportBusy === "png_1350_all"
+                  ? `生成中(剩 ${pngQueue.length} 张)…`
+                  : "PNG 全部六张 1080×1350"}
+              </button>
             </div>
             <div className={styles.exportRow}>
               <button
@@ -594,7 +683,11 @@ function Editor({
                 disabled={busy}
                 onClick={() => serverExport("json")}
               >
-                {exportBusy === "json" ? "生成中…" : "JSON(bundle+overrides)"}
+                {exportBusy === "json"
+                  ? "生成中…"
+                  : safeMode
+                    ? "JSON（安全数据）"
+                    : "JSON(bundle+overrides)"}
               </button>
               <button
                 type="button"
@@ -606,15 +699,41 @@ function Editor({
               </button>
             </div>
             <p className={styles.exportNote}>
-              每种导出都携带数据截止时间与模型版本:PNG 在画面页脚、TXT
-              在首行、JSON 在 bundle 字段、SRT 以文件名标注。导出前会自动保存
-              未保存的编辑。
+              安全版文件名携带 douyin-safe-v1、比赛 ID、cutoff 与 source hash；
+              JSON/TXT/SRT 只导出安全视图。内部版继续保留原分析包导出。
             </p>
           </div>
         </div>
 
         <aside className={styles.editCol}>
-          <h2 className={styles.sectionTitle}>编辑面板</h2>
+          <h2 className={styles.sectionTitle}>
+            {safeMode ? "安全版内容检查" : "编辑面板"}
+          </h2>
+
+          {safeMode && safeProfile ? (
+            <>
+              <div className={styles.safeCheck}>
+                <strong>已通过物理字段门禁</strong>
+                <p>
+                  六张卡只读取球队打法画像；未向安全 view model 放入赛果概率、
+                  交易信息或内部分析字段。
+                </p>
+              </div>
+              <div className={styles.editGroup}>
+                <span className={styles.editGroupTitle}>安全标题（3 个）</span>
+                {safeProfile.titles.map((item) => <p key={item} className={styles.safeCopy}>{item}</p>)}
+              </div>
+              <div className={styles.editGroup}>
+                <span className={styles.editGroupTitle}>小红书正文</span>
+                <pre className={styles.safeText}>{safeProfile.xiaohongshu_text}</pre>
+              </div>
+              <div className={styles.editGroup}>
+                <span className={styles.editGroupTitle}>公众号摘要</span>
+                <p className={styles.safeCopy}>{safeProfile.wechat_summary}</p>
+              </div>
+            </>
+          ) : (
+            <>
 
           <div className={styles.editGroup}>
             <label className={styles.editGroupTitle} htmlFor="draft-title">
@@ -684,19 +803,29 @@ function Editor({
             概率、预期进球与图表来自冻结的分析包快照,不能在 Studio
             修改;需要新数据请回 Studio 首页重新创建草稿。
           </p>
+            </>
+          )}
         </aside>
       </div>
 
       {pngQueue[0] && (
         <div className={styles.exportStage} aria-hidden>
           <div ref={stageRef}>
-            <SceneCard
-              bundle={bundle}
-              overrides={liveOverrides}
-              draftTitle={draft.title}
-              scene={pngQueue[0].scene}
-              height={pngQueue[0].height}
-            />
+            {safeMode && safeProfile ? (
+              <SafeSceneCard
+                profile={safeProfile}
+                scene={pngQueue[0].scene as SafeSceneId}
+                height={pngQueue[0].height}
+              />
+            ) : (
+              <SceneCard
+                bundle={bundle}
+                overrides={liveOverrides}
+                draftTitle={draft.title}
+                scene={pngQueue[0].scene as SceneId}
+                height={pngQueue[0].height}
+              />
+            )}
           </div>
         </div>
       )}

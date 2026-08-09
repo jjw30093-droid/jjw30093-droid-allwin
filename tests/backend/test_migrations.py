@@ -47,7 +47,7 @@ def test_platform_fresh_init(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM plans").fetchone()[0] == 3
     free = {r[0] for r in conn.execute(
         "SELECT entitlement FROM plan_entitlements WHERE plan_id='free'")}
-    assert free == {"league:epl", "prediction:top_probability", "odds:summary_delayed"}
+    assert free == {"league:epl", "league:lottery", "prediction:top_probability", "odds:summary_delayed"}
     pro = {r[0] for r in conn.execute(
         "SELECT entitlement FROM plan_entitlements WHERE plan_id='pro'")}
     assert "prediction:full_wdl" in pro and free <= pro  # pro ⊇ free
@@ -152,26 +152,30 @@ def _seed_snapshot(conn, locked=False, official=False):
          1 if official else 0))
 
 
-def test_locked_snapshot_immutable_at_db_layer(tmp_path):
+def test_locked_snapshot_editable_but_not_deletable_at_db_layer(tmp_path):
+    """migration 0007(2026-08-05):锁定行的 UPDATE 触发器已移除——概率/hash 等
+    实质字段现在可以被直接 UPDATE(应用层唯一入口是 edit_snapshot,见
+    tests/backend/test_predictions.py::TestEditSnapshot,这里只测 DB 层本身不再
+    拦截)。DELETE 触发器不受影响,物理删除依然被拒绝。"""
     db = tmp_path / "platform.db"
     migrate.apply_all("platform", db_file=db, quiet=True)
     conn = sqlite3.connect(db)
     conn.execute("PRAGMA foreign_keys = ON")
     _seed_snapshot(conn, locked=True, official=True)
     conn.commit()
-    # 改概率 → 拒绝
-    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
-        conn.execute("UPDATE prediction_snapshots SET home_win=0.9, draw=0.05, away_win=0.05 WHERE id='snap1'")
-    # 改 hash → 拒绝
-    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
-        conn.execute("UPDATE prediction_snapshots SET prediction_hash='forged' WHERE id='snap1'")
-    # 物理删除 → 拒绝
+    # 改概率 → 现在允许(DB 层不再兜底,留痕是 edit_snapshot 的应用层职责)
+    conn.execute("UPDATE prediction_snapshots SET home_win=0.9, draw=0.05, away_win=0.05 WHERE id='snap1'")
+    # 改 hash → 同样允许
+    conn.execute("UPDATE prediction_snapshots SET prediction_hash='forged' WHERE id='snap1'")
+    row = conn.execute("SELECT home_win, prediction_hash FROM prediction_snapshots WHERE id='snap1'").fetchone()
+    assert row == (0.9, "forged")
+    # 物理删除 → 依然拒绝(trg_pred_snap_no_delete 未受本次改动影响)
     with pytest.raises(sqlite3.IntegrityError, match="cannot be deleted"):
         conn.execute("DELETE FROM prediction_snapshots WHERE id='snap1'")
-    # 撤回状态 → 允许(status 不在锁定列清单)
+    # 撤回状态 → 允许(status 从未受锁定触发器保护)
     conn.execute("UPDATE prediction_snapshots SET status='retracted' WHERE id='snap1'")
     row = conn.execute("SELECT status, home_win FROM prediction_snapshots WHERE id='snap1'").fetchone()
-    assert row == ("retracted", 0.5)
+    assert row == ("retracted", 0.9)
     conn.close()
 
 
@@ -201,6 +205,77 @@ def test_probability_sum_check(tmp_path):
     conn.close()
 
 
+def test_lottery_entitlement_present_in_all_three_plans_fresh_db(tmp_path):
+    """瑞典超接入(0004):league:lottery 必须在全新库的 free/pro/premium 三档都出现,
+    不能只加在 free 上指望"继承"(plan_entitlements 是逐档全量枚举,见 0002_seed.sql)。"""
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    plans = {r[0] for r in conn.execute(
+        "SELECT plan_id FROM plan_entitlements WHERE entitlement='league:lottery'")}
+    conn.close()
+    assert plans == {"free", "pro", "premium"}
+
+
+def test_lottery_entitlement_upgrade_from_pre_0004_db_no_duplicates(tmp_path):
+    """升级场景(0004 之前只跑到 0003 的既有库):升级后 league:lottery 正确补齐到
+    三档且不重复;既有 plan_entitlements 行不受影响。"""
+    staged = tmp_path / "staged_migrations"
+    staged.mkdir()
+    src = migrate.MIGRATIONS_ROOT / "platform"
+    for name in ("0001_init.sql", "0002_seed.sql", "0003_snapshot_kickoff_provenance.sql"):
+        shutil.copyfile(src / name, staged / name)
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, migrations_dir=staged, quiet=True)
+    conn = sqlite3.connect(db)
+    before = conn.execute("SELECT COUNT(*) FROM plan_entitlements").fetchone()[0]
+    assert conn.execute(
+        "SELECT COUNT(*) FROM plan_entitlements WHERE entitlement='league:lottery'"
+    ).fetchone()[0] == 0
+    conn.close()
+
+    # 升级:指向真实(含 0004/0005)的迁移目录
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    after = conn.execute("SELECT COUNT(*) FROM plan_entitlements").fetchone()[0]
+    assert after == before + 3   # 恰好新增三档 league:lottery,既有行不受影响
+    plans = {r[0] for r in conn.execute(
+        "SELECT plan_id FROM plan_entitlements WHERE entitlement='league:lottery'")}
+    assert plans == {"free", "pro", "premium"}
+
+    # 重复应用同一套完整迁移:不产生重复行(第三次幂等检查)
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    dup_check = conn.execute("SELECT COUNT(*) FROM plan_entitlements").fetchone()[0]
+    assert dup_check == after
+    conn.close()
+
+
+def test_model_league_scope_columns_and_league_id_editable(tmp_path):
+    """瑞典超接入(0005):model_versions.applicable_league_ids /
+    prediction_snapshots.league_id 列存在。此前(migration 0005)锁定后 league_id
+    不可再改写(trg_pred_snap_locked_league_immutable);该触发器已被 migration
+    0007(2026-08-05)移除——锁定行现在允许直接编辑,包括 league_id。"""
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    mv_cols = {r[1] for r in conn.execute("PRAGMA table_info(model_versions)")}
+    snap_cols = {r[1] for r in conn.execute("PRAGMA table_info(prediction_snapshots)")}
+    assert "applicable_league_ids" in mv_cols
+    assert "league_id" in snap_cols
+
+    _seed_snapshot(conn, locked=False, official=False)
+    conn.execute("UPDATE prediction_snapshots SET league_id=47 WHERE id='snap1'")
+    conn.execute(
+        "UPDATE prediction_snapshots SET status='locked', locked_at='2026-07-19T01:00:00Z', is_official=1"
+        " WHERE id='snap1'"
+    )
+    conn.commit()
+    conn.execute("UPDATE prediction_snapshots SET league_id=999 WHERE id='snap1'")
+    row = conn.execute("SELECT league_id FROM prediction_snapshots WHERE id='snap1'").fetchone()
+    assert row == (999,)
+    conn.close()
+
+
 def test_cli_all_with_data_dir(tmp_path):
     """CLI 形态:python -m backend.db.migrate --all --data-dir <tmp> 三库全建。"""
     proc = subprocess.run(
@@ -211,3 +286,136 @@ def test_cli_all_with_data_dir(tmp_path):
     assert (tmp_path / "platform.db").exists()
     assert (tmp_path / "odds.db").exists()
     assert (tmp_path / "allwin.db").exists()  # core:仅 schema_migrations,现有库不受影响
+
+
+# ── Schedule-state migration manifest identity closure ─────────────────────
+
+
+def _write_manifest_file(directory: Path, name: str, sql: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / name).write_text(sql, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        (),
+        ("0002_second.sql",),
+        ("0001_first.sql", "0003_third.sql"),
+    ],
+    ids=("empty-manifest", "missing-first-version", "missing-middle-version"),
+)
+def test_manifest_gap_is_rejected_before_database_creation(tmp_path, names):
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    for name in names:
+        _write_manifest_file(
+            migrations,
+            name,
+            f"CREATE TABLE t_{name[:4]} (id INTEGER PRIMARY KEY);\n",
+        )
+    db = tmp_path / "must-not-exist.db"
+
+    with pytest.raises(ValueError, match="连续"):
+        migrate.apply_all(
+            "core",
+            db_file=db,
+            migrations_dir=migrations,
+            quiet=True,
+        )
+
+    assert not db.exists()
+
+
+def test_duplicate_manifest_version_is_rejected_before_database_creation(tmp_path):
+    migrations = tmp_path / "migrations"
+    _write_manifest_file(
+        migrations,
+        "0001_first.sql",
+        "CREATE TABLE first_table (id INTEGER PRIMARY KEY);\n",
+    )
+    _write_manifest_file(
+        migrations,
+        "0001_second.sql",
+        "CREATE TABLE second_table (id INTEGER PRIMARY KEY);\n",
+    )
+    db = tmp_path / "must-not-exist.db"
+
+    with pytest.raises(ValueError, match="重复版本号"):
+        migrate.apply_all(
+            "core",
+            db_file=db,
+            migrations_dir=migrations,
+            quiet=True,
+        )
+
+    assert not db.exists()
+
+
+def test_ledger_filename_mismatch_is_rejected_without_database_change(tmp_path):
+    migrations = tmp_path / "migrations"
+    _write_manifest_file(
+        migrations,
+        "0001_first.sql",
+        "CREATE TABLE first_table (id INTEGER PRIMARY KEY);\n",
+    )
+    db = tmp_path / "ledger-name.db"
+    migrate.apply_all(
+        "core",
+        db_file=db,
+        migrations_dir=migrations,
+        quiet=True,
+    )
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "UPDATE schema_migrations SET name='0009_wrong.sql' WHERE version=1"
+    )
+    conn.commit()
+    conn.close()
+    before = db.read_bytes()
+
+    with pytest.raises(RuntimeError, match="identity"):
+        migrate.apply_all(
+            "core",
+            db_file=db,
+            migrations_dir=migrations,
+            quiet=True,
+        )
+
+    assert db.read_bytes() == before
+
+
+def test_ledger_version_missing_from_manifest_is_rejected_without_change(tmp_path):
+    migrations = tmp_path / "migrations"
+    _write_manifest_file(
+        migrations,
+        "0001_first.sql",
+        "CREATE TABLE first_table (id INTEGER PRIMARY KEY);\n",
+    )
+    db = tmp_path / "orphan-ledger.db"
+    migrate.apply_all(
+        "core",
+        db_file=db,
+        migrations_dir=migrations,
+        quiet=True,
+    )
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO schema_migrations "
+        "(version, name, checksum, applied_at) "
+        "VALUES (2, '0002_missing.sql', ?, '2026-07-26T00:00:00Z')",
+        ("0" * 64,),
+    )
+    conn.commit()
+    conn.close()
+    before = db.read_bytes()
+
+    with pytest.raises(RuntimeError, match="manifest"):
+        migrate.apply_all(
+            "core",
+            db_file=db,
+            migrations_dir=migrations,
+            quiet=True,
+        )
+
+    assert db.read_bytes() == before

@@ -7,6 +7,7 @@ import pytest
 from backend.commands.predictions import (
     PredictionError,
     build_daily_manifest,
+    edit_snapshot,
     get_or_create_model_version,
     lock_snapshot,
     publish_snapshot,
@@ -129,6 +130,227 @@ class TestLifecycle:
         with pytest.raises(PredictionError) as ei:
             _register(platform, probs=(0.5, 0.3, 0.5))
         assert ei.value.reason == "bad_probabilities"
+
+
+class TestEditSnapshot:
+    """2026-08-05:用户明确要求正式预测"随时可以更改"——edit_snapshot 不受
+    draft/published/locked/retracted 或开球前/后门禁约束,但每次真正产生变化的
+    修正都必须写 prediction_snapshot_edits 留痕(见 CLAUDE.md §9.1 / migration 0007)。
+    """
+
+    def test_edit_draft_row(self, platform):
+        sid = _register(platform)
+        result = edit_snapshot(platform, sid, actor=None, reason="调整", home_win=0.6, draw=0.25, away_win=0.15)
+        assert result["changed_fields"] == ["away_win", "draw", "home_win"]
+        assert result["edit_count"] == 1
+
+    def test_edit_locked_row_succeeds(self, platform):
+        """核心场景:锁定后仍可编辑——这是本次改动的直接目的。"""
+        sid = _register(platform)
+        publish_snapshot(platform, sid, actor=None)
+        lock_snapshot(platform, sid, actor=None)
+        result = edit_snapshot(platform, sid, actor=None, reason="真实数据修正", home_win=0.7, draw=0.2, away_win=0.1)
+        assert result["edit_count"] == 1
+        row = platform.execute("SELECT home_win, draw, away_win, status, locked_at FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert (row["home_win"], row["draw"], row["away_win"]) == (0.7, 0.2, 0.1)
+        assert row["status"] == "locked" and row["locked_at"]  # 编辑不改变状态机
+
+    def test_edit_retracted_row_succeeds(self, platform):
+        sid = _register(platform)
+        publish_snapshot(platform, sid, actor=None)
+        lock_snapshot(platform, sid, actor=None)
+        retract_snapshot(platform, sid, actor=None, reason="test")
+        result = edit_snapshot(platform, sid, actor=None, reason="撤回后仍修正", confidence="low")
+        assert result["changed_fields"] == ["confidence"]
+
+    def test_edit_after_kickoff_succeeds(self, platform):
+        """"随时"包含开球后——publish/lock/supersede 的 _require_pre_kickoff 门禁
+        不适用于 edit_snapshot(这是有意的设计差异,不是遗漏)。"""
+        sid = _insert_official(platform, 991, (0.5, 0.3, 0.2), _past(days=1))
+        result = edit_snapshot(platform, sid, actor=None, reason="赛后修正", home_win=0.55, draw=0.25, away_win=0.2)
+        assert result["edit_count"] == 1
+
+    def test_bad_probabilities_rejected(self, platform):
+        sid = _register(platform)
+        publish_snapshot(platform, sid, actor=None)
+        lock_snapshot(platform, sid, actor=None)
+        with pytest.raises(PredictionError) as ei:
+            edit_snapshot(platform, sid, actor=None, reason="改坏", home_win=0.9)
+        assert ei.value.reason == "bad_probabilities"
+        # 校验失败不能留下部分写入的痕迹
+        row = platform.execute("SELECT home_win, edit_count FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert row["home_win"] == 0.5 and row["edit_count"] == 0
+
+    def test_probability_merge_uses_current_values_for_untouched_fields(self, platform):
+        """只传 home_win 时,必须用快照当前的 draw/away_win 合并校验,不是假设它们为 0。"""
+        sid = _register(platform, probs=(0.5, 0.3, 0.2))
+        with pytest.raises(PredictionError) as ei:
+            edit_snapshot(platform, sid, actor=None, reason="只改一个概率,和不为1", home_win=0.9)
+        assert ei.value.reason == "bad_probabilities"
+        # 合法的单字段概率修正(和依然为 1)必须成功
+        result = edit_snapshot(platform, sid, actor=None, reason="合法单字段修正", home_win=0.5, draw=0.3, away_win=0.2)
+        assert result["changed_fields"] == []  # 值和原来相同,no-op
+
+    def test_empty_reason_rejected(self, platform):
+        sid = _register(platform)
+        with pytest.raises(PredictionError) as ei:
+            edit_snapshot(platform, sid, actor=None, reason="", home_win=0.6, draw=0.25, away_win=0.15)
+        assert ei.value.reason == "bad_reason"
+        with pytest.raises(PredictionError):
+            edit_snapshot(platform, sid, actor=None, reason="   ", home_win=0.6, draw=0.25, away_win=0.15)
+
+    def test_noop_edit_does_not_write_history_or_increment_count(self, platform):
+        sid = _register(platform, probs=(0.5, 0.3, 0.2))
+        result = edit_snapshot(platform, sid, actor=None, reason="没有真实变化", home_win=0.5, draw=0.3, away_win=0.2)
+        assert result == {"edit_id": None, "changed_fields": [], "edit_count": 0}
+        count = platform.execute(
+            "SELECT COUNT(*) FROM prediction_snapshot_edits WHERE snapshot_id=?", (sid,)
+        ).fetchone()[0]
+        assert count == 0
+
+    def test_multiple_edits_accumulate_history_and_count(self, platform):
+        sid = _register(platform, probs=(0.5, 0.3, 0.2))
+        edit_snapshot(platform, sid, actor=None, reason="第一次修正", home_win=0.55, draw=0.25, away_win=0.2)
+        edit_snapshot(platform, sid, actor=None, reason="第二次修正", home_win=0.6, draw=0.25, away_win=0.15)
+        row = platform.execute("SELECT edit_count, last_edited_at, home_win FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert row["edit_count"] == 2
+        assert row["last_edited_at"] is not None
+        assert row["home_win"] == 0.6
+        rows = platform.execute(
+            "SELECT reason FROM prediction_snapshot_edits WHERE snapshot_id=? ORDER BY edited_at", (sid,)
+        ).fetchall()
+        assert [r["reason"] for r in rows] == ["第一次修正", "第二次修正"]
+
+    def test_before_json_only_contains_changed_fields(self, platform):
+        sid = _register(platform, probs=(0.5, 0.3, 0.2), confidence="normal")
+        edit_snapshot(platform, sid, actor=None, reason="只改一个字段", confidence="low")
+        row = platform.execute(
+            "SELECT before_json, after_json FROM prediction_snapshot_edits WHERE snapshot_id=?", (sid,)
+        ).fetchone()
+        import json as _json
+        assert _json.loads(row["before_json"]) == {"confidence": "normal"}
+        assert _json.loads(row["after_json"]) == {"confidence": "low"}
+
+    def test_edit_recomputes_prediction_hash(self, platform):
+        sid = _register(platform, probs=(0.5, 0.3, 0.2))
+        old_hash = platform.execute("SELECT prediction_hash FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()["prediction_hash"]
+        edit_snapshot(platform, sid, actor=None, reason="改概率", home_win=0.6, draw=0.25, away_win=0.15)
+        new_hash = platform.execute("SELECT prediction_hash FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()["prediction_hash"]
+        assert old_hash != new_hash
+
+    def test_edit_writes_audit_log(self, platform):
+        sid = _register(platform)
+        edit_snapshot(platform, sid, actor=None, reason="审计留痕验证", home_win=0.6, draw=0.25, away_win=0.15)
+        row = platform.execute(
+            "SELECT action, target_id FROM audit_logs WHERE action='prediction.edit' AND target_id=?", (sid,)
+        ).fetchone()
+        assert row is not None
+
+    def test_edit_history_table_is_append_only(self, platform):
+        import sqlite3 as _sqlite3
+
+        sid = _register(platform)
+        edit_snapshot(platform, sid, actor=None, reason="生成一条历史", home_win=0.6, draw=0.25, away_win=0.15)
+        edit_id = platform.execute(
+            "SELECT id FROM prediction_snapshot_edits WHERE snapshot_id=?", (sid,)
+        ).fetchone()["id"]
+        with pytest.raises(_sqlite3.IntegrityError, match="append-only"):
+            platform.execute("UPDATE prediction_snapshot_edits SET reason='改过了' WHERE id=?", (edit_id,))
+        with pytest.raises(_sqlite3.IntegrityError, match="append-only"):
+            platform.execute("DELETE FROM prediction_snapshot_edits WHERE id=?", (edit_id,))
+
+    def test_editing_does_not_change_already_generated_manifest(self, platform):
+        """编辑发生在 manifest 生成之后:已有 manifest 是历史时刻快照,不追溯改写;
+        重新生成才会用新值。"""
+        kickoff = _future(days=2)
+        sid = _insert_official(platform, 992, (0.5, 0.3, 0.2), kickoff, published_offset_min=-2880)
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        r1 = build_daily_manifest(platform, date)
+
+        edit_snapshot(platform, sid, actor=None, reason="生成清单后修正", home_win=0.6, draw=0.25, away_win=0.15)
+
+        row = platform.execute(
+            "SELECT manifest_json FROM prediction_manifests WHERE manifest_date=? AND version=?",
+            (date, r1["version"]),
+        ).fetchone()
+        import json as _json
+        entry = next(e for e in _json.loads(row["manifest_json"])["entries"] if e["id"] == sid)
+        assert entry["home_win"] == 0.5  # 旧 manifest 内容不变
+
+        r2 = build_daily_manifest(platform, date)
+        assert r2["changed"] is True and r2["version"] == r1["version"] + 1
+        row2 = platform.execute(
+            "SELECT manifest_json FROM prediction_manifests WHERE manifest_date=? AND version=?",
+            (date, r2["version"]),
+        ).fetchone()
+        entry2 = next(e for e in _json.loads(row2["manifest_json"])["entries"] if e["id"] == sid)
+        assert entry2["home_win"] == 0.6  # 新 manifest 用编辑后的值
+
+    def test_editing_does_not_affect_official_sample_membership(self, platform):
+        """公开样本口径不变量(CLAUDE.md §9.1):编辑内容不影响该快照是否属于正式样本集合。"""
+        sid = _insert_official(platform, 993, (0.5, 0.3, 0.2), _past(days=1))
+        before = official_samples(platform)["total"]
+        edit_snapshot(platform, sid, actor=None, reason="编辑不影响样本资格", home_win=0.6, draw=0.25, away_win=0.15)
+        after = official_samples(platform)["total"]
+        assert before == after
+
+    def test_admin_edit_endpoint_requires_csrf_and_writes_history(self, data_dir, platform, client):
+        """POST /api/v1/admin/predictions/{id}/edit:需要 admin+CSRF,成功后落库 +
+        写 prediction_snapshot_edits,与 publish/lock/retract 走同一套门禁。"""
+        sid = _insert_official(platform, 994, (0.5, 0.3, 0.2), _past(days=1))
+        platform.commit()
+
+        # 无 CSRF token 直接 POST 被拒绝(与 publish/lock/retract 同款保护)
+        admin = _login_admin(client.app, "10.9.9.10")
+        no_csrf = admin.post(
+            f"/api/v1/admin/predictions/{sid}/edit",
+            json={"reason": "缺 CSRF", "home_win": 0.6, "draw": 0.25, "away_win": 0.15},
+            headers=ORIGIN,
+        )
+        assert no_csrf.status_code == 403
+
+        r = admin.post(
+            f"/api/v1/admin/predictions/{sid}/edit",
+            json={"reason": "真实数据修正", "home_win": 0.6, "draw": 0.25, "away_win": 0.15},
+            headers=_csrf(admin),
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["changed_fields"] == ["away_win", "draw", "home_win"]
+        assert body["edit_count"] == 1
+
+        row = platform.execute(
+            "SELECT home_win, draw, away_win, edit_count FROM prediction_snapshots WHERE id=?", (sid,)
+        ).fetchone()
+        assert (row["home_win"], row["draw"], row["away_win"]) == (0.6, 0.25, 0.15)
+        assert row["edit_count"] == 1
+
+        # 非法概率之和被拒(409,PredictionError 转换)
+        bad = admin.post(
+            f"/api/v1/admin/predictions/{sid}/edit",
+            json={"reason": "改坏", "home_win": 0.9},
+            headers=_csrf(admin),
+        )
+        assert bad.status_code == 409
+        assert bad.json()["code"] == "bad_probabilities"
+
+    def test_admin_edit_endpoint_rejects_non_admin(self, data_dir, platform, client, fresh_ip):
+        """普通登录用户(非 admin)调用 edit 端点必须被拒绝,不能靠隐藏路由绕过权限
+        (CLAUDE.md §8.3:Admin 不能只靠隐藏路由)。"""
+        sid = _insert_official(platform, 995, (0.5, 0.3, 0.2), _past(days=1))
+        platform.commit()
+
+        r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
+                        headers={"x-real-ip": fresh_ip})
+        client.get(r1.headers["location"], follow_redirects=False)
+        assert client.get("/api/v1/me").json()["authenticated"]
+
+        resp = client.post(
+            f"/api/v1/admin/predictions/{sid}/edit",
+            json={"reason": "无权限尝试", "home_win": 0.6, "draw": 0.25, "away_win": 0.15},
+            headers=_csrf(client),
+        )
+        assert resp.status_code in (401, 403)
 
 
 class TestUtcNormalizationAtWrite:
@@ -589,13 +811,27 @@ class TestPermanentEligibility:
         assert by_id[new]["home_win"] == 0.45
         assert result["superseded_count"] == 1
 
-        # 锁定行仍受 DB 触发器保护:概率 UPDATE / 物理 DELETE 都被拒绝
+        # 2026-08-05 起:锁定行的内容允许直接编辑(用户明确要求"随时可以更改"),
+        # 但必须经 edit_snapshot 留痕,不是静默 UPDATE;物理删除仍然被拒绝(未变)。
+        result = edit_snapshot(
+            platform, old, actor=None, reason="真实数据修正",
+            home_win=0.9, draw=0.05, away_win=0.05,
+        )
+        assert result["changed_fields"] == ["away_win", "draw", "home_win"]
+        assert result["edit_count"] == 1
+        row = platform.execute(
+            "SELECT home_win, draw, away_win, edit_count FROM prediction_snapshots WHERE id=?",
+            (old,),
+        ).fetchone()
+        assert (row["home_win"], row["draw"], row["away_win"]) == (0.9, 0.05, 0.05)
+        assert row["edit_count"] == 1
+        edit_row = platform.execute(
+            "SELECT before_json, after_json, reason FROM prediction_snapshot_edits WHERE snapshot_id=?",
+            (old,),
+        ).fetchone()
+        assert edit_row["reason"] == "真实数据修正"
+
         import sqlite3 as _sqlite3
-        with pytest.raises(_sqlite3.IntegrityError, match="immutable"):
-            platform.execute(
-                "UPDATE prediction_snapshots SET home_win=0.9, draw=0.05, away_win=0.05 WHERE id=?",
-                (old,),
-            )
         with pytest.raises(_sqlite3.IntegrityError, match="cannot be deleted"):
             platform.execute("DELETE FROM prediction_snapshots WHERE id=?", (old,))
 
@@ -791,3 +1027,116 @@ class TestUnifiedOfficialScope:
         # 三集合一致(资格口径统一)
         assert tr_ids == mf_ids == qualified
         assert len(ev) == len(qualified)
+
+
+class TestModelLeagueScope:
+    """瑞典超接入新增:模型适用范围保护(CLAUDE.md §9)。
+
+    校验必须是 opt-in——快照不显式冻结 league_id 时行为完全不变(历史/既有
+    调用方零回归,TestLifecycle 等既有用例已经覆盖这一点);一旦显式提供
+    league_id,模型必须在 applicable_league_ids 显式声明包含该联赛,否则
+    publish/lock 一律拒绝,且拒绝原因是稳定的 'model_unvalidated_for_league'
+    (供 admin/Studio 识别为统一错误码)。
+    """
+
+    def test_no_scope_declared_model_rejected_for_any_league(self, platform):
+        """模型从未声明任何适用范围(如既有 m-test)→ 不隐式放行,禁止发布到 league 67。"""
+        sid = _register(platform, league_id=67)
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "model_unvalidated_for_league"
+
+    def test_scoped_to_other_league_rejected(self, platform):
+        """模型只声明适用 EPL(47)→ 禁止发布/锁定到瑞典超(67)。"""
+        get_or_create_model_version(
+            platform, "m-epl-only", "dixon-coles", applicable_league_ids=[47]
+        )
+        sid = register_snapshot(
+            platform, match_id=2, kickoff_at_utc=_future(), kickoff_precision="exact",
+            kickoff_source="test:fixture", model_version_id="m-epl-only",
+            home_win=0.5, draw=0.3, away_win=0.2, league_id=67,
+        )
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "model_unvalidated_for_league"
+
+    def test_scoped_including_target_league_can_publish_and_lock(self, platform):
+        """模型显式声明适用瑞典超(67)→ 正常走完 publish/lock。"""
+        get_or_create_model_version(
+            platform, "m-allsvenskan", "dixon-coles", applicable_league_ids=[47, 67]
+        )
+        sid = register_snapshot(
+            platform, match_id=3, kickoff_at_utc=_future(), kickoff_precision="exact",
+            kickoff_source="test:fixture", model_version_id="m-allsvenskan",
+            home_win=0.5, draw=0.3, away_win=0.2, league_id=67,
+        )
+        publish_snapshot(platform, sid, actor=None)
+        lock_snapshot(platform, sid, actor=None)
+        row = platform.execute("SELECT status, league_id FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert row["status"] == "locked" and row["league_id"] == 67
+
+    def test_no_league_id_unaffected_by_scope_check(self, platform):
+        """不显式传 league_id(默认 None)→ 即便模型只声明了 EPL,也不触发校验
+        (向后兼容:既有/历史调用方从不传 league_id,行为必须与本次改动前完全一致)。"""
+        get_or_create_model_version(
+            platform, "m-epl-only-2", "dixon-coles", applicable_league_ids=[47]
+        )
+        sid = register_snapshot(
+            platform, match_id=4, kickoff_at_utc=_future(), kickoff_precision="exact",
+            kickoff_source="test:fixture", model_version_id="m-epl-only-2",
+            home_win=0.5, draw=0.3, away_win=0.2,
+        )
+        publish_snapshot(platform, sid, actor=None)
+        lock_snapshot(platform, sid, actor=None)
+        row = platform.execute("SELECT status, league_id FROM prediction_snapshots WHERE id=?", (sid,)).fetchone()
+        assert row["status"] == "locked" and row["league_id"] is None
+
+    def test_lock_also_enforced_independent_of_publish(self, platform):
+        """防御性纵深:直接构造一条已 published 但联赛越界的行(绕过 publish_snapshot
+        的校验路径),证明 lock_snapshot 自己也拦截,不依赖 publish 已经拦过一次。"""
+        from backend.db.util import new_uuid
+
+        get_or_create_model_version(
+            platform, "m-epl-only-3", "dixon-coles", applicable_league_ids=[47]
+        )
+        sid = new_uuid()
+        platform.execute(
+            """INSERT INTO prediction_snapshots
+               (id, match_id, kickoff_at_utc, kickoff_precision, kickoff_source, league_id,
+                model_version_id, generated_at, published_at, prediction_hash,
+                home_win, draw, away_win, visibility, status, is_official, created_at)
+               VALUES (?, 5, ?, 'exact', 'test:fixture', 67, 'm-epl-only-3', ?, ?, 'h',
+                       0.5, 0.3, 0.2, 'public', 'published', 0, ?)""",
+            (sid, _future(), _future(), _future(), _future()),
+        )
+        platform.commit()
+        with pytest.raises(PredictionError) as ei:
+            lock_snapshot(platform, sid, actor=None)
+        assert ei.value.reason == "model_unvalidated_for_league"
+
+    def test_supersede_inherits_league_id_and_enforcement_still_applies(self, platform):
+        """supersede 继承 league_id;新版本若指向不适用模型,仍必须在 publish 时被拒绝
+        (不能借"修正"绕过联赛范围保护)。"""
+        get_or_create_model_version(
+            platform, "m-allsvenskan-2", "dixon-coles", applicable_league_ids=[67]
+        )
+        get_or_create_model_version(
+            platform, "m-epl-only-4", "dixon-coles", applicable_league_ids=[47]
+        )
+        old = register_snapshot(
+            platform, match_id=6, kickoff_at_utc=_future(), kickoff_precision="exact",
+            kickoff_source="test:fixture", model_version_id="m-allsvenskan-2",
+            home_win=0.5, draw=0.3, away_win=0.2, league_id=67,
+        )
+        publish_snapshot(platform, old, actor=None)
+        lock_snapshot(platform, old, actor=None)
+        new = supersede_snapshot(
+            platform, old, actor=None,
+            home_win=0.4, draw=0.35, away_win=0.25, status="draft",
+            model_version_id="m-epl-only-4",
+        )
+        row = platform.execute("SELECT league_id FROM prediction_snapshots WHERE id=?", (new,)).fetchone()
+        assert row["league_id"] == 67
+        with pytest.raises(PredictionError) as ei:
+            publish_snapshot(platform, new, actor=None)
+        assert ei.value.reason == "model_unvalidated_for_league"
