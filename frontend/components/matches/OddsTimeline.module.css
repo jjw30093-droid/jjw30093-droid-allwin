@@ -63,6 +63,79 @@
   color: var(--ink-2);
 }
 
+/* ── 数字快照块(取代无走势时的表格,2026-08-14 重设计) ────────── */
+
+.numsBlock {
+  margin-bottom: 10px;
+}
+
+.numsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.numCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.numCell span:first-child {
+  color: var(--ink);
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.numCell span:last-child {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.sourceLine {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.snapshotNote {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.snapshotNote time {
+  color: var(--ink);
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-weight: 600;
+}
+
+.snapshotNote b {
+  color: var(--ink);
+}
+
+.permissionLine {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.permissionLink {
+  margin-left: 6px;
+  color: var(--brand-teal);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .chartWrap {
   margin-bottom: 16px;
 }

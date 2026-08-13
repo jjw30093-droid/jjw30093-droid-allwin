@@ -65,34 +65,41 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
   // 加载中/加载失败/确认无内容:整个区块不渲染(不展示空标题与占位文案)
   if (error || resp == null || resp.count === 0) return null;
 
+  const countLine = (
+    <p className={styles.countLine}>
+      共 <b className="num">{resp.count}</b> 组同时段变化。
+      <b>同一时间窗内观察到两类变化,不代表二者存在因果关系。</b>
+    </p>
+  );
+
   if (resp.items == null) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>关键变化</h2>
-        <div className={styles.stateBox}>
-          本站共检测到 <b className="num">{resp.count}</b> 组同时段变化
-          (固定时间窗内,赔率变化与阵容/伤停变化在同一时段出现)。
-          <p className={styles.lockNote}>
-            明细登录后免费查看。
-            <Link
-              href={`/login?next=${encodeURIComponent(`/matches/${matchId}`)}`}
-              className={styles.lockLink}
-            >
-              免费登录 →
-            </Link>
-          </p>
-        </div>
+        <h2 className={styles.sectionTitle}>
+          <span className={styles.sectionBar} aria-hidden />
+          关键变化
+        </h2>
+        {countLine}
+        <p className={styles.lockNote}>
+          明细登录后免费查看。
+          <Link
+            href={`/login?next=${encodeURIComponent(`/matches/${matchId}`)}`}
+            className={styles.lockLink}
+          >
+            免费登录 →
+          </Link>
+        </p>
       </section>
     );
   }
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>关键变化</h2>
-      <p className={styles.countLine}>
-        共 <b className="num">{resp.count}</b>{" "}
-        组同时段变化。以下为时间共现记录:同一时间窗内观察到两类变化,不代表二者存在因果关系。
-      </p>
+      <h2 className={styles.sectionTitle}>
+        <span className={styles.sectionBar} aria-hidden />
+        关键变化
+      </h2>
+      {countLine}
       <ul className={styles.list}>
         {resp.items.map((item, i) => {
           const detail = eventDetail(item);

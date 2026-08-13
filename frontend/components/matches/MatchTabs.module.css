@@ -2,22 +2,39 @@
   width: 100%;
 }
 
-/* 视觉与 LeagueNav.module.css 保持同一惯例(金色下划线激活态,窄屏横滑) */
+/* 已完赛(5 tab):横向滚动,每项按内容宽度 + 左右内边距 */
 .tablist {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   overflow-x: auto;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
-  padding-bottom: 1px;
+  scrollbar-width: none;
+}
+
+.tablist::-webkit-scrollbar {
+  display: none;
+}
+
+/* 赛前(3 tab):等宽铺满,不滚动——用于 MatchPreTabs */
+.tablistPre {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
 }
 
 .link,
 .active {
   flex: 0 0 auto;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 14px;
+  font-size: 14.5px;
   font-weight: 500;
-  padding: 10px 16px;
   color: var(--ink-2);
   background: none;
   border: none;
@@ -31,7 +48,7 @@
 }
 
 .active {
-  color: var(--gold-300);
+  color: var(--brand-teal);
   font-weight: 700;
-  border-bottom: 2px solid var(--gold-300);
+  border-bottom: 2px solid var(--brand-teal);
 }

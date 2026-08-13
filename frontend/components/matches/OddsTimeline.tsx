@@ -1,16 +1,23 @@
 "use client";
 
 /**
- * 赔率时间轴(比赛详情页第 5 区块)。
+ * 赔率时间轴(比赛详情页赔率 tab)。
  *
  * 会话 cookie Path=/api/v1,只有浏览器端请求能携带 → 本组件用 clientFetch:
  * - 匿名/Free/Pro:后端返回延迟摘要(每公司每市场最新一条,观察时间 ≥1 小时前);
  * - Premium(odds:history_full):完整快照时间线,1x2 市场补一张折线图。
  *
+ * 2026-08-14 重设计(Claude Design 定稿):当样本不足以画走势时
+ * (`tier !== "full"` 或 `display_mode === "current_odds"`,含免费档几乎
+ * 全部场次)不再出表格,改成"大数字快照 + 一行说明",不假装有走势可看;
+ * 真有走势(`tier === "full"` 且 `display_mode === "odds_changes"`)时,
+ * 大数字块之上加折线图,之下保留原有"每公司一行+完整历史折叠"表格。
+ *
  * 文案纪律:只写"系统于 X 检测到",不写因果;时间按北京时间展示(CLAUDE.md §11.2)。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { EChartsOption } from "echarts";
 import { clientFetch } from "@/lib/api-v1";
 import { EChart } from "@/components/EChart";
@@ -24,6 +31,9 @@ const PHASE_ZH: Record<string, string> = {
   in_play: "滚球",
   unknown: "未标注",
 };
+
+/** 主题切换时重新解析一遍 CSS 变量的实际取值,ECharts(canvas)拿不到 var()。 */
+const THEME_CHANGE_EVENT = "allwin-theme-change";
 
 function groupLabel(s: OddsSnapshot): string {
   return `${s.market}|${s.company_id}`;
@@ -99,9 +109,12 @@ export function summarizeCompanyOdds(
   };
 }
 
+type ChartColors = { axis: string; grid: string; win: string; draw: string; loss: string };
+
 /** 完整时间线时,为快照最多的一家公司的 1x2 序列画折线(≥2 个点才画) */
 function build1x2Chart(
   snapshots: OddsSnapshot[],
+  colors: ChartColors,
 ): { option: EChartsOption; summary: string } | null {
   const byCompany = new Map<string, OddsSnapshot[]>();
   for (const s of snapshots) {
@@ -133,24 +146,24 @@ function build1x2Chart(
     grid: { left: 44, right: 16, top: 30, bottom: 28 },
     legend: {
       data: ["主胜", "平局", "客胜"],
-      textStyle: { color: "#a79c87" },
+      textStyle: { color: colors.axis },
       top: 0,
     },
     xAxis: {
       type: "category",
       data: times,
-      axisLabel: { color: "#a79c87", fontSize: 10 },
+      axisLabel: { color: colors.axis, fontSize: 10 },
     },
     yAxis: {
       type: "value",
       scale: true,
-      axisLabel: { color: "#a79c87" },
-      splitLine: { lineStyle: { color: "#241c11" } },
+      axisLabel: { color: colors.axis },
+      splitLine: { lineStyle: { color: colors.grid } },
     },
     series: [
-      { name: "主胜", type: "line", data: pick("home"), color: "#4e9a5b" },
-      { name: "平局", type: "line", data: pick("draw"), color: "#8a8069" },
-      { name: "客胜", type: "line", data: pick("away"), color: "#c05437" },
+      { name: "主胜", type: "line", data: pick("home"), color: colors.win },
+      { name: "平局", type: "line", data: pick("draw"), color: colors.draw },
+      { name: "客胜", type: "line", data: pick("away"), color: colors.loss },
     ],
   };
   return {
@@ -159,10 +172,36 @@ function build1x2Chart(
   };
 }
 
+/** 一家公司一个市场的快照数字块:大数字 + 小标签,取代原来的表格行。 */
+function OddsNumbers({ market, row }: { market: string; row: CompanyOddsRow }) {
+  const fields = MARKET_FIELDS[market] ?? [];
+  const values = row.current ?? row.initial;
+  return (
+    <div className={styles.numsBlock}>
+      <div className={styles.numsGrid}>
+        {fields.map((f) => (
+          <div key={f.key} className={styles.numCell}>
+            <span className="num">{values?.[f.key] ?? "—"}</span>
+            <span>{f.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className={styles.sourceLine}>
+        <span>{row.companyLabel}</span>
+        <span aria-hidden> · </span>
+        <span>{MARKET_ZH[market] ?? market}</span>
+        <span aria-hidden> · </span>
+        <span>{PHASE_ZH[row.marketPhase] ?? row.marketPhase}</span>
+      </p>
+    </div>
+  );
+}
+
 export function OddsTimeline({ matchId }: { matchId: number }) {
   const [resp, setResp] = useState<OddsResponse | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [themeTick, setThemeTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,23 +217,38 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
     };
   }, [matchId, attempt]);
 
+  useEffect(() => {
+    const bump = () => setThemeTick((t) => t + 1);
+    window.addEventListener(THEME_CHANGE_EVENT, bump);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, bump);
+  }, []);
+
   const retry = useCallback(() => {
     setError(false);
     setAttempt((n) => n + 1);
   }, []);
 
-  const chart = useMemo(
-    () =>
-      // §6.2 纪律护栏:只对"完整时间线且确有 ≥2 个观测点"的档位画走势——
-      // open_close_only(两点摘要)与 current_odds(单点)绝不绘制变化曲线。
-      resp?.available &&
-      resp.tier === "full" &&
-      resp.coverage_tier === "full_timeline" &&
-      resp.display_mode === "odds_changes"
-        ? build1x2Chart(resp.snapshots)
-        : null,
-    [resp],
-  );
+  const isFullTimeline =
+    resp?.available === true &&
+    resp.tier === "full" &&
+    resp.coverage_tier === "full_timeline" &&
+    resp.display_mode === "odds_changes";
+
+  const chart = useMemo(() => {
+    if (!isFullTimeline || resp?.available !== true) return null;
+    const style = getComputedStyle(document.documentElement);
+    const readVar = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+    const colors: ChartColors = {
+      axis: readVar("--ink-3", "#82969d"),
+      grid: readVar("--border", "#203842"),
+      win: readVar("--win", "#68c994"),
+      draw: readVar("--draw", "#aaa79f"),
+      loss: readVar("--loss", "#ef7865"),
+    };
+    return build1x2Chart(resp.snapshots, colors);
+    // themeTick 只用来触发重新读取 CSS 变量,不直接参与计算
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resp, isFullTimeline, themeTick]);
 
   if (error) {
     return (
@@ -305,17 +359,77 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   }
 
   const markets = Array.from(new Set(resp.snapshots.map((s) => s.market)));
+  const observationCount = resp.observation_count ?? resp.snapshots.length;
+
+  // 每个市场归并出的公司行,数字块(简化态/完整态都要用)按这份数据渲染
+  const marketRows = markets.map((market) => {
+    const rows = resp.snapshots.filter((s) => s.market === market);
+    const fieldKeys = (MARKET_FIELDS[market] ?? []).map((f) => f.key);
+    const byCompany = new Map<string, typeof rows>();
+    for (const snap of rows) {
+      const list = byCompany.get(snap.company_id) ?? [];
+      list.push(snap);
+      byCompany.set(snap.company_id, list);
+    }
+    const companyRows = Array.from(byCompany.values()).map((list) =>
+      summarizeCompanyOdds(list, fieldKeys),
+    );
+    return { market, rows, companyRows };
+  });
+  const freshestRow = marketRows[0]?.companyRows[0] ?? null;
+
+  if (!isFullTimeline) {
+    // 简化态(免费档,或样本不足以画走势):只给数字块 + 说明,不出表格。
+    return (
+      <div>
+        {marketRows.map(({ market, companyRows }) => (
+          <div key={market} className={styles.marketBlock}>
+            {companyRows.map((row) => (
+              <OddsNumbers key={`${market}|${row.companyId}`} market={market} row={row} />
+            ))}
+          </div>
+        ))}
+        {freshestRow && (
+          <p className={styles.snapshotNote}>
+            这是 <LocalTime iso={freshestRow.observedAt} /> 采集到的快照,
+            <b>不是实时赔率</b>。本场只采集到 <span className="num">{observationCount}</span>{" "}
+            个观测点,不足以画走势,所以这里不画曲线。
+          </p>
+        )}
+        {resp.tier !== "full" && (
+          <p className={styles.permissionLine}>
+            未登录只展示这一条。
+            <Link
+              href={`/login?next=${encodeURIComponent(`/matches/${matchId}`)}`}
+              className={styles.permissionLink}
+            >
+              免费登录查看完整时间线 →
+            </Link>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const header = (fields: { key: string; label: string }[]) => (
+    <thead>
+      <tr>
+        <th>公司</th>
+        <th>阶段</th>
+        {fields.map((f) => (
+          <th key={f.key}>{f.label}</th>
+        ))}
+        <th>本站采集时间</th>
+        <th>来源声明时间</th>
+      </tr>
+    </thead>
+  );
 
   return (
     <div>
       <p className={styles.tierNote}>
-        {resp.display_mode === "current_odds"
-          ? "当前赔率:样本不足以绘制走势曲线;若来源报告的初盘与最新报价不同,已用「→」标出。"
-          : "赔率变化记录:默认展示每家公司的初盘→最新,完整历史可展开。"}
-        {" "}
-        {resp.tier === "full"
-          ? "完整快照时间线(已登录):同一公司同一市场,内容有变化才记录一条。"
-          : "延迟摘要(未登录):每公司每市场仅展示观察时间在 1 小时前的最新一条;登录后免费查看完整时间线。"}
+        赔率变化记录:默认展示每家公司的初盘→最新,完整历史可展开。
+        完整快照时间线(已登录):同一公司同一市场,内容有变化才记录一条。
         {resp.home_away_inverted &&
           " 注:该场来源主客方向与本站相反,数值已按本站主客口径换算。"}
       </p>
@@ -326,22 +440,16 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
         </div>
       )}
 
-      {markets.map((market) => {
+      {marketRows.map(({ market, companyRows }) => (
+        <div key={market} className={styles.marketBlock}>
+          {companyRows.map((row) => (
+            <OddsNumbers key={`${market}|${row.companyId}`} market={market} row={row} />
+          ))}
+        </div>
+      ))}
+
+      {marketRows.map(({ market, rows, companyRows }) => {
         const fields = MARKET_FIELDS[market] ?? [];
-        const rows = resp.snapshots.filter((s) => s.market === market);
-        // 默认精简:每家公司一行,初盘→最新有变化就用箭头标出;原始快照
-        // 全部保留在下方"完整历史"里,点击展开,不适合手机连续阅读的长表
-        // 不再默认铺开。
-        const byCompany = new Map<string, typeof rows>();
-        for (const snap of rows) {
-          const list = byCompany.get(snap.company_id) ?? [];
-          list.push(snap);
-          byCompany.set(snap.company_id, list);
-        }
-        const fieldKeys = fields.map((f) => f.key);
-        const companyRows = Array.from(byCompany.values()).map((list) =>
-          summarizeCompanyOdds(list, fieldKeys),
-        );
         const rawRow = (snap: OddsSnapshot, key: string) => {
           const g = flatOddsGroup(snap.payload);
           return (
@@ -362,25 +470,12 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
             </tr>
           );
         };
-        const header = (
-          <thead>
-            <tr>
-              <th>公司</th>
-              <th>阶段</th>
-              {fields.map((f) => (
-                <th key={f.key}>{f.label}</th>
-              ))}
-              <th>本站采集时间</th>
-              <th>来源声明时间</th>
-            </tr>
-          </thead>
-        );
         return (
           <div key={market} className={styles.marketBlock}>
             <h4 className={styles.marketTitle}>{MARKET_ZH[market] ?? market}</h4>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
-                {header}
+                {header(fields)}
                 <tbody>
                   {companyRows.map((row) => (
                     <tr key={`${market}|${row.companyId}`}>
@@ -418,7 +513,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
                 </summary>
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
-                    {header}
+                    {header(fields)}
                     <tbody>
                       {rows.map((snap, i) =>
                         rawRow(snap, `${groupLabel(snap)}|${snap.observed_at}|${i}`),

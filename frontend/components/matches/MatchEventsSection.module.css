@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -20,7 +20,7 @@
 }
 
 .home {
-  border-left: 3px solid var(--gold-300);
+  border-left: 3px solid var(--brand-teal);
 }
 
 .away {
@@ -57,7 +57,7 @@
 }
 
 .score {
-  color: var(--gold-300);
+  color: var(--brand-teal);
 }
 
 .team {
@@ -105,7 +105,7 @@
 }
 
 .cardYellow {
-  background: #e5c245;
+  background: var(--card-yellow);
 }
 
 .cardRed {

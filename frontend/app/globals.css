@@ -38,6 +38,8 @@
   --border-strong: #b8c6c6;
   /* 首页锁定对照卡底色(= --surface-soft,起独立别名避免组件里写死具体色值) */
   --lock-band: #eef2f2;
+  /* 黄牌图标专用色(比赛详情页事件 tab),深浅两套同值——黄牌就是黄牌 */
+  --card-yellow: #e5c245;
   /* cool neutrals */
   --ink: var(--brand-navy);
   --ink-2: #40535d;

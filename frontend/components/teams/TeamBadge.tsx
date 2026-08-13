@@ -4,12 +4,13 @@ import Image from "next/image";
 import { useState } from "react";
 import styles from "./TeamBadge.module.css";
 
-export type TeamBadgeSize = 24 | 28 | 32 | 40 | 48 | 56;
+export type TeamBadgeSize = 24 | 28 | 32 | 36 | 40 | 48 | 56;
 
 const SIZE_CLASS: Record<TeamBadgeSize, string> = {
   24: styles.size24,
   28: styles.size28,
   32: styles.size32,
+  36: styles.size36,
   40: styles.size40,
   48: styles.size48,
   56: styles.size56,

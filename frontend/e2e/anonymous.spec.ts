@@ -260,10 +260,12 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
     await expect(page.getByText(`盘口线 ${line}`)).toBeVisible();
   }
 
-  // 罚牌/大小球在种子数据上是有效信号(★★),必须渲染"数据倾向:"结论,
-  // 且明确不是投注建议措辞。
-  await expect(page.getByText(/数据倾向:偏大/)).toBeVisible();
-  await expect(page.getByText(/数据倾向:偏小/)).toBeVisible();
+  // 罚牌/大小球在种子数据上是有效信号(★★),必须渲染倾向结论(2026-08-14
+  // 重设计:结论区是"偏大/偏小"大字 + "数据倾向"小字说明两个独立元素,
+  // 不再是"数据倾向:偏大"一句话),且明确不是投注建议措辞。
+  await expect(page.getByText("偏大")).toBeVisible();
+  await expect(page.getByText("偏小")).toBeVisible();
+  await expect(page.getByText("数据倾向").first()).toBeVisible();
   // "推荐"不检测——"推荐待发布"是 QuickView 的合法状态文案,不是投注推荐,
   // 检测那个词会和自己的功能打架;真正禁止的措辞是"必胜"/"稳赚"/"红单"。
   await expect(page.getByText("必胜")).toHaveCount(0);
@@ -329,12 +331,13 @@ test("详情页免费概率投影(API 层)+ 本场看点不渲染任何概率(UI
   await expect(page.getByText("27%")).toHaveCount(0);
   await expect(page.getByText("25%")).toHaveCount(0);
 
-  // 本场看点(先结论后证据):推荐存在性状态 + 详细数据锚点。
+  // 本场看点(先结论后证据):推荐存在性状态。
   // 种子未发布任何推荐单 → 如实"推荐待发布",不得伪造已发布。
+  // 2026-08-14 重设计:内容分 tab(看点/数据/赔率)后,"查看详细数据↓"
+  // 锚点已删除——不再有"往下滚"这件事,断言随之移除。
   const quick = page.getByTestId("quick-view");
   await expect(quick).toBeVisible();
   await expect(quick.getByText("推荐待发布")).toBeVisible();
-  await expect(quick.getByRole("link", { name: /查看详细数据/ })).toBeVisible();
 });
 
 test("队徽走同源媒体路由:Web 源必须与 API 源返回同一张 PNG", async ({ request }) => {

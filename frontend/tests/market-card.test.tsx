@@ -33,15 +33,18 @@ const BASE: MarketCardData = {
 };
 
 describe("MarketCard 结论区", () => {
-  it("有信号时渲染倾向 + 星级 + 历史命中率", () => {
+  it("有信号时渲染倾向 + 星级 + 历史命中率(2026-08-14 重设计:倾向/命中率两格,不是一句话)", () => {
     render(<MarketCard card={BASE} />);
     expect(screen.getByText("罚牌")).not.toBeNull();
-    // "数据倾向:" 带冒号只在结论区出现;折叠区的说明文字是"数据倾向来自离线
-    // 历史回测",不带冒号——用冒号精确区分两处,避免两个断言互相打架。
-    expect(screen.getByText(/数据倾向:/)).not.toBeNull();
+    // 结论区是"偏大"(倾向格大字)+"数据倾向"(格下小字说明)两个独立元素,
+    // 不再是"数据倾向:偏大"这样一句话——用这两个断言精确区分两处,
+    // 避免和折叠区"倾向来自离线历史回测"这句话互相打架。
     expect(screen.getByText("偏大")).not.toBeNull();
+    expect(screen.getByText("数据倾向")).not.toBeNull();
     expect(screen.getByText("★★")).not.toBeNull();
-    expect(screen.getByText(/58%/)).not.toBeNull();
+    // "58%" 同时出现在结论格大字和下方说明句里,两处都是真实内容,不是重复渲染
+    expect(screen.getAllByText(/58%/).length).toBeGreaterThan(0);
+    expect(screen.getByText("历史命中率")).not.toBeNull();
   });
 
   it(
@@ -56,7 +59,9 @@ describe("MarketCard 结论区", () => {
         hit_rate: 0.5148, // 真实存在的数字,但不该被展示成"信号"
       };
       render(<MarketCard card={card} />);
-      expect(screen.queryByText(/数据倾向:/)).toBeNull();
+      expect(screen.queryByText("偏大")).toBeNull();
+      expect(screen.queryByText("偏小")).toBeNull();
+      expect(screen.getByText("暂无倾向")).not.toBeNull();
       expect(screen.getByText(/样本外测试中不够稳定/)).not.toBeNull();
       // hit_rate 的具体数值不应该被当结论展示出来
       expect(screen.queryByText(/51%/)).toBeNull();

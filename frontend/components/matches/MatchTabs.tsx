@@ -22,17 +22,17 @@ export type MatchTabKey = "shots" | "stats" | "lineup" | "events" | "overview";
 /**
  * 顺序即优先级,第一个是默认。
  *
- * 2026-08-12 重排:此前默认落「总览」,而完赛后 QuickView 不渲染,总览里只剩
- * 证据块(已下架)和文字战绩列表 —— **默认第一屏是全页最弱的一屏**,
- * 而最强的射门内容藏在第三个 tab 里。现在射门(威胁时间轴 + xG 累积曲线 +
- * 射门落点图)排第一并设为默认,总览退到最后。
+ * 2026-08-12 曾把默认从「总览」改成「射门」(彼时总览里只剩已下架的证据块和
+ * 文字战绩列表,是全页最弱的一屏)。2026-08-14 比赛详情页重设计(Claude
+ * Design 定稿)把总览重组为"看点+数据倾向/近期表现+图表/赔率+关键变化"
+ * 三段式内容后,总览重新是信息密度最高的一屏,默认与顺序都改回总览第一。
  */
 const TABS: { key: MatchTabKey; label: string }[] = [
+  { key: "overview", label: "总览" },
   { key: "shots", label: "射门" },
   { key: "stats", label: "统计" },
   { key: "lineup", label: "阵容" },
   { key: "events", label: "事件" },
-  { key: "overview", label: "总览" },
 ];
 
 export function MatchTabs({
@@ -48,7 +48,7 @@ export function MatchTabs({
   stats: ReactNode;
   events: ReactNode;
 }) {
-  const [active, setActive] = useState<MatchTabKey>("shots");
+  const [active, setActive] = useState<MatchTabKey>("overview");
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;

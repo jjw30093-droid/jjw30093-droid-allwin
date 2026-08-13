@@ -85,10 +85,12 @@ describe("flatOddsGroup 归一(与后端 normalize_odds_payload 同规则)", () 
 });
 
 describe("OddsTimeline 扁平 payload(审计 B2 的直接回归)", () => {
-  it("渲染真实数值而非 —", async () => {
+  it("渲染真实数值而非 —(current_odds 简化态:大数字块,取代原表格)", async () => {
     mockOddsResponse(fullTimelineBody([FLAT_SNAP]));
     render(<OddsTimeline matchId={1} />);
-    await waitFor(() => expect(screen.queryByText("Bet365")).not.toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
     expect(screen.getByText("0.99")).not.toBeNull();   // 主队水位
     expect(screen.getByText("1.25")).not.toBeNull();   // 盘口线
     expect(screen.getByText("0.91")).not.toBeNull();   // 客队水位
@@ -96,20 +98,17 @@ describe("OddsTimeline 扁平 payload(审计 B2 的直接回归)", () => {
   });
 });
 
-describe("OddsTimeline 嵌套 payload(实时轮询形状,不得回归)", () => {
+describe("OddsTimeline 嵌套 payload,tier=full 且 display_mode=odds_changes(实时轮询形状,不得回归)", () => {
   it(
     "initial 与 latest 不同时,用箭头显示真实变化(2026-08-12 修复:此前只显示" +
       " latest 却打「初盘」标签,盘口真实变化从未展示)",
     async () => {
-      mockOddsResponse(fullTimelineBody([NESTED_SNAP]));
+      mockOddsResponse(fullTimelineBody([NESTED_SNAP], { display_mode: "odds_changes" }));
       render(<OddsTimeline matchId={1} />);
-      await waitFor(() => expect(screen.queryByText("Bet365")).not.toBeNull());
+      await waitFor(() => expect(screen.queryByText("有变动")).not.toBeNull());
       expect(screen.getByText("1.02 → 0.97")).not.toBeNull();
       expect(screen.getByText("0.88 → 0.93")).not.toBeNull();
       expect(screen.queryByText("—")).toBeNull();
-      // 只有一条快照,却真实发生了变化——必须标出来,不能因为"只有一个
-      // observed_at"就退化成"无变化可显示"。
-      expect(screen.getByText("有变动")).not.toBeNull();
     },
   );
 
@@ -121,13 +120,30 @@ describe("OddsTimeline 嵌套 payload(实时轮询形状,不得回归)", () => {
         latest: { home: 0.97, line: 1.25, away: 0.93 },
       },
     };
-    mockOddsResponse(fullTimelineBody([stable]));
+    mockOddsResponse(fullTimelineBody([stable], { display_mode: "odds_changes" }));
     render(<OddsTimeline matchId={1} />);
-    await waitFor(() => expect(screen.queryByText("Bet365")).not.toBeNull());
-    expect(screen.getByText("0.97")).not.toBeNull();
-    // "→" 会出现在 current_odds 提示文案里(说明箭头功能存在),这里只需要
-    // 确认数据单元格没有画箭头——用"有变动"标签的缺失来精确断言这一点。
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    expect(screen.getAllByText("0.97").length).toBeGreaterThan(0);
+    // "→" 会出现在数字块/表格之外的说明文案里,这里只需要确认数据单元格
+    // 没有画箭头——用"有变动"标签的缺失来精确断言这一点。
     expect(screen.queryByText("有变动")).toBeNull();
+  });
+});
+
+describe("OddsTimeline tier=full 但 display_mode=current_odds(样本不足以画走势,退化成简化态)", () => {
+  it("大数字块显示 latest 值,不画箭头、不出表格(2026-08-14 重设计)", async () => {
+    mockOddsResponse(fullTimelineBody([NESTED_SNAP]));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    expect(screen.getByText("0.97")).not.toBeNull();
+    expect(screen.getByText("0.93")).not.toBeNull();
+    expect(screen.queryByText("1.02 → 0.97")).toBeNull();
+    expect(screen.queryByText("有变动")).toBeNull();
+    expect(screen.getByText(/不是实时赔率/)).not.toBeNull();
   });
 });
 

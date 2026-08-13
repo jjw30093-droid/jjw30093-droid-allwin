@@ -53,6 +53,15 @@
   font-size: 11px;
 }
 
+.size36 {
+  width: 36px;
+  height: 36px;
+}
+
+.size36.fallback {
+  font-size: 12px;
+}
+
 .size40 {
   width: 40px;
   height: 40px;

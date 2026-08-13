@@ -11,18 +11,33 @@
 
 import { useEffect, useState } from "react";
 
-function formatCountdown(ms: number): string {
+function formatCountdown(ms: number, variant: "suffix" | "prefix"): string {
   if (ms <= 0) return "已开球";
   const totalMinutes = Math.floor(ms / 60_000);
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
+  if (variant === "prefix") {
+    // 比赛详情页头部:开球时间已经单独一行展示,这里只补"还有多久",
+    // 不重复"开球"两个字;精确到小时,不像首页那样细到分钟。
+    if (days > 0) return `还有 ${days} 天 ${hours} 小时`;
+    if (hours > 0) return `还有 ${hours} 小时`;
+    return `还有 ${minutes} 分钟`;
+  }
   if (days > 0) return `${days}天${hours}小时后开球`;
   if (hours > 0) return `${hours}小时${minutes}分钟后开球`;
   return `${minutes}分钟后开球`;
 }
 
-export function KickoffCountdown({ iso }: { iso: string }) {
+export function KickoffCountdown({
+  iso,
+  variant = "suffix",
+}: {
+  iso: string;
+  /** "suffix"(默认,首页用):"1天3小时后开球"。"prefix"(比赛详情页头部用):
+   * "还有 1 天 3 小时",配合旁边已经展示的完整开球时间使用。 */
+  variant?: "suffix" | "prefix";
+}) {
   const [nowMs, setNowMs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -38,5 +53,7 @@ export function KickoffCountdown({ iso }: { iso: string }) {
   }, []);
 
   if (nowMs === null) return null;
-  return <span className="num">{formatCountdown(new Date(iso).getTime() - nowMs)}</span>;
+  return (
+    <span className="num">{formatCountdown(new Date(iso).getTime() - nowMs, variant)}</span>
+  );
 }
