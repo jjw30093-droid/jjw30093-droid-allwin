@@ -1,0 +1,89 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wrapCompact {
+  composes: wrap;
+  gap: 4px;
+}
+
+.bar {
+  display: flex;
+  width: 100%;
+  height: 9px;
+  gap: 2px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: var(--border);
+}
+
+.wrapCompact .bar {
+  height: 6px;
+}
+
+.segHome,
+.segDraw,
+.segAway {
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+
+.segHome {
+  background: var(--win);
+}
+
+.segDraw {
+  background: var(--draw);
+}
+
+.segAway {
+  background: var(--loss);
+}
+
+.labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.wrapCompact .labels {
+  font-size: 11.5px;
+}
+
+.labelHome,
+.labelDraw,
+.labelAway {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.labelHome b {
+  color: var(--win);
+}
+
+.labelDraw b {
+  color: var(--draw);
+}
+
+.labelAway b {
+  color: var(--loss);
+}
+
+.labelHome b,
+.labelDraw b,
+.labelAway b {
+  font-weight: 700;
+}
+
+@media (max-width: 360px) {
+  .labels {
+    font-size: 11px;
+  }
+}

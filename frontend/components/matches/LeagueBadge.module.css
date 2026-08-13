@@ -1,0 +1,21 @@
+.badge {
+  display: inline-block;
+  flex: none;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.size14 {
+  width: 14px;
+  height: 14px;
+}
+
+.size16 {
+  width: 16px;
+  height: 16px;
+}
+
+.size20 {
+  width: 20px;
+  height: 20px;
+}
