@@ -250,8 +250,11 @@ export default async function WdlPredictionsPage({
         <span className={styles.seasonChip}>{data.season}</span>
       </div>
       <p className={styles.membershipNote}>
-        此页为匿名公开视图(免费层)。完整三项概率需 Pro 会员并登录后查看,详见
-        「会员」页;本页展示不构成投注建议。
+        此页为匿名公开视图。
+        <Link href={`/login?next=/league/${id}/wdl-predictions`}>
+          登录后免费查看完整三项概率
+        </Link>
+        ;本页展示不构成投注建议。
       </p>
 
       <TopBar season={data.season} nextRoundMatches={nextRoundMatches} />

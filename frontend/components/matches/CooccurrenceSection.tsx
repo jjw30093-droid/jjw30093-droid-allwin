@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * 同期事件(比赛详情页第 6 区块;时间共现,不声称因果)。
- * 匿名/Free/Pro(无 report:deep):后端只给计数;Pro 深度报告权益给明细。
+ * 关键变化(比赛详情页第 6 区块;时间共现,不声称因果)。
+ * 区块标题与 <section> 由本组件自带:加载中/加载失败/无内容时整个区块
+ * 不渲染("暂无同期事件"对用户没有价值,空标题也不占屏)。
+ * 匿名(无 report:deep):后端只给计数;深度报告权益给明细。
  * 文案只允许"同期/同时段检测到",禁止任何因果表述(宪法 §6.4)。
  */
 
@@ -58,52 +60,38 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
     setError(false);
     setAttempt((n) => n + 1);
   }, []);
+  void retry;
 
-  if (error) {
-    return (
-      <div className={styles.stateBox}>
-        同期事件数据加载失败。
-        <button type="button" onClick={retry} className={styles.retryBtn}>
-          重试
-        </button>
-      </div>
-    );
-  }
-  if (resp == null) {
-    return (
-      <div className={styles.skeleton} aria-label="同期事件加载中">
-        <span className={styles.skelLine} />
-        <span className={styles.skelLine} />
-      </div>
-    );
-  }
-  if (resp.count === 0) {
-    return (
-      <div className={styles.stateBox}>
-        暂无同期事件:系统未在固定时间窗内同时检测到赔率变化与阵容/伤停变化。
-      </div>
-    );
-  }
+  // 加载中/加载失败/确认无内容:整个区块不渲染(不展示空标题与占位文案)
+  if (error || resp == null || resp.count === 0) return null;
+
   if (resp.items == null) {
     return (
-      <div className={styles.stateBox}>
-        系统共检测到 <b className="num">{resp.count}</b> 组同期事件
-        (固定时间窗内,赔率变化与阵容/伤停变化在同一时段出现)。
-        <p className={styles.lockNote}>
-          明细为 Pro 深度报告内容。
-          <Link href="/pricing" className={styles.lockLink}>
-            了解会员权益 →
-          </Link>
-        </p>
-      </div>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>关键变化</h2>
+        <div className={styles.stateBox}>
+          本站共检测到 <b className="num">{resp.count}</b> 组同时段变化
+          (固定时间窗内,赔率变化与阵容/伤停变化在同一时段出现)。
+          <p className={styles.lockNote}>
+            明细登录后免费查看。
+            <Link
+              href={`/login?next=${encodeURIComponent(`/matches/${matchId}`)}`}
+              className={styles.lockLink}
+            >
+              免费登录 →
+            </Link>
+          </p>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div>
+    <section className={styles.section}>
+      <h2 className={styles.sectionTitle}>关键变化</h2>
       <p className={styles.countLine}>
         共 <b className="num">{resp.count}</b>{" "}
-        组同期事件。以下为时间共现记录:同一时间窗内观察到两类变化,不代表二者存在因果关系。
+        组同时段变化。以下为时间共现记录:同一时间窗内观察到两类变化,不代表二者存在因果关系。
       </p>
       <ul className={styles.list}>
         {resp.items.map((item, i) => {
@@ -114,7 +102,7 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
                 <span className={styles.itemTime}>
                   <LocalTime iso={item.odds_moved_at} />
                 </span>
-                <span>系统检测到赔率变化:{describeOddsMove(item)}</span>
+                <span>本站采集到赔率变化:{describeOddsMove(item)}</span>
               </div>
               <div className={styles.itemLine}>
                 <span className={styles.itemTime}>
@@ -132,6 +120,6 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
           );
         })}
       </ul>
-    </div>
+    </section>
   );
 }

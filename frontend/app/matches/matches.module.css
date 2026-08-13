@@ -4,6 +4,13 @@
   padding: 32px 20px 64px;
 }
 
+@media (max-width: 640px) {
+  .page {
+    /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 .header {
   display: flex;
   align-items: baseline;
@@ -91,8 +98,8 @@
 .proBadge {
   margin-left: 6px;
   font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  letter-spacing: 0.04em;
   color: var(--gold-300);
   border: 1px solid var(--gold-700);
   border-radius: var(--r-pill);
@@ -269,5 +276,5 @@
 .widenNote {
   margin: 0 0 12px;
   font-size: 13px;
-  color: var(--ink-soft);
+  color: var(--ink-3);
 }

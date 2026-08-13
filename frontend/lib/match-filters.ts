@@ -28,3 +28,45 @@ export function buildMatchesHref(
   const value = query.toString();
   return value ? `/matches?${value}` : "/matches";
 }
+
+/**
+ * 构造 `/api/v1/matches` 的请求query串 —— 服务端 SSR(匿名口径)与浏览器端
+ * 会员刷新(见 MatchListLive)共用同一份映射,不允许出现第二套各自维护、
+ * 迟早漂移的参数拼接逻辑。
+ */
+export function buildMatchesApiQuery(
+  filters: MatchFilters,
+  opts: { limit: number; windowOverride?: MatchFilters["window"] },
+): string {
+  const { date, league, season, status, content, q, page } = filters;
+  const window = opts.windowOverride ?? filters.window;
+  const qs = new URLSearchParams();
+  if (date) qs.set("date", date);
+  if (league != null) qs.set("league_id", String(league));
+  if (season) qs.set("season", season);
+  if (status !== "all") qs.set("status", status);
+  qs.set("window", window);
+  if (content) qs.set("content", content);
+  if (q) qs.set("q", q);
+  qs.set("limit", String(opts.limit));
+  qs.set("offset", String((page - 1) * opts.limit));
+  return qs.toString();
+}
+
+/**
+ * 默认视图(status=upcoming 且用户未显式指定 window/date/season/q)在赛季
+ * 间歇期会是 0 场——这个条件决定"要不要自动放宽到全部未来赛程"。SSR 与
+ * 浏览器端刷新必须用同一个判据,否则会员刷新后的放宽时机会和匿名首屏不一致。
+ */
+export function isWindowAutoWidenEligible(
+  filters: Pick<MatchFilters, "date" | "season" | "q" | "status">,
+  windowExplicit: boolean,
+): boolean {
+  return (
+    filters.status === "upcoming" &&
+    !windowExplicit &&
+    !filters.date &&
+    !filters.season &&
+    !filters.q
+  );
+}

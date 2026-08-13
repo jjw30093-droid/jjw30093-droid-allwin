@@ -3,6 +3,13 @@
   margin: 0 auto;
   padding: 32px 20px 64px;
 }
+@media (max-width: 640px) {
+  .page {
+    /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 
 .title {
   font-size: 22px;
@@ -32,16 +39,6 @@
   line-height: 1.6;
 }
 
-.devNote {
-  font-size: 12.5px;
-  color: var(--gold-300);
-  background: var(--surface-2);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--r-control);
-  padding: 8px 12px;
-  margin: 12px 0 0;
-}
-
 .footNote {
   font-size: 12.5px;
   color: var(--ink-3);
@@ -54,75 +51,6 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.qrBox {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  background: var(--bg-2);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--r-control);
-  padding: 16px;
-  margin-bottom: 12px;
-  min-height: 96px;
-  justify-content: center;
-}
-
-.qrHint {
-  font-size: 12px;
-  color: var(--ink-3);
-  letter-spacing: 0.06em;
-}
-
-.qrUrl {
-  font-family: var(--font-latin), monospace;
-  font-size: 12.5px;
-  color: var(--gold-300);
-  word-break: break-all;
-  line-height: 1.6;
-}
-
-/* 真二维码:白底色块保证扫码对比度(站点深色主题下同样可扫) */
-.qrCanvas {
-  display: block;
-  width: 200px;
-  height: 200px;
-  max-width: 100%;
-  border-radius: 8px;
-  background: #fff;
-  align-self: center;
-}
-
-.qrFallback {
-  margin-bottom: 12px;
-}
-
-.qrFallbackSummary {
-  cursor: pointer;
-  font-size: 12.5px;
-  color: var(--ink-3);
-  padding: 4px 0;
-}
-
-.qrFallback[open] .qrFallbackSummary {
-  margin-bottom: 8px;
-}
-
-.qrFallback .qrUrl {
-  display: block;
-  margin-bottom: 8px;
-}
-
-.countdown {
-  font-size: 13px;
-  color: var(--ink-2);
-}
-
-.dim {
-  color: var(--ink-3);
-  font-size: 13.5px;
 }
 
 .errText {

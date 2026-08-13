@@ -1,0 +1,51 @@
+.wrap {
+  width: 100%;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.controlLabel {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.segmented button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.segmented .active {
+  background: var(--brand-teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}

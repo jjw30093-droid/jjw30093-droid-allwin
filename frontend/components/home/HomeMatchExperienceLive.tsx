@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clientFetch, type MatchListResponse } from "@/lib/api-v1";
 import { selectHomepageMatches, type HomeMatchCard } from "@/lib/homepage";
+import { KickoffCountdown } from "@/components/matches/KickoffCountdown";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { LeagueBadge } from "@/components/matches/LeagueBadge";
 import { WinProbabilityBar } from "@/components/matches/WinProbabilityBar";
@@ -124,18 +125,17 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
       <article className={styles.heroCard} data-testid="featured-match-card">
         <header className={styles.heroHeader}>
           <div>
-            <p className={styles.heroKicker}>
-              {featuredKicker(card)}
-              <span>
-                <LeagueBadge leagueId={match.league_id} size={16} />
-                {LEAGUE_ZH[match.league_id] ?? `联赛 ${match.league_id}`}
-              </span>
-            </p>
+            <p className={styles.heroKicker}>{featuredKicker(card)}</p>
             <p className={styles.heroKickoff}>
               {match.kickoff_at_utc ? (
                 <LocalTime iso={match.kickoff_at_utc} fallback={match.date_utc} />
               ) : (
                 match.date_utc
+              )}
+              {match.kickoff_at_utc && (
+                <span className={styles.heroCountdown}>
+                  <KickoffCountdown iso={match.kickoff_at_utc} />
+                </span>
               )}
             </p>
           </div>
@@ -147,7 +147,13 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
               <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={48} eager />
               <span>{match.home.name}</span>
             </span>
-            <b>vs</b>
+            <span className={styles.heroVsCol}>
+              <span className={styles.heroLeague}>
+                <LeagueBadge leagueId={match.league_id} size={14} />
+                {LEAGUE_ZH[match.league_id] ?? `联赛 ${match.league_id}`}
+              </span>
+              <b>vs</b>
+            </span>
             <span className={styles.heroTeam}>
               <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={48} eager />
               <span>{match.away.name}</span>
@@ -218,15 +224,11 @@ function SecondaryMatchCard({ card }: { card: HomeMatchCard }) {
         </span>
       </div>
       <div className={styles.secondaryTeams}>
-        <div className={styles.secondaryTeam}>
-          <strong>{match.home.name}</strong>
-        </div>
-        <div className={styles.secondaryTeam}>
-          <span className={styles.secondaryVs} aria-hidden>
-            vs
-          </span>
-          <strong>{match.away.name}</strong>
-        </div>
+        <strong className={styles.secondaryTeamName}>{match.home.name}</strong>
+        <span className={styles.secondaryVs} aria-hidden>
+          vs
+        </span>
+        <strong className={styles.secondaryTeamName}>{match.away.name}</strong>
       </div>
       {match.win_probability ? (
         <div className={styles.secondaryProb}>

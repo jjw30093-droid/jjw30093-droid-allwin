@@ -4,6 +4,13 @@
   padding: 0 16px 56px;
 }
 
+@media (max-width: 640px) {
+  .page {
+    /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 .heroSection {
   margin-top: 14px;
 }
@@ -36,18 +43,40 @@
   font-weight: 900;
 }
 
-.heroKicker span {
-  padding-left: 8px;
-  border-left: 1px solid var(--border-strong);
+.heroKickoff {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 3px 0 0;
   color: var(--ink-2);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.heroCountdown {
+  color: var(--gold-300);
+  font-size: 12px;
   font-weight: 700;
 }
 
-.heroKickoff {
-  margin: 2px 0 0;
+/* 联赛队徽+名浮在 h1 网格中列的 vs 上方(站长要求),不再放进 heroKicker */
+.heroVsCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.heroLeague {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--ink-3);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-cn), system-ui, sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .syncBadge {
@@ -136,7 +165,7 @@
 
 .conclusionLabel {
   color: #a8c1ca;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -165,7 +194,7 @@
 .conclusionSource {
   margin: 9px 0 0;
   color: #b9cbd2;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .conclusionPending {
@@ -206,7 +235,7 @@
 
 .evidenceHead span {
   color: var(--ink-3);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .evidenceList {
@@ -247,6 +276,13 @@
   color: var(--ink-3);
 }
 
+/* ── 胜平负概率条(Bet365 1x2 去水,替代原"近期战绩"面板) ───── */
+
+.winProbSection {
+  padding: 16px 20px 18px;
+  border-top: 1px solid var(--border);
+}
+
 .heroFooter {
   display: flex;
   align-items: center;
@@ -260,7 +296,7 @@
 .heroFooter p {
   margin: 0;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .primaryAction {
@@ -326,7 +362,7 @@
 
 .secondaryViewport {
   display: grid;
-  grid-auto-columns: minmax(245px, 282px);
+  grid-auto-columns: minmax(176px, 204px);
   grid-auto-flow: column;
   gap: 9px;
   overflow-x: auto;
@@ -370,57 +406,57 @@
 }
 
 .secondaryMeta span:last-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
   overflow: hidden;
-  text-align: right;
   text-overflow: ellipsis;
 }
 
+/* 对阵一行平铺(站长要求:不要上下两行),两队名对称省略号截断 */
 .secondaryTeams {
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  min-height: 50px;
-}
-
-.secondaryTeam {
   display: flex;
-  min-width: 0;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  min-height: 34px;
 }
 
-.secondaryTeam strong {
+.secondaryTeamName {
+  flex: 1 1 0;
+  min-width: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.secondaryTip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 5px;
-  border-top: 1px solid var(--border);
+.secondaryTeams .secondaryTeamName:first-child {
+  text-align: right;
 }
 
-.secondaryTip span,
-.secondaryPending {
-  color: var(--ink-2);
+.secondaryTeams .secondaryTeamName:last-child {
+  text-align: left;
+}
+
+.secondaryVs {
+  flex: none;
+  color: var(--ink-3);
   font-size: 11px;
-  font-weight: 800;
 }
 
-.secondaryTip strong {
-  color: var(--brand-teal);
-  font-size: 22px;
-  line-height: 1;
+.secondaryProb {
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
 }
 
 .secondaryPending {
   padding-top: 5px;
   border-top: 1px solid var(--border);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .secondaryAll {
@@ -831,7 +867,16 @@
   }
 
   .heroKickoff {
-    font-size: 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+
+  .heroCountdown {
+    font-size: 10.5px;
+  }
+
+  .heroLeague {
+    font-size: 9.5px;
   }
 
   .syncBadge {
@@ -951,7 +996,7 @@
   }
 
   .secondaryViewport {
-    grid-auto-columns: 72vw;
+    grid-auto-columns: 56vw;
     margin-inline: -12px;
     padding-inline: 12px;
     scroll-padding-inline: 12px;
@@ -1043,4 +1088,179 @@
   .skelLine {
     animation: none;
   }
+}
+
+/* ── 今晚/明天/未来7天 计数条 ──────────────────────────── */
+
+.countsBar {
+  margin: 0 0 14px;
+}
+
+.countsRow {
+  display: flex;
+  gap: 8px;
+}
+
+.countItem {
+  flex: 1 1 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  text-decoration: none;
+  color: var(--ink-1);
+}
+
+.countItemEmpty {
+  opacity: 0.6;
+}
+
+.countLabel {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.countNum {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.countUnit {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.countsFallback {
+  margin: 8px 2px 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.countsFallback a {
+  color: var(--gold-300);
+  margin-left: 6px;
+  text-decoration: none;
+}
+
+/* ── 今日更新状态 ─────────────────────────────────────────── */
+
+.freshnessLine {
+  margin: 6px 2px 14px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+
+/* ── 今日精选卡 ─────────────────────────────────────────── */
+
+.picksCard {
+  margin: 26px 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 18px 20px;
+}
+
+.picksHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.picksHead h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.picksBadge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-300);
+  border: 1px solid var(--gold-300);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.picksNote {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+.picksActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.picksPrimary {
+  display: inline-block;
+  background: var(--gold-grad);
+  color: #fff;
+  border-radius: var(--r-control);
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.picksGhost {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink-2);
+}
+
+/* ── 推荐战绩摘要 ──────────────────────────────────────── */
+
+.recoSummary {
+  margin: 26px 0 0;
+}
+
+.recoSummaryRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.recoSummaryItem {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recoSummaryItem b {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.recoSummaryItem span {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ── 今日精选:文字链接(首页只保留重点卡一个最强按钮) ── */
+
+.picksLink {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brand-teal);
+  text-decoration: none;
+  margin-right: 18px;
 }

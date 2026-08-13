@@ -6,7 +6,13 @@ export function buildLeagueSeasonHref(
   leagueId: string,
   section: string,
   season?: string,
+  /** 排名页专用:总榜/主场/客场/近期/xG 榜。缺省(all)不写进 URL。 */
+  tableType?: string,
 ): string {
   const base = `/league/${leagueId}/${section}`;
-  return season ? `${base}?season=${encodeURIComponent(season)}` : base;
+  const params = new URLSearchParams();
+  if (season) params.set("season", season);
+  if (tableType && tableType !== "all") params.set("table_type", tableType);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
 }

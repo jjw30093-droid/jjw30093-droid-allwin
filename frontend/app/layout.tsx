@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Oswald, Noto_Sans_SC } from "next/font/google";
 import { SiteNav } from "@/components/SiteNav";
+import { SiteFooter } from "@/components/SiteFooter";
 import "./globals.css";
 
 const oswald = Oswald({
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body>
         <SiteNav />
         {children}
+        <SiteFooter />
       </body>
     </html>
   );

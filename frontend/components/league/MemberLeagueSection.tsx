@@ -30,6 +30,7 @@ import { PlayerBoards } from "./PlayerBoards";
 import { SeasonSwitcher } from "./SeasonSwitcher";
 import { StandingsTable } from "./StandingsTable";
 import { TeamStatsBoards } from "./TeamStatsBoards";
+import { TeamQuadrantChart } from "./TeamQuadrantChart";
 import styles from "./MemberLeagueSection.module.css";
 
 type SectionData =
@@ -95,25 +96,26 @@ export function MemberLeagueSection({
   }
 
   if (state.phase === "gate") {
+    // 登录后回到当前联赛页,而不是首页(路由段与 API kind 刻意不同:
+    // fixtures 的路由是 "matches",见 lib/league-links.ts 头注释)。
+    const routeSection = kind === "fixtures" ? "matches" : kind;
+    const nextPath = `/league/${leagueId}/${routeSection}${
+      season ? `?season=${encodeURIComponent(season)}` : ""
+    }`;
     return (
       <div className={styles.gateBox}>
-        <h2 className={styles.gateTitle}>该联赛数据为 Pro 会员内容</h2>
+        <h2 className={styles.gateTitle}>登录后即可免费查看该联赛数据</h2>
         <p className={styles.gateText}>
           {state.status === 401
-            ? "登录并开通 Pro 会员后,即可查看该联赛的排名、赛程与数据榜。"
-            : "当前账号尚未开通 Pro 会员,开通后即可查看该联赛的完整数据。"}
+            ? "免费登录后,即可查看该联赛的排名、赛程与数据榜;登录完成后会返回本页。"
+            : "当前账号暂无该联赛权限,请重新登录后重试;若仍受限请联系站长。"}
         </p>
         <div className={styles.gateActions}>
-          {state.status === 401 && (
-            <a className={styles.btnPrimary} href="/login">
-              登录
-            </a>
-          )}
           <a
-            className={state.status === 401 ? styles.btnSecondary : styles.btnPrimary}
-            href="/pricing"
+            className={styles.btnPrimary}
+            href={`/login?next=${encodeURIComponent(nextPath)}`}
           >
-            查看会员方案
+            登录
           </a>
         </div>
       </div>
@@ -186,6 +188,8 @@ export function MemberLeagueSection({
       return (
         <>
           {switcher}
+          {/* 会员加载路径必须和服务端渲染路径同构,否则登录后反而少一张图 */}
+          <TeamQuadrantChart rows={data.body.rows} />
           <TeamStatsBoards rows={data.body.rows} />
         </>
       );

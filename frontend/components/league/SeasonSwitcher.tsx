@@ -17,6 +17,7 @@ export function SeasonSwitcher({
   seasons,
   selected,
   resolved,
+  tableType,
 }: {
   leagueId: string;
   section: string;
@@ -26,6 +27,8 @@ export function SeasonSwitcher({
   selected?: string;
   /** 后端实际解析并返回的赛季,用于"自动"链接的可见提示与无障碍标签。 */
   resolved?: string;
+  /** 排名页当前榜别(all/home/away/form/xg);切赛季时必须带着走,否则会掉回总榜。 */
+  tableType?: string;
 }) {
   if (seasons.length === 0) return null;
 
@@ -55,7 +58,7 @@ export function SeasonSwitcher({
         </span>
       )}
       <Link
-        href={buildLeagueSeasonHref(leagueId, section)}
+        href={buildLeagueSeasonHref(leagueId, section, undefined, tableType)}
         className={isAuto ? styles.chipActive : styles.chip}
         aria-current={isAuto ? "page" : undefined}
         aria-label={autoLabel}
@@ -71,7 +74,7 @@ export function SeasonSwitcher({
         return (
           <Link
             key={season}
-            href={buildLeagueSeasonHref(leagueId, section, season)}
+            href={buildLeagueSeasonHref(leagueId, section, season, tableType)}
             className={active ? styles.chipActive : styles.chip}
             aria-current={active ? "page" : undefined}
             data-testid="season-switcher-chip"

@@ -18,80 +18,82 @@ function kickoffOf(card: HomeMatchCard): string {
 }
 
 /**
- * 2026-08-07 J 联赛跨年新赛季首轮开幕的一次性首页编排。
- *
- * 这是明确指定的一次性活动置顶,不是通用"运营置顶"框架——CLAUDE.md 不为
- * "以后可能用到"提前抽象,过期后这段常量与 selectFeaturedOverride 应直接
- * 删除,不要沉淀成常驻配置项。
- *
- * 规则:首轮最早开球的横滨水手 vs 鹿岛鹿角(match_id 5803519,
- * 2026-08-07T10:25:00Z,数据库真实查询得出的该轮最早开球场次)置顶为首页
- * 热门;开球 2 小时后自动切换为瑞典超(67)/挪威超(59)当时离现在最近的
- * 一场比赛(不区分未来还是刚开球/进行中,单纯按 |kickoff-now| 最小)。
+ * 联赛档位——只用于同一时间点附近多场比赛的打平判据,不是"谁更重要"的
+ * 编辑判断。五大联赛+南美头部联赛的开球时段本身就天然错开(北京时间 EPL
+ * 晚场约 23 点,西甲/意甲约 3 点,巴甲清晨约 5 点),按开球时间就近排序时
+ * 自然会跟着这个节奏轮换;这张表只用来处理同一时段撞车的情况。
  */
-export const HOMEPAGE_FEATURE_EVENT = {
-  pinnedMatchId: 5803519,
-  pinnedKickoffUtc: "2026-08-07T10:25:00Z",
-  pinWindowHours: 2,
-  fallbackLeagueIds: [67, 59] as const,
+const LEAGUE_TIER_RANK: Record<number, number> = {
+  47: 0, // 英超
+  87: 1, // 西甲
+  55: 1, // 意甲
+  54: 1, // 德甲
+  53: 1, // 法甲
+  268: 2, // 巴甲
+};
+function tierOf(card: HomeMatchCard): number {
+  return LEAGUE_TIER_RANK[card.match.league_id] ?? 9;
+}
+
+/** 一场比赛"点进去有没有东西看"的真实判据。 */
+export type MatchDataSignals = {
+  /** 双方球队都有历史射门数据 → 赛前射门分布图画得出来(/matches?content=shots) */
+  withShots: ReadonlySet<number>;
 };
 
 /**
- * 覆盖规则的选择结果;null 表示不适用覆盖,调用方应回退到
- * selectHomepageMatches 的默认结果。
+ * 数据富集度打分:0 = 点进去基本空白,越大内容越厚。
+ *
+ * 射门图权重高于赔率,因为它是**视觉型**证据(一屏 200-300 个真实落点),
+ * 而赔率目前每场只有 2-4 个观测点、只能显示两点变化条。
  */
-export function selectFeaturedOverride(
-  candidates: HomeMatchCard[],
-  nordicCandidates: HomeMatchCard[],
-  now: Date,
-): HomeMatchCard | null {
-  const pinEndMs =
-    new Date(HOMEPAGE_FEATURE_EVENT.pinnedKickoffUtc).getTime() +
-    HOMEPAGE_FEATURE_EVENT.pinWindowHours * 3600_000;
-
-  if (now.getTime() < pinEndMs) {
-    const pinned = candidates.find(
-      (c) => c.match.match_id === HOMEPAGE_FEATURE_EVENT.pinnedMatchId,
-    );
-    if (pinned) return pinned;
-    // 置顶场次这段时间理应总能取到;取不到时不伪造,直接落到下面的
-    // 北欧回退或最终的默认算法,不在这里报错阻断首页渲染。
-  }
-
-  if (nordicCandidates.length === 0) return null;
-  const nowMs = now.getTime();
-  return [...nordicCandidates].sort((a, b) => {
-    const da = Math.abs(new Date(kickoffOf(a)).getTime() - nowMs);
-    const db = Math.abs(new Date(kickoffOf(b)).getTime() - nowMs);
-    return da - db;
-  })[0];
-}
-
-function hasValidPublicTip(card: HomeMatchCard): boolean {
-  const probability = card.tip?.top_probability;
-  return (
-    typeof probability === "number" &&
-    Number.isFinite(probability) &&
-    probability >= 0 &&
-    probability <= 1
-  );
+export function dataRichness(card: HomeMatchCard, signals: MatchDataSignals): number {
+  let score = 0;
+  if (signals.withShots.has(card.match.match_id)) score += 2;
+  const tier = card.match.odds_coverage_tier;
+  if (tier === "full_timeline") score += 1;
+  else if (tier === "open_close_only") score += 1;
+  return score;
 }
 
 /**
- * 首页重点比赛的唯一选择规则:
- * 先选具有合法匿名公开概率的最近比赛;没有公开概率时退化到最近开球比赛。
+ * 首页重点比赛的选择规则(2026-08-12 第二版:data-aware)。
+ *
+ * 第一版只按"开球时间与当前时刻的接近程度"排序,完全不看这场比赛有没有数据。
+ * 实测后果(未来 7 天 78 场):**24 场(31%)射门与赔率都没有**;而本周赛程
+ * 最多的四个联赛——英冠 12 / 巴甲 10 / 葡超 9 / 荷甲 9 共 40 场(51%)——
+ * 在 dim_match 里 0 场完赛、0 行射门、0 行球队统计,是 2026-08-10 才接入的
+ * 纯赛程壳。也就是说从短视频点进首页,约 1/3 概率重点卡指向一场什么都没有的
+ * 比赛 —— 这对"用数据建立信任"的链路是直接反效果。
+ *
+ * 现在的排序键:
+ *   1. 数据富集度(有射门史 / 有赔率)—— 空页面永远不做重点;
+ *   2. 开球时间与当前时刻的接近程度(同富集度内,最近的一场自然成为重点);
+ *   3. 联赛档位(同时段撞车时打平)。
+ *
+ * 注意富集度只做粗分档,不做连续排序 —— 否则会把一场三天后的英超顶到今晚
+ * 开球的比赛前面,那同样不合理。
+ *
  * 返回的新数组不会修改 API 原始顺序。
  */
-export function selectHomepageMatches(cards: HomeMatchCard[]): {
+export function selectHomepageMatches(
+  cards: HomeMatchCard[],
+  now: Date = new Date(),
+  signals: MatchDataSignals = { withShots: new Set<number>() },
+): {
   featured: HomeMatchCard | null;
   secondary: HomeMatchCard[];
   ordered: HomeMatchCard[];
 } {
+  const nowMs = now.getTime();
   const ordered = [...cards].sort((a, b) => {
-    const predictionPriority =
-      Number(hasValidPublicTip(b)) - Number(hasValidPublicTip(a));
-    if (predictionPriority !== 0) return predictionPriority;
-    return kickoffOf(a).localeCompare(kickoffOf(b));
+    const ra = dataRichness(a, signals);
+    const rb = dataRichness(b, signals);
+    if (ra !== rb) return rb - ra;
+    const da = Math.abs(new Date(kickoffOf(a)).getTime() - nowMs);
+    const db = Math.abs(new Date(kickoffOf(b)).getTime() - nowMs);
+    if (da !== db) return da - db;
+    return tierOf(a) - tierOf(b);
   });
 
   return {
@@ -99,6 +101,46 @@ export function selectHomepageMatches(cards: HomeMatchCard[]): {
     secondary: ordered.slice(1),
     ordered,
   };
+}
+
+export type HeroForm = {
+  name: string;
+  results: string[];
+  w: number;
+  d: number;
+  l: number;
+};
+
+/**
+ * 首页重点卡的近期战绩对比 —— 取自 analysis bundle 的 form_compare chart spec。
+ *
+ * 为什么用它替代原来的 evidence 列表:evidence 是 backend/studio/bundle.py 里
+ * 一串硬编码 if/else 模板,实测 200 场未来比赛中 **84 场(42%)为空**,而最高频
+ * 的一类 `rest`(休息天数)因为 `_rest_days` 只查上一场完赛、不区分休赛期,
+ * 中位数 24 天、最大 1917.8 天 —— 那是错误信息,不是弱信息。
+ * form_compare 则是 200/200 场都有,且直接来自真实比分。
+ */
+export function heroForms(
+  analysis: AnalysisBundle | null,
+): { home: HeroForm; away: HeroForm } | null {
+  const spec = analysis?.chart_specs?.find((s) => s.type === "form_compare");
+  if (!spec) return null;
+  const d = spec.data as Record<string, unknown>;
+  const build = (results: unknown, name: unknown): HeroForm | null => {
+    if (!Array.isArray(results) || results.length === 0) return null;
+    const list = results.map(String);
+    return {
+      name: String(name ?? ""),
+      results: list,
+      w: list.filter((r) => r === "W").length,
+      d: list.filter((r) => r === "D").length,
+      l: list.filter((r) => r === "L").length,
+    };
+  };
+  const home = build(d.home, d.home_name);
+  const away = build(d.away, d.away_name);
+  if (!home || !away) return null;
+  return { home, away };
 }
 
 /**

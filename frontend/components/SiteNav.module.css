@@ -230,7 +230,7 @@
     left: 0;
     z-index: 60;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     min-height: calc(58px + env(safe-area-inset-bottom));
     padding: 3px 6px env(safe-area-inset-bottom);
     border-top: 1px solid var(--border-strong);
@@ -248,7 +248,7 @@
     align-content: center;
     gap: 2px;
     color: var(--ink-3);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-decoration: none;
   }

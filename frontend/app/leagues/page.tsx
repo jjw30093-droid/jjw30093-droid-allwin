@@ -77,9 +77,9 @@ export default async function LeaguesPage() {
                   <dd>
                     {league.accessible
                       ? "当前可访问"
-                      : league.requires_pro
-                        ? "需要 Pro"
-                        : "需要会员权限"}
+                      : league.requires_login
+                        ? "登录后免费查看"
+                        : "需要登录"}
                   </dd>
                 </div>
                 <div>
@@ -97,17 +97,20 @@ export default async function LeaguesPage() {
               <div className={styles.actions}>
                 {available ? (
                   // 有数据即给入口(审计 B4):此前 `accessible` 参与决定链接存废,
-                  // 而它来自匿名 SSR 取数——Pro/Premium 也看到"查看会员权限"、
-                  // 全站没有任何指向付费联赛页面的链接。目标页自带门禁引导
-                  // (MemberLeagueSection),链接过去对任何身份都是安全的;
-                  // accessible 只决定是否附带 Pro 徽标。
+                  // 而它来自匿名 SSR 取数——已登录用户也看不到任何指向受限
+                  // 联赛页面的链接。目标页自带门禁引导(MemberLeagueSection),
+                  // 链接过去对任何身份都是安全的;accessible 只决定是否附带
+                  // 登录提示(登录即免费解锁,不存在付费联赛)。
                   <>
                     <Link href={`/league/${league.league_id}/standings`}>排名</Link>
                     <Link href={`/league/${league.league_id}/matches`}>赛程</Link>
                     <Link href={`/league/${league.league_id}/team-stats`}>球队数据</Link>
                     {!league.accessible && (
-                      <Link href="/pricing" className={styles.proHint}>
-                        Pro 解锁
+                      <Link
+                        href={`/login?next=/league/${league.league_id}/standings`}
+                        className={styles.proHint}
+                      >
+                        登录后免费查看
                       </Link>
                     )}
                   </>

@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest";
+import { officialOnTargetSum } from "@/components/charts/ShotMapExplorer";
+
+// 最小可用的 ShotMapData fixture:两支球队各打了两场,team 1 主场对 team 2、
+// team 1 客场对 team 3。official_stats 覆盖三支球队在这几场的官方口径。
+const data = {
+  pitch: { length: 105, width: 68 },
+  coordinate_note: "",
+  window: 5,
+  teams: [
+    { team_id: 1, name: "队A", side: "home" },
+    { team_id: 2, name: "队B", side: "away" },
+  ],
+  recent_sets: {},
+  matches: [
+    { match_id: 100, date_utc: "2026-01-01", home: { team_id: 1, name: "队A" }, away: { team_id: 2, name: "队B" } },
+    { match_id: 101, date_utc: "2026-01-08", home: { team_id: 3, name: "队C" }, away: { team_id: 1, name: "队A" } },
+    { match_id: 102, date_utc: "2026-01-15", home: { team_id: 1, name: "队A" }, away: { team_id: 4, name: "队D" } },
+  ],
+  shots: [],
+  official_stats: [
+    { match_id: 100, team_id: 1, shots_on_target: 5, blocked_shots: 2, total_shots: 10 },
+    { match_id: 100, team_id: 2, shots_on_target: 3, blocked_shots: 1, total_shots: 8 },
+    { match_id: 101, team_id: 3, shots_on_target: 4, blocked_shots: 3, total_shots: 12 },
+    { match_id: 101, team_id: 1, shots_on_target: 2, blocked_shots: 0, total_shots: 6 },
+    // 102 场故意不给官方数据,模拟 fact_team_match_stats 缺失
+  ],
+};
+
+describe("officialOnTargetSum(官方口径射正)", () => {
+  it("created 视角:直接按 teamId 汇总本队射正", () => {
+    const r = officialOnTargetSum(data, [100, 101], 1, "created");
+    // 队A 在 100 场 5 + 101 场 2 = 7,均有官方数据
+    expect(r).toEqual({ value: 7, covered: 2, total: 2 });
+  });
+
+  it("conceded 视角:按每场对手 team_id 取值,不是固定队伍", () => {
+    // 队A 视角"对手射正":100 场对手是队B(3),101 场对手是队C(4)
+    const r = officialOnTargetSum(data, [100, 101], 1, "conceded");
+    expect(r).toEqual({ value: 7, covered: 2, total: 2 });
+  });
+
+  it("部分场次缺官方数据:未覆盖的场次不计入总和,但计入 total", () => {
+    const r = officialOnTargetSum(data, [100, 101, 102], 1, "created");
+    expect(r.value).toBe(7); // 102 场没有官方数据,不贡献
+    expect(r.covered).toBe(2);
+    expect(r.total).toBe(3);
+  });
+
+  it("完全没有官方数据的场次集合:value 为 null,不是 0", () => {
+    // 0 是"官方统计射正为 0"的真实值,不能用来表示"没有数据"
+    const r = officialOnTargetSum(data, [102], 1, "created");
+    expect(r).toEqual({ value: null, covered: 0, total: 1 });
+  });
+
+  it("空场次列表:value 为 null", () => {
+    expect(officialOnTargetSum(data, [], 1, "created")).toEqual({
+      value: null,
+      covered: 0,
+      total: 0,
+    });
+  });
+
+  it("单场(selectedMatchId 场景)按同样逻辑工作", () => {
+    const r = officialOnTargetSum(data, [100], 1, "created");
+    expect(r).toEqual({ value: 5, covered: 1, total: 1 });
+  });
+});

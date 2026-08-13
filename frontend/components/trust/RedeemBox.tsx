@@ -14,9 +14,9 @@ import { LocalTime } from "./LocalTime";
 import styles from "./RedeemBox.module.css";
 
 const PLAN_ZH: Record<string, string> = {
-  free: "免费",
-  pro: "Pro",
-  premium: "Premium",
+  free: "游客",
+  member: "注册用户",
+  daily_picks: "每日精选",
 };
 
 type AuthState = "loading" | "anonymous" | "authenticated" | "unknown";
@@ -81,8 +81,8 @@ export function RedeemBox() {
 
       {auth === "anonymous" && (
         <p className={styles.loginHint}>
-          兑换码需要登录后使用。
-          <Link href="/login" className={styles.loginLink}>
+          兑换码需要登录后使用;首次微信扫码会自动创建账号。
+          <Link href="/login?next=/pricing" className={styles.loginLink}>
             前往登录
           </Link>
         </p>
@@ -123,12 +123,12 @@ export function RedeemBox() {
         <p className={styles.success} role="status">
           兑换成功:{PLAN_ZH[success.planId] ?? success.planId} 已生效,有效期至{" "}
           <LocalTime utc={success.endsAt} />
-          。刷新页面后可见完整会员内容。
+          。刷新页面后即可查看对应内容。
         </p>
       )}
 
       <p className={styles.note}>
-        当前未接入线上支付,会员通过兑换码或管理员开通;开通与撤销均有审计记录。
+        当前未接入线上支付,精选授权通过兑换码或站长开通;开通与撤销均有审计记录。
       </p>
     </div>
   );

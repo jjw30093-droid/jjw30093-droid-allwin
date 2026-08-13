@@ -1,0 +1,176 @@
+.wrap {
+  width: 100%;
+}
+
+.legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+
+.legendHome {
+  color: var(--gold-300);
+  font-weight: 700;
+}
+
+.legendAway {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+/* 球场底(线条画在 CSS 层,与图表 0..105/0..68 逻辑坐标 1:1 对齐:
+ * 图表 grid 四边距为 0,轴范围即球场边界) */
+.pitchWrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 105 / 68; /* 图表挂载前占位同一纵横比,挂载后与图表像素高一致 */
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.halfLine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border);
+}
+
+.centerCircle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 17%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+.box {
+  position: absolute;
+  top: 21%;
+  bottom: 21%;
+  width: 15.7%;
+  border: 1px solid var(--border);
+}
+
+.boxLeft {
+  left: 0;
+  border-left: none;
+}
+
+.boxRight {
+  right: 0;
+  border-right: none;
+}
+
+.chart {
+  position: relative;
+}
+
+/* EChart 封装自带的可见摘要在球场层里隐藏(会撑破装饰线的定位基准);
+   同一段摘要由组件在球场下方另行渲染,aria-label 不受影响 */
+.chart :global(.chart-summary) {
+  display: none;
+}
+
+.empty {
+  color: var(--ink-3);
+  font-size: 13.5px;
+}
+
+/* ── 筛选控件(export 模式隐藏:截图里的按钮是死的) ────────── */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.segmented button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  padding: 5px 11px;
+  min-height: 32px;
+  cursor: pointer;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.segmented .active {
+  background: var(--brand-teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip,
+.chipOn,
+.reset {
+  appearance: none;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  padding: 4px 11px;
+  min-height: 30px;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.chipOn {
+  background: var(--gold-hi);
+  border-color: var(--gold-500);
+  color: var(--gold-900);
+  font-weight: 600;
+}
+
+.reset {
+  border-style: dashed;
+  color: var(--ink-3);
+}
+
+/* 筛选后无结果:盖在球场上给一句话,而不是留一张空球场让人以为坏了 */
+.noMatch {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}

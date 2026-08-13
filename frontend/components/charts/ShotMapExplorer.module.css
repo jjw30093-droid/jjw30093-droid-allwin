@@ -1,0 +1,316 @@
+.explorer {
+  display: grid;
+  gap: 14px;
+}
+
+.reportHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reportHeader h3,
+.eyebrow {
+  margin: 0;
+}
+
+.reportHeader h3 {
+  margin-top: 4px;
+  color: var(--ink);
+  font-family: var(--font-latin), sans-serif;
+  font-size: clamp(20px, 4vw, 26px);
+  letter-spacing: 0.01em;
+}
+
+.eyebrow {
+  color: var(--brand-teal);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.coverageBadge {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: var(--brand-teal);
+  background: color-mix(in srgb, var(--brand-teal) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand-teal) 28%, var(--border));
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.filterPanel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.filterRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterLabel {
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: 9px;
+}
+
+.segmented button,
+.chips button,
+.scopeToggle button,
+.matchRail button {
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.segmented button {
+  min-width: 0;
+  padding: 7px 9px;
+  overflow: hidden;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmented button.active {
+  color: #fff;
+  background: var(--brand-teal);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-teal) 24%, transparent);
+}
+
+.scopeToggle,
+.chips {
+  display: flex;
+  gap: 4px;
+}
+
+.scopeToggle button,
+.chips button {
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.scopeToggle button.scopeActive,
+.chips button.chipActive {
+  color: var(--brand-teal);
+  background: color-mix(in srgb, var(--brand-teal) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--brand-teal) 35%, var(--border));
+}
+
+.matchRail {
+  display: flex;
+  gap: 7px;
+  padding: 2px 1px 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+}
+
+.matchRail button {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 1px;
+  min-height: 46px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  scroll-snap-align: start;
+}
+
+.matchRail button span {
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.matchRail button.matchActive {
+  color: var(--brand-teal);
+  background: color-mix(in srgb, var(--brand-teal) 8%, var(--surface));
+  border-color: var(--brand-teal);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.statGrid div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 6px;
+  text-align: center;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.statGrid div:last-child {
+  border-right: 0;
+}
+
+.statGrid span {
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.statGrid strong {
+  color: var(--ink);
+  font-family: var(--font-latin), sans-serif;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.pitchCard {
+  overflow: hidden;
+  padding: 10px 10px 0;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(47, 193, 171, 0.12), transparent 42%),
+    linear-gradient(160deg, #0b4d4a 0%, #07383d 60%, #062c34 100%);
+  border: 1px solid rgba(91, 220, 198, 0.54);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.pitchTopline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 4px 0;
+  color: rgba(230, 248, 244, 0.82);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.chartInner :global(.chart-summary) {
+  margin: 0 -10px;
+  padding: 10px 13px 11px;
+  color: #effaf7;
+  background: rgba(2, 25, 31, 0.55);
+  border-top: 1px solid rgba(119, 225, 207, 0.22);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 13px;
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1px solid #06323a;
+  border-radius: 50%;
+}
+
+.legend .goalDot {
+  background: #ffd166;
+  border-color: #7a5000;
+}
+
+.legend .savedDot {
+  background: #45dcc7;
+}
+
+.legend .otherDot {
+  background: #eef6f5;
+}
+
+.legend .sizeLegend i {
+  width: 13px;
+  height: 13px;
+  background: transparent;
+  border-color: var(--ink-3);
+}
+
+.note {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+@media (max-width: 620px) {
+  .filterRow {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .filterRow .scopeToggle {
+    grid-column: 2;
+  }
+
+  .reportHeader {
+    align-items: center;
+  }
+
+  .coverageBadge {
+    padding-inline: 7px;
+  }
+
+  .pitchCard {
+    margin-inline: -2px;
+  }
+}
+
+@media (max-width: 390px) {
+  .filterPanel {
+    padding: 10px;
+  }
+
+  .segmented button {
+    padding-inline: 6px;
+    font-size: 11px;
+  }
+
+  .scopeToggle button,
+  .chips button {
+    padding-inline: 7px;
+  }
+}

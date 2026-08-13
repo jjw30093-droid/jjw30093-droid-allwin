@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MatchSummary, TrackRecordResponse } from "@/lib/api-v1";
 import type { HomeMatchCard } from "@/lib/homepage";
 import {
-  HOMEPAGE_FEATURE_EVENT,
   publicRecordView,
-  selectFeaturedOverride,
   selectHomepageEvidence,
   selectHomepageMatches,
 } from "@/lib/homepage";
@@ -25,6 +23,7 @@ function match(
       status: "NotStarted",
       home: { id: matchId * 10, name: `主队${matchId}` },
       away: { id: matchId * 10 + 1, name: `客队${matchId}` },
+      requires_login: false,
     } as MatchSummary,
     tip:
       probability == null
@@ -37,73 +36,91 @@ function match(
   };
 }
 
-describe("selectHomepageMatches", () => {
-  it("优先选择有合法公开概率的最近比赛,并从其他比赛中排除", () => {
-    const noTipSooner = match(1, "2026-07-30T12:00:00Z");
-    const featured = match(2, "2026-07-31T12:00:00Z", 0.58);
-    const laterTip = match(3, "2026-08-01T12:00:00Z", 0.52);
+describe("selectHomepageMatches:data-aware(空页面永远不做重点)", () => {
+  const now = new Date("2026-08-12T12:00:00Z");
 
-    const result = selectHomepageMatches([laterTip, noTipSooner, featured]);
+  it("有射门史的比赛顶掉时间更近但什么数据都没有的比赛", () => {
+    // 实测背景:未来 7 天 78 场里 24 场(31%)射门与赔率都没有,而本周赛程最多的
+    // 四个联赛(英冠/巴甲/葡超/荷甲)在 dim_match 里 0 场完赛、0 行射门 ——
+    // 旧的纯"时间就近"规则会让约 1/3 的首页重点卡指向一场空白比赛。
+    const emptySooner = match(1, "2026-08-12T12:10:00Z");
+    const richLater = match(2, "2026-08-14T12:00:00Z");
+
+    const result = selectHomepageMatches([emptySooner, richLater], now, {
+      withShots: new Set([2]),
+    });
 
     expect(result.featured?.match.match_id).toBe(2);
-    expect(result.secondary.map((card) => card.match.match_id)).not.toContain(2);
-    expect(result.secondary.map((card) => card.match.match_id)).toEqual([3, 1]);
   });
 
-  it("没有预测时退化到最近开球比赛并保持分析准备中所需的 null tip", () => {
-    const result = selectHomepageMatches([
-      match(9, "2026-08-03T12:00:00Z"),
-      match(8, "2026-08-02T12:00:00Z"),
-    ]);
+  it("同为有数据时仍按开球时间就近(富集度只做粗分档,不做连续排序)", () => {
+    const soon = match(3, "2026-08-12T12:30:00Z");
+    const later = match(4, "2026-08-15T12:00:00Z");
+
+    const result = selectHomepageMatches([later, soon], now, {
+      withShots: new Set([3, 4]),
+    });
+
+    expect(result.featured?.match.match_id).toBe(3);
+  });
+
+  it("赔率也算数据:有赔率的比赛顶掉两样都没有的", () => {
+    const nothing = match(5, "2026-08-12T12:05:00Z");
+    const withOdds = match(6, "2026-08-13T12:00:00Z");
+    withOdds.match.odds_coverage_tier = "open_close_only";
+
+    const result = selectHomepageMatches([nothing, withOdds], now, {
+      withShots: new Set(),
+    });
+
+    expect(result.featured?.match.match_id).toBe(6);
+  });
+
+  it("全都没有数据时退化为纯时间就近(不因此崩溃或空选)", () => {
+    const result = selectHomepageMatches(
+      [match(7, "2026-08-14T12:00:00Z"), match(8, "2026-08-12T13:00:00Z")],
+      now,
+      { withShots: new Set() },
+    );
 
     expect(result.featured?.match.match_id).toBe(8);
-    expect(result.featured?.tip).toBeNull();
   });
 });
 
-describe("selectFeaturedOverride(2026-08-07 J 联赛开幕一次性置顶)", () => {
-  const pinned = match(
-    HOMEPAGE_FEATURE_EVENT.pinnedMatchId,
-    HOMEPAGE_FEATURE_EVENT.pinnedKickoffUtc,
-    null,
-    223,
-  );
+describe("selectHomepageMatches(2026-08-12 改版:按开球时间就近排序)", () => {
+  it("选中开球时间离当前最近的一场,不论是刚开球还是即将开球", () => {
+    const now = new Date("2026-08-12T12:00:00Z");
+    const justKickedOff = match(1, "2026-08-12T11:30:00Z"); // 30min 前
+    const soon = match(2, "2026-08-12T12:20:00Z"); // 20min 后(离 now 更近)
+    const farAway = match(3, "2026-08-15T12:00:00Z");
 
-  it("置顶窗口内(开球前)有该场次则选中,不看有没有公开概率", () => {
-    const now = new Date("2026-08-06T12:00:00Z"); // 开球前一天
-    const other = match(1, "2026-08-07T09:00:00Z", 0.9, 47);
-    const result = selectFeaturedOverride([other, pinned], [], now);
-    expect(result?.match.match_id).toBe(HOMEPAGE_FEATURE_EVENT.pinnedMatchId);
+    const result = selectHomepageMatches([justKickedOff, soon, farAway], now);
+
+    expect(result.featured?.match.match_id).toBe(2);
+    expect(result.secondary.map((c) => c.match.match_id)).toEqual([1, 3]);
   });
 
-  it("置顶窗口内(开球后 2 小时内)仍然选中", () => {
-    const now = new Date("2026-08-07T12:00:00Z"); // 开球后 1h35m
-    const result = selectFeaturedOverride([pinned], [], now);
-    expect(result?.match.match_id).toBe(HOMEPAGE_FEATURE_EVENT.pinnedMatchId);
+  it("同一时刻撞车时按联赛档位打平(英超 > 西甲/意甲/德甲/法甲 > 巴甲 > 其它)", () => {
+    const now = new Date("2026-08-12T12:00:00Z");
+    const eliteserien = match(1, "2026-08-12T12:05:00Z", null, 59); // 挪超
+    const laliga = match(2, "2026-08-12T12:05:00Z", null, 87); // 西甲
+    const epl = match(3, "2026-08-12T12:05:00Z", null, 47); // 英超
+
+    const result = selectHomepageMatches([eliteserien, laliga, epl], now);
+
+    expect(result.featured?.match.match_id).toBe(3); // 英超优先
+    expect(result.secondary.map((c) => c.match.match_id)).toEqual([2, 1]);
   });
 
-  it("过了开球 2 小时后,从北欧候选里选离当前时间最近的一场", () => {
-    const now = new Date("2026-08-07T13:00:00Z"); // 开球后 2h35m,已过窗口
-    const allsvenskan = match(201, "2026-08-07T14:00:00Z", null, 67); // 1h 后
-    const eliteserien = match(202, "2026-08-07T16:00:00Z", null, 59); // 3h 后
-    const result = selectFeaturedOverride(
-      [pinned],
-      [eliteserien, allsvenskan],
+  it("五大联赛休赛期(候选池只有小联赛)自动退化为纯粹的时间就近", () => {
+    const now = new Date("2026-08-12T00:00:00Z");
+    const result = selectHomepageMatches(
+      [match(9, "2026-08-13T12:00:00Z"), match(8, "2026-08-12T06:00:00Z")],
       now,
     );
-    expect(result?.match.match_id).toBe(201);
-  });
 
-  it("过了窗口且没有北欧候选时返回 null,交给默认算法兜底", () => {
-    const now = new Date("2026-08-07T13:00:00Z");
-    expect(selectFeaturedOverride([pinned], [], now)).toBeNull();
-  });
-
-  it("置顶窗口内但置顶场次不在候选池里时不伪造,落到北欧回退", () => {
-    const now = new Date("2026-08-07T12:00:00Z");
-    const allsvenskan = match(201, "2026-08-07T12:30:00Z", null, 67);
-    const result = selectFeaturedOverride([], [allsvenskan], now);
-    expect(result?.match.match_id).toBe(201);
+    expect(result.featured?.match.match_id).toBe(8); // 更接近 now
+    expect(result.featured?.tip).toBeNull(); // tip 字段照常透传,不参与排序
   });
 });
 

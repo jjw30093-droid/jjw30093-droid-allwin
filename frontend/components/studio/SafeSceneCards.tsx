@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { SpecChart, type ChartSpec } from "@/components/charts/SpecCharts";
 import { fmtUtc } from "./api";
 import type {
   DouyinSafeProfile,
@@ -113,16 +114,31 @@ export function SafeSceneCard({
   profile,
   scene,
   height,
+  chartSpecs = [],
 }: {
   profile: DouyinSafeProfile;
   scene: SafeSceneId;
   height: 1920 | 1350;
+  /**
+   * 来自 analysis_bundle 的图表规格。安全版此前**一张图都没有**,只有纯 CSS
+   * 双色条 —— 实测导出的 PNG 下方约 25% 是纯空白,而站长要的是"数据可视化
+   * 做得更用心"。这里给"禁区威胁"场景补一张真实射门分布图(空间即解释)。
+   *
+   * 只取 shot_map_explorer:它不含任何概率/赔率字段,不会破坏
+   * backend/studio/team_style.py::assert_safe_content 守的抖音过审边界。
+   */
+  chartSpecs?: ChartSpec[];
 }) {
   const data = profile.scenes.find((item) => item.id === scene);
   if (!data) return null;
   const { match } = profile;
   const isCover = scene === "cover";
   const isSummary = scene === "summary";
+  // 禁区威胁场景补射门图;其余场景保持原样(指标对比条信息密度已经够)
+  const shotSpec =
+    scene === "threat"
+      ? chartSpecs.find((s) => s.type === "shot_map_explorer") ?? null
+      : null;
   return (
     <article
       className={styles.card}
@@ -203,7 +219,8 @@ export function SafeSceneCard({
               </span>
             </div>
             <div className={styles.metricList}>
-              {data.metrics.slice(0, 3).map((metric) => (
+              {/* 有射门图时指标压到 2 条,给图留出版面;否则保持 3 条 */}
+              {data.metrics.slice(0, shotSpec ? 2 : 3).map((metric) => (
                 <MetricRow
                   key={metric.key}
                   metric={metric}
@@ -215,6 +232,17 @@ export function SafeSceneCard({
                 <p className={styles.missing}>这组指标暂不可用，未以 0 填充。</p>
               )}
             </div>
+            {shotSpec && (
+              <div className={styles.chartBox}>
+                <span className={styles.chartCaption}>近 5 场射门落点</span>
+                {/* export 模式:大字号、关动画、隐藏筛选控件 */}
+                <SpecChart
+                  spec={shotSpec}
+                  height={height >= 1600 ? 560 : 400}
+                  mode="export"
+                />
+              </div>
+            )}
             {data.conclusions[0] && (
               <p className={styles.takeaway}><span>观察</span>{data.conclusions[0]}</p>
             )}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiErrorMessage, clientFetch, readCsrfToken, wechatLoginUrl } from "@/lib/api-v1";
+import { ApiError, apiErrorMessage, clientFetch, readCsrfToken } from "@/lib/api-v1";
 
 describe("readCsrfToken", () => {
   it("parses the allwin_csrf cookie", () => {
@@ -11,14 +11,6 @@ describe("readCsrfToken", () => {
   it("returns empty string when absent", () => {
     document.cookie = "allwin_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     expect(readCsrfToken()).toBe("");
-  });
-});
-
-describe("wechatLoginUrl", () => {
-  it("URL-encodes next path and never auto-navigates", () => {
-    const url = wechatLoginUrl("/matches?date=2026-08-21");
-    expect(url).toContain("/api/v1/auth/wechat/oa/start?next=");
-    expect(url).toContain(encodeURIComponent("/matches?date=2026-08-21"));
   });
 });
 

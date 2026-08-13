@@ -10,8 +10,10 @@
  * 本组件与 MemberLeagueSection 同构:浏览器带 credentials 重试同一端点,
  * - 已开通会员 → 并行补拉 prediction/analysis/related,渲染与 SSR 完全相同的
  *   MatchDetailBody(公共 HTML 外壳不因登录态变化,宪法 §10.2);
- * - 401(未登录)→ 登录 + 会员方案引导;
- * - 403(已登录无权益)→ 会员方案引导;
+ * - 401(未登录)→ 门禁卡片(带真实赛事信息 + 扫码登录,见 LeagueGateCard);
+ *   member 基线权益覆盖全部联赛(见 platform 0009),登录用户不会撞到同一
+ *   门禁,因此不再区分"已登录但无权益"的 403 分支——审计确认该分支在生产
+ *   不可达,是死文案。
  * - 404 → 比赛不存在的诚实说明;
  * - 其他错误 → 可重试错误态。
  */
@@ -23,19 +25,20 @@ import {
   clientFetch,
   type MatchDetailResponse,
   type MatchListResponse,
+  type MatchReportResponse,
   type MatchSummary,
-  type PredictionResponse,
 } from "@/lib/api-v1";
 import {
   MatchDetailBody,
   type AnalysisBundle,
 } from "@/components/matches/MatchDetailBody";
+import { LeagueGateCard, type GateInfo } from "@/components/matches/LeagueGateCard";
 import styles from "@/components/league/MemberLeagueSection.module.css";
 
 type LoadedData = {
   detail: MatchDetailResponse;
-  prediction: PredictionResponse | null;
   analysis: AnalysisBundle | null;
+  report: MatchReportResponse | null;
   previousMatch: MatchSummary | null;
   nextMatch: MatchSummary | null;
 };
@@ -43,7 +46,7 @@ type LoadedData = {
 type State =
   | { phase: "loading" }
   | { phase: "data"; data: LoadedData }
-  | { phase: "gate"; status: 401 | 403 }
+  | { phase: "gate"; info: GateInfo }
   | { phase: "notfound" }
   | { phase: "error" };
 
@@ -66,11 +69,11 @@ export function MemberMatchDetail({
       const detail = await clientFetch<MatchDetailResponse>(
         `/api/v1/matches/${matchId}`,
       );
-      const [prediction, analysis, related] = await Promise.all([
-        clientFetch<PredictionResponse>(
-          `/api/v1/matches/${matchId}/prediction`,
-        ).catch(() => null),
+      const [analysis, report, related] = await Promise.all([
         clientFetch<AnalysisBundle>(`/api/v1/matches/${matchId}/analysis`).catch(
+          () => null,
+        ),
+        clientFetch<MatchReportResponse>(`/api/v1/matches/${matchId}/report`).catch(
           () => null,
         ),
         clientFetch<MatchListResponse>(
@@ -81,8 +84,8 @@ export function MemberMatchDetail({
       const idx = relatedMatches.findIndex((item) => item.match_id === matchId);
       return {
         detail,
-        prediction,
         analysis,
+        report,
         previousMatch: idx > 0 ? relatedMatches[idx - 1] : null,
         nextMatch:
           idx >= 0 && idx + 1 < relatedMatches.length
@@ -97,7 +100,18 @@ export function MemberMatchDetail({
       .catch((e) => {
         if (cancelled) return;
         if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-          setState({ phase: "gate", status: e.status });
+          const d = e.details ?? {};
+          setState({
+            phase: "gate",
+            info: {
+              leagueName: typeof d.league_name === "string" ? d.league_name : undefined,
+              round: typeof d.round === "string" ? d.round : null,
+              homeTeam: typeof d.home_team === "string" ? d.home_team : undefined,
+              awayTeam: typeof d.away_team === "string" ? d.away_team : undefined,
+              kickoffAtUtc:
+                typeof d.kickoff_at_utc === "string" ? d.kickoff_at_utc : null,
+            },
+          });
         } else if (e instanceof ApiError && e.status === 404) {
           setState({ phase: "notfound" });
         } else {
@@ -125,29 +139,7 @@ export function MemberMatchDetail({
   }
 
   if (state.phase === "gate") {
-    return (
-      <div className={styles.gateBox}>
-        <h2 className={styles.gateTitle}>该联赛的比赛详情为 Pro 会员内容</h2>
-        <p className={styles.gateText}>
-          {state.status === 401
-            ? "登录并开通 Pro 会员后,即可查看该场比赛的完整数据、模型概率与赔率信息。"
-            : "当前账号尚未开通 Pro 会员,开通后即可查看该场比赛的完整数据与赔率信息。"}
-        </p>
-        <div className={styles.gateActions}>
-          {state.status === 401 && (
-            <a className={styles.btnPrimary} href="/login">
-              登录
-            </a>
-          )}
-          <a
-            className={state.status === 401 ? styles.btnSecondary : styles.btnPrimary}
-            href="/pricing"
-          >
-            查看会员方案
-          </a>
-        </div>
-      </div>
-    );
+    return <LeagueGateCard matchId={matchId} info={state.info} />;
   }
 
   if (state.phase === "notfound") {
@@ -183,8 +175,8 @@ export function MemberMatchDetail({
     <MatchDetailBody
       idNum={matchId}
       detail={data.detail}
-      prediction={data.prediction}
       analysis={data.analysis}
+      report={data.report}
       returnTo={returnTo}
       returnLabel={returnLabel}
       previousMatch={data.previousMatch}

@@ -243,6 +243,20 @@ function Editor({
     }
   };
 
+  /**
+   * 导出时真正生效的 profile —— 必须与实际渲染的那一套一致。
+   *
+   * 修 409:profileId 默认 "douyin-safe-v1",但当 social_profiles 里没有安全版
+   * 数据时(team_style_profiles 为空的库),UI 退回渲染内部版、"内部完整分析版"
+   * 标签也显示为选中态,而 profileId 仍是 douyin-safe-v1 → 导出请求照发 →
+   * 后端找不到 safe profile 直接 409。结果是默认状态下**任何导出都失败**,
+   * 必须先手动点一次"内部完整分析版"。这里让 profile 跟随实际渲染结果。
+   */
+  const exportProfileId: StudioProfileId =
+    profileId === "douyin-safe-v1" && draft && douyinSafeProfile(draft.bundle) !== null
+      ? "douyin-safe-v1"
+      : "internal-full-v1";
+
   /* ── 服务端导出(TXT/JSON/SRT) ──────────────────── */
 
   const serverExport = async (kind: "txt" | "json" | "srt") => {
@@ -254,7 +268,7 @@ function Editor({
         const ok = await doSave();
         if (!ok) return;
       }
-      const res = await requestExport(draft.id, kind, profileId);
+      const res = await requestExport(draft.id, kind, exportProfileId);
       if (res.side !== "server" || !res.download_url)
         throw new Error("后端未返回下载地址");
       await downloadServerExport(
@@ -263,9 +277,9 @@ function Editor({
           draft.match_id,
           kind,
           kind,
-          profileId === "douyin-safe-v1" ? null : res.model_version,
+          exportProfileId === "douyin-safe-v1" ? null : res.model_version,
           res.data_cutoff_at,
-          profileId,
+          exportProfileId,
           douyinSafeProfile(draft.bundle)?.source_hash,
         ),
       );
@@ -299,10 +313,10 @@ function Editor({
       await requestExport(
         draft.id,
         height === 1920 ? "png_1080x1920" : "png_1080x1350",
-        profileId,
+        exportProfileId,
       );
       const scenes: Array<SceneId | SafeSceneId> =
-        profileId === "douyin-safe-v1"
+        exportProfileId === "douyin-safe-v1"
           ? all
             ? SAFE_SCENES.map((s) => s.id)
             : [activeSafeScene]
@@ -335,7 +349,7 @@ function Editor({
           height: job.height,
           pixelRatio: 1,
           backgroundColor:
-            profileId === "douyin-safe-v1" ? "#061724" : "#0a0806",
+            exportProfileId === "douyin-safe-v1" ? "#061724" : "#0a0806",
         });
         if (cancelled) return;
         triggerDownload(
@@ -344,11 +358,11 @@ function Editor({
             draft.match_id,
             `${job.scene}_${job.width}x${job.height}`,
             "png",
-            profileId === "douyin-safe-v1"
+            exportProfileId === "douyin-safe-v1"
               ? null
               : draft.bundle.model_version,
             draft.bundle.data_cutoff_at,
-            profileId,
+            exportProfileId,
             douyinSafeProfile(draft.bundle)?.source_hash,
           ),
         );
@@ -364,7 +378,7 @@ function Editor({
     return () => {
       cancelled = true;
     };
-  }, [pngQueue, draft, profileId]);
+  }, [pngQueue, draft, exportProfileId]);
 
   useEffect(() => {
     if (
@@ -608,6 +622,7 @@ function Editor({
                         profile={safeProfile}
                         scene={sc.id as SafeSceneId}
                         height={1920}
+                        chartSpecs={bundle.chart_specs}
                       />
                     ) : (
                       <SceneCard
@@ -816,6 +831,7 @@ function Editor({
                 profile={safeProfile}
                 scene={pngQueue[0].scene as SafeSceneId}
                 height={pngQueue[0].height}
+                chartSpecs={bundle.chart_specs}
               />
             ) : (
               <SceneCard

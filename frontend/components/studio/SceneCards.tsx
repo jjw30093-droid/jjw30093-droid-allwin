@@ -20,6 +20,17 @@ import type {
 import { OUTCOME_ZH, SCENES } from "./types";
 import styles from "./SceneCards.module.css";
 
+/**
+ * 卡片选图优先级(视觉冲击力,非 bundle 构造顺序)。
+ * 射门图是空间型图表,位置本身即解释,对短视频观众最有说服力,排第一。
+ */
+const CARD_CHART_PRIORITY = [
+  "shot_map_explorer",
+  "xg_compare",
+  "form_compare",
+  "probability_bar",
+];
+
 function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
@@ -75,11 +86,23 @@ export function SceneCard({
   const probabilityLabel =
     bundle.probability_source === "MARKET_BASELINE" ? "市场去水基线" : "模型";
 
-  const maxCharts = height >= 1600 ? 3 : 2;
-  const chartSpecs = bundle.chart_specs.slice(0, maxCharts);
+  // 卡片选图按"视觉冲击力"排序,不按 bundle 的构造顺序截断。
+  // 旧实现 chart_specs.slice(0, maxCharts) 配上 bundle.py 的固定顺序
+  // (prob_bar → form_compare → xg_compare → recent_shot_map)导致
+  // 射门图永远排第 4、永远进不了卡片 —— 而它恰恰是最有说服力的一张。
+  const chartSpecs = [...bundle.chart_specs]
+    .sort(
+      (a, b) =>
+        (CARD_CHART_PRIORITY.indexOf(a.type) + 1 || 99) -
+        (CARD_CHART_PRIORITY.indexOf(b.type) + 1 || 99),
+    )
+    // 每张卡最多 2 张图(1920)/ 1 张(1350)。旧的 3 张会溢出 .body 可用高度
+    // (3×(图316+padding56+标题44+摘要40)+gap64 ≈ 1432 > 可用 ≈1420),
+    // 第三张被 overflow:hidden 裁掉。少而大 > 多而挤。
+    .slice(0, height >= 1600 ? 2 : 1);
   const chartHeight = Math.max(
-    240,
-    Math.floor((height - 640) / Math.max(1, chartSpecs.length)) - 110,
+    320,
+    Math.floor((height - 640) / Math.max(1, chartSpecs.length)) - 170,
   );
 
   let body: React.ReactNode;
@@ -184,7 +207,8 @@ export function SceneCard({
         chartSpecs.map((spec) => (
           <div key={spec.id} className={styles.chartBlock}>
             <div className={styles.chartTitle}>{spec.title}</div>
-            <SpecChart spec={spec} height={chartHeight} />
+            {/* 卡片是 1080px 宽的静态导出物:大字号、关动画、隐藏交互控件 */}
+            <SpecChart spec={spec} height={chartHeight} mode="export" />
           </div>
         ))
       );

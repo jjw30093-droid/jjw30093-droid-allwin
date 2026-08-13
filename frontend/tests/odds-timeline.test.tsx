@@ -97,13 +97,37 @@ describe("OddsTimeline 扁平 payload(审计 B2 的直接回归)", () => {
 });
 
 describe("OddsTimeline 嵌套 payload(实时轮询形状,不得回归)", () => {
-  it("取 latest 组渲染数值", async () => {
-    mockOddsResponse(fullTimelineBody([NESTED_SNAP]));
+  it(
+    "initial 与 latest 不同时,用箭头显示真实变化(2026-08-12 修复:此前只显示" +
+      " latest 却打「初盘」标签,盘口真实变化从未展示)",
+    async () => {
+      mockOddsResponse(fullTimelineBody([NESTED_SNAP]));
+      render(<OddsTimeline matchId={1} />);
+      await waitFor(() => expect(screen.queryByText("Bet365")).not.toBeNull());
+      expect(screen.getByText("1.02 → 0.97")).not.toBeNull();
+      expect(screen.getByText("0.88 → 0.93")).not.toBeNull();
+      expect(screen.queryByText("—")).toBeNull();
+      // 只有一条快照,却真实发生了变化——必须标出来,不能因为"只有一个
+      // observed_at"就退化成"无变化可显示"。
+      expect(screen.getByText("有变动")).not.toBeNull();
+    },
+  );
+
+  it('initial 与 latest 相同时,不画箭头(避免"1.25 → 1.25"这种噪音)', async () => {
+    const stable = {
+      ...NESTED_SNAP,
+      payload: {
+        initial: { home: 0.97, line: 1.25, away: 0.93 },
+        latest: { home: 0.97, line: 1.25, away: 0.93 },
+      },
+    };
+    mockOddsResponse(fullTimelineBody([stable]));
     render(<OddsTimeline matchId={1} />);
     await waitFor(() => expect(screen.queryByText("Bet365")).not.toBeNull());
     expect(screen.getByText("0.97")).not.toBeNull();
-    expect(screen.getByText("0.93")).not.toBeNull();
-    expect(screen.queryByText("—")).toBeNull();
+    // "→" 会出现在 current_odds 提示文案里(说明箭头功能存在),这里只需要
+    // 确认数据单元格没有画箭头——用"有变动"标签的缺失来精确断言这一点。
+    expect(screen.queryByText("有变动")).toBeNull();
   });
 });
 
@@ -138,6 +162,39 @@ describe("OddsTimeline open_close_only(§6.2:两点摘要绝不画走势图)", (
     expect(screen.queryByTestId("echart-stub")).toBeNull();       // 绝不画图
     expect(screen.queryByText("系统检测时间")).toBeNull();          // 无时间戳列
   });
+
+  it(
+    "同一公司出现在两个存档批次里、数值不同时,标出批次来源" +
+      "(2026-08-12 修复:此前只显示 provider,两行「Bet365 / 临场」" +
+      "看起来像未解释的重复,实际是港赔/欧赔两种格式的独立抓取)",
+    async () => {
+      mockOddsResponse({
+        match_id: 1,
+        available: true,
+        tier: "full",
+        coverage_tier: "open_close_only",
+        home_away_inverted: false,
+        observation_count: 0,
+        display_mode: "current_odds",
+        snapshots: [],
+        summary_points: [
+          {
+            market: "1x2", period: "latest", source: "asset_a_json", provider: "Bet365",
+            line: null, home_or_over: 1.91, draw: 3.6, away_or_under: 3.9,
+          },
+          {
+            market: "1x2", period: "latest", source: "asset_b_footballdata", provider: "Bet365",
+            line: null, home_or_over: 1.91, draw: 3.6, away_or_under: 3.9,
+          },
+        ],
+        note: "本场为历史存档赔率,仅有初盘与临场两个观测点,无完整走势时间线。",
+      });
+      render(<OddsTimeline matchId={1} />);
+      await waitFor(() => expect(screen.queryAllByText("Bet365").length).toBe(2));
+      expect(screen.getByText("存档 A")).not.toBeNull();
+      expect(screen.getByText("存档 B·football-data")).not.toBeNull();
+    },
+  );
 });
 
 describe("OddsTimeline 不可用态", () => {

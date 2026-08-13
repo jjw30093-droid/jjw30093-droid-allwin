@@ -75,11 +75,11 @@ export default function AboutPage() {
         <div className={styles.prose}>
           <p>
             比赛与球队数据主要来自 FotMob，赔率快照来自 NowGoal。
-            每个区块保留数据截止时间和来源；来源没有提供的字段就显示不可用，
+            每个区块保留数据更新时间和来源；来源没有提供的字段就显示不可用，
             不用零值补齐。
           </p>
           <p>
-            概率可能来自登记模型，也可能是明确标识的市场去水基线。
+            概率可能来自登记模型，也可能是明确标识的赔率折算概率。
             两者不会混写，页面会直接告诉你来源。
           </p>
           <div className={styles.inlineLinks}>

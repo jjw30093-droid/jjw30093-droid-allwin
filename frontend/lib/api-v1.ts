@@ -43,8 +43,12 @@ export type TeamSeasonStatRow = TeamStatsResponse["rows"][number];
 export type PlayersResponse = GetJson<"/api/v1/leagues/{league_id}/players">;
 export type MatchListResponse = GetJson<"/api/v1/matches">;
 export type MatchSummary = MatchListResponse["matches"][number];
+export type WinProbability = NonNullable<MatchSummary["win_probability"]>;
 export type MatchDetailResponse = GetJson<"/api/v1/matches/{match_id}">;
 export type PredictionResponse = GetJson<"/api/v1/matches/{match_id}/prediction">;
+export type MatchReportResponse = GetJson<"/api/v1/matches/{match_id}/report">;
+export type MatchMarketCardsResponse = GetJson<"/api/v1/matches/{match_id}/markets">;
+export type MarketCard = MatchMarketCardsResponse["cards"][number];
 export type TrackRecordResponse = GetJson<"/api/v1/track-record">;
 export type AuthMethodsResponse = GetJson<"/api/v1/auth/methods">;
 export type PasswordLoginResponse = PostJson<"/api/v1/auth/password/login">;
@@ -52,7 +56,12 @@ export type PasswordLoginResponse = PostJson<"/api/v1/auth/password/login">;
 /* ── 联赛分区路径(服务端 SSR 与客户端会员加载器共用;不能定义在
  * "use client" 模块里——client 模块的导出对服务端组件是不可调用的引用) ── */
 
-export type LeagueSectionKind = "standings" | "fixtures" | "team-stats" | "players";
+export type LeagueSectionKind =
+  | "standings"
+  | "fixtures"
+  | "team-stats"
+  | "players"
+  | "season-profile";
 
 export function leagueSectionPath(
   kind: LeagueSectionKind,
@@ -233,7 +242,3 @@ export const redeemCode = (code: string) =>
     method: "POST",
     body: { code },
   });
-
-/** 登录入口 URL(必须由用户点击触发跳转,不得自动跳)。 */
-export const wechatLoginUrl = (next: string) =>
-  `${API_BASE}/api/v1/auth/wechat/oa/start?next=${encodeURIComponent(next)}`;

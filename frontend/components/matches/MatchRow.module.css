@@ -71,18 +71,15 @@
 }
 
 .status {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
-.tip {
+.probRow {
   grid-column: 1 / -1;
-  text-align: center;
-  font-size: 12px;
-  color: var(--ink-2);
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
   margin-top: 4px;
 }
@@ -90,7 +87,7 @@
 .syncLine {
   grid-column: 1 / -1;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -101,16 +98,6 @@
 
 .syncLine[data-state="STALE"] b {
   color: var(--loss);
-}
-
-.tip b {
-  color: var(--brand-teal);
-  font-weight: 700;
-}
-
-.tipNote {
-  color: var(--ink-3);
-  margin-left: 6px;
 }
 
 @media (max-width: 520px) {
@@ -140,13 +127,20 @@
   }
 }
 
-/* 赔率覆盖徽标(D8):跨整行的小字说明,与 .tip 同格律 */
+/* 赔率覆盖徽标(D8):跨整行的小字说明,与 .probRow 同格律 */
 .oddsTier {
   grid-column: 1 / -1;
   font-size: 12px;
-  color: var(--ink-soft);
+  color: var(--ink-3);
 }
 
 .oddsTier[data-tier="full_timeline"] {
+  color: var(--gold-300);
+}
+
+/* 联赛权限不足时的概率条占位提示,与 .oddsTier/.probRow 同格律 */
+.loginHint {
+  grid-column: 1 / -1;
+  font-size: 12px;
   color: var(--gold-300);
 }

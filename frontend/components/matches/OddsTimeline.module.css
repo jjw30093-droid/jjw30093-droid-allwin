@@ -92,7 +92,7 @@
   text-align: left;
   font-weight: 500;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   padding: 6px 10px;
   border-bottom: 1px solid var(--border-strong);
@@ -112,6 +112,35 @@
 
 .footNote {
   margin: 8px 0 0;
-  font-size: 11.5px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ── 精简视图:初盘/最新标签 + 完整历史折叠 ────────────── */
+
+.pointTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.sourceTag {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.historyDetails {
+  margin-top: 8px;
+}
+
+.historySummary {
+  cursor: pointer;
+  font-size: 12.5px;
   color: var(--ink-3);
 }

@@ -6,8 +6,8 @@
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { getMe, type MeResponse } from "@/lib/api-v1";
 import styles from "./SiteNav.module.css";
 import { ThemeToggle } from "./ThemeToggle";
@@ -21,13 +21,21 @@ const NAV_ITEMS = [
     prefix: "/league",
     mobile: false,
   },
-  { href: "/track-record", label: "公开战绩", mobile: false },
+  { href: "/reco", label: "每日精选", mobile: true },
+  { href: "/track-record", label: "模型战绩", mobile: false },
   { href: "/about-model", label: "模型说明", mobile: false },
-  { href: "/pricing", label: "会员", mobile: true },
+  { href: "/pricing", label: "权限说明", mobile: true },
   { href: "/about", label: "关于我们", mobile: true },
 ];
 
-type BottomNavIcon = "home" | "matches" | "record" | "account";
+/** 顶栏套餐徽标:内部 plan id 不直接暴露给用户。 */
+const PLAN_BADGE_ZH: Record<string, string> = {
+  free: "免费",
+  member: "会员",
+  daily_picks: "精选",
+};
+
+type BottomNavIcon = "home" | "matches" | "picks" | "record" | "account";
 
 function BottomIcon({ name }: { name: BottomNavIcon }) {
   if (name === "home") {
@@ -44,6 +52,13 @@ function BottomIcon({ name }: { name: BottomNavIcon }) {
       </svg>
     );
   }
+  if (name === "picks") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden>
+        <path d="M12 3.6 14.5 9l5.8.5-4.4 3.9 1.3 5.7L12 16.1 6.8 19.1l1.3-5.7-4.4-3.9L9.5 9z" />
+      </svg>
+    );
+  }
   if (name === "record") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden>
@@ -57,6 +72,80 @@ function BottomIcon({ name }: { name: BottomNavIcon }) {
       <path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" />
     </svg>
   );
+}
+
+/**
+ * 底部导航(手机):首页|比赛|精选|战绩|我的。
+ * 「精选/战绩」都指向 /reco 的两个标签,选中态需要读 ?tab=,
+ * 因此拆出本组件由 Suspense 包裹(useSearchParams 的 Next 16 约束);
+ * SSR fallback 用 tab=null 渲染同一结构,水合后补上标签级选中态。
+ */
+function BottomNavLinks({
+  pathname,
+  tab,
+  authed,
+}: {
+  pathname: string;
+  tab: string | null;
+  authed: boolean;
+}) {
+  const onReco = pathname.startsWith("/reco");
+  const items: {
+    href: string;
+    label: string;
+    icon: BottomNavIcon;
+    active: boolean;
+  }[] = [
+    { href: "/", label: "首页", icon: "home", active: pathname === "/" },
+    {
+      href: "/matches",
+      label: "比赛",
+      icon: "matches",
+      active: pathname.startsWith("/matches"),
+    },
+    {
+      href: "/reco?tab=daily",
+      label: "精选",
+      icon: "picks",
+      active: onReco && tab !== "record",
+    },
+    {
+      href: "/reco?tab=record",
+      label: "战绩",
+      icon: "record",
+      active: onReco && tab === "record",
+    },
+    {
+      href: authed ? "/account" : "/login",
+      label: "我的",
+      icon: "account",
+      active: pathname.startsWith("/account") || pathname.startsWith("/login"),
+    },
+  ];
+  return (
+    <nav
+      className={styles.bottomNav}
+      aria-label="手机底部导航"
+      data-testid="mobile-bottom-nav"
+    >
+      {items.map((item) => (
+        <Link
+          key={item.label}
+          href={item.href}
+          className={item.active ? styles.bottomActive : styles.bottomLink}
+          aria-current={item.active ? "page" : undefined}
+        >
+          <BottomIcon name={item.icon} />
+          <span>{item.label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function BottomNavWithTab(props: { pathname: string; authed: boolean }) {
+  const searchParams = useSearchParams();
+  return <BottomNavLinks {...props} tab={searchParams.get("tab")} />;
 }
 
 export function SiteNav() {
@@ -82,32 +171,7 @@ export function SiteNav() {
   };
 
   const role = me?.authenticated ? me.user?.role : null;
-  const bottomItems: {
-    href: string;
-    label: string;
-    icon: BottomNavIcon;
-    active: boolean;
-  }[] = [
-    { href: "/", label: "首页", icon: "home", active: pathname === "/" },
-    {
-      href: "/matches",
-      label: "比赛",
-      icon: "matches",
-      active: pathname.startsWith("/matches"),
-    },
-    {
-      href: "/track-record",
-      label: "战绩",
-      icon: "record",
-      active: pathname.startsWith("/track-record"),
-    },
-    {
-      href: me?.authenticated ? "/account" : "/login",
-      label: "我的",
-      icon: "account",
-      active: pathname.startsWith("/account") || pathname.startsWith("/login"),
-    },
-  ];
+  const authed = Boolean(me?.authenticated);
 
   return (
     <>
@@ -157,7 +221,7 @@ export function SiteNav() {
               {me?.authenticated ? (
                 <Link href="/account" className={styles.accountLink}>
                   <span className={styles.planBadge} data-plan={me.plan}>
-                    {me.plan === "premium" ? "Premium" : me.plan === "pro" ? "Pro" : "免费"}
+                    {PLAN_BADGE_ZH[me.plan] ?? "会员"}
                   </span>
                   {me.user?.display_name}
                 </Link>
@@ -171,23 +235,9 @@ export function SiteNav() {
         </div>
       </header>
 
-      <nav
-        className={styles.bottomNav}
-        aria-label="手机底部导航"
-        data-testid="mobile-bottom-nav"
-      >
-        {bottomItems.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            className={item.active ? styles.bottomActive : styles.bottomLink}
-            aria-current={item.active ? "page" : undefined}
-          >
-            <BottomIcon name={item.icon} />
-            <span>{item.label}</span>
-          </Link>
-        ))}
-      </nav>
+      <Suspense fallback={<BottomNavLinks pathname={pathname} tab={null} authed={authed} />}>
+        <BottomNavWithTab pathname={pathname} authed={authed} />
+      </Suspense>
     </>
   );
 }

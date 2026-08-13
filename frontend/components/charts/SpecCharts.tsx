@@ -3,10 +3,17 @@
 /**
  * chart_specs 渲染器:后端 analysis_bundle 的 chart_specs → ECharts。
  * 比赛详情页与 Studio 共用(宪法 §12:不在 Studio 再写一套解释逻辑)。
+ *
+ * 两个渲染目标共用同一份数据,靠 ChartMode 切换视觉 token:
+ * - interactive:网站,12px 字号 + tooltip;
+ * - export:Studio 卡片,1080px 宽舞台,30px+ 字号、关动画、数值直接标在图上。
+ * 见 components/charts/chartMode.ts。
  */
 
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
+import { ShotMapExplorer } from "@/components/charts/ShotMapExplorer";
+import { type ChartMode, scaleGrid, tokensFor } from "@/components/charts/chartMode";
 import type { components } from "@/lib/api-types";
 
 /**
@@ -22,14 +29,15 @@ const WIN = "#4e9a5b";
 const LOSS = "#c05437";
 const DRAW = "#8a8069";
 
-function probabilityBarOption(d: Record<string, unknown>): EChartsOption {
+function probabilityBarOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
+  const t = tokensFor(mode);
   const rows = [
     { name: "主胜", value: Number(d.home), color: WIN },
     { name: "平局", value: Number(d.draw), color: DRAW },
     { name: "客胜", value: Number(d.away), color: LOSS },
   ];
   return {
-    grid: { left: 60, right: 40, top: 10, bottom: 10 },
+    grid: scaleGrid({ left: 60, right: 40, top: 10, bottom: 10 }, mode),
     xAxis: { type: "value", max: 1, show: false },
     yAxis: {
       type: "category",
@@ -37,17 +45,18 @@ function probabilityBarOption(d: Record<string, unknown>): EChartsOption {
       inverse: true,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: INK2 },
+      axisLabel: { color: INK2, fontSize: t.axisFont },
     },
     series: [
       {
         type: "bar",
         data: rows.map((r) => ({ value: r.value, itemStyle: { color: r.color } })),
-        barWidth: 18,
+        barWidth: t.barWidth,
         label: {
           show: true,
           position: "right",
           color: "#f3ecdc",
+          fontSize: t.labelFont,
           formatter: ({ value }) => `${Math.round(Number(value) * 100)}%`,
         },
       },
@@ -55,40 +64,71 @@ function probabilityBarOption(d: Record<string, unknown>): EChartsOption {
   };
 }
 
-function formCompareOption(d: Record<string, unknown>): EChartsOption {
+function formCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
+  const t = tokensFor(mode);
   const score = (r: string) => (r === "W" ? 3 : r === "D" ? 1 : 0);
   const home = (d.home as string[]) ?? [];
   const away = (d.away as string[]) ?? [];
   const n = Math.max(home.length, away.length);
   return {
-    grid: { left: 40, right: 16, top: 30, bottom: 24 },
+    grid: scaleGrid({ left: 40, right: 16, top: 30, bottom: 24 }, mode),
     legend: {
       data: [String(d.home_name), String(d.away_name)],
-      textStyle: { color: INK2 },
+      textStyle: { color: INK2, fontSize: t.legendFont },
       top: 0,
+      itemHeight: Math.round(t.legendFont * 0.8),
+      itemWidth: Math.round(t.legendFont * 1.6),
     },
     xAxis: {
       type: "category",
       data: Array.from({ length: n }, (_, i) => `近${n - i}场`),
-      axisLabel: { color: INK2 },
+      axisLabel: { color: INK2, fontSize: t.axisFont },
     },
     yAxis: { type: "value", max: 3, axisLabel: { show: false }, splitLine: { show: false } },
     series: [
-      { name: String(d.home_name), type: "line", data: [...home].reverse().map(score), color: GOLD },
-      { name: String(d.away_name), type: "line", data: [...away].reverse().map(score), color: INK2 },
+      {
+        name: String(d.home_name),
+        type: "line",
+        data: [...home].reverse().map(score),
+        color: GOLD,
+        symbolSize: t.symbolSize,
+        lineStyle: { width: t.lineWidth },
+      },
+      {
+        name: String(d.away_name),
+        type: "line",
+        data: [...away].reverse().map(score),
+        color: INK2,
+        symbolSize: t.symbolSize,
+        lineStyle: { width: t.lineWidth },
+      },
     ],
   };
 }
 
-function xgCompareOption(d: Record<string, unknown>): EChartsOption {
+function xgCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
+  const t = tokensFor(mode);
+  const valueLabel = {
+    show: t.alwaysShowValues,
+    position: "right" as const,
+    color: "#f3ecdc",
+    fontSize: t.labelFont,
+    formatter: ({ value }: { value: unknown }) => Number(value).toFixed(2),
+  };
   return {
-    grid: { left: 80, right: 40, top: 30, bottom: 24 },
-    legend: { data: ["进攻 xG", "防守失 xG"], textStyle: { color: INK2 }, top: 0 },
-    xAxis: { type: "value", axisLabel: { color: INK2 } },
+    grid: scaleGrid({ left: 80, right: 40, top: 30, bottom: 24 }, mode),
+    legend: {
+      data: ["进攻 xG", "防守失 xG"],
+      textStyle: { color: INK2, fontSize: t.legendFont },
+      top: 0,
+      itemHeight: Math.round(t.legendFont * 0.8),
+      itemWidth: Math.round(t.legendFont * 1.6),
+    },
+    xAxis: { type: "value", axisLabel: { color: INK2, fontSize: t.axisFont } },
     yAxis: {
       type: "category",
       data: [String(d.home_name), String(d.away_name)],
-      axisLabel: { color: INK2 },
+      axisLabel: { color: INK2, fontSize: t.axisFont },
     },
     series: [
       {
@@ -96,14 +136,16 @@ function xgCompareOption(d: Record<string, unknown>): EChartsOption {
         type: "bar",
         data: [Number(d.home_xg_for), Number(d.away_xg_for)],
         color: GOLD,
-        barWidth: 14,
+        barWidth: Math.round(t.barWidth * 0.78),
+        label: valueLabel,
       },
       {
         name: "防守失 xG",
         type: "bar",
         data: [Number(d.home_xg_against), Number(d.away_xg_against)],
         color: LOSS,
-        barWidth: 14,
+        barWidth: Math.round(t.barWidth * 0.78),
+        label: valueLabel,
       },
     ],
   };
@@ -113,21 +155,51 @@ export function summarize(spec: ChartSpec): string {
   const d = spec.data;
   if (spec.type === "probability_bar") {
     const label =
-      d.probability_source === "MARKET_BASELINE" ? "市场去水基线" : "模型概率";
+      d.probability_source === "MARKET_BASELINE" ? "赔率折算概率" : "模型概率";
     return `${label}:主胜 ${Math.round(Number(d.home) * 100)}%,平局 ${Math.round(Number(d.draw) * 100)}%,客胜 ${Math.round(Number(d.away) * 100)}%`;
   }
   if (spec.type === "form_compare")
     return `近期战绩:${d.home_name} ${(d.home as string[]).join("")} / ${d.away_name} ${(d.away as string[]).join("")}`;
   if (spec.type === "xg_compare")
     return `近10场滚动 xG:${d.home_name} 进攻 ${d.home_xg_for} 防守 ${d.home_xg_against};${d.away_name} 进攻 ${d.away_xg_for} 防守 ${d.away_xg_against}`;
+  if (spec.type === "shot_map_explorer") {
+    const teams = (d.teams as { team_id: number; name: string }[]) ?? [];
+    const sets = (d.recent_sets ?? {}) as Record<
+      string,
+      Record<string, { matched_games: number; shot_covered_games: number }>
+    >;
+    const parts = teams.map((t) => {
+      const s = sets[String(t.team_id)]?.same_league;
+      return s ? `${t.name} ${s.shot_covered_games}/${s.matched_games} 场有射门数据` : t.name;
+    });
+    return `最近 5 场射门分布(同联赛口径):${parts.join(";")}。`;
+  }
   return spec.title;
 }
 
-export function SpecChart({ spec, height = 220 }: { spec: ChartSpec; height?: number }) {
+export function SpecChart({
+  spec,
+  height = 220,
+  mode = "interactive",
+}: {
+  spec: ChartSpec;
+  height?: number;
+  mode?: ChartMode;
+}) {
+  if (spec.type === "shot_map_explorer") {
+    // 导出模式必须隐藏筛选控件 —— 截进 PNG 的按钮全是死的。
+    return (
+      <ShotMapExplorer
+        raw={spec.data}
+        height={Math.max(height, 360)}
+        mode={mode}
+      />
+    );
+  }
   let option: EChartsOption | null = null;
-  if (spec.type === "probability_bar") option = probabilityBarOption(spec.data);
-  else if (spec.type === "form_compare") option = formCompareOption(spec.data);
-  else if (spec.type === "xg_compare") option = xgCompareOption(spec.data);
+  if (spec.type === "probability_bar") option = probabilityBarOption(spec.data, mode);
+  else if (spec.type === "form_compare") option = formCompareOption(spec.data, mode);
+  else if (spec.type === "xg_compare") option = xgCompareOption(spec.data, mode);
   if (!option) return null;
-  return <EChart option={option} height={height} ariaSummary={summarize(spec)} />;
+  return <EChart option={option} height={height} ariaSummary={summarize(spec)} mode={mode} />;
 }

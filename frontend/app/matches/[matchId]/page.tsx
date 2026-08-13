@@ -4,7 +4,7 @@ import {
   serverGetOptional,
   type MatchDetailResponse,
   type MatchListResponse,
-  type PredictionResponse,
+  type MatchReportResponse,
 } from "@/lib/api-v1";
 import {
   MatchDetailBody,
@@ -94,11 +94,11 @@ export default async function MatchDetailPage({
   }
 
   const m = detail.match;
-  const [prediction, analysis, related] = await Promise.all([
-    serverGetOptional<PredictionResponse>(`/api/v1/matches/${idNum}/prediction`).catch(
-      () => null,
-    ),
+  const [analysis, report, related] = await Promise.all([
     serverGetOptional<AnalysisBundle>(`/api/v1/matches/${idNum}/analysis`).catch(() => null),
+    serverGetOptional<MatchReportResponse>(`/api/v1/matches/${idNum}/report`, {
+      revalidate: 300, // 完赛事实不再变化,可安心 ISR;未完赛响应为 available=false
+    }).catch(() => null),
     serverGetOptional<MatchListResponse>(
       `/api/v1/matches?league_id=${m.league_id}&status=upcoming&window=7d&limit=200`,
       { revalidate: 60 },
@@ -117,8 +117,8 @@ export default async function MatchDetailPage({
     <MatchDetailBody
       idNum={idNum}
       detail={detail}
-      prediction={prediction}
       analysis={analysis}
+      report={report}
       returnTo={returnTo}
       returnLabel={returnLabel}
       previousMatch={previousMatch}

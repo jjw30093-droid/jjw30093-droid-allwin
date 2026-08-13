@@ -5,137 +5,87 @@ import { RedeemBox } from "@/components/trust/RedeemBox";
 import styles from "./pricing.module.css";
 
 export const metadata: Metadata = {
-  title: "会员 — 欧赢 ALLWIN",
+  title: "访问权限说明 — 欧赢 ALLWIN",
   description:
-    "免费 / Pro / Premium 套餐权益对比与价格。当前未接线上支付,通过兑换码或管理员开通。",
+    "足球数据免费:登录即可查看全部联赛数据、模型完整概率与完整赔率时间线;赛前每日精选由站长为账号开通授权。",
 };
 
 /* 类型从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3);
- * plans + products 数据全部来自 DB。 */
+ * 展示哪些层级来自 DB 的 is_active 套餐,不在前端虚构层级。 */
 type ProductsResponse = GetJson<"/api/v1/products">;
 type PlanDTO = ProductsResponse["plans"][number];
-type ProductDTO = ProductsResponse["products"][number];
 
-/* entitlement 中文化;未知 key 原样展示,不猜 */
-const ENTITLEMENT_ZH: Record<string, string> = {
-  "league:epl": "英超数据",
-  "league:top5": "五大联赛数据",
-  "prediction:top_probability": "每场最高一项概率",
-  "prediction:full_wdl": "完整胜平负概率",
-  "prediction:score_matrix": "比分概率矩阵",
-  "report:deep": "深度分析报告",
-  "odds:summary_delayed": "赔率概要(延迟)",
-  "odds:history_full": "完整赔率历史",
-  "odds:raw": "赔率原始快照",
-  "export:basic": "基础导出",
-  "export:full": "完整导出",
-  "alert:odds": "赔率变化提醒",
+/**
+ * 三层权限的用户视角说明。技术上的 plan id / entitlement 键值属于内部实现,
+ * 不向用户展示;未在此登记的新套餐回退展示 DB 中的 name_zh + description。
+ */
+const PLAN_PRESENTATION: Record<
+  string,
+  { title: string; how: string; lines: string[] }
+> = {
+  free: {
+    title: "游客",
+    how: "无需登录",
+    lines: [
+      "浏览部分公开联赛的比赛资料",
+      "每场比赛的最高一项模型概率",
+      "延迟赔率概要",
+    ],
+  },
+  member: {
+    title: "注册用户",
+    how: "免费登录即可,无需付费",
+    lines: [
+      "全部联赛的完整足球数据",
+      "完整胜平负三项概率与比分矩阵",
+      "赔率时间轴与变化记录",
+      "每日精选的全部历史战绩",
+    ],
+  },
+  daily_picks: {
+    title: "精选授权用户",
+    how: "由站长为账号开通",
+    lines: [
+      "包含注册用户的全部内容",
+      "赛前每日精选(未结算推荐)",
+    ],
+  },
 };
 
-function entitlementLabel(key: string): string {
-  return ENTITLEMENT_ZH[key] ?? key;
-}
-
-function formatPrice(cents: number, currency: string): string {
-  const amount = cents / 100;
-  const text = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
-  return currency === "CNY" ? `¥${text}` : `${text} ${currency}`;
-}
-
-/* ── 套餐卡 ─────────────────────────────────────────────── */
-
-function PlanCard({ plan, products }: { plan: PlanDTO; products: ProductDTO[] }) {
+function TierCard({ plan }: { plan: PlanDTO }) {
+  const view = PLAN_PRESENTATION[plan.id];
+  if (!view) {
+    // 未登记的新套餐:回退 DB 文案,绝不展示内部权益键值
+    return (
+      <div className={styles.planCard}>
+        <div className={styles.planName}>{plan.name_zh}</div>
+        {plan.description && <p className={styles.planDesc}>{plan.description}</p>}
+      </div>
+    );
+  }
   return (
     <div className={styles.planCard}>
-      <div className={styles.planName}>{plan.name_zh}</div>
-      {plan.description && <p className={styles.planDesc}>{plan.description}</p>}
-      {products.length > 0 ? (
-        <ul className={styles.productList}>
-          {products.map((p) => (
-            <li key={p.id} className={styles.productRow}>
-              <span className={styles.productName}>{p.name_zh}</span>
-              <span className={styles.productPrice}>
-                <span className={`num ${styles.priceNum}`}>
-                  {formatPrice(p.price_cents, p.currency)}
-                </span>
-                <span className={styles.productDuration}>
-                  / <span className="num">{p.duration_days}</span> 天
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className={styles.freeNote}>无需付费,注册即用</p>
-      )}
+      <div className={styles.planName}>{view.title}</div>
+      <p className={styles.freeNote}>{view.how}</p>
       <ul className={styles.entList}>
-        {plan.entitlements.map((e) => (
-          <li key={e}>{entitlementLabel(e)}</li>
+        {view.lines.map((line) => (
+          <li key={line}>{line}</li>
         ))}
       </ul>
     </div>
   );
 }
 
-/* ── 权益对比表 ─────────────────────────────────────────── */
-
-function CompareTable({ plans }: { plans: PlanDTO[] }) {
-  // 行序:按套餐从低到高首次出现的顺序,稳定去重
-  const rows: string[] = [];
-  for (const plan of plans) {
-    for (const e of plan.entitlements) {
-      if (!rows.includes(e)) rows.push(e);
-    }
-  }
-  if (rows.length === 0) return null;
-  return (
-    <div className={styles.tableCard}>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.thLeft}>权益</th>
-              {plans.map((p) => (
-                <th key={p.id}>{p.name_zh}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((e) => (
-              <tr key={e}>
-                <td className={styles.entName}>{entitlementLabel(e)}</td>
-                {plans.map((p) => (
-                  <td key={p.id} className={styles.checkCell}>
-                    {p.entitlements.includes(e) ? (
-                      <span className={styles.checkYes} aria-label="包含">
-                        ✓
-                      </span>
-                    ) : (
-                      <span className={styles.checkNo} aria-label="不包含">
-                        –
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 /* ── 数据区块(Suspense 内)────────────────────────────── */
 
-async function PricingContent() {
+async function AccessTiers() {
   let data: ProductsResponse;
   try {
     data = await serverGet<ProductsResponse>("/api/v1/products", { revalidate: 300 });
   } catch (err) {
     return (
       <div className={styles.errorBox}>
-        <div className={styles.errorTitle}>套餐信息暂时无法加载</div>
+        <div className={styles.errorTitle}>权限说明暂时无法加载</div>
         <p>
           后端 API 未响应,请稍后重试。
           <br />
@@ -151,27 +101,18 @@ async function PricingContent() {
   if (plans.length === 0) {
     return (
       <div className={styles.emptyCard}>
-        <div className={styles.emptyTitle}>暂无可用套餐</div>
-        <p className={styles.emptyText}>套餐配置尚未就绪,请稍后再来。</p>
+        <div className={styles.emptyTitle}>权限配置尚未就绪</div>
+        <p className={styles.emptyText}>请稍后再来。</p>
       </div>
     );
   }
-  const productsByPlan = (planId: string) =>
-    data.products
-      .filter((p) => p.plan_id === planId)
-      .sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <>
-      <div className={styles.planGrid}>
-        {plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} products={productsByPlan(plan.id)} />
-        ))}
-      </div>
-
-      <h2 className={styles.sectionTitle}>权益对比</h2>
-      <CompareTable plans={plans} />
-    </>
+    <div className={styles.planGrid}>
+      {plans.map((plan) => (
+        <TierCard key={plan.id} plan={plan} />
+      ))}
+    </div>
   );
 }
 
@@ -183,7 +124,6 @@ function Skeleton() {
           <div key={i} className={`${styles.planCard} ${styles.skeletonCard}`} />
         ))}
       </div>
-      <div className={styles.skeletonTable} />
     </div>
   );
 }
@@ -194,22 +134,25 @@ export default function PricingPage() {
   return (
     <main className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>会员套餐</h1>
+        <h1 className={styles.title}>访问权限说明</h1>
       </div>
       <p className={styles.subtitle}>
-        所有套餐提供的都是数据、概率与分析内容,不提供投注建议;模型输出是概率,不是确定结果。
+        登录不是付费:免费登录后即可查看全部联赛数据、模型完整概率、完整赔率时间线和历史战绩
+        (比赛卡片上按赔率折算的胜平负概率条,匿名即可查看,登录后看到的赔率更完整、更及时)。
+        只有<strong>赛前每日精选</strong>需要站长为账号单独开通授权。
+        本站提供的都是数据、概率与分析内容,不提供投注建议;模型输出是概率,不是确定结果。
       </p>
 
-      <div className={styles.noticeCard}>
-        当前未接入线上支付:会员通过<strong>兑换码</strong>或<strong>管理员开通</strong>,
-        价格与权益均来自后台配置,以下为实时读取结果。
-      </div>
-
       <Suspense fallback={<Skeleton />}>
-        <PricingContent />
+        <AccessTiers />
       </Suspense>
 
-      <h2 className={styles.sectionTitle}>兑换</h2>
+      <h2 className={styles.sectionTitle}>如何获得精选授权</h2>
+      <div className={styles.noticeCard}>
+        当前未接入线上支付:通过<strong>公众号联系站长</strong>为账号开通,
+        或在下方使用<strong>兑换码</strong>。授权生效后「每日精选」页会自动显示内容,
+        无需重新注册。
+      </div>
       <RedeemBox />
     </main>
   );

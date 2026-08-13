@@ -1,0 +1,135 @@
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 14px 16px 12px;
+  margin-bottom: 12px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.label {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+  margin: 0;
+}
+
+.line {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.verdict {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+.lean {
+  color: var(--gold-500);
+  font-size: 15px;
+}
+
+.grade {
+  color: var(--gold-500);
+  letter-spacing: 1px;
+}
+
+.degraded {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin: 0 0 4px;
+}
+
+.estimate {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin: 0 0 6px;
+}
+
+.details {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.details > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--gold-300);
+  list-style: none;
+}
+
+.details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.details > summary::before {
+  content: "▶ ";
+  font-size: 10px;
+}
+
+.details[open] > summary::before {
+  content: "▼ ";
+}
+
+.driverGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+@media (min-width: 560px) {
+  .driverGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.driverGrid h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin: 0 0 4px;
+}
+
+.driverTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.driverTable th {
+  text-align: left;
+  color: var(--ink-3);
+  font-weight: 500;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.driverTable td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.driverTable td.num,
+.driverTable th.num {
+  text-align: right;
+}
+
+.note {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin: 10px 0 0;
+  line-height: 1.5;
+}

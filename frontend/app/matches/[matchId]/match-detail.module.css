@@ -3,6 +3,13 @@
   margin: 0 auto;
   padding: 32px 20px 64px;
 }
+@media (max-width: 640px) {
+  .page {
+    /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 
 .contextNav {
   display: flex;
@@ -102,9 +109,11 @@
 }
 
 .score {
-  font-size: 30px;
-  color: var(--gold-hi);
-  font-weight: 700;
+  /* 曾用 --gold-hi(浅色近白/深色深绿),浅深两种模式都与背景对比不足
+     ——比分是完赛页最核心的数字,直接用主文字色 + 大字重 */
+  font-size: 32px;
+  color: var(--ink);
+  font-weight: 800;
 }
 
 .vs {
@@ -257,7 +266,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 12px;
   color: #fff;
 }
 
@@ -382,4 +391,117 @@
   .score {
     font-size: 24px;
   }
+}
+
+/* ── 关注按钮行 / 折叠数据说明 ─────────────────────────── */
+
+.followRow {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 4px;
+}
+
+.metaDetails {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 12px 16px;
+  background: var(--surface);
+}
+
+.metaSummary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.metaDetails[open] .metaSummary {
+  margin-bottom: 10px;
+}
+
+
+/* ── 30秒速览(赛前第一屏,先结论后证据) ──────────────── */
+
+.quickView {
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  border-radius: var(--r-card);
+  background: var(--surface-soft);
+}
+
+.quickRecoRow {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.quickRecoOn {
+  color: var(--brand-teal);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.quickRecoOff {
+  color: var(--ink-3);
+}
+
+.quickFormLine {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+
+.quickNoTip {
+  font-size: 14px;
+  color: var(--ink-2);
+  margin: 0 0 10px;
+}
+
+.quickPoints {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.quickPoints li {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.quickTagPro,
+.quickTagCon {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  margin-top: 2px;
+}
+
+.quickTagPro {
+  color: var(--win);
+  border: 1px solid var(--win);
+}
+
+.quickTagCon {
+  color: var(--loss);
+  border: 1px solid var(--loss);
+}
+
+.quickFoot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.quickMore {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand-teal);
+  text-decoration: none;
 }

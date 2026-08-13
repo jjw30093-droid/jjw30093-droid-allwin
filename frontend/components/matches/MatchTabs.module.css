@@ -1,0 +1,37 @@
+.wrap {
+  width: 100%;
+}
+
+/* 视觉与 LeagueNav.module.css 保持同一惯例(金色下划线激活态,窄屏横滑) */
+.tablist {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  padding-bottom: 1px;
+}
+
+.link,
+.active {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--ink);
+}
+
+.active {
+  color: var(--gold-300);
+  font-weight: 700;
+  border-bottom: 2px solid var(--gold-300);
+}

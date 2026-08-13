@@ -1265,9 +1265,239 @@ function AuditTab() {
 
 /* ── 页面外壳 ──────────────────────────────────────────── */
 
-const TABS = [
-  { key: "users", label: "用户" },
+/* ── Tab:每日精选(人工推荐板块;内容可修正但全程留痕) ── */
+
+type RecoSlipsResp = GetJson<"/api/v1/admin/reco/slips">;
+type RecoSlip = RecoSlipsResp["slips"][number];
+type RecoCreateResp = PostJson<"/api/v1/admin/reco/slips">;
+type RecoSettleResp = PostJson<"/api/v1/admin/reco/slips/{slip_id}/settle">;
+
+const RECO_RESULT_ZH: Record<string, string> = { win: "命中", lose: "未中", push: "走水" };
+const RECO_STATUS_ZH: Record<string, string> = {
+  draft: "草稿", published: "已发布", settled: "已结算", voided: "已作废",
+};
+
+type LegDraft = { match_desc: string; market: string; selection: string; odds: string };
+const emptyLeg = (): LegDraft => ({ match_desc: "", market: "1x2", selection: "", odds: "" });
+
+function beijingToday(): string {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+}
+
+function RecoTab() {
+  const [data, setData] = useState<RecoSlipsResp | null>(null);
+  const [msg, setMsg] = useState<Msg>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // 新建表单
+  const [slipDate, setSlipDate] = useState(beijingToday());
+  const [title, setTitle] = useState("");
+  const [note, setNote] = useState("");
+  const [legs, setLegs] = useState<LegDraft[]>([emptyLeg()]);
+
+  // 结算面板:slipId → legId → result
+  const [settleFor, setSettleFor] = useState<string | null>(null);
+  const [legResults, setLegResults] = useState<Record<string, string>>({});
+  const [voidFor, setVoidFor] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setData(await clientFetch<RecoSlipsResp>("/api/v1/admin/reco/slips"));
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "推荐单列表加载失败") });
+    }
+  }, []);
+  // 经微任务回调触发,effect 体内不同步 setState(react-hooks/set-state-in-effect)
+  useEffect(() => {
+    void Promise.resolve().then(() => load());
+  }, [load]);
+
+  const create = async () => {
+    const parsed = legs.map((l) => ({
+      match_desc: l.match_desc.trim(),
+      market: l.market.trim(),
+      selection: l.selection.trim(),
+      odds: Number(l.odds),
+    }));
+    if (parsed.some((l) => !l.match_desc || !l.selection || !(l.odds > 1))) {
+      setMsg({ kind: "err", text: "每条腿需要 比赛/选项/大于1的赔率" });
+      return;
+    }
+    try {
+      await clientFetch<RecoCreateResp>("/api/v1/admin/reco/slips", {
+        method: "POST",
+        body: { slip_date: slipDate, title: title.trim(), note: note.trim() || null, legs: parsed },
+      });
+      setMsg({ kind: "ok", text: "已创建草稿" });
+      setTitle(""); setNote(""); setLegs([emptyLeg()]);
+      void load();
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "创建失败") });
+    }
+  };
+
+  const act = async (id: string, path: string, body?: object) => {
+    setBusyId(id);
+    try {
+      await clientFetch(path, { method: "POST", body: body ?? {} });
+      setMsg({ kind: "ok", text: "操作成功" });
+      setSettleFor(null); setVoidFor(null); setVoidReason("");
+      void load();
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "操作失败") });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const submitSettle = async (s: RecoSlip) => {
+    const missing = s.legs.filter((l) => !legResults[l.id]);
+    if (missing.length) {
+      setMsg({ kind: "err", text: "每条腿都要选结果" });
+      return;
+    }
+    setBusyId(s.id);
+    try {
+      const r = await clientFetch<RecoSettleResp>(
+        `/api/v1/admin/reco/slips/${s.id}/settle`,
+        { method: "POST", body: { leg_results: legResults } },
+      );
+      setMsg({ kind: "ok", text: `已结算:${RECO_RESULT_ZH[r.result]},回报 ${r.return_units} 单位` });
+      setSettleFor(null); setLegResults({});
+      void load();
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "结算失败") });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div>
+      <MsgBar msg={msg} />
+
+      <section className={styles.recoPanel}>
+        <h2 className={styles.panelTitle}>新建推荐单(草稿)</h2>
+        <div className={styles.formRow}>
+          <label className={styles.fieldInline}>
+            <span>日期</span>
+            <input type="date" className={styles.input} value={slipDate}
+                   onChange={(e) => setSlipDate(e.target.value)} />
+          </label>
+          <label className={styles.fieldInline}>
+            <span>标题</span>
+            <input className={styles.input} value={title} placeholder="如:今日三串一"
+                   onChange={(e) => setTitle(e.target.value)} />
+          </label>
+        </div>
+        <label className={styles.fieldInline}>
+          <span>思路(可空)</span>
+          <input className={styles.input} value={note}
+                 onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {legs.map((leg, i) => (
+          <div key={i} className={styles.formRow}>
+            <input className={styles.input} placeholder="比赛(如 曼城 vs 阿森纳 08-15)"
+                   value={leg.match_desc}
+                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, match_desc: e.target.value } : x))} />
+            <input className={styles.input} placeholder="玩法" value={leg.market} style={{ maxWidth: 90 }}
+                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, market: e.target.value } : x))} />
+            <input className={styles.input} placeholder="选项(如 主胜)" value={leg.selection} style={{ maxWidth: 140 }}
+                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, selection: e.target.value } : x))} />
+            <input className={styles.input} placeholder="赔率" value={leg.odds} style={{ maxWidth: 80 }}
+                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, odds: e.target.value } : x))} />
+            {legs.length > 1 && (
+              <button type="button" className={styles.btnGhost}
+                      onClick={() => setLegs(ls => ls.filter((_, j) => j !== i))}>删</button>
+            )}
+          </div>
+        ))}
+        <div className={styles.formRow}>
+          <button type="button" className={styles.btnGhost}
+                  onClick={() => setLegs(ls => [...ls, emptyLeg()])}>+ 加一腿</button>
+          <button type="button" className={styles.btnPrimary} onClick={create}
+                  disabled={!title.trim()}>创建草稿</button>
+        </div>
+      </section>
+
+      {!data ? <Loading /> : (
+        <section className={styles.recoPanel}>
+          <h2 className={styles.panelTitle}>推荐单({data.total})</h2>
+          {data.slips.length === 0 && <p className={styles.empty}>还没有推荐单</p>}
+          {data.slips.map((s) => (
+            <div key={s.id} className={styles.rowCard}>
+              <div>
+                <strong>{s.slip_date} · {s.title}</strong>
+                {" "}
+                <span className={styles.badge}>{RECO_STATUS_ZH[s.status]}</span>
+                {s.result && <span className={styles.badge}>{RECO_RESULT_ZH[s.result]}</span>}
+                {s.return_units != null && <span className={styles.dim}> 回报 {s.return_units} 单位</span>}
+                {s.edit_count > 0 && <span className={styles.dim}>(修正 {s.edit_count} 次)</span>}
+                <ul>
+                  {s.legs.map((l) => (
+                    <li key={l.id} className={styles.dim}>
+                      {l.match_desc} · {l.market} · {l.selection} @{l.odds}
+                      {l.result ? ` → ${RECO_RESULT_ZH[l.result]}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className={styles.rowActions}>
+                {s.status === "draft" && (
+                  <button className={styles.btnPrimary} disabled={busyId === s.id}
+                          onClick={() => act(s.id, `/api/v1/admin/reco/slips/${s.id}/publish`)}>发布</button>
+                )}
+                {(s.status === "published" || s.status === "settled") && (
+                  <button className={styles.btnGhost} disabled={busyId === s.id}
+                          onClick={() => { setSettleFor(settleFor === s.id ? null : s.id); setLegResults({}); }}>
+                    {s.status === "settled" ? "重新结算(留痕)" : "结算"}
+                  </button>
+                )}
+                {s.status !== "voided" && (
+                  <button className={styles.btnGhost} disabled={busyId === s.id}
+                          onClick={() => setVoidFor(voidFor === s.id ? null : s.id)}>作废</button>
+                )}
+              </div>
+              {settleFor === s.id && (
+                <div className={styles.formRow}>
+                  {s.legs.map((l) => (
+                    <label key={l.id} className={styles.fieldInline}>
+                      <span>{l.selection}</span>
+                      <select className={styles.input} value={legResults[l.id] ?? ""}
+                              onChange={(e) => setLegResults(r => ({ ...r, [l.id]: e.target.value }))}>
+                        <option value="">选结果</option>
+                        <option value="win">命中</option>
+                        <option value="lose">未中</option>
+                        <option value="push">走水</option>
+                      </select>
+                    </label>
+                  ))}
+                  <button className={styles.btnPrimary} disabled={busyId === s.id}
+                          onClick={() => void submitSettle(s)}>提交结算</button>
+                </div>
+              )}
+              {voidFor === s.id && (
+                <div className={styles.formRow}>
+                  <input className={styles.input} placeholder="作废原因(必填,战绩页单列展示)"
+                         value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+                  <button className={styles.btnPrimary} disabled={busyId === s.id || !voidReason.trim()}
+                          onClick={() => act(s.id, `/api/v1/admin/reco/slips/${s.id}/void`, { reason: voidReason })}>
+                    确认作废
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+const TABS = [  { key: "users", label: "用户" },
   { key: "codes", label: "兑换码" },
+  { key: "reco", label: "每日精选" },
   { key: "predictions", label: "预测" },
   { key: "xref", label: "映射审核" },
   { key: "jobs", label: "任务健康" },
@@ -1397,6 +1627,7 @@ export default function AdminPage() {
       <section className={styles.tabBody}>
         {tab === "users" && <UsersTab plans={plans} />}
         {tab === "codes" && <CodesTab plans={plans} />}
+        {tab === "reco" && <RecoTab />}
         {tab === "predictions" && <PredictionsTab />}
         {tab === "xref" && <XrefTab />}
         {tab === "jobs" && <JobsTab />}

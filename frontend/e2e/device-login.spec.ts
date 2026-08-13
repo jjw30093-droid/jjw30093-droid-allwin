@@ -1,16 +1,16 @@
 import { execFileSync } from "node:child_process";
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import type { PostJson } from "../lib/api-v1";
-import { API, e2ePlatformDbPath } from "./helpers";
+import { API, approveViaWebhook, e2ePlatformDbPath } from "./helpers";
 
 /**
- * Device Login 完整 E2E(CLAUDE.md §7.3):
- * 桌面创建 → 真二维码(canvas)→ 手机(独立 context)扫码走 Mock OAuth 批准
+ * 扫码登录完整 E2E(CLAUDE.md §7.3,带参数二维码 + webhook 路线):
+ * 桌面创建 → 真二维码(canvas)→ 模拟微信服务器投递签名 SCAN 事件到 webhook 批准
  * → 桌面轮询原子领取 → 会话生效(刷新仍登录)→ 二次 claim 410。
- * 另覆盖:错误 secret 403、篡改过期(直接 SQL 改 data/e2e 临时库)410。
+ * 另覆盖:错误 secret 403、篡改过期(直接 SQL 改 data/e2e 临时库)410、
+ * 伪造签名 403 且不产生批准副作用。
  *
- * MockWechatProvider.authorize_url 固定 code=mock-user-1,
- * 种子已给 mock-openid-user-1 绑定 pro 会员(显示名 E2E会员)。
+ * 种子用户 mock-openid-user-1 显示名 E2E会员;登录即 member 基线(CLAUDE.md §8)。
  */
 
 /** 从生成类型派生(Pydantic 单一真源,宪法 §10.3),不再手写与 API 响应重复的 type。 */
@@ -24,14 +24,7 @@ async function createDeviceRequest(
   return (await r.json()) as DeviceCreateResponse;
 }
 
-/** 等价"手机扫码":直接打开 qr_url,mock provider 302 回 callback 完成批准。 */
-async function approveViaQrUrl(request: APIRequestContext, qrUrl: string) {
-  const r = await request.get(qrUrl);
-  expect(r.status()).toBe(200);
-  expect(((await r.json()) as { status: string }).status).toBe("approved");
-}
-
-test("完整 Device Login:桌面创建→真二维码→手机批准→桌面轮询→会话生效→二次 claim 410", async ({
+test("完整扫码登录:桌面创建→真二维码→webhook批准→桌面轮询→会话生效→二次 claim 410", async ({
   browser,
 }) => {
   const desktop = await browser.newContext();
@@ -48,12 +41,11 @@ test("完整 Device Login:桌面创建→真二维码→手机批准→桌面轮
     await deviceRespPromise
   ).json()) as DeviceCreateResponse;
 
-  // 真二维码:页面渲染 <canvas>,DOM 可提取 qr_url
+  // 真二维码:页面渲染 <canvas>,DOM 可提取 qr_url(mock provider 的带参二维码 URL)
   const canvas = desktopPage.locator("canvas[data-qr-url]");
   await expect(canvas).toBeVisible();
   const qrUrl = await canvas.getAttribute("data-qr-url");
   expect(qrUrl).toBe(device.qr_url);
-  expect(qrUrl!).toContain(`${API}/api/v1/auth/wechat/oa/start?device=`);
   expect(qrUrl!).toContain(device.request_id);
 
   // canvas 真的画了二维码(存在深色模块,不是空白画布)
@@ -73,18 +65,22 @@ test("完整 Device Login:桌面创建→真二维码→手机批准→桌面轮
   expect(device.qr_url).not.toContain(device.secret);
   expect(await desktopPage.content()).not.toContain(device.secret);
 
-  // 手机 context(独立 cookie 空间)打开 qr_url,走 Mock OAuth 完成批准
-  const phone = await browser.newContext();
-  const phonePage = await phone.newPage();
-  await phonePage.goto(qrUrl!);
-  await expect(phonePage.locator("body")).toContainText("approved");
-  // 批准动作不给手机端种网站会话 cookie
-  const phoneCookies = await phone.cookies(API);
-  expect(
-    phoneCookies.find((c) => c.name === "allwin_session"),
-  ).toBeUndefined();
+  // 伪造签名的 webhook 投递必须 403,且不产生批准副作用(轮询仍 pending)
+  const forged = await desktopPage.request.post(
+    `${API}/api/v1/auth/wechat/webhook?signature=${"0".repeat(40)}&timestamp=1&nonce=forged`,
+    { data: "<xml/>", headers: { "Content-Type": "application/xml" } },
+  );
+  expect(forged.status()).toBe(403);
 
-  // 桌面轮询领取成功 → 跳转 next=/account,已登录(种子 pro 会员)
+  // 模拟微信服务器投递合法签名的 SCAN 事件 → 批准
+  const scan = await approveViaWebhook(desktopPage.request, device.request_id);
+  expect(scan.status()).toBe(200);
+  expect(await scan.text()).toContain("登录成功");
+
+  // webhook 批准不给任何一方种网站会话 cookie(会话只在桌面 claim 时建立)
+  // (approveViaWebhook 走的是 desktopPage.request,但响应是被动回复 XML,无 Set-Cookie)
+
+  // 桌面轮询领取成功 → 跳转 next=/account,已登录(member 基线)
   await desktopPage.waitForURL("**/account", { timeout: 20_000 });
   await expect(desktopPage.getByText("E2E会员").first()).toBeVisible();
 
@@ -99,16 +95,16 @@ test("完整 Device Login:桌面创建→真二维码→手机批准→桌面轮
   );
   expect(second.status()).toBe(410);
 
-  await phone.close();
   await desktop.close();
 });
 
-test("Device Login 安全边界:错误 secret 403(不烧毁请求)/ 篡改过期后 claim 410", async ({
+test("扫码登录安全边界:错误 secret 403(不烧毁请求)/ 篡改过期后 claim 410", async ({
   request,
 }) => {
   // 错误 secret → 403;正确 secret 仍可领取(错误尝试不烧毁请求)
   const reqA = await createDeviceRequest(request);
-  await approveViaQrUrl(request, reqA.qr_url);
+  const scanA = await approveViaWebhook(request, reqA.request_id);
+  expect(scanA.status()).toBe(200);
   const wrong = await request.post(
     `${API}/api/v1/auth/wechat/device/${reqA.request_id}/claim`,
     { data: { secret: "wrong-secret" } },

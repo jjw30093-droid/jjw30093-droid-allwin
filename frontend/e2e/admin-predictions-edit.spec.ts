@@ -1,18 +1,19 @@
 import { test, expect } from "@playwright/test";
-import { seedMatchId, seedSnapshotId } from "./helpers";
+import { seedEditMatchId, seedEditSnapshotId } from "./helpers";
 
 /**
  * 管理员登录 → 预测 Tab → 编辑一条已锁定的正式预测 → 修正记录留痕可见
  * (2026-08-05:CLAUDE.md §9.1 改为"可编辑但强制留痕",取代此前的锁定后不可改)。
  *
- * 复用 seed_e2e.py 已经 publish+lock 的种子快照(见 admin-studio.spec.ts 同款
- * 登录流程),不额外造数据。
+ * 使用 seed_e2e.py 专门 publish+lock 的隔离编辑目标(edit_match_id):本用例
+ * 按字母序先于 anonymous/auth 跑并把概率改成 0.6/0.25/0.15,若复用主种子快照
+ * 会直接毁掉后续所有 48% 断言(2026-08-11 真实回归)。
  */
 
 test("管理员登录 → 编辑已锁定预测 → 修正记录公开可查", async ({ page }) => {
   test.setTimeout(60_000);
-  const matchId = seedMatchId();
-  const snapshotId = seedSnapshotId();
+  const matchId = seedEditMatchId();
+  const snapshotId = seedEditSnapshotId();
 
   await page.goto("/login");
   const summary = page.getByText("管理员密码登录");

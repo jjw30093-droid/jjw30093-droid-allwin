@@ -152,7 +152,10 @@ export default function AccountPage() {
       <main className={styles.page}>
         <h1 className={styles.title}>账户中心</h1>
         <section className={styles.card}>
-          <p className={styles.note}>尚未登录。登录后可查看套餐、收藏与登录设备。</p>
+          <p className={styles.note}>
+            尚未登录。免费登录后可查看全部联赛资料、模型完整概率、完整赔率时间线和
+            每日精选的历史战绩;首次微信扫码会自动创建账号。
+          </p>
           <Link className={styles.btnPrimary} href="/login?next=/account">
             前往登录
           </Link>
@@ -181,6 +184,11 @@ export default function AccountPage() {
     (s) => s.status === "active" && s.ends_at > nowIso,
   );
   const planLabel = (id: string) => planNames[id] ?? id;
+  const hasDaily = account.entitlements.includes("reco:daily");
+  const dailyEndsAt =
+    activeSubs
+      .filter((s) => s.plan_id === "daily_picks")
+      .sort((a, b) => b.ends_at.localeCompare(a.ends_at))[0]?.ends_at ?? null;
 
   return (
     <main className={styles.page}>
@@ -198,7 +206,45 @@ export default function AccountPage() {
 
       {actionMsg && <p className={styles.actionMsg}>{actionMsg}</p>}
 
-      {/* 基本信息与套餐 */}
+      {/* 权限状态:登录的价值一眼可见,技术细节折叠在下方 */}
+      <div className={styles.accessGrid}>
+        <div className={styles.accessCard}>
+          <span className={styles.accessName}>完整足球数据</span>
+          <span className={`${styles.accessState} ${styles.accessOn}`}>已开放</span>
+          <span className={styles.accessHint}>
+            全部联赛资料、模型完整概率与完整赔率时间线
+          </span>
+        </div>
+        <div className={styles.accessCard}>
+          <span className={styles.accessName}>历史推荐战绩</span>
+          <span className={`${styles.accessState} ${styles.accessOn}`}>已开放</span>
+          <span className={styles.accessHint}>
+            <Link href="/reco?tab=record">查看每日精选历史战绩 →</Link>
+          </span>
+        </div>
+        <div className={styles.accessCard}>
+          <span className={styles.accessName}>今日精选</span>
+          {hasDaily ? (
+            <>
+              <span className={`${styles.accessState} ${styles.accessOn}`}>
+                已开通{dailyEndsAt ? `至 ${fmtLocal(dailyEndsAt)}` : ""}
+              </span>
+              <span className={styles.accessHint}>
+                <Link href="/reco?tab=daily">查看赛前推荐 →</Link>
+              </span>
+            </>
+          ) : (
+            <>
+              <span className={`${styles.accessState} ${styles.accessOff}`}>未开通</span>
+              <span className={styles.accessHint}>
+                由站长为账号开通,<Link href="/pricing">查看权限说明</Link>
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 基本信息 */}
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>基本信息</h2>
         <dl className={styles.dl}>
@@ -207,15 +253,7 @@ export default function AccountPage() {
             <dd>{account.user.display_name ?? "未设置"}</dd>
           </div>
           <div className={styles.dlRow}>
-            <dt>账号 ID</dt>
-            <dd className="num">{account.user.id}</dd>
-          </div>
-          <div className={styles.dlRow}>
-            <dt>角色</dt>
-            <dd>{account.user.role}</dd>
-          </div>
-          <div className={styles.dlRow}>
-            <dt>当前套餐</dt>
+            <dt>当前身份</dt>
             <dd>
               <span className={account.plan === "free" ? styles.planFree : styles.planPaid}>
                 {planLabel(account.plan)}
@@ -229,11 +267,19 @@ export default function AccountPage() {
             </dd>
           </div>
         </dl>
-        {account.plan === "free" && (
-          <p className={styles.note}>
-            免费套餐可查看每场最高一项概率。<Link href="/pricing">了解会员套餐</Link>
-          </p>
-        )}
+        <details className={styles.detailsBox}>
+          <summary>账户详情(技术信息)</summary>
+          <dl className={styles.dl}>
+            <div className={styles.dlRow}>
+              <dt>账号 ID</dt>
+              <dd className="num">{account.user.id}</dd>
+            </div>
+            <div className={styles.dlRow}>
+              <dt>角色</dt>
+              <dd>{account.user.role}</dd>
+            </div>
+          </dl>
+        </details>
       </section>
 
       {/* 订阅记录 */}

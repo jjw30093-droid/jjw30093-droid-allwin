@@ -508,3 +508,22 @@
 .card[data-height="1350"] .conclusionList { gap: 10px; margin: 15px 0; }
 .card[data-height="1350"] .conclusionList li { padding-top: 13px; padding-bottom: 13px; }
 .card[data-height="1350"] .riskBox { padding-top: 16px; padding-bottom: 16px; }
+
+/* ── 卡片内嵌真实图表(export 模式;此前安全版一张图都没有) ─── */
+
+.chartBox {
+  margin-top: 28px;
+  padding: 24px 24px 12px;
+  border: 1px solid rgba(101, 227, 209, 0.28);
+  border-radius: 18px;
+  background: rgba(6, 23, 36, 0.55);
+}
+
+.chartCaption {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #65e3d1;
+}

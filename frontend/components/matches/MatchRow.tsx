@@ -1,18 +1,25 @@
 /**
  * 赛程行(server component,首页与 /matches 共用)。
  * 对称三栏:主队右对齐 / 中间比分或比赛日 / 客队左对齐;
- * 未开赛且有已发布预测时,行下方展示免费层最高一项概率。
+ * 未开赛且有赔率时,行下方展示 Bet365 1x2 折算的胜平负概率条。
  */
 
 import Link from "next/link";
 import type { MatchSummary } from "@/lib/api-v1";
 import { buildMatchHref } from "@/lib/match-links";
 import { LocalTime } from "./LocalTime";
+import { WinProbabilityBar } from "./WinProbabilityBar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
 import { syncStateLabel } from "@/lib/product-status";
-import { OUTCOME_ZH, STATUS_ZH, pct } from "./zh";
+import { STATUS_ZH } from "./zh";
 import styles from "./MatchRow.module.css";
 
+/**
+ * 免费层最高一项概率的类型定义——保留给 lib/homepage.ts / lib/free-tip.ts
+ * 的既有类型引用用,渲染逻辑已被下面的 WinProbabilityBar 取代
+ * (MatchListLive 此前每场发一个 /prediction 请求算这个字段,实测
+ * prediction_snapshots 是 0 行,100% 返回空——纯粹的 N+1,直接删掉请求)。
+ */
 export interface FreeTip {
   top_outcome: "home" | "draw" | "away";
   top_probability: number;
@@ -21,11 +28,9 @@ export interface FreeTip {
 
 export function MatchRow({
   match,
-  freeTip,
   returnTo,
 }: {
   match: MatchSummary;
-  freeTip?: FreeTip | null;
   returnTo?: string;
 }) {
   const finished = match.status === "Finish";
@@ -37,7 +42,7 @@ export function MatchRow({
         <TeamBadge
           teamName={match.home.name}
           crestUrl={match.home.crest_url}
-          size={32}
+          size={40}
         />
       </span>
       <span className={styles.center}>
@@ -63,28 +68,22 @@ export function MatchRow({
         <TeamBadge
           teamName={match.away.name}
           crestUrl={match.away.crest_url}
-          size={32}
+          size={40}
         />
         <span>{match.away.name}</span>
       </span>
-      {match.sync_state && (
+      {/* 内部字段名(MARKET_BASELINE)、观测点数、统一模糊标签不再逐行输出;
+          只保留可行动的 STALE 提示与最近更新时间(详情页仍可完整溯源)。 */}
+      {match.sync_state === "STALE" && (
         <span className={styles.syncLine} data-state={match.sync_state}>
           <b>{syncStateLabel(match.sync_state)}</b>
           {match.data_updated_at && (
             <>
-              {" · 更新 "}
+              {" · 更新于 "}
               <LocalTime iso={match.data_updated_at} />
             </>
           )}
-          {match.probability_source && ` · ${match.probability_source}`}
-          {match.odds_observation_count != null &&
-            ` · 赔率观测 ${match.odds_observation_count} 个点`}
-          {match.sync_state === "STALE" &&
-            ` · ${
-              match.next_planned_sync_at
-                ? "数据已过期，等待计划采集"
-                : "数据已过期，正在等待采集恢复"
-            }`}
+          {` · ${match.next_planned_sync_at ? "等待计划采集" : "正在等待采集恢复"}`}
         </span>
       )}
       {/* 赔率覆盖徽标(D8):区分完整走势与两点摘要,不再把两档混为一谈;
@@ -97,15 +96,16 @@ export function MatchRow({
             : "赔率:初盘与临场"}
         </span>
       )}
-      {freeTip && (
-        <span className={styles.tip}>
-          {freeTip.probability_source === "MARKET_BASELINE"
-            ? "市场去水基线"
-            : "模型最高概率"}
-          :{OUTCOME_ZH[freeTip.top_outcome]}{" "}
-          <b className="num">{pct(freeTip.top_probability)}</b>
-          <span className={styles.tipNote}>(免费分析仅展示最高一项)</span>
+      {match.win_probability && (
+        <span className={styles.probRow}>
+          <WinProbabilityBar probability={match.win_probability} compact />
         </span>
+      )}
+      {/* 2026-08-13:本场所属联赛不在当前身份权限内——比赛本身仍在列表里,
+          只是概率条不下发(见 MatchSummary.requires_login),用一行提示
+          说明原因,点进详情页会走既有登录门禁。 */}
+      {match.requires_login && (
+        <span className={styles.loginHint}>登录后查看胜平负概率</span>
       )}
     </Link>
   );

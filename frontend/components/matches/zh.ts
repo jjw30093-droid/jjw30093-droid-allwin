@@ -24,6 +24,19 @@ export const MARKET_ZH: Record<string, string> = {
   ou: "大小球",
 };
 
+/** bronze_legacy_odds_summary.source——历史存档赔率的批次来源(与
+ * backend/migrations/odds/0004_legacy_odds_summary.sql /
+ * 0005_legacy_source_jka.sql 的 CHECK 约束对齐)。同一公司出现两行不同
+ * 数字时,标出批次来源比默默去重更诚实——两个批次本就可能是独立抓取,
+ * 数值不同是真实的数据差异,不是渲染 bug。 */
+export const LEGACY_SOURCE_ZH: Record<string, string> = {
+  asset_a_json: "存档 A",
+  asset_b_footballdata: "存档 B·football-data",
+  asset_b_nowgoal: "存档 B·NowGoal",
+  football_uk_jka: "旧库 J/K/澳",
+  nowgoal_archive_refetch: "NowGoal 重抓",
+};
+
 /** 各市场 payload 字段 → 中文列名(与 backend/providers/nowgoal.py _FIELD_MAP 对齐) */
 export const MARKET_FIELDS: Record<string, { key: string; label: string }[]> = {
   "1x2": [
@@ -48,6 +61,88 @@ export const EVENT_TYPE_ZH: Record<string, string> = {
   sideline_change: "伤停名单变化",
 };
 
+/* ── 完赛事实报告(/matches/{id}/report 四 tab)词表 ────────────────────
+ * 与上面的 EVENT_TYPE_ZH(赛前阵容/伤停"同期事件")是两套不同概念,不合并。
+ * 全部枚举值来自真实库 DISTINCT 核对(2026-08);来源新增值兜底显示原文。 */
+
+export const POSITION_ZH: Record<string, string> = {
+  GK: "门将",
+  DEF: "后卫",
+  MID: "中场",
+  FWD: "前锋",
+};
+
+export const MATCH_EVENT_ZH: Record<string, string> = {
+  Goal: "进球",
+  Card: "牌",
+  Substitution: "换人",
+  Half: "半场",
+  AddedTime: "补时",
+  VAR: "VAR 判罚",
+  MissedPenalty: "射失点球",
+  PenaltyShootout: "点球大战",
+  Comment: "说明",
+};
+
+export const CARD_ZH: Record<string, string> = {
+  Yellow: "黄牌",
+  Red: "红牌",
+  YellowRed: "两黄变红",
+};
+
+export const SHOT_OUTCOME_ZH: Record<string, string> = {
+  Goal: "进球",
+  AttemptSaved: "被扑出",
+  Miss: "偏出",
+  Post: "中框",
+};
+
+export const SHOT_SITUATION_ZH: Record<string, string> = {
+  RegularPlay: "运动战",
+  FastBreak: "快速反击",
+  SetPiece: "定位球",
+  FromCorner: "角球",
+  FreeKick: "任意球",
+  Penalty: "点球",
+  ThrowInSetPiece: "界外球战术",
+  IndividualPlay: "个人突破",
+};
+
+export const SHOT_TYPE_ZH: Record<string, string> = {
+  RightFoot: "右脚",
+  LeftFoot: "左脚",
+  Header: "头球",
+  OtherBodyParts: "其他部位",
+};
+
+/** 球队数据对比行(顺序即展示顺序;format 决定数值渲染方式)。
+ * key 与 MatchReportTeamStat 的字段名一一对应(Pydantic 单一真源生成)。 */
+export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "num" | "num1" }[] = [
+  { key: "possession", label: "控球率", format: "pct" },
+  // "官方统计 xG"取自 FotMob 团队统计接口,与统计 tab 下方射门图自行按
+  // shots[] 求和的"射门图 xG 合计"是两个独立来源,分别命名(不同名混称
+  // 会让用户误以为数值不一致是 bug)。
+  { key: "expected_goals", label: "官方统计 xG", format: "num1" },
+  { key: "total_shots", label: "射门", format: "num" },
+  { key: "shots_on_target", label: "射正", format: "num" },
+  { key: "big_chance", label: "绝佳机会", format: "num" },
+  { key: "shots_inside_box", label: "禁区内射门", format: "num" },
+  { key: "touches_opp_box", label: "对方禁区触球", format: "num" },
+  { key: "accurate_passes", label: "成功传球", format: "num" },
+  { key: "accurate_crosses", label: "成功传中", format: "num" },
+  { key: "corners", label: "角球", format: "num" },
+  { key: "tackles", label: "抢断", format: "num" },
+  { key: "interceptions", label: "拦截", format: "num" },
+  { key: "clearances", label: "解围", format: "num" },
+  { key: "keeper_saves", label: "门将扑救", format: "num" },
+  { key: "duel_won", label: "对抗成功", format: "num" },
+  { key: "aerials_won", label: "争顶成功", format: "num" },
+  { key: "fouls", label: "犯规", format: "num" },
+  { key: "offsides", label: "越位", format: "num" },
+  { key: "yellow_cards", label: "黄牌", format: "num" },
+  { key: "red_cards", label: "红牌", format: "num" },
+];
+
 /** 联赛静态元数据(镜像 backend/queries/leagues.py LEAGUE_META,仅作显示回退) */
 export const LEAGUE_ZH: Record<number, string> = {
   47: "英超",
@@ -60,11 +155,18 @@ export const LEAGUE_ZH: Record<number, string> = {
   223: "日职联",
   9080: "韩K联",
   113: "澳超",
+  48: "英冠",
+  57: "荷甲",
+  61: "葡超",
+  268: "巴甲",
+  42: "欧冠",
+  73: "欧联",
+  10216: "欧协联",
 };
 
 export const ENTITLEMENT_ZH: Record<string, string> = {
   "league:epl": "英超联赛数据",
-  "league:lottery": "竞彩常见联赛数据(日职联/韩K联/澳超/北欧)",
+  "league:lottery": "竞彩常见联赛数据(欧冠欧联/五大联赛外的英冠荷甲葡超巴甲/日韩澳/北欧)",
   "league:top5": "五大联赛数据",
   "prediction:top_probability": "模型最高一项概率",
   "prediction:full_wdl": "完整胜平负三项概率",

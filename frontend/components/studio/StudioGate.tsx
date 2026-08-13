@@ -63,7 +63,7 @@ export function StudioGate({ children }: { children: React.ReactNode }) {
           <p className={styles.noticeText}>
             Creator Studio 仅限 analyst / admin 角色使用,请先登录。
           </p>
-          <Link href="/login" className={styles.cta}>
+          <Link href="/login?next=/studio" className={styles.cta}>
             前往登录
           </Link>
         </div>

@@ -3,6 +3,13 @@
   margin: 0 auto;
   padding: 32px 20px 64px;
 }
+@media (max-width: 640px) {
+  .page {
+    /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+
 
 .title {
   font-size: 22px;
@@ -345,4 +352,67 @@
   50% {
     opacity: 1;
   }
+}
+
+/* ── 每日精选(RecoTab;沿用现有 token:--bg-2/--border/--ink-3) ── */
+
+.recoPanel {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.panelTitle {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.formRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.fieldInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.rowCard {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  margin-bottom: 10px;
+  background: var(--bg-2);
+  font-size: 13px;
+}
+
+.rowCard ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.rowActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }

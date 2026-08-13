@@ -1,0 +1,102 @@
+.compareList {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compareRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compareHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.compareLabel {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.compareValue {
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 48px;
+}
+
+.compareValue:last-child {
+  text-align: right;
+}
+
+/* 与 SpecCharts 图表同一套主客配色惯例(主=金,客=中性) */
+.barTrack {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.barHome {
+  background: var(--gold-300);
+}
+
+.barAway {
+  background: var(--ink-3);
+  opacity: 0.55;
+}
+
+.tableWrap {
+  margin-top: 14px;
+  overflow-x: auto; /* 宽表在自身容器内横滑,不撑破页面(§11.2) */
+}
+
+.tableTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.playerTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.playerTable th,
+.playerTable td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.playerTable th {
+  color: var(--ink-3);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.nameCol {
+  text-align: left !important;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .wideCol {
+    display: none; /* 窄屏砍列(xG/射正/创造机会/抢断),不缩字号 */
+  }
+  .nameCol {
+    max-width: 110px;
+  }
+}

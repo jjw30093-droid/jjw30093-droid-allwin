@@ -3,29 +3,18 @@ import Link from "next/link";
 import {
   serverGet,
   serverGetOptional,
+  type GetJson,
   type MatchListResponse,
-  type PredictionResponse,
-  type TrackRecordResponse,
 } from "@/lib/api-v1";
-import {
-  HOMEPAGE_FEATURE_EVENT,
-  publicRecordView,
-  selectFeaturedOverride,
-  selectHomepageEvidence,
-  selectHomepageMatches,
-  type AnalysisBundle,
-  type HomeMatchCard,
-} from "@/lib/homepage";
+import { selectHomepageMatches, type HomeMatchCard } from "@/lib/homepage";
 import { LocalTime } from "@/components/matches/LocalTime";
-import { MatchRow, type FreeTip } from "@/components/matches/MatchRow";
-import { TeamBadge } from "@/components/teams/TeamBadge";
-import { LEAGUE_ZH, OUTCOME_ZH, pct } from "@/components/matches/zh";
-import { syncStateLabel } from "@/lib/product-status";
+import { FollowedMatches } from "@/components/matches/FollowedMatches";
+import { RecentlyViewed } from "@/components/matches/RecentlyViewed";
+import { HomeMatchExperienceLive } from "@/components/home/HomeMatchExperienceLive";
 import styles from "./page.module.css";
 
-function ErrorBox({ text }: { text: string }) {
-  return <div className={styles.errorBox}>{text}</div>;
-}
+type RecoOverview = GetJson<"/api/v1/reco/overview">;
+type Freshness = GetJson<"/api/v1/status/freshness">;
 
 function SectionSkeleton({ lines = 3 }: { lines?: number }) {
   return (
@@ -37,548 +26,260 @@ function SectionSkeleton({ lines = 3 }: { lines?: number }) {
   );
 }
 
-function freeTipOf(resp: PredictionResponse | null): FreeTip | null {
-  if (!resp?.available || !resp.prediction) return null;
-  const prediction = resp.prediction;
-  if (prediction.tier !== "free") return null;
-  if (
-    !Number.isFinite(prediction.top_probability) ||
-    prediction.top_probability < 0 ||
-    prediction.top_probability > 1
-  ) {
-    return null;
-  }
-  return {
-    top_outcome: prediction.top_outcome,
-    top_probability: prediction.top_probability,
-    probability_source: prediction.meta.probability_source,
-  };
-}
-
-function probabilitySourceLabel(source: FreeTip["probability_source"]) {
-  if (source === "MARKET_BASELINE") return "市场去水基线";
-  if (source === "MODEL") return "模型概率";
-  return "来源待确认";
-}
-
 type HomePageData = {
   cards: HomeMatchCard[];
   featured: HomeMatchCard | null;
-  secondary: HomeMatchCard[];
-  finished: MatchListResponse | null;
-  analysis: AnalysisBundle | null;
+  weekly: HomeMatchCard[];
+  counts: { today: number; tomorrow: number; week: number } | null;
 };
 
 /**
- * 首页比赛、预测与分析的唯一服务端聚合入口。
- * React cache 让首屏与近期列表在同一次渲染中共享同一份请求结果。
+ * 首页比赛与预测的唯一服务端聚合入口。
+ * React cache 让首屏各模块在同一次渲染中共享同一份请求结果。
+ *
+ * 不再拉 /matches/{id}/analysis:重点卡的胜平负概率条直接读
+ * match.win_probability(随 /api/v1/matches 列表一次性下发,见
+ * backend/queries/odds.py::latest_1x2_by_match),不需要再单独请求
+ * analysis bundle——那是"近期战绩"面板专用的字段,面板已下架。
  */
 const getHomePageData = cache(async (): Promise<HomePageData> => {
-  const [upcoming, finished, ...fallbackLeagueLists] = await Promise.all([
-    serverGet<MatchListResponse>("/api/v1/matches?status=upcoming&window=7d&limit=8", {
-      revalidate: 60,
-    }),
-    serverGet<MatchListResponse>("/api/v1/matches?status=finished&limit=5", {
-      revalidate: 60,
-    }).catch(() => null),
-    // 2026-08-07 J 联赛开幕一次性置顶(见 lib/homepage.ts
-    // HOMEPAGE_FEATURE_EVENT)所需的北欧回退候选——瑞典超/挪超的比赛
-    // 未必落在上面按开球时间排的默认前 8 场里,需要单独取。过期后随
-    // selectFeaturedOverride 一起删除。
-    ...HOMEPAGE_FEATURE_EVENT.fallbackLeagueIds.map((leagueId) =>
-      serverGetOptional<MatchListResponse>(
-        `/api/v1/matches?league_id=${leagueId}&status=upcoming&window=7d&limit=3`,
-        { revalidate: 60 },
-      ).catch(() => null),
+  const [upcoming, todayList, tomorrowList, shotsList] = await Promise.all([
+    serverGet<MatchListResponse>(
+      "/api/v1/matches?status=upcoming&window=7d&limit=8",
+      { revalidate: 60 },
     ),
+    serverGetOptional<MatchListResponse>(
+      "/api/v1/matches?status=upcoming&window=today&limit=1",
+      { revalidate: 60 },
+    ).catch(() => null),
+    serverGetOptional<MatchListResponse>(
+      "/api/v1/matches?status=upcoming&window=tomorrow&limit=1",
+      { revalidate: 60 },
+    ).catch(() => null),
+    // 重点比赛选场需要知道"哪几场点进去真有东西看"。一次列表请求换回整段窗口
+    // 的射门史命中集合,比逐场拉 analysis 便宜得多(替代了此前逐场拉 prediction
+    // 的 N 次请求 —— 概率面板已下架,那些请求本就没有消费方了)。
+    serverGetOptional<MatchListResponse>(
+      "/api/v1/matches?status=upcoming&window=7d&content=shots&limit=200",
+      { revalidate: 60 },
+    ).catch(() => null),
   ]);
 
-  const nordicMatches = fallbackLeagueLists
-    .flatMap((resp) => resp?.matches ?? [])
-    .filter((m) => !upcoming.matches.some((u) => u.match_id === m.match_id));
+  const cards = upcoming.matches.map((match) => ({ match, tip: null }));
 
-  const allMatches = [...upcoming.matches, ...nordicMatches];
-  const predictionResponses = await Promise.all(
-    allMatches.map((match) =>
-      serverGetOptional<PredictionResponse>(
-        `/api/v1/matches/${match.match_id}/prediction`,
-        { revalidate: 60 },
-      ).catch(() => null),
-    ),
+  const withShots = new Set<number>(
+    (shotsList?.matches ?? []).map((m) => m.match_id),
   );
+  const { featured, ordered } = selectHomepageMatches(cards, new Date(), {
+    withShots,
+  });
+  // 近期比赛列表:按开球时间顺序(不套用 featured 的"时间就近"排序),去掉重点场
+  const weekly = [...cards]
+    .filter((card) => card.match.match_id !== featured?.match.match_id)
+    .sort((a, b) =>
+      (a.match.kickoff_at_utc ?? a.match.date_utc).localeCompare(
+        b.match.kickoff_at_utc ?? b.match.date_utc,
+      ),
+    );
 
-  const allCards = allMatches.map((match, index) => ({
-    match,
-    tip: freeTipOf(predictionResponses[index]),
-  }));
-  const cards = allCards.slice(0, upcoming.matches.length);
-  const nordicCards = allCards.slice(upcoming.matches.length);
+  const counts =
+    todayList && tomorrowList
+      ? {
+          today: todayList.total,
+          tomorrow: tomorrowList.total,
+          week: upcoming.total,
+        }
+      : null;
 
-  const { featured: defaultFeatured, ordered } = selectHomepageMatches(cards);
-  const overrideFeatured = selectFeaturedOverride(allCards, nordicCards, new Date());
-  const featured = overrideFeatured ?? defaultFeatured;
-  const secondary = ordered.filter(
-    (card) => card.match.match_id !== featured?.match.match_id,
-  );
-
-  const analysis = featured
-    ? await serverGetOptional<AnalysisBundle>(
-        `/api/v1/matches/${featured.match.match_id}/analysis`,
-        { revalidate: 60 },
-      ).catch(() => null)
-    : null;
-
-  return { cards: ordered, featured, secondary, finished, analysis };
+  return { cards: ordered, featured, weekly, counts };
 });
 
-function FeaturedMatchCard({
-  card,
-  analysis,
-}: {
-  card: HomeMatchCard;
-  analysis: AnalysisBundle | null;
-}) {
-  const { match, tip } = card;
-  const evidence = selectHomepageEvidence(analysis?.evidence);
-  const updatedAt = match.data_updated_at ?? analysis?.built_at ?? null;
+const getRecoOverview = cache(async (): Promise<RecoOverview | null> => {
+  return serverGetOptional<RecoOverview>("/api/v1/reco/overview", {
+    revalidate: 120,
+  }).catch(() => null);
+});
 
+const getFreshness = cache(async (): Promise<Freshness | null> => {
+  return serverGetOptional<Freshness>("/api/v1/status/freshness", {
+    revalidate: 60,
+  }).catch(() => null);
+});
+
+/* ── 今日更新状态 ───────────────────────────────────────── */
+
+async function FreshnessLine() {
+  const f = await getFreshness();
+  if (!f) return null;
+  // 三条来源各自独立轮询,互不代表彼此;任一为空如实展示"尚无记录",
+  // 不用当前时间或另一条的时间顶替。
   return (
-    <section className={styles.heroSection} aria-labelledby="featured-match-title">
-      <article className={styles.heroCard} data-testid="featured-match-card">
-        <header className={styles.heroHeader}>
-          <div>
-            <p className={styles.heroKicker}>
-              今日重点
-              <span>{LEAGUE_ZH[match.league_id] ?? `联赛 ${match.league_id}`}</span>
-            </p>
-            <p className={styles.heroKickoff}>
-              {match.kickoff_at_utc ? (
-                <LocalTime iso={match.kickoff_at_utc} fallback={match.date_utc} />
-              ) : (
-                match.date_utc
-              )}
-            </p>
-          </div>
-          <span className={styles.syncBadge} data-state={match.sync_state ?? "UNKNOWN"}>
-            {syncStateLabel(match.sync_state)}
-          </span>
-        </header>
-
-        <div className={styles.heroTeams}>
-          <h1 id="featured-match-title">
-            <span className={styles.heroTeam}>
-              <TeamBadge
-                teamName={match.home.name}
-                crestUrl={match.home.crest_url}
-                size={48}
-                eager
-              />
-              <span>{match.home.name}</span>
-            </span>
-            <b>vs</b>
-            <span className={styles.heroTeam}>
-              <TeamBadge
-                teamName={match.away.name}
-                crestUrl={match.away.crest_url}
-                size={48}
-                eager
-              />
-              <span>{match.away.name}</span>
-            </span>
-          </h1>
-        </div>
-
-        <div className={styles.heroGrid}>
-          <div className={styles.conclusionPanel}>
-            <span className={styles.conclusionLabel}>公开结论</span>
-            {tip ? (
-              <>
-                <div className={styles.conclusionValue}>
-                  <span>{OUTCOME_ZH[tip.top_outcome]}</span>
-                  <strong className="num">{pct(tip.top_probability)}</strong>
-                </div>
-                <p className={styles.conclusionSource}>
-                  {probabilitySourceLabel(tip.probability_source)}
-                </p>
-              </>
-            ) : (
-              <div className={styles.conclusionPending}>
-                <strong>分析准备中</strong>
-                <span>赛前数据入库后更新</span>
-              </div>
-            )}
-          </div>
-
-          <div className={styles.evidencePanel}>
-            <div className={styles.evidenceHead}>
-              <h2>本场依据</h2>
-              <span>公开信息</span>
-            </div>
-            {evidence.length > 0 ? (
-              <ul className={styles.evidenceList}>
-                {evidence.map((item) => (
-                  <li key={`${item.kind}-${item.side}`}>
-                    <span aria-hidden />
-                    <p>{item.text}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.evidenceEmpty}>本场公开依据尚未完成整理。</p>
-            )}
-          </div>
-        </div>
-
-        <footer className={styles.heroFooter}>
-          <p>
-            {updatedAt ? (
-              <>
-                数据更新 <LocalTime iso={updatedAt} />
-              </>
-            ) : (
-              "以当前公开数据为准"
-            )}
-          </p>
-          <Link
-            href={`/matches/${match.match_id}`}
-            className={styles.primaryAction}
-            aria-label={`查看${match.home.name}对${match.away.name}完整分析`}
-          >
-            查看完整分析
-            <span aria-hidden>→</span>
-          </Link>
-        </footer>
-      </article>
-    </section>
+    <p className={styles.freshnessLine} data-testid="freshness-line">
+      赛程更新 <LocalTime iso={f.schedule_updated_at} fallback="尚无记录" />
+      {" ｜ "}
+      赔率更新 <LocalTime iso={f.odds_updated_at} fallback="尚无记录" />
+      {" ｜ "}
+      推荐更新 <LocalTime iso={f.reco_updated_at} fallback="尚无记录" />
+    </p>
   );
 }
 
-function SecondaryMatches({ cards }: { cards: HomeMatchCard[] }) {
-  return (
-    <section
-      className={styles.secondarySection}
-      aria-labelledby="secondary-matches-title"
-    >
-      <header className={styles.secondaryHead}>
-        <div>
-          <h2 id="secondary-matches-title">其他比赛</h2>
-          <span>未来 7 天</span>
-        </div>
-        <span className={styles.secondaryHint}>右滑查看更多</span>
-      </header>
+/* ── 今晚/明天/未来7天计数条 + 重点比赛卡 + 近期比赛 ──────────
+ * 服务端只算一次匿名口径的初始数据(SSR/无 JS 兜底),真正的"这次访问者
+ * 实际能看到什么"交给 HomeMatchExperienceLive 挂载后用 cookie 刷新——
+ * 会话 cookie Path=/api/v1,这里(Next RSC)读不到,见该组件顶部注释。
+ * 三块以前分开 Suspense(CountsBar / HomeMatchExperience),现在合并成
+ * 一次请求 + 一个客户端边界:三块共享同一个 featured 选场结果,分开刷新
+ * 会出现"计数条已经是新数据、重点卡还是旧的"这种不一致。 */
 
-      {cards.length === 0 ? (
-        <p className={styles.secondaryEmpty}>暂无其他已排期比赛。</p>
-      ) : (
-        <div
-          className={styles.secondaryViewport}
-          data-testid="secondary-match-ticker"
-          aria-label="其他比赛横向列表"
-        >
-          {cards.map(({ match, tip }) => (
-            <Link
-              key={match.match_id}
-              href={`/matches/${match.match_id}`}
-              className={styles.secondaryCard}
-              aria-label={`查看${match.home.name}对${match.away.name}比赛分析`}
-            >
-              <div className={styles.secondaryMeta}>
-                <span>{LEAGUE_ZH[match.league_id] ?? `联赛 ${match.league_id}`}</span>
-                <span>
-                  {match.kickoff_at_utc ? (
-                    <LocalTime iso={match.kickoff_at_utc} fallback={match.date_utc} />
-                  ) : (
-                    match.date_utc
-                  )}
-                </span>
-              </div>
-              <div className={styles.secondaryTeams}>
-                <span className={styles.secondaryTeam}>
-                  <TeamBadge
-                    teamName={match.home.name}
-                    crestUrl={match.home.crest_url}
-                    size={24}
-                  />
-                  <strong>{match.home.name}</strong>
-                </span>
-                <span className={styles.secondaryTeam}>
-                  <TeamBadge
-                    teamName={match.away.name}
-                    crestUrl={match.away.crest_url}
-                    size={24}
-                  />
-                  <strong>{match.away.name}</strong>
-                </span>
-              </div>
-              {tip ? (
-                <div className={styles.secondaryTip}>
-                  <span>{OUTCOME_ZH[tip.top_outcome]}</span>
-                  <strong className="num">{pct(tip.top_probability)}</strong>
-                </div>
-              ) : (
-                <span className={styles.secondaryPending}>分析准备中</span>
-              )}
-            </Link>
-          ))}
-          <Link href="/matches" className={styles.secondaryAll}>
-            <strong>全部比赛</strong>
-            <span aria-hidden>→</span>
-          </Link>
-        </div>
-      )}
-    </section>
-  );
-}
-
-async function HomeMatchExperience() {
+async function HomeMatchExperienceSection() {
   let data: HomePageData;
   try {
     data = await getHomePageData();
   } catch {
-    return <ErrorBox text="今日比赛暂时无法加载，请稍后再试。" />;
-  }
-
-  if (!data.featured) {
-    return <ErrorBox text="暂无已排期的未来比赛。" />;
+    return (
+      <HomeMatchExperienceLive
+        initialFeatured={null}
+        initialWeekly={[]}
+        initialCounts={null}
+        initialErrored
+      />
+    );
   }
 
   return (
-    <>
-      <FeaturedMatchCard card={data.featured} analysis={data.analysis} />
-      <SecondaryMatches cards={data.secondary} />
-    </>
+    <HomeMatchExperienceLive
+      initialFeatured={data.featured}
+      initialWeekly={data.weekly}
+      initialCounts={data.counts}
+      initialErrored={false}
+    />
   );
 }
 
-type TrackRecordSample = TrackRecordResponse["samples"][number];
+/* ── 今日精选 + 推荐战绩摘要(匿名聚合,不含单据内容) ───── */
 
-function hitRatePlot(samples: TrackRecordSample[]) {
-  const settled = [...samples]
-    .reverse()
-    .filter(
-      (sample): sample is TrackRecordSample & { hit: boolean } =>
-        typeof sample.hit === "boolean",
-    );
-
-  if (settled.length === 0) {
-    return { points: "", last: null, count: 0 };
-  }
-
-  let hits = 0;
-  const chartPoints = settled.map((sample, index) => {
-    if (sample.hit) hits += 1;
-    const rate = hits / (index + 1);
-    const x = settled.length === 1 ? 240 : (index / (settled.length - 1)) * 480;
-    const y = 82 - rate * 68;
-    return { x, y };
-  });
-
-  return {
-    points: chartPoints
-      .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`)
-      .join(" "),
-    last: chartPoints.at(-1) ?? null,
-    count: settled.length,
-  };
+async function DailyPicksSection() {
+  const overview = await getRecoOverview();
+  return (
+    <section className={styles.picksCard} aria-labelledby="daily-picks-title">
+      <header className={styles.picksHead}>
+        <h2 id="daily-picks-title">今日精选</h2>
+        {overview && overview.today_published_count > 0 && (
+          <span className={styles.picksBadge}>
+            已发布 {overview.today_published_count} 场
+          </span>
+        )}
+      </header>
+      {!overview ? (
+        <p className={styles.picksNote}>精选状态暂时无法加载,可直接进入精选页查看。</p>
+      ) : overview.today_published_count > 0 ? (
+        <p className={styles.picksNote}>
+          今天已发布 <b className="num">{overview.today_published_count}</b> 场
+          {overview.today_latest_published_at && (
+            <>
+              ,更新于 <LocalTime iso={overview.today_latest_published_at} />
+            </>
+          )}
+          。内容包含赛果方向、数据依据与风险提示。
+        </p>
+      ) : (
+        <p className={styles.picksNote}>今日精选尚未发布;发布后本模块自动更新。</p>
+      )}
+      {/* 首页只保留重点卡"查看完整分析"一个最强按钮,这里降为文字链接 */}
+      <div className={styles.picksActions}>
+        <Link href="/reco?tab=daily" className={styles.picksLink}>
+          查看今日精选 →
+        </Link>
+        <Link href="/reco?tab=record" className={styles.picksLink}>
+          查看历史战绩 →
+        </Link>
+      </div>
+    </section>
+  );
 }
 
-async function PublicRecordSection() {
-  let data: TrackRecordResponse | null = null;
-  let failed = false;
-  try {
-    data = await serverGet<TrackRecordResponse>(
-      "/api/v1/track-record?limit=40&offset=0",
-      { revalidate: 120 },
-    );
-  } catch {
-    failed = true;
-  }
-
-  const view = publicRecordView(data, failed);
-  const plot =
-    view.status === "ready"
-      ? hitRatePlot(view.samples)
-      : { points: "", last: null, count: 0 };
-
+async function RecoSummarySection() {
+  const overview = await getRecoOverview();
+  if (!overview) return null;
+  const hasRecords = overview.settled_count > 0;
   return (
-    <section className={styles.recordPanel} aria-labelledby="public-record-title">
-      <header className={styles.recordHead}>
+    <section className={styles.recoSummary} aria-labelledby="reco-summary-title">
+      <header className={styles.sectionHead}>
         <div>
-          <p className={styles.recordKicker}>PUBLIC RECORD</p>
-          <div className={styles.recordTitleLine}>
-            <h2 id="public-record-title" className={styles.recordTitle}>
-              公开战绩
-            </h2>
-            <span className={styles.recordStatus} data-status={view.status}>
-              {view.status === "ready"
-                ? "连续公开"
-                : view.status === "empty"
-                  ? "公开验证中"
-                  : "暂不可用"}
-            </span>
-          </div>
+          <h2 id="reco-summary-title" className={styles.sectionTitle}>
+            近{overview.window_days}天推荐记录
+          </h2>
         </div>
-        <Link href="/track-record" className={styles.recordLink}>
-          逐场记录
-          <span aria-hidden>→</span>
+        <Link href="/reco?tab=record" className={styles.textLink}>
+          查看全部记录 →
         </Link>
       </header>
-
-      {view.status === "empty" && (
-        <div className={styles.recordMessage}>
-          <strong>公开验证中，从首场锁定记录开始</strong>
-          <span>发布、命中与未中都会保留。</span>
-        </div>
-      )}
-
-      {view.status === "error" && (
-        <div className={styles.recordMessage} data-testid="public-record-error">
-          <strong>公开记录暂时无法加载</strong>
-          <span>比赛入口与完整分析仍可正常查看。</span>
-        </div>
-      )}
-
-      {view.status === "ready" && (
-        <div className={styles.recordBody}>
-          <div className={styles.recordMetrics}>
-            <div className={styles.recordMetric}>
-              <span>正式记录</span>
-              <strong className={styles.recordMetricValue}>{view.total}</strong>
-              <small>场</small>
-            </div>
-            <div className={styles.recordMetric}>
-              <span>命中率</span>
-              <strong className={styles.recordMetricValue}>
-                {view.accuracy == null
-                  ? "—"
-                  : `${(view.accuracy * 100).toFixed(1)}%`}
-              </strong>
-            </div>
-            <div className={styles.recordMetric}>
-              <span>已结算</span>
-              <strong className={styles.recordMetricValue}>{view.evaluated}</strong>
-              <small>场</small>
-            </div>
+      {hasRecords ? (
+        <div className={styles.recoSummaryRow}>
+          <div className={styles.recoSummaryItem}>
+            <b className="num">{overview.settled_count}</b>
+            <span>已结算</span>
           </div>
-
-          <div className={styles.recordChart}>
-            <div className={styles.recordChartHead}>
-              <span>累计命中率走势</span>
-              <span>{plot.count > 0 ? `最近 ${plot.count} 场` : "等待结算"}</span>
-            </div>
-            <div className={styles.recordPlot}>
-              <svg
-                viewBox="0 0 480 96"
-                preserveAspectRatio="none"
-                role="img"
-                aria-label={`最近 ${plot.count} 场已结算预测的累计命中率走势`}
-              >
-                <line x1="0" y1="14" x2="480" y2="14" className={styles.plotGrid} />
-                <line x1="0" y1="48" x2="480" y2="48" className={styles.plotGrid} />
-                <line
-                  x1="0"
-                  y1="82"
-                  x2="480"
-                  y2="82"
-                  className={styles.plotBaseline}
-                />
-                {plot.points && (
-                  <polyline points={plot.points} className={styles.plotLine} />
-                )}
-                {plot.last && (
-                  <circle
-                    cx={plot.last.x}
-                    cy={plot.last.y}
-                    r="3.5"
-                    className={styles.plotPoint}
-                  />
-                )}
-              </svg>
-            </div>
+          <div className={styles.recoSummaryItem}>
+            <b className="num">
+              {overview.win_count}胜 {overview.lose_count}负 {overview.push_count}走
+            </b>
+            <span>命中/未中/走水</span>
           </div>
+          <div className={styles.recoSummaryItem}>
+            <b className="num">
+              {overview.net_units >= 0 ? "+" : ""}
+              {overview.net_units.toFixed(2)}
+            </b>
+            <span>净单位</span>
+          </div>
+          {overview.voided_count > 0 && (
+            <div className={styles.recoSummaryItem}>
+              <b className="num">{overview.voided_count}</b>
+              <span>作废(单列)</span>
+            </div>
+          )}
         </div>
+      ) : (
+        <p className={styles.emptyText}>
+          正式推荐尚未开始,首场结算后开始累计;命中与未中都会保留。
+        </p>
       )}
     </section>
-  );
-}
-
-async function RecentMatchesSection() {
-  let data: HomePageData;
-  try {
-    data = await getHomePageData();
-  } catch {
-    return <ErrorBox text="比赛数据暂时无法加载，请稍后再试。" />;
-  }
-
-  const upcoming = data.cards
-    .filter((card) => card.match.match_id !== data.featured?.match.match_id)
-    .slice(0, 5);
-
-  return (
-    <div className={styles.twoCol}>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>近期赛程</h3>
-        {upcoming.length === 0 ? (
-          <p className={styles.emptyText}>暂无其他已排期比赛。</p>
-        ) : (
-          upcoming.map(({ match, tip }) => (
-            <MatchRow key={match.match_id} match={match} freeTip={tip} />
-          ))
-        )}
-      </div>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>最近完赛</h3>
-        {!data.finished ? (
-          <p className={styles.emptyText}>完赛数据暂时无法加载。</p>
-        ) : data.finished.matches.length === 0 ? (
-          <p className={styles.emptyText}>暂无已完赛的比赛记录。</p>
-        ) : (
-          data.finished.matches.map((match) => (
-            <MatchRow key={match.match_id} match={match} />
-          ))
-        )}
-      </div>
-      <p className={styles.sectionFoot}>
-        免费展示一项真实概率；来源可能是模型或明确标识的市场去水基线。
-      </p>
-    </div>
   );
 }
 
 export default function Home() {
   return (
     <main className={styles.page}>
+      <Suspense fallback={null}>
+        <FreshnessLine />
+      </Suspense>
+
       <Suspense fallback={<SectionSkeleton lines={5} />}>
-        <HomeMatchExperience />
+        <HomeMatchExperienceSection />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton lines={2} />}>
-        <PublicRecordSection />
+        <DailyPicksSection />
       </Suspense>
 
-      <section className={styles.matchesSection}>
-        <div className={styles.sectionHead}>
-          <div>
-            <p className={styles.eyebrow}>MATCHES</p>
-            <h2 className={styles.sectionTitle}>近期比赛</h2>
-          </div>
-          <Link href="/matches" className={styles.textLink}>
-            全部比赛 →
-          </Link>
-        </div>
-        <Suspense fallback={<SectionSkeleton lines={5} />}>
-          <RecentMatchesSection />
-        </Suspense>
-      </section>
+      <Suspense fallback={null}>
+        <RecoSummarySection />
+      </Suspense>
+
+      <FollowedMatches />
+      <RecentlyViewed />
 
       <nav className={styles.quickLinks} aria-label="常用入口">
         <Link href="/track-record">
-          <strong>公开记录</strong>
+          <strong>模型公开记录</strong>
           <span>查看发布与赛后评估</span>
         </Link>
         <Link href="/pricing">
-          <strong>会员权益</strong>
-          <span>完整概率与赔率记录</span>
+          <strong>权限说明</strong>
+          <span>登录免费,精选需授权</span>
         </Link>
         <Link href="/about">
           <strong>关于我们</strong>

@@ -90,10 +90,33 @@ test.describe("瑞典超(Allsvenskan)接入验收 — 真实数据,隔离实验�
     expect(leaked.nextData).toBe(false);
   });
 
-  test("8. premium(pro)保持完整三项概率", async ({ page }) => {
-    // mock 微信登录(与 frontend/e2e/auth.spec.ts 相同机制,固定 openid 已预置 pro)
-    await page.goto(`${API}/api/v1/auth/wechat/oa/start?next=/account`);
-    await page.waitForURL("**/account");
+  test("8. 已登录用户(member 基线)看到完整三项概率", async ({ page }) => {
+    // 扫码登录(与 frontend/e2e/auth.spec.ts 相同机制:webhook 批准;登录即解锁全部足球数据)
+    const deviceResp = await page.request.post(`${API}/api/v1/auth/wechat/device`, { data: {} });
+    const device = (await deviceResp.json()) as { request_id: string; secret: string };
+    const { createHash, randomUUID } = await import("node:crypto");
+    const ts = String(Math.floor(Date.now() / 1000));
+    const nonce = randomUUID().replace(/-/g, "");
+    const signature = createHash("sha1")
+      .update(["dev-webhook-token", ts, nonce].sort().join(""))
+      .digest("hex");
+    const xml =
+      "<xml><ToUserName><![CDATA[gh_mock_oa]]></ToUserName>" +
+      "<FromUserName><![CDATA[mock-openid-user-1]]></FromUserName>" +
+      `<CreateTime>${ts}</CreateTime><MsgType><![CDATA[event]]></MsgType>` +
+      "<Event><![CDATA[SCAN]]></Event>" +
+      `<EventKey><![CDATA[${device.request_id}]]></EventKey></xml>`;
+    const scan = await page.request.post(
+      `${API}/api/v1/auth/wechat/webhook?signature=${signature}&timestamp=${ts}&nonce=${nonce}`,
+      { data: xml, headers: { "Content-Type": "application/xml" } },
+    );
+    expect(scan.status()).toBe(200);
+    const claim = await page.request.post(
+      `${API}/api/v1/auth/wechat/device/${device.request_id}/claim`,
+      { data: { secret: device.secret } },
+    );
+    expect(claim.status()).toBe(200);
+    await page.goto("/account");
 
     await page.goto(`/matches/${PREDICTED_MATCH_ID}`);
     await expect(page.getByText("42%").first()).toBeVisible();

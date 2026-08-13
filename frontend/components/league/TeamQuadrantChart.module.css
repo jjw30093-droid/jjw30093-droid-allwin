@@ -1,0 +1,138 @@
+.card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px 14px 14px;
+  margin-bottom: 18px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.title {
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--ink);
+  margin: 0 0 3px;
+  letter-spacing: 0.01em;
+}
+
+.sub {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.tab,
+.tabOn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  /* 手机端点击目标不小于 32px */
+  min-height: 32px;
+}
+
+.tab:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+
+.tabOn {
+  color: #2a1b06;
+  background: var(--gold);
+  border-color: var(--gold);
+  font-weight: 600;
+}
+
+.tab:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.legend {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0 8px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+.legendRow {
+  display: grid;
+  grid-template-columns: 5.6em 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.legendKey {
+  color: var(--gold);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.legendVal {
+  color: var(--ink-2);
+  word-break: break-word;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.65;
+  color: var(--ink-3, var(--ink-2));
+}
+
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 520px) {
+  .card {
+    padding: 14px 11px 12px;
+  }
+
+  .head {
+    flex-direction: column;
+  }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .tab,
+  .tabOn {
+    flex: 1;
+    padding: 6px 8px;
+  }
+
+  .legendRow {
+    grid-template-columns: 1fr;
+    gap: 1px;
+  }
+}
