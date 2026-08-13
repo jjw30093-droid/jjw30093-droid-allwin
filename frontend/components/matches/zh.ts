@@ -267,6 +267,14 @@ export function formatBeijingZh(iso: string): string | null {
   return `${p.month}月${p.day}日 ${pad2(p.hour)}:${pad2(p.minute)}`;
 }
 
+/** "2026-08-07T17:00:00Z" → "01:00"——首页数据更新条只需要钟点,不需要
+ * 日期(三条来源都是"今天最近一次成功",日期永远是今天)。 */
+export function formatBeijingHM(iso: string): string | null {
+  const p = toBeijingParts(iso);
+  if (!p) return null;
+  return `${pad2(p.hour)}:${pad2(p.minute)}`;
+}
+
 /** 精确 kickoff 对应的北京自然日"YYYY-MM-DD",供按天分组/排序使用。
  * date_only 输入返回 null(那种输入本身就没有"精确北京日"这个概念——
  * 来源只给了 UTC 自然日,不等于北京自然日,不能悄悄拿 UTC 日期顶替)。 */

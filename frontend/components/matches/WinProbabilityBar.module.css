@@ -87,3 +87,88 @@
     font-size: 11px;
   }
 }
+
+/* ── size="lg":首页重点位免费卡专用,大号数字在上、小标签在下 ───── */
+
+.wrapLg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.barLg {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  gap: 2px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: var(--border);
+}
+
+@media (min-width: 900px) {
+  .barLg {
+    height: 14px;
+  }
+}
+
+.numsLg {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.numGroup {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.numsLg .numGroup:first-child {
+  align-items: flex-start;
+}
+
+.numsLg .numGroup:nth-child(2) {
+  align-items: center;
+}
+
+.numsLg .numGroup:last-child {
+  align-items: flex-end;
+}
+
+.numGroup b {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (min-width: 900px) {
+  .numGroup b {
+    font-size: 26px;
+  }
+}
+
+.numGroup small {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+@media (min-width: 900px) {
+  .numGroup small {
+    font-size: 11.5px;
+  }
+}
+
+.numHome {
+  color: var(--win);
+}
+
+.numDraw {
+  color: var(--draw);
+}
+
+.numAway {
+  color: var(--loss);
+}

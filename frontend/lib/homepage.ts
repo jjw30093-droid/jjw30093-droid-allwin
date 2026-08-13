@@ -103,6 +103,52 @@ export function selectHomepageMatches(
   };
 }
 
+/**
+ * 首页重点位选场(2026-08-13 Claude Design 定稿:并排一免费一锁定对照卡,
+ * 取代单张 featured 卡)。
+ *
+ * - `freeCard`:优先选有真实概率的免费比赛(`requires_login===false` 且
+ *   `win_probability` 非空)——重点位的核心卖点就是这条概率条,选一场
+ *   概率还没算出来的免费比赛没有意义。真找不到"免费+有概率"的组合时
+ *   退化为"任意一场免费比赛",保证赛季间歇期这类数据稀薄场景也有得选。
+ * - `lockedCard`:同一批比赛里开球最近的一场锁定比赛,与 `freeCard` 去重。
+ *   用"开球时间"排序而不是 `selectHomepageMatches` 的数据富集度排序——
+ *   对照卡本来就是"诚实展示这场看不到概率",不需要挑数据最厚的那场。
+ * - 两者都找不到时都是 `null`,调用方回退到"暂无已排期的未来比赛"空态,
+ *   不臆造数据凑对照。
+ * - `secondary`:按开球时间顺序的剩余比赛,已排除 `freeCard`/`lockedCard`,
+ *   避免同一场比赛在重点位和"近期比赛"横滑区里重复出现。
+ */
+export function selectHeroPair(
+  cards: HomeMatchCard[],
+  now: Date = new Date(),
+  signals: MatchDataSignals = { withShots: new Set<number>() },
+): {
+  freeCard: HomeMatchCard | null;
+  lockedCard: HomeMatchCard | null;
+  secondary: HomeMatchCard[];
+} {
+  const { ordered } = selectHomepageMatches(cards, now, signals);
+  const freeCard =
+    ordered.find((c) => !c.match.requires_login && c.match.win_probability) ??
+    ordered.find((c) => !c.match.requires_login) ??
+    null;
+  const byKickoff = [...cards].sort((a, b) =>
+    kickoffOf(a).localeCompare(kickoffOf(b)),
+  );
+  const lockedCard =
+    byKickoff.find(
+      (c) => c.match.requires_login && c.match.match_id !== freeCard?.match.match_id,
+    ) ?? null;
+  const usedIds = new Set(
+    [freeCard, lockedCard]
+      .filter((c): c is HomeMatchCard => c != null)
+      .map((c) => c.match.match_id),
+  );
+  const secondary = byKickoff.filter((c) => !usedIds.has(c.match.match_id));
+  return { freeCard, lockedCard, secondary };
+}
+
 export type HeroForm = {
   name: string;
   results: string[];

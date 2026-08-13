@@ -14,11 +14,12 @@ import Image from "next/image";
 import { useState } from "react";
 import styles from "./LeagueBadge.module.css";
 
-export type LeagueBadgeSize = 14 | 16 | 20;
+export type LeagueBadgeSize = 14 | 16 | 18 | 20;
 
 const SIZE_CLASS: Record<LeagueBadgeSize, string> = {
   14: styles.size14,
   16: styles.size16,
+  18: styles.size18,
   20: styles.size20,
 };
 

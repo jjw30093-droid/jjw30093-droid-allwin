@@ -36,6 +36,8 @@
   --surface-2: #e8eeee;
   --border: #d8e0e0;
   --border-strong: #b8c6c6;
+  /* 首页锁定对照卡底色(= --surface-soft,起独立别名避免组件里写死具体色值) */
+  --lock-band: #eef2f2;
   /* cool neutrals */
   --ink: var(--brand-navy);
   --ink-2: #40535d;
@@ -101,6 +103,7 @@ html[data-theme="dark"] {
   --surface-2: #132b34;
   --border: #203842;
   --border-strong: #35515b;
+  --lock-band: #0b1d26;
   --ink: #eef5f4;
   --ink-2: #bdcbce;
   --ink-3: #82969d;

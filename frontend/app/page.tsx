@@ -6,7 +6,7 @@ import {
   type GetJson,
   type MatchListResponse,
 } from "@/lib/api-v1";
-import { selectHomepageMatches, type HomeMatchCard } from "@/lib/homepage";
+import { selectHeroPair, type HomeMatchCard } from "@/lib/homepage";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { FollowedMatches } from "@/components/matches/FollowedMatches";
 import { RecentlyViewed } from "@/components/matches/RecentlyViewed";
@@ -27,23 +27,29 @@ function SectionSkeleton({ lines = 3 }: { lines?: number }) {
 }
 
 type HomePageData = {
-  cards: HomeMatchCard[];
-  featured: HomeMatchCard | null;
-  weekly: HomeMatchCard[];
+  freeCard: HomeMatchCard | null;
+  lockedCard: HomeMatchCard | null;
+  secondary: HomeMatchCard[];
   counts: { today: number; tomorrow: number; week: number } | null;
+  freshness: Freshness | null;
 };
 
 /**
  * 首页比赛与预测的唯一服务端聚合入口。
  * React cache 让首屏各模块在同一次渲染中共享同一份请求结果。
  *
- * 不再拉 /matches/{id}/analysis:重点卡的胜平负概率条直接读
+ * 不再拉 /matches/{id}/analysis:重点位的胜平负概率条直接读
  * match.win_probability(随 /api/v1/matches 列表一次性下发,见
  * backend/queries/odds.py::latest_1x2_by_match),不需要再单独请求
  * analysis bundle——那是"近期战绩"面板专用的字段,面板已下架。
+ *
+ * 数据更新条(freshness)一并在这里取:2026-08-13 Claude Design 定稿把
+ * 它从独立段落挪进了计数条卡内部,不再是页面顶部单独一行——公开只读、
+ * 不受身份影响,SSR 一次即可,不需要跟着 HomeMatchExperienceLive 的
+ * 客户端 cookie 刷新重新拉。
  */
 const getHomePageData = cache(async (): Promise<HomePageData> => {
-  const [upcoming, todayList, tomorrowList, shotsList] = await Promise.all([
+  const [upcoming, todayList, tomorrowList, shotsList, freshness] = await Promise.all([
     serverGet<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=7d&limit=8",
       { revalidate: 60 },
@@ -56,31 +62,23 @@ const getHomePageData = cache(async (): Promise<HomePageData> => {
       "/api/v1/matches?status=upcoming&window=tomorrow&limit=1",
       { revalidate: 60 },
     ).catch(() => null),
-    // 重点比赛选场需要知道"哪几场点进去真有东西看"。一次列表请求换回整段窗口
+    // 重点位选场需要知道"哪几场点进去真有东西看"。一次列表请求换回整段窗口
     // 的射门史命中集合,比逐场拉 analysis 便宜得多(替代了此前逐场拉 prediction
     // 的 N 次请求 —— 概率面板已下架,那些请求本就没有消费方了)。
     serverGetOptional<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=7d&content=shots&limit=200",
       { revalidate: 60 },
     ).catch(() => null),
+    getFreshness(),
   ]);
 
   const cards = upcoming.matches.map((match) => ({ match, tip: null }));
-
   const withShots = new Set<number>(
     (shotsList?.matches ?? []).map((m) => m.match_id),
   );
-  const { featured, ordered } = selectHomepageMatches(cards, new Date(), {
+  const { freeCard, lockedCard, secondary } = selectHeroPair(cards, new Date(), {
     withShots,
   });
-  // 近期比赛列表:按开球时间顺序(不套用 featured 的"时间就近"排序),去掉重点场
-  const weekly = [...cards]
-    .filter((card) => card.match.match_id !== featured?.match.match_id)
-    .sort((a, b) =>
-      (a.match.kickoff_at_utc ?? a.match.date_utc).localeCompare(
-        b.match.kickoff_at_utc ?? b.match.date_utc,
-      ),
-    );
 
   const counts =
     todayList && tomorrowList
@@ -91,7 +89,7 @@ const getHomePageData = cache(async (): Promise<HomePageData> => {
         }
       : null;
 
-  return { cards: ordered, featured, weekly, counts };
+  return { freeCard, lockedCard, secondary, counts, freshness };
 });
 
 const getRecoOverview = cache(async (): Promise<RecoOverview | null> => {
@@ -106,31 +104,14 @@ const getFreshness = cache(async (): Promise<Freshness | null> => {
   }).catch(() => null);
 });
 
-/* ── 今日更新状态 ───────────────────────────────────────── */
-
-async function FreshnessLine() {
-  const f = await getFreshness();
-  if (!f) return null;
-  // 三条来源各自独立轮询,互不代表彼此;任一为空如实展示"尚无记录",
-  // 不用当前时间或另一条的时间顶替。
-  return (
-    <p className={styles.freshnessLine} data-testid="freshness-line">
-      赛程更新 <LocalTime iso={f.schedule_updated_at} fallback="尚无记录" />
-      {" ｜ "}
-      赔率更新 <LocalTime iso={f.odds_updated_at} fallback="尚无记录" />
-      {" ｜ "}
-      推荐更新 <LocalTime iso={f.reco_updated_at} fallback="尚无记录" />
-    </p>
-  );
-}
-
-/* ── 今晚/明天/未来7天计数条 + 重点比赛卡 + 近期比赛 ──────────
+/* ── 今晚/明天/未来7天计数条 + 重点比赛(免费/锁定对照卡) + 近期比赛 ──
  * 服务端只算一次匿名口径的初始数据(SSR/无 JS 兜底),真正的"这次访问者
  * 实际能看到什么"交给 HomeMatchExperienceLive 挂载后用 cookie 刷新——
  * 会话 cookie Path=/api/v1,这里(Next RSC)读不到,见该组件顶部注释。
  * 三块以前分开 Suspense(CountsBar / HomeMatchExperience),现在合并成
- * 一次请求 + 一个客户端边界:三块共享同一个 featured 选场结果,分开刷新
- * 会出现"计数条已经是新数据、重点卡还是旧的"这种不一致。 */
+ * 一次请求 + 一个客户端边界:三块共享同一个选场结果,分开刷新会出现
+ * "计数条已经是新数据、重点卡还是旧的"这种不一致。数据更新条(freshness)
+ * 不跟着这次客户端刷新——公开只读聚合,不随登录状态变化。 */
 
 async function HomeMatchExperienceSection() {
   let data: HomePageData;
@@ -139,9 +120,11 @@ async function HomeMatchExperienceSection() {
   } catch {
     return (
       <HomeMatchExperienceLive
-        initialFeatured={null}
-        initialWeekly={[]}
+        initialFreeCard={null}
+        initialLockedCard={null}
+        initialSecondary={[]}
         initialCounts={null}
+        initialFreshness={null}
         initialErrored
       />
     );
@@ -149,9 +132,11 @@ async function HomeMatchExperienceSection() {
 
   return (
     <HomeMatchExperienceLive
-      initialFeatured={data.featured}
-      initialWeekly={data.weekly}
+      initialFreeCard={data.freeCard}
+      initialLockedCard={data.lockedCard}
+      initialSecondary={data.secondary}
       initialCounts={data.counts}
+      initialFreshness={data.freshness}
       initialErrored={false}
     />
   );
@@ -253,10 +238,6 @@ async function RecoSummarySection() {
 export default function Home() {
   return (
     <main className={styles.page}>
-      <Suspense fallback={null}>
-        <FreshnessLine />
-      </Suspense>
-
       <Suspense fallback={<SectionSkeleton lines={5} />}>
         <HomeMatchExperienceSection />
       </Suspense>

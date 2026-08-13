@@ -23,22 +23,53 @@ function pct(p: number): number {
 export function WinProbabilityBar({
   probability,
   compact = false,
+  size = "sm",
 }: {
   probability: WinProbability | null | undefined;
   /** 列表行里用更矮的条,首页重点卡用标准尺寸 */
   compact?: boolean;
+  /** "lg":首页重点位免费卡专用——大号数字在上、小标签在下,取代
+   * "标签 数字"同行的默认版式。和 compact 互斥,size="lg" 时忽略 compact。 */
+  size?: "sm" | "lg";
 }) {
   if (!probability) return null;
   const { p_home, p_draw, p_away } = probability;
   const home = pct(p_home);
   const draw = pct(p_draw);
   const away = pct(p_away);
+  const label = `胜平负概率:主胜 ${home}%,平局 ${draw}%,客胜 ${away}%`;
+
+  if (size === "lg") {
+    return (
+      <div className={styles.wrapLg} role="img" aria-label={label}>
+        <div className={styles.barLg}>
+          <span className={styles.segHome} style={{ width: `${p_home * 100}%` }} />
+          <span className={styles.segDraw} style={{ width: `${p_draw * 100}%` }} />
+          <span className={styles.segAway} style={{ width: `${p_away * 100}%` }} />
+        </div>
+        <div className={styles.numsLg}>
+          <span className={styles.numGroup}>
+            <b className={`${styles.numHome} num`}>{home}%</b>
+            <small>主胜</small>
+          </span>
+          <span className={styles.numGroup}>
+            <b className={`${styles.numDraw} num`}>{draw}%</b>
+            <small>平局</small>
+          </span>
+          <span className={styles.numGroup}>
+            <b className={`${styles.numAway} num`}>{away}%</b>
+            <small>客胜</small>
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       className={compact ? styles.wrapCompact : styles.wrap}
       role="img"
-      aria-label={`胜平负概率:主胜 ${home}%,平局 ${draw}%,客胜 ${away}%`}
+      aria-label={label}
     >
       <div className={styles.bar}>
         <span className={styles.segHome} style={{ width: `${p_home * 100}%` }} />

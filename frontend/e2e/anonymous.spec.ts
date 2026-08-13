@@ -63,7 +63,7 @@ test("首页匿名可浏览", async ({ page }) => {
   ).toBeLessThanOrEqual(844);
 
   // 概率条底部必须标注赔率观测时间(§6.2 不伪装:折算概率不是实时数据)
-  await expect(featured.getByText("赔率采集于")).toBeVisible();
+  await expect(featured.getByText("采集于")).toBeVisible();
 
   // 今日更新状态:赛程/赔率/推荐三条独立时间戳(种子已产生真实赛程+推荐
   // 记录,赔率库为空 → 该条如实显示"尚无记录",不得三条都用同一个假时间)

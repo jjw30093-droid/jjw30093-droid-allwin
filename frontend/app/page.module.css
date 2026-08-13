@@ -11,314 +11,325 @@
   }
 }
 
-.heroSection {
+/* ── 重点位:一张免费卡 + 一张锁定对照卡并排(2026-08-13 Claude Design 定稿)
+ * design_handoff_home_hero/README.md §3。移动端(<900px)上下堆叠,
+ * ≥900px 并排,只换 CSS 变量与网格,单份 JSX(§2.9 深浅色/断点铁律同理)。 */
+
+.pairSection {
   margin-top: 14px;
 }
 
-.heroCard {
+.pairSectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+}
+
+.pairSectionHead h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.pairHintMobile,
+.pairHintDesktop,
+.pairHint {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.pairHintDesktop {
+  display: none;
+}
+
+.pairGrid,
+.pairGridSolo {
+  display: grid;
+  gap: 8px;
+}
+
+.freeCard,
+.lockedCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   overflow: hidden;
+  border-radius: var(--r-card);
+}
+
+.freeCard {
   border: 1px solid var(--border-strong);
   border-top: 3px solid var(--brand-teal);
-  border-radius: var(--r-card);
   background: var(--surface);
 }
 
-.heroHeader {
+.lockedCard {
+  border: 1px solid var(--border);
+  background: var(--lock-band);
+}
+
+.pairHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 58px;
-  padding: 10px 16px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.heroKicker {
+.pairLeague {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--brand-teal);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.heroKickoff {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 3px 0 0;
+  gap: 5px;
+  overflow: hidden;
   color: var(--ink-2);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.heroCountdown {
-  color: var(--gold-300);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* 联赛队徽+名浮在 h1 网格中列的 vs 上方(站长要求),不再放进 heroKicker */
-.heroVsCol {
+.pairBadges {
   display: flex;
-  flex-direction: column;
+  flex: none;
   align-items: center;
-  gap: 3px;
+  gap: 7px;
 }
 
-.heroLeague {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--ink-3);
-  font-family: var(--font-cn), system-ui, sans-serif;
+.pairStatusBadge,
+.pairFreeBadge,
+.pairLockedBadge {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
   font-size: 10.5px;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.syncBadge {
-  flex: 0 0 auto;
-  padding: 5px 9px;
-  border: 1px solid color-mix(in srgb, var(--brand-teal) 45%, var(--border));
-  border-radius: var(--r-pill);
-  color: var(--brand-teal);
-  font-size: 10.5px;
-  font-weight: 800;
-  white-space: nowrap;
+.pairStatusBadge {
+  border: 1px solid var(--border-strong);
+  color: var(--ink-3);
 }
 
-.syncBadge[data-state="LIVE"] {
-  border-color: var(--brand-lime);
+.pairFreeBadge {
   background: var(--brand-lime);
   color: var(--brand-navy);
 }
 
-.syncBadge[data-state="STALE"] {
-  border-color: color-mix(in srgb, var(--brand-red) 45%, var(--border));
-  color: var(--brand-red-deep);
+.pairLockedBadge {
+  border: 1px solid var(--border-strong);
+  color: var(--ink-3);
 }
 
-.heroTeams {
-  padding: 14px 16px 13px;
-  border-bottom: 1px solid var(--border);
-}
-
-.heroTeams h1 {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
+.pairBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   gap: 12px;
-  margin: 0;
-  color: var(--ink);
-  font-size: clamp(19px, 3.2vw, 27px);
-  font-weight: 900;
-  letter-spacing: -0.035em;
-  line-height: 1.2;
+  padding: 12px 12px 10px;
 }
 
-.heroTeams h1 b {
+.pairMatchup {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pairKickoff {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pairCountdown {
+  color: var(--brand-teal);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-latin), system-ui, sans-serif;
+}
+
+.pairTeamRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.pairTeamName {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pairTeamName b {
+  flex: none;
   color: var(--ink-3);
   font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.heroTeam {
+.pairProbCol {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.heroTeam:first-child {
-  justify-content: flex-end;
-  text-align: right;
-}
-
-.heroTeam:last-child {
-  justify-content: flex-start;
-}
-
-.heroTeam > span:last-child {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.heroGrid {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
-  min-height: 174px;
-}
-
-.conclusionPanel {
-  display: grid;
-  align-content: center;
-  padding: 18px 20px;
-  background: var(--brand-navy);
-  color: #fff;
-}
-
-.conclusionLabel {
-  color: #a8c1ca;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.conclusionValue {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 5px;
-}
-
-.conclusionValue span {
-  padding-bottom: 5px;
-  font-size: 19px;
-  font-weight: 900;
-}
-
-.conclusionValue strong {
-  color: var(--brand-lime);
-  font-size: clamp(48px, 7vw, 58px);
-  font-weight: 700;
-  letter-spacing: -0.045em;
-  line-height: 0.95;
-}
-
-.conclusionSource {
-  margin: 9px 0 0;
-  color: #b9cbd2;
-  font-size: 12px;
-}
-
-.conclusionPending {
-  display: grid;
-  gap: 4px;
-  margin-top: 13px;
-}
-
-.conclusionPending strong {
-  color: var(--brand-lime);
-  font-size: 20px;
-}
-
-.conclusionPending span {
-  color: #b9cbd2;
-  font-size: 12px;
-}
-
-.evidencePanel {
-  min-width: 0;
-  padding: 16px 18px;
-}
-
-.evidenceHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 7px;
-}
-
-.evidenceHead h2 {
+.pairProbTitle {
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
 }
 
-.evidenceHead span {
+.pairSourceLine,
+.pairTierLine,
+.pairEmptyNote {
+  margin: 0;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
-.evidenceList {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.evidenceList li {
-  display: grid;
-  grid-template-columns: 5px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  min-height: 39px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-}
-
-.evidenceList li > span {
-  width: 5px;
-  height: 5px;
-  margin-top: 7px;
-  background: var(--brand-teal);
-}
-
-.evidenceList p,
-.evidenceEmpty {
-  margin: 0;
+.pairSourceLine time,
+.pairTierLine time {
   color: var(--ink-2);
-  font-size: 14px;
-  line-height: 1.55;
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-weight: 600;
 }
 
-.evidenceEmpty {
-  padding: 18px 0;
-  color: var(--ink-3);
-}
-
-/* ── 胜平负概率条(Bet365 1x2 去水,替代原"近期战绩"面板) ───── */
-
-.winProbSection {
-  padding: 16px 20px 18px;
-  border-top: 1px solid var(--border);
-}
-
-.heroFooter {
+.pairFreeCta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 58px;
-  padding: 7px 8px 7px 16px;
-  border-top: 1px solid var(--border);
-}
-
-.heroFooter p {
-  margin: 0;
-  color: var(--ink-3);
-  font-size: 12px;
-}
-
-.primaryAction {
-  display: inline-flex;
-  min-width: 176px;
-  min-height: 44px;
+  min-height: 48px;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 0 16px;
-  border-radius: var(--r-control);
+  gap: 10px;
   background: var(--brand-teal);
   color: #fff;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   text-decoration: none;
 }
 
-.primaryAction span {
+.pairFreeCta span {
   color: var(--brand-lime);
   font-family: var(--font-latin), system-ui, sans-serif;
   font-size: 18px;
+}
+
+.pairLockedNote {
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+.pairLockedNoteDesktop {
+  display: none;
+}
+
+.pairLockedCta {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--brand-teal);
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .freeCard:hover,
+  .lockedCard:hover {
+    border-color: var(--brand-teal);
+  }
+
+  .pairFreeCta:hover,
+  .pairLockedCta:hover {
+    filter: brightness(0.94);
+  }
+}
+
+@media (min-width: 900px) {
+  .pairHintMobile {
+    display: none;
+  }
+
+  .pairHintDesktop {
+    display: inline;
+  }
+
+  .pairGrid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .pairHeader {
+    padding: 9px 14px;
+  }
+
+  .pairLeague {
+    font-size: 13px;
+  }
+
+  .pairBody {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 14px;
+  }
+
+  .pairProbCol {
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+  }
+
+  .pairTeamName {
+    font-size: 20px;
+  }
+
+  .pairSourceLine,
+  .pairTierLine {
+    font-size: 11.5px;
+  }
+
+  .pairLockedNoteDesktop {
+    display: inline;
+  }
+
+  .pairLockedNoteMobile {
+    display: none;
+  }
 }
 
 .secondarySection {
@@ -333,12 +344,6 @@
   min-height: 36px;
 }
 
-.secondaryHead > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .secondaryHead h2 {
   margin: 0;
   color: var(--ink);
@@ -347,26 +352,28 @@
   letter-spacing: -0.025em;
 }
 
-.secondaryHead > div > span {
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  color: var(--ink-3);
-  font-size: 9.5px;
-}
-
-.secondaryHint {
+.secondaryHintMobile {
   color: var(--ink-3);
   font-size: 10.5px;
 }
 
+.secondaryHintDesktop {
+  display: none;
+  color: var(--brand-teal);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+/* <640px:容器自身横向滚动,body 不产生横向滚动条(E2E 在 360/390/430/1280
+ * 四个宽度强制断言);640-899px 与 ≥900px 两档改纯 CSS 网格,见下方媒体查询。 */
 .secondaryViewport {
   display: grid;
-  grid-auto-columns: minmax(176px, 204px);
+  grid-auto-columns: 228px;
   grid-auto-flow: column;
-  gap: 9px;
+  gap: 8px;
   overflow-x: auto;
-  padding: 1px 1px 7px;
+  padding: 1px 1px 8px;
   scroll-padding-inline: 1px;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
@@ -378,9 +385,16 @@
   display: none;
 }
 
+/* 640px 以下只展示前 5 张卡 + 入口格(第 6、7 张卡隐藏,不是不存在——
+ * 单份 DOM 列表靠 CSS 在三档断点间切换,不为不同宽度渲染两份重复内容) */
+.secondaryViewport > :nth-child(6),
+.secondaryViewport > :nth-child(7) {
+  display: none;
+}
+
 .secondaryCard,
 .secondaryAll {
-  min-height: 104px;
+  min-height: 108px;
   scroll-snap-align: start;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-card);
@@ -391,8 +405,9 @@
 
 .secondaryCard {
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  padding: 9px 10px;
+  grid-template-rows: auto auto 1fr;
+  gap: 8px;
+  padding: 10px 11px;
 }
 
 .secondaryMeta {
@@ -400,9 +415,10 @@
   justify-content: space-between;
   gap: 9px;
   color: var(--ink-3);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .secondaryMeta span:last-child {
@@ -411,22 +427,22 @@
   justify-content: flex-end;
   gap: 4px;
   overflow: hidden;
+  color: var(--ink-2);
+  font-variant-numeric: normal;
   text-overflow: ellipsis;
 }
 
-/* 对阵一行平铺(站长要求:不要上下两行),两队名对称省略号截断 */
 .secondaryTeams {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
 }
 
 .secondaryTeamName {
-  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -443,38 +459,56 @@
 .secondaryVs {
   flex: none;
   color: var(--ink-3);
-  font-size: 11px;
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 10px;
 }
 
 .secondaryProb {
-  padding-top: 7px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
 .secondaryPending {
-  padding-top: 5px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
-  color: var(--ink-3);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
+}
+
+.secondaryPending[data-tone="link"] {
+  color: var(--brand-teal);
+}
+
+.secondaryPending[data-tone="muted"] {
+  color: var(--ink-3);
 }
 
 .secondaryAll {
   display: flex;
   min-width: 124px;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 2px;
   padding: 16px;
   background: var(--surface-soft);
+  text-align: center;
 }
 
 .secondaryAll strong {
-  font-size: 14px;
+  font-size: 15px;
 }
 
-.secondaryAll span {
+.secondaryAll > span[aria-hidden] {
   color: var(--brand-teal);
+  font-family: var(--font-latin), system-ui, sans-serif;
   font-size: 20px;
+}
+
+.secondaryAllHint {
+  display: none;
+  color: var(--ink-3);
+  font-size: 12px;
 }
 
 .secondaryEmpty {
@@ -483,6 +517,39 @@
   border: 1px solid var(--border);
   color: var(--ink-2);
   font-size: 14px;
+}
+
+@media (min-width: 640px) {
+  .secondaryViewport {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+}
+
+@media (min-width: 900px) {
+  .secondaryHintMobile {
+    display: none;
+  }
+
+  .secondaryHintDesktop {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .secondaryViewport {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .secondaryViewport > :nth-child(6),
+  .secondaryViewport > :nth-child(7) {
+    display: block;
+  }
+
+  .secondaryAllHint {
+    display: block;
+  }
 }
 
 .recordPanel {
@@ -853,138 +920,8 @@
     padding: 0 12px calc(88px + env(safe-area-inset-bottom));
   }
 
-  .heroSection {
+  .pairSection {
     margin-top: 8px;
-  }
-
-  .heroHeader {
-    min-height: 49px;
-    padding: 7px 10px;
-  }
-
-  .heroKicker {
-    font-size: 11px;
-  }
-
-  .heroKickoff {
-    flex-wrap: wrap;
-    font-size: 13px;
-  }
-
-  .heroCountdown {
-    font-size: 10.5px;
-  }
-
-  .heroLeague {
-    font-size: 9.5px;
-  }
-
-  .syncBadge {
-    padding: 4px 7px;
-    font-size: 9.5px;
-  }
-
-  .heroTeams {
-    padding: 11px 10px 10px;
-  }
-
-  .heroTeams h1 {
-    gap: 8px;
-    font-size: 19px;
-  }
-
-  .heroGrid {
-    grid-template-columns: minmax(112px, 0.72fr) minmax(0, 1.28fr);
-    min-height: 132px;
-  }
-
-  .conclusionPanel {
-    padding: 12px 10px;
-  }
-
-  .conclusionLabel {
-    font-size: 10px;
-  }
-
-  .conclusionValue {
-    display: grid;
-    gap: 2px;
-    margin-top: 5px;
-  }
-
-  .conclusionValue span {
-    padding: 0;
-    font-size: 16px;
-  }
-
-  .conclusionValue strong {
-    font-size: 49px;
-  }
-
-  .conclusionSource {
-    margin-top: 6px;
-    font-size: 10px;
-  }
-
-  .conclusionPending strong {
-    font-size: 17px;
-  }
-
-  .evidencePanel {
-    padding: 10px 10px 8px;
-  }
-
-  .evidenceHead {
-    margin-bottom: 2px;
-  }
-
-  .evidenceHead h2 {
-    font-size: 13px;
-  }
-
-  .evidenceHead span {
-    display: none;
-  }
-
-  .evidenceList li {
-    grid-template-columns: 4px minmax(0, 1fr);
-    gap: 7px;
-    min-height: 34px;
-    padding: 5px 0;
-  }
-
-  .evidenceList li > span {
-    width: 4px;
-    height: 4px;
-  }
-
-  .evidenceList p,
-  .evidenceEmpty {
-    display: -webkit-box;
-    overflow: hidden;
-    font-size: 14px;
-    line-height: 1.42;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  .heroFooter {
-    min-height: 52px;
-    padding: 4px 5px 4px 10px;
-  }
-
-  .heroFooter p {
-    max-width: 43%;
-    font-size: 9.5px;
-    line-height: 1.35;
-  }
-
-  .primaryAction {
-    min-width: 158px;
-    min-height: 44px;
-    gap: 12px;
-    padding-inline: 13px;
-    font-size: 14px;
   }
 
   .secondarySection {
@@ -993,13 +930,6 @@
 
   .secondaryHead {
     min-height: 34px;
-  }
-
-  .secondaryViewport {
-    grid-auto-columns: 56vw;
-    margin-inline: -12px;
-    padding-inline: 12px;
-    scroll-padding-inline: 12px;
   }
 
   .recordPanel {
@@ -1070,17 +1000,13 @@
   }
 }
 
-@media (max-width: 360px) {
-  .heroGrid {
-    grid-template-columns: 108px minmax(0, 1fr);
-  }
-
-  .heroFooter p {
-    display: none;
-  }
-
-  .primaryAction {
-    width: 100%;
+/* <640px:近期比赛横滑容器出血到屏幕边缘(负外边距 + 等量内边距抵消),
+ * 只在真正横滑这一档需要——640px 以上已经是静态网格,不需要出血。 */
+@media (max-width: 639px) {
+  .secondaryViewport {
+    margin-inline: -12px;
+    padding-inline: 12px;
+    scroll-padding-inline: 12px;
   }
 }
 
@@ -1092,68 +1018,148 @@
 
 /* ── 今晚/明天/未来7天 计数条 ──────────────────────────── */
 
+/* ── 今晚/明天/未来7天计数条(时间轴式:数字 + 进度段 + 数据更新条)
+ * design_handoff_home_hero/README.md §2。单张卡收编原来独立一行的
+ * freshnessLine;count=0 靠颜色降级(--ink-3),不再用 opacity——降透明
+ * 会让"0"更难读。 */
+
 .countsBar {
   margin: 0 0 14px;
-}
-
-.countsRow {
-  display: flex;
-  gap: 8px;
-}
-
-.countItem {
-  flex: 1 1 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 5px;
-  padding: 10px 8px;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   background: var(--surface);
-  text-decoration: none;
-  color: var(--ink-1);
 }
 
-.countItemEmpty {
-  opacity: 0.6;
+.countsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 12px 4px 0;
+}
+
+.countItem {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 0 4px 10px;
+  color: inherit;
+  text-decoration: none;
 }
 
 .countLabel {
-  font-size: 12.5px;
   color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.countItem[data-empty="true"] .countLabel {
+  color: var(--ink-3);
 }
 
 .countNum {
-  font-size: 18px;
-  font-weight: 800;
+  color: var(--ink);
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.countItem[data-highlight] .countNum {
+  color: var(--brand-teal);
+}
+
+.countItem[data-empty="true"] .countNum {
+  color: var(--ink-3);
 }
 
 .countUnit {
-  font-size: 12px;
   color: var(--ink-3);
+  font-size: 11px;
+}
+
+.countsProgress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  padding: 0 12px 12px;
+}
+
+.progressOn,
+.progressOff {
+  height: 4px;
+  border-radius: var(--r-pill);
+}
+
+.progressOn {
+  background: var(--brand-teal);
+}
+
+.progressOff {
+  background: var(--border);
 }
 
 .countsFallback {
-  margin: 8px 2px 0;
-  font-size: 12.5px;
+  margin: 0;
+  padding: 0 12px 12px;
   color: var(--ink-2);
+  font-size: 12px;
   line-height: 1.6;
 }
 
-.countsFallback a {
-  color: var(--gold-300);
-  margin-left: 6px;
-  text-decoration: none;
-}
-
-/* ── 今日更新状态 ─────────────────────────────────────────── */
+/* ── 今日更新状态(原独立段落,现收编进计数条卡底部) ─────────── */
 
 .freshnessLine {
-  margin: 6px 2px 14px;
-  font-size: 12.5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-soft);
   color: var(--ink-3);
-  line-height: 1.6;
+  font-size: 11px;
+}
+
+.freshnessLine time {
+  color: var(--ink-2);
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-weight: 600;
+}
+
+@media (min-width: 900px) {
+  .countsRow {
+    padding: 14px 8px 0;
+  }
+
+  .countItem {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 8px 12px;
+  }
+
+  .countLabel {
+    font-size: 14px;
+  }
+
+  .countNum {
+    font-size: 34px;
+  }
+
+  .countUnit {
+    font-size: 12px;
+  }
+
+  .countsProgress {
+    gap: 4px;
+    padding: 0 16px 14px;
+  }
+
+  .freshnessLine {
+    gap: 6px 20px;
+    padding: 9px 16px;
+    font-size: 11.5px;
+  }
 }
 
 /* ── 今日精选卡 ─────────────────────────────────────────── */
