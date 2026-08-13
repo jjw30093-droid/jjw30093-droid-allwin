@@ -51,14 +51,16 @@ export function LeagueGateCard({
         </div>
       )}
 
+      {env !== null && (
+        <ScanLoginCard nextPath={nextPath} env={env} title="扫码登录后查看本场数据" />
+      )}
+
       <h2 className={styles.title}>登录后可免费查看</h2>
       <ul className={styles.perks}>
         <li>双方近5场战绩与进失球</li>
         <li>近5场射门分布图</li>
         <li>初盘 → 临场赔率变化</li>
       </ul>
-
-      {env !== null && <ScanLoginCard nextPath={nextPath} env={env} />}
 
       <p className={styles.note}>微信扫码 · 免费,不需付费,不填手机号</p>
     </div>

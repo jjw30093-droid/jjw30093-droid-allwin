@@ -14,6 +14,11 @@
  *
  * useSearchParams 必须包在 Suspense 里(Next 16 生产构建约束,
  * 见 node_modules/next/dist/docs/01-app/03-api-reference/04-functions/use-search-params.md)。
+ *
+ * 2026-08-14 重设计(Claude Design 定稿,design_handoff_login_redesign,方向 2a):
+ * 标题组 eyebrow+h1 随环境变化;扫码卡是页面核心区域;密码登录从卡片降级为纯文字
+ * <details>;整页改 flex+gap 纵向堆叠,不再用 margin 堆叠。SSR 水合前(env===null)
+ * 的骨架直接复用 ScanLoginCard 自己的卡片外壳,不再是单独两条骨架横条。
  */
 
 import { Suspense, useEffect, useState } from "react";
@@ -26,7 +31,8 @@ import {
   type MeResponse,
   type PasswordLoginResponse,
 } from "@/lib/api-v1";
-import { ScanLoginCard, useEnv } from "@/components/auth/ScanLoginCard";
+import { ENV_TITLE, ScanLoginCard, useEnv } from "@/components/auth/ScanLoginCard";
+import scanStyles from "@/components/auth/ScanLoginCard.module.css";
 import styles from "./login.module.css";
 
 /** 与后端 service.is_safe_next_path 同规则:仅本站相对路径。 */
@@ -36,7 +42,7 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
-/* ── 管理员密码登录(折叠) ─────────────────────────────── */
+/* ── 管理员密码登录(降级为纯文字折叠入口,不再是卡片) ────── */
 
 function PasswordLoginSection({ nextPath }: { nextPath: string }) {
   const [username, setUsername] = useState("");
@@ -96,6 +102,30 @@ function PasswordLoginSection({ nextPath }: { nextPath: string }) {
   );
 }
 
+/** SSR/水合前骨架:复用 ScanLoginCard 自己的卡片外壳(idle 态视觉),
+ * 避免和真正挂载后的卡片切换时跳版。 */
+function ScanCardSkeleton() {
+  return (
+    <section className={scanStyles.card} data-state="idle" aria-busy="true">
+      <header className={scanStyles.band}>
+        <span className={scanStyles.bandLeft}>
+          <span className={scanStyles.dot} aria-hidden />
+          <span className={scanStyles.bandLabel}>正在生成扫码请求…</span>
+        </span>
+      </header>
+      <div className={scanStyles.progressTrack} data-pulse>
+        <span className={scanStyles.progressFill} style={{ width: "0%" }} />
+      </div>
+      <div className={scanStyles.stage}>
+        <div className={scanStyles.stageQr}>
+          <span className={scanStyles.qrSkeleton} aria-hidden />
+        </div>
+      </div>
+      <span className={scanStyles.footnoteSkeleton} aria-hidden />
+    </section>
+  );
+}
+
 /* ── 主体 ──────────────────────────────────────────────── */
 
 function LoginBody() {
@@ -128,24 +158,29 @@ function LoginBody() {
     };
   }, []);
 
+  const pageTitle = wechatEnabled === false ? "登录" : env ? ENV_TITLE[env] : "登录";
+
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>登录</h1>
-      <p className={styles.note}>
-        首次扫码即自动创建账号,无需填写手机号;登录完成后会返回刚才浏览的页面。
-      </p>
+      <div className={styles.titleGroup}>
+        <span className={styles.eyebrow}>WECHAT LOGIN</span>
+        <h1 className={styles.title}>{pageTitle}</h1>
+        <p className={styles.note}>
+          首次扫码即自动创建账号,无需填写手机号;登录完成后会返回刚才浏览的页面。
+        </p>
+      </div>
 
       {me?.authenticated && (
-        <section className={styles.card}>
-          <p className={styles.note}>
-            当前已登录:{me.user?.display_name ?? me.user?.id}
+        <section className={styles.loggedInBar}>
+          <p className={styles.loggedInText}>
+            当前已登录:<b>{me.user?.display_name ?? me.user?.id}</b>
           </p>
           <div className={styles.row}>
             <a className={styles.btnPrimary} href={nextPath}>
               继续前往
             </a>
-            <a className={styles.btnGhost} href="/account">
-              账户中心
+            <a className={styles.linkGhost} href="/account">
+              账户中心 →
             </a>
           </div>
         </section>
@@ -160,13 +195,20 @@ function LoginBody() {
           </p>
         </section>
       ) : env === null ? (
-        <section className={styles.card} aria-busy="true">
-          <div className={styles.skeleton} />
-          <div className={styles.skeletonShort} />
-        </section>
+        <ScanCardSkeleton />
       ) : (
         <ScanLoginCard nextPath={nextPath} env={env} />
       )}
+
+      <section className={styles.perksBlock}>
+        <h2 className={styles.perksTitle}>登录后可免费查看</h2>
+        <ul className={styles.perks}>
+          <li>全部联赛数据(含冷门赛事)</li>
+          <li>模型完整概率(主胜 / 平局 / 客胜)</li>
+          <li>完整赔率时间线与历史战绩</li>
+        </ul>
+        <p className={styles.perksFoot}>免费 · 不填手机号 · 只发数据,不发荐单</p>
+      </section>
 
       <PasswordLoginSection nextPath={nextPath} />
 
@@ -183,11 +225,11 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <main className={styles.page}>
-          <h1 className={styles.title}>登录</h1>
-          <section className={styles.card} aria-busy="true">
-            <div className={styles.skeleton} />
-            <div className={styles.skeletonShort} />
-          </section>
+          <div className={styles.titleGroup}>
+            <span className={styles.eyebrow}>WECHAT LOGIN</span>
+            <h1 className={styles.title}>登录</h1>
+          </div>
+          <ScanCardSkeleton />
         </main>
       }
     >
