@@ -185,3 +185,32 @@ def admin_slips(conn: sqlite3.Connection, limit: int = 100, offset: int = 0) -> 
     ).fetchall()
     legs = _legs_by_slip(conn, [r["id"] for r in rows])
     return total, [_slip_dto(r, legs.get(r["id"], [])) for r in rows]
+
+
+def admin_match_candidates(
+    conn_core: sqlite3.Connection, *, query: str | None, limit: int
+) -> list[dict]:
+    """admin 录入每日精选用的比赛候选(替代自由文本描述,减少手打描述与真实
+    比赛对不上的风险)。admin 不受 entitlement 门禁约束,全部联赛可见;只看
+    未开赛比赛,按开球时间由近到远排序——与站内比赛卡片同一份数据源
+    (backend.queries.matches.list_matches),不重新定义一套比赛列表逻辑。
+    """
+    from backend.queries.leagues import LEAGUE_META
+    from backend.queries.matches import list_matches
+
+    result = list_matches(
+        conn_core, set(LEAGUE_META.keys()), status="upcoming", query=query, limit=limit,
+    )
+    out = []
+    for m in result["matches"]:
+        meta = LEAGUE_META.get(m["league_id"])
+        out.append({
+            "match_id": m["match_id"],
+            "league_id": m["league_id"],
+            "league_name": meta["name_zh"] if meta else str(m["league_id"]),
+            "home_name": m["home"]["name"],
+            "away_name": m["away"]["name"],
+            "kickoff_at_utc": m["kickoff_at_utc"],
+            "status": m["status"],
+        })
+    return out

@@ -1272,13 +1272,184 @@ type RecoSlip = RecoSlipsResp["slips"][number];
 type RecoCreateResp = PostJson<"/api/v1/admin/reco/slips">;
 type RecoSettleResp = PostJson<"/api/v1/admin/reco/slips/{slip_id}/settle">;
 
+type RecoMatchCandidatesResp = GetJson<"/api/v1/admin/reco/match-candidates">;
+type RecoMatchCandidate = RecoMatchCandidatesResp["matches"][number];
+type RecoOddsOptionsResp = GetJson<"/api/v1/admin/reco/match-candidates/{match_id}/odds-options">;
+type RecoOddsOption = RecoOddsOptionsResp["options"][number];
+
 const RECO_RESULT_ZH: Record<string, string> = { win: "命中", lose: "未中", push: "走水" };
 const RECO_STATUS_ZH: Record<string, string> = {
   draft: "草稿", published: "已发布", settled: "已结算", voided: "已作废",
 };
 
-type LegDraft = { match_desc: string; market: string; selection: string; odds: string };
-const emptyLeg = (): LegDraft => ({ match_desc: "", market: "1x2", selection: "", odds: "" });
+type LegDraft = {
+  match_id: number | null;
+  match_desc: string;
+  market: string;
+  selection: string;
+  odds: string;
+};
+const emptyLeg = (): LegDraft => ({ match_id: null, match_desc: "", market: "1x2", selection: "", odds: "" });
+
+/** 300ms 防抖:比赛搜索框边打字边查询,不是每个按键都发请求。 */
+function useDebounced<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+function matchCandidateLabel(m: RecoMatchCandidate): string {
+  const kickoff = m.kickoff_at_utc
+    ? new Date(m.kickoff_at_utc).toLocaleString("zh-CN", {
+        month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+        hour12: false, timeZone: "Asia/Shanghai",
+      })
+    : "";
+  return `${m.home_name} vs ${m.away_name}${kickoff ? ` ${kickoff}` : ""}`;
+}
+
+/**
+ * 单条腿的比赛/赔率录入:比赛从真实比赛候选搜索选(替代自由文本描述);
+ * 选定比赛后若抓到真实盘口(1x2/大小球/角球大小),赔率从真实选项里选,
+ * 不用手打数字——历史上手打的赔率数字没有任何东西保证它和真实盘口对得上。
+ * 没有真实数据(未抓到 / AH 等未覆盖市场)时优雅退回原有自由文本三格,
+ * 不因为"选不出来"就让这条腿没法录。
+ */
+function LegRowEditor({
+  leg, onChange, onRemove, removable,
+}: {
+  leg: LegDraft;
+  onChange: (patch: Partial<LegDraft>) => void;
+  onRemove: () => void;
+  removable: boolean;
+}) {
+  const [matchQuery, setMatchQuery] = useState(leg.match_desc);
+  const [candidates, setCandidates] = useState<RecoMatchCandidate[]>([]);
+  const [showCandidates, setShowCandidates] = useState(false);
+  const [oddsOptions, setOddsOptions] = useState<RecoOddsOption[]>([]);
+  const [manualOdds, setManualOdds] = useState(false);
+  const debouncedQuery = useDebounced(matchQuery);
+
+  useEffect(() => {
+    if (!showCandidates) return;
+    let cancelled = false;
+    const q = debouncedQuery.trim();
+    clientFetch<RecoMatchCandidatesResp>(
+      `/api/v1/admin/reco/match-candidates${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+    )
+      .then((r) => { if (!cancelled) setCandidates(r.matches); })
+      .catch(() => { if (!cancelled) setCandidates([]); });
+    return () => { cancelled = true; };
+  }, [debouncedQuery, showCandidates]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (leg.match_id == null) {
+      void Promise.resolve().then(() => { if (!cancelled) setOddsOptions([]); });
+      return () => { cancelled = true; };
+    }
+    clientFetch<RecoOddsOptionsResp>(
+      `/api/v1/admin/reco/match-candidates/${leg.match_id}/odds-options`,
+    )
+      .then((r) => { if (!cancelled) setOddsOptions(r.options); })
+      .catch(() => { if (!cancelled) setOddsOptions([]); });
+    return () => { cancelled = true; };
+  }, [leg.match_id]);
+
+  const pickMatch = (m: RecoMatchCandidate) => {
+    const label = matchCandidateLabel(m);
+    setMatchQuery(label);
+    setShowCandidates(false);
+    setManualOdds(false);
+    onChange({ match_id: m.match_id, match_desc: label });
+  };
+
+  const hasOptions = oddsOptions.length > 0;
+  const showManualOddsFields = manualOdds || !hasOptions;
+  const selectedOptionIndex = oddsOptions.findIndex(
+    (o) => o.market === leg.market && o.selection === leg.selection && String(o.odds) === leg.odds,
+  );
+
+  return (
+    <div className={styles.formRow}>
+      <div className={styles.matchPicker}>
+        <input
+          className={styles.input}
+          placeholder="比赛(搜索队名,或手动填写描述)"
+          value={matchQuery}
+          onFocus={() => setShowCandidates(true)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setMatchQuery(value);
+            setShowCandidates(true);
+            onChange({ match_id: null, match_desc: value });
+          }}
+          onBlur={() => setTimeout(() => setShowCandidates(false), 150)}
+        />
+        {showCandidates && (
+          <ul className={styles.matchDropdown}>
+            {candidates.length === 0 ? (
+              <li className={styles.matchDropdownEmpty}>没有匹配的未开赛比赛</li>
+            ) : (
+              candidates.map((m) => (
+                <li key={m.match_id}>
+                  <button
+                    type="button"
+                    className={styles.matchDropdownItem}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickMatch(m)}
+                  >
+                    {m.league_name} · {matchCandidateLabel(m)}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
+
+      {showManualOddsFields ? (
+        <>
+          <input className={styles.input} placeholder="玩法" value={leg.market} style={{ maxWidth: 90 }}
+                 onChange={(e) => onChange({ market: e.target.value })} />
+          <input className={styles.input} placeholder="选项(如 主胜)" value={leg.selection} style={{ maxWidth: 140 }}
+                 onChange={(e) => onChange({ selection: e.target.value })} />
+          <input className={styles.input} placeholder="赔率" value={leg.odds} style={{ maxWidth: 80 }}
+                 onChange={(e) => onChange({ odds: e.target.value })} />
+        </>
+      ) : (
+        <select
+          className={styles.input}
+          style={{ maxWidth: 260 }}
+          value={selectedOptionIndex >= 0 ? String(selectedOptionIndex) : ""}
+          onChange={(e) => {
+            const opt = oddsOptions[Number(e.target.value)];
+            if (opt) onChange({ market: opt.market, selection: opt.selection, odds: String(opt.odds) });
+          }}
+        >
+          <option value="" disabled>真实盘口选项…</option>
+          {oddsOptions.map((o, i) => (
+            <option key={i} value={i}>
+              {o.market_label} · {o.selection} @{o.odds}({o.company_name})
+            </option>
+          ))}
+        </select>
+      )}
+      {hasOptions && (
+        <button type="button" className={styles.btnGhost}
+                onClick={() => setManualOdds((v) => !v)}>
+          {manualOdds ? "改用真实盘口" : "手动填写"}
+        </button>
+      )}
+      {removable && (
+        <button type="button" className={styles.btnGhost} onClick={onRemove}>删</button>
+      )}
+    </div>
+  );
+}
 
 function beijingToday(): string {
   return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
@@ -1315,6 +1486,7 @@ function RecoTab() {
 
   const create = async () => {
     const parsed = legs.map((l) => ({
+      match_id: l.match_id,
       match_desc: l.match_desc.trim(),
       market: l.market.trim(),
       selection: l.selection.trim(),
@@ -1397,21 +1569,13 @@ function RecoTab() {
                  onChange={(e) => setNote(e.target.value)} />
         </label>
         {legs.map((leg, i) => (
-          <div key={i} className={styles.formRow}>
-            <input className={styles.input} placeholder="比赛(如 曼城 vs 阿森纳 08-15)"
-                   value={leg.match_desc}
-                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, match_desc: e.target.value } : x))} />
-            <input className={styles.input} placeholder="玩法" value={leg.market} style={{ maxWidth: 90 }}
-                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, market: e.target.value } : x))} />
-            <input className={styles.input} placeholder="选项(如 主胜)" value={leg.selection} style={{ maxWidth: 140 }}
-                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, selection: e.target.value } : x))} />
-            <input className={styles.input} placeholder="赔率" value={leg.odds} style={{ maxWidth: 80 }}
-                   onChange={(e) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, odds: e.target.value } : x))} />
-            {legs.length > 1 && (
-              <button type="button" className={styles.btnGhost}
-                      onClick={() => setLegs(ls => ls.filter((_, j) => j !== i))}>删</button>
-            )}
-          </div>
+          <LegRowEditor
+            key={i}
+            leg={leg}
+            removable={legs.length > 1}
+            onChange={(patch) => setLegs(ls => ls.map((x, j) => j === i ? { ...x, ...patch } : x))}
+            onRemove={() => setLegs(ls => ls.filter((_, j) => j !== i))}
+          />
         ))}
         <div className={styles.formRow}>
           <button type="button" className={styles.btnGhost}

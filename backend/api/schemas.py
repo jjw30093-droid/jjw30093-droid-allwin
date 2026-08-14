@@ -1526,3 +1526,35 @@ class RecoSettledDTO(BaseModel):
 class AdminRecoSlipsResponse(BaseModel):
     total: int
     slips: list[RecoSlipDTO]
+
+
+class RecoMatchCandidateDTO(BaseModel):
+    """admin 录入每日精选用的比赛候选(从真实比赛卡片选,替代自由文本描述)。"""
+
+    match_id: int
+    league_id: int
+    league_name: str
+    home_name: str
+    away_name: str
+    kickoff_at_utc: Optional[str] = None
+    status: str
+
+
+class RecoMatchCandidatesResponse(BaseModel):
+    matches: list[RecoMatchCandidateDTO]
+
+
+class RecoOddsOptionDTO(BaseModel):
+    """真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。"""
+
+    market: str
+    market_label: str
+    selection: str
+    odds: float
+    company_name: str
+    observed_at: str
+
+
+class RecoMatchOddsOptionsResponse(BaseModel):
+    match_id: int
+    options: list[RecoOddsOptionDTO]

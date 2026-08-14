@@ -270,3 +270,88 @@ def latest_market_line(
             continue
         return {"line": float(line), "company_id": cid, "observed_at": obs}
     return None
+
+
+# admin「每日精选」录入用(2026-08-14):与其让 admin 手打赔率数字,不如直接从
+# 已经抓到的真实盘口里选——只覆盖三个"选项一句话能说清楚"的市场,AH 的让球
+# 方向(主队让/受让)容易记反且历史上出过反向 bug(见 nowgoal.py 主客反转归一
+# 注释),不纳入自动选项;这三个市场之外或没有真实数据时,admin 仍手动填写。
+_OPTION_MARKETS = ("1x2", "ou", "corners_ou")
+_OPTION_MARKET_LABEL_ZH = {"1x2": "胜平负", "ou": "大小球", "corners_ou": "角球大小"}
+
+
+def _market_option_selections(market: str, flat: dict[str, Any]) -> list[tuple[str, float]]:
+    """单个市场的扁平赔率 → (选项文案, 赔率) 列表;任一必需字段缺失/非数值则整市场跳过。"""
+    if market == "1x2":
+        h, d, a = flat.get("home"), flat.get("draw"), flat.get("away")
+        if not all(isinstance(v, (int, float)) for v in (h, d, a)):
+            return []
+        return [("主胜", float(h)), ("平局", float(d)), ("客胜", float(a))]
+    if market in ("ou", "corners_ou"):
+        line, over, under = flat.get("line"), flat.get("over"), flat.get("under")
+        if not all(isinstance(v, (int, float)) for v in (line, over, under)):
+            return []
+        unit = "角球" if market == "corners_ou" else ""
+        return [(f"大{unit}{line}", float(over)), (f"小{unit}{line}", float(under))]
+    return []
+
+
+def raw_market_options(
+    conn_odds: sqlite3.Connection, fotmob_match_id: int
+) -> list[dict[str, Any]]:
+    """单场三个市场(1x2/大小球/角球大小)的最新真实原始赔率选项。
+
+    不去水、不算胜率——原样透出该公司最新一口价与公司名(admin 需要的是
+    "这个数字来自哪家公司的真实报价",不是研究用的隐含概率)。公司优先级同
+    latest_1x2_by_match(Bet365 实时轮询 '8' 优先于历史回填 '281')。没有真实
+    数据时返回空列表,由调用方(admin 端点)决定退回手动输入,不在这里编造。
+    """
+    placeholders_m = ",".join("?" for _ in _OPTION_MARKETS)
+    placeholders_c = ",".join("?" for _ in _WIN_PROB_COMPANY_PRIORITY)
+    try:
+        rows = conn_odds.execute(
+            f"""SELECT b.id, b.market, b.company_id, b.company_name, b.payload_json, b.observed_at
+                  FROM bronze_ng_odds_snap b
+                  JOIN dim_match_xref x
+                    ON x.provider_match_id = b.provider_match_id AND x.provider='nowgoal'
+                 WHERE x.fotmob_match_id=? AND b.market IN ({placeholders_m})
+                   AND b.company_id IN ({placeholders_c})
+                   AND x.review_status IN ('auto_ok','confirmed')""",
+            (fotmob_match_id, *_OPTION_MARKETS, *_WIN_PROB_COMPANY_PRIORITY),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+    best: dict[tuple[str, str], tuple[str, int, dict, str]] = {}
+    for r in rows:
+        key = (str(r["market"]), str(r["company_id"]))
+        cand_key = (str(r["observed_at"]), int(r["id"]))
+        cur = best.get(key)
+        if cur is None or cand_key > (cur[0], cur[1]):
+            try:
+                payload = json.loads(r["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            best[key] = (cand_key[0], cand_key[1], payload, str(r["company_name"]))
+
+    options: list[dict[str, Any]] = []
+    for market in _OPTION_MARKETS:
+        chosen = None
+        for cid in _WIN_PROB_COMPANY_PRIORITY:
+            chosen = best.get((market, cid))
+            if chosen is not None:
+                break
+        if chosen is None:
+            continue
+        obs, _id, payload, company_name = chosen
+        flat = normalize_odds_payload(payload)
+        for selection, odds in _market_option_selections(market, flat):
+            options.append({
+                "market": market,
+                "market_label": _OPTION_MARKET_LABEL_ZH[market],
+                "selection": selection,
+                "odds": round(odds, 2),
+                "company_name": company_name,
+                "observed_at": obs,
+            })
+    return options

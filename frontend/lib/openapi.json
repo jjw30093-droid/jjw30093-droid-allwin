@@ -3577,6 +3577,195 @@
     }
    }
   },
+  "/api/v1/admin/reco/match-candidates": {
+   "get": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Reco Match Candidates",
+    "description": "录入每日精选时的比赛候选(从真实比赛选,不再手打描述)。\n\nadmin 身份即可见全部联赛的未开赛比赛,不受个人 Plan/Entitlement 门禁\n约束(§CLAUDE.md 8.1:Role 与 Plan 分离——建正式公开内容不能被自己的\n免费档位挡住看不到完整数据)。`q` 缺省时返回最近开球的一批,供不搜索\n直接浏览挑选。",
+    "operationId": "admin_reco_match_candidates_api_v1_admin_reco_match_candidates_get",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 80
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Q"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 50,
+       "minimum": 1,
+       "default": 20,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoMatchCandidatesResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/reco/match-candidates/{match_id}/odds-options": {
+   "get": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Reco Match Odds Options",
+    "description": "选定比赛后的真实盘口选项(1x2/大小球/角球大小),供选择而非手打赔率。\n\n没有真实数据时 `options` 为空列表(不是 404)——前端据此退回手动输入,\n不把\"抓不到\"伪装成\"这场没有对应市场\"。",
+    "operationId": "admin_reco_match_odds_options_api_v1_admin_reco_match_candidates__match_id__odds_options_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoMatchOddsOptionsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
   "/api/v1/admin/reco/slips/{slip_id}": {
    "patch": {
     "tags": [
@@ -12967,6 +13156,132 @@
      "odds"
     ],
     "title": "RecoLegInput"
+   },
+   "RecoMatchCandidateDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "league_name": {
+      "type": "string",
+      "title": "League Name"
+     },
+     "home_name": {
+      "type": "string",
+      "title": "Home Name"
+     },
+     "away_name": {
+      "type": "string",
+      "title": "Away Name"
+     },
+     "kickoff_at_utc": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kickoff At Utc"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "league_id",
+     "league_name",
+     "home_name",
+     "away_name",
+     "status"
+    ],
+    "title": "RecoMatchCandidateDTO",
+    "description": "admin 录入每日精选用的比赛候选(从真实比赛卡片选,替代自由文本描述)。"
+   },
+   "RecoMatchCandidatesResponse": {
+    "properties": {
+     "matches": {
+      "items": {
+       "$ref": "#/components/schemas/RecoMatchCandidateDTO"
+      },
+      "type": "array",
+      "title": "Matches"
+     }
+    },
+    "type": "object",
+    "required": [
+     "matches"
+    ],
+    "title": "RecoMatchCandidatesResponse"
+   },
+   "RecoMatchOddsOptionsResponse": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "options": {
+      "items": {
+       "$ref": "#/components/schemas/RecoOddsOptionDTO"
+      },
+      "type": "array",
+      "title": "Options"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "options"
+    ],
+    "title": "RecoMatchOddsOptionsResponse"
+   },
+   "RecoOddsOptionDTO": {
+    "properties": {
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "market_label": {
+      "type": "string",
+      "title": "Market Label"
+     },
+     "selection": {
+      "type": "string",
+      "title": "Selection"
+     },
+     "odds": {
+      "type": "number",
+      "title": "Odds"
+     },
+     "company_name": {
+      "type": "string",
+      "title": "Company Name"
+     },
+     "observed_at": {
+      "type": "string",
+      "title": "Observed At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "market",
+     "market_label",
+     "selection",
+     "odds",
+     "company_name",
+     "observed_at"
+    ],
+    "title": "RecoOddsOptionDTO",
+    "description": "真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。"
    },
    "RecoOverviewResponse": {
     "properties": {

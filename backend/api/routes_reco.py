@@ -10,17 +10,20 @@
 匿名请求 401(引导登录);已登录无权益 403 + reco_membership_required。
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from backend.commands import reco as cmd
 from backend.commands.reco import LegInput, RecoError
 from backend.db.connections import tx
-from backend.queries import reco as q
+from backend.queries import odds as q_odds
+from backend.queries import reco as q_reco
 
 from .deps import (
     NO_STORE,
     AuthContext,
+    core_ro,
     get_auth_context,
+    odds_ro,
     platform_ro,
     platform_rw,
     require_csrf,
@@ -29,6 +32,8 @@ from .schemas import (
     AdminRecoSlipsResponse,
     OkDTO,
     RecoDailyResponse,
+    RecoMatchCandidatesResponse,
+    RecoMatchOddsOptionsResponse,
     RecoOverviewResponse,
     RecoSettleBody,
     RecoSettledDTO,
@@ -75,7 +80,7 @@ def reco_overview(
     维持中间件 default-deny 的 no-store;首页服务端按 revalidate 自行缓存。
     """
     _no_store(response)
-    return q.public_overview(conn)
+    return q_reco.public_overview(conn)
 
 
 # ── 会员/付费只读面 ────────────────────────────────────────
@@ -89,7 +94,7 @@ def reco_daily(
     """付费面(reco:daily):近 30 天推荐单,含未结算(受限内容,物理不下发给无权益者)。"""
     _no_store(response)
     _require_entitlement(ctx, "reco:daily")
-    return {"window_days": q.RECO_DAILY_WINDOW_DAYS, "slips": q.daily_slips(conn)}
+    return {"window_days": q_reco.RECO_DAILY_WINDOW_DAYS, "slips": q_reco.daily_slips(conn)}
 
 
 @router.get("/reco/track-record", response_model=RecoTrackRecordResponse)
@@ -110,9 +115,9 @@ def reco_track_record(
     _require_entitlement(ctx, "reco:track_record")
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
-    total, slips = q.track_record_slips(conn, limit=limit, offset=offset)
+    total, slips = q_reco.track_record_slips(conn, limit=limit, offset=offset)
     return {
-        "summary": q.track_record_summary(conn),
+        "summary": q_reco.track_record_summary(conn),
         "total": total,
         "slips": slips,
     }
@@ -145,8 +150,55 @@ def admin_list_slips(
     if not ctx.authenticated:
         raise HTTPException(status_code=401, detail="请先登录")
     _require_admin(ctx)
-    total, slips = q.admin_slips(conn, limit=max(1, min(limit, 200)), offset=max(0, offset))
+    total, slips = q_reco.admin_slips(conn, limit=max(1, min(limit, 200)), offset=max(0, offset))
     return {"total": total, "slips": slips}
+
+
+@router.get(
+    "/admin/reco/match-candidates", response_model=RecoMatchCandidatesResponse, tags=["admin"]
+)
+def admin_reco_match_candidates(
+    response: Response,
+    q: str | None = Query(None, min_length=1, max_length=80),
+    limit: int = Query(20, ge=1, le=50),
+    ctx: AuthContext = Depends(get_auth_context),
+    conn=Depends(core_ro),
+):
+    """录入每日精选时的比赛候选(从真实比赛选,不再手打描述)。
+
+    admin 身份即可见全部联赛的未开赛比赛,不受个人 Plan/Entitlement 门禁
+    约束(§CLAUDE.md 8.1:Role 与 Plan 分离——建正式公开内容不能被自己的
+    免费档位挡住看不到完整数据)。`q` 缺省时返回最近开球的一批,供不搜索
+    直接浏览挑选。
+    """
+    _no_store(response)
+    if not ctx.authenticated:
+        raise HTTPException(status_code=401, detail="请先登录")
+    _require_admin(ctx)
+    return {"matches": q_reco.admin_match_candidates(conn, query=q, limit=limit)}
+
+
+@router.get(
+    "/admin/reco/match-candidates/{match_id}/odds-options",
+    response_model=RecoMatchOddsOptionsResponse,
+    tags=["admin"],
+)
+def admin_reco_match_odds_options(
+    match_id: int,
+    response: Response,
+    ctx: AuthContext = Depends(get_auth_context),
+    conn_odds=Depends(odds_ro),
+):
+    """选定比赛后的真实盘口选项(1x2/大小球/角球大小),供选择而非手打赔率。
+
+    没有真实数据时 `options` 为空列表(不是 404)——前端据此退回手动输入,
+    不把"抓不到"伪装成"这场没有对应市场"。
+    """
+    _no_store(response)
+    if not ctx.authenticated:
+        raise HTTPException(status_code=401, detail="请先登录")
+    _require_admin(ctx)
+    return {"match_id": match_id, "options": q_odds.raw_market_options(conn_odds, match_id)}
 
 
 @router.post("/admin/reco/slips", response_model=RecoSlipCreatedDTO, tags=["admin"])

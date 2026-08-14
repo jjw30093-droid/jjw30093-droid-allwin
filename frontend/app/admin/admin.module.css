@@ -386,6 +386,59 @@
   color: var(--ink-3);
 }
 
+/* ── 每日精选录入:比赛/赔率从真实数据选(2026-08-14) ── */
+
+.matchPicker {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+
+.matchPicker .input {
+  width: 100%;
+}
+
+.matchDropdown {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.matchDropdownItem {
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: calc(var(--r-control) - 2px);
+}
+
+.matchDropdownItem:hover,
+.matchDropdownItem:focus {
+  background: var(--surface-2);
+}
+
+.matchDropdownEmpty {
+  padding: 7px 8px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
 .rowCard {
   padding: 12px 14px;
   border: 1px solid var(--border);

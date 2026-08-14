@@ -716,6 +716,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/reco/match-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Reco Match Candidates
+         * @description 录入每日精选时的比赛候选(从真实比赛选,不再手打描述)。
+         *
+         *     admin 身份即可见全部联赛的未开赛比赛,不受个人 Plan/Entitlement 门禁
+         *     约束(§CLAUDE.md 8.1:Role 与 Plan 分离——建正式公开内容不能被自己的
+         *     免费档位挡住看不到完整数据)。`q` 缺省时返回最近开球的一批,供不搜索
+         *     直接浏览挑选。
+         */
+        get: operations["admin_reco_match_candidates_api_v1_admin_reco_match_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reco/match-candidates/{match_id}/odds-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Reco Match Odds Options
+         * @description 选定比赛后的真实盘口选项(1x2/大小球/角球大小),供选择而非手打赔率。
+         *
+         *     没有真实数据时 `options` 为空列表(不是 404)——前端据此退回手动输入,
+         *     不把"抓不到"伪装成"这场没有对应市场"。
+         */
+        get: operations["admin_reco_match_odds_options_api_v1_admin_reco_match_candidates__match_id__odds_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/reco/slips/{slip_id}": {
         parameters: {
             query?: never;
@@ -3217,6 +3265,56 @@ export interface components {
             odds: number;
             /** Match Id */
             match_id?: number | null;
+        };
+        /**
+         * RecoMatchCandidateDTO
+         * @description admin 录入每日精选用的比赛候选(从真实比赛卡片选,替代自由文本描述)。
+         */
+        RecoMatchCandidateDTO: {
+            /** Match Id */
+            match_id: number;
+            /** League Id */
+            league_id: number;
+            /** League Name */
+            league_name: string;
+            /** Home Name */
+            home_name: string;
+            /** Away Name */
+            away_name: string;
+            /** Kickoff At Utc */
+            kickoff_at_utc?: string | null;
+            /** Status */
+            status: string;
+        };
+        /** RecoMatchCandidatesResponse */
+        RecoMatchCandidatesResponse: {
+            /** Matches */
+            matches: components["schemas"]["RecoMatchCandidateDTO"][];
+        };
+        /** RecoMatchOddsOptionsResponse */
+        RecoMatchOddsOptionsResponse: {
+            /** Match Id */
+            match_id: number;
+            /** Options */
+            options: components["schemas"]["RecoOddsOptionDTO"][];
+        };
+        /**
+         * RecoOddsOptionDTO
+         * @description 真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。
+         */
+        RecoOddsOptionDTO: {
+            /** Market */
+            market: string;
+            /** Market Label */
+            market_label: string;
+            /** Selection */
+            selection: string;
+            /** Odds */
+            odds: number;
+            /** Company Name */
+            company_name: string;
+            /** Observed At */
+            observed_at: string;
         };
         /**
          * RecoOverviewResponse
@@ -6559,6 +6657,141 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecoSlipCreatedDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_reco_match_candidates_api_v1_admin_reco_match_candidates_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoMatchCandidatesResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_reco_match_odds_options_api_v1_admin_reco_match_candidates__match_id__odds_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                match_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoMatchOddsOptionsResponse"];
                 };
             };
             /** @description Bad Request */
