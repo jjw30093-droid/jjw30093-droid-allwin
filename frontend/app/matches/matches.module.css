@@ -250,11 +250,6 @@
   margin-bottom: 8px;
 }
 
-.errorDetail {
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 @media (max-width: 520px) {
   .page {
     padding-inline: 12px;

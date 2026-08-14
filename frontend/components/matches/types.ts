@@ -13,10 +13,7 @@ type Schemas = components["schemas"];
 
 export type AnalysisBundle = GetJson<"/api/v1/matches/{match_id}/analysis">;
 export type EvidenceItem = Schemas["BundleEvidenceItem"];
-export type UncertaintyItem = Schemas["BundleUncertaintyItem"];
-export type SourceNote = Schemas["BundleSourceNote"];
 export type ScriptSection = Schemas["BundleScriptSection"];
-export type AnalysisChartSpec = Schemas["BundleChartSpec"];
 
 /* ── GET /api/v1/matches/{id}/odds ─────────────────────────── */
 
@@ -68,11 +65,8 @@ export type CooccurrenceResponse = GetJson<"/api/v1/matches/{match_id}/cooccurre
 /* ── GET /api/v1/model/metrics ─────────────────────────────── */
 
 export type ModelMetricsResponse = GetJson<"/api/v1/model/metrics">;
-export type ModelVersionInfo = Schemas["ModelVersionDTO"];
-export type OfficialEvaluation = Schemas["OfficialEvaluationDTO"];
 
 /* ── GET /api/v1/products ──────────────────────────────────── */
 
 export type ProductsResponse = GetJson<"/api/v1/products">;
 export type PlanInfo = Schemas["PlanDTO"];
-export type ProductInfo = Schemas["ProductDTO"];

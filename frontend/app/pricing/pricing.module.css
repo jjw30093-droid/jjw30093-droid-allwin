@@ -92,47 +92,6 @@
   font-size: 13.5px;
 }
 
-.productList {
-  list-style: none;
-  margin: 0 0 16px;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.productRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-control);
-  padding: 10px 14px;
-}
-
-.productName {
-  color: var(--ink);
-  font-weight: 500;
-  font-size: 13.5px;
-}
-
-.productPrice {
-  white-space: nowrap;
-}
-
-.priceNum {
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--gold-300);
-}
-
-.productDuration {
-  margin-left: 6px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 .freeNote {
   margin: 0 0 16px;
   color: var(--ink-2);
@@ -158,73 +117,6 @@
   content: "✓";
   color: var(--gold-500);
   margin-right: 8px;
-}
-
-/* ── 对比表 ── */
-
-.tableCard {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  overflow: hidden;
-}
-
-.tableWrap {
-  overflow-x: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 480px;
-}
-
-.table thead th {
-  background: var(--bg-2);
-  color: var(--ink-3);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-align: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.thLeft {
-  text-align: left !important;
-}
-
-.table tbody td {
-  height: 46px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--border);
-  text-align: center;
-}
-
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.entName {
-  text-align: left !important;
-  color: var(--ink);
-  font-size: 13.5px;
-  white-space: nowrap;
-}
-
-.checkCell {
-  font-family: var(--font-latin), system-ui, sans-serif;
-}
-
-.checkYes {
-  color: var(--gold-300);
-  font-weight: 700;
-}
-
-.checkNo {
-  color: var(--ink-3);
-  opacity: 0.6;
 }
 
 /* ── 空态 / 错误 ── */
@@ -277,15 +169,6 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.skeletonTable {
-  height: 260px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  margin-top: 24px;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
 @keyframes pulse {
   0%,
   100% {
@@ -297,8 +180,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeletonCard,
-  .skeletonTable {
+  .skeletonCard {
     animation: none;
   }
 }

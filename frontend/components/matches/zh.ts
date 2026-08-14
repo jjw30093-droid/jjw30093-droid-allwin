@@ -12,12 +12,6 @@ export const STATUS_ZH: Record<string, string> = {
   Finish: "已完赛",
 };
 
-export const PRED_STATUS_ZH: Record<string, string> = {
-  published: "已发布",
-  locked: "已锁定",
-  retracted: "已撤回",
-};
-
 export const MARKET_ZH: Record<string, string> = {
   "1x2": "胜平负(欧赔)",
   ah: "亚洲让球",
@@ -164,26 +158,6 @@ export const LEAGUE_ZH: Record<number, string> = {
   10216: "欧协联",
 };
 
-export const ENTITLEMENT_ZH: Record<string, string> = {
-  "league:epl": "英超联赛数据",
-  "league:lottery": "竞彩常见联赛数据(欧冠欧联/五大联赛外的英冠荷甲葡超巴甲/日韩澳/北欧)",
-  "league:top5": "五大联赛数据",
-  "prediction:top_probability": "模型最高一项概率",
-  "prediction:full_wdl": "完整胜平负三项概率",
-  "prediction:score_matrix": "比分概率矩阵",
-  "report:deep": "深度报告与同期事件明细",
-  "odds:summary_delayed": "赔率摘要(延迟约 1 小时)",
-  "odds:history_full": "完整赔率时间线",
-  "odds:raw": "原始赔率快照",
-  "export:basic": "基础导出",
-  "export:full": "完整导出",
-  "alert:odds": "赔率变化提醒",
-};
-
-export function entitlementLabel(code: string): string {
-  return ENTITLEMENT_ZH[code] ?? code;
-}
-
 export function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
@@ -194,12 +168,6 @@ export function formatDateZh(dateStr: string): string {
   if (parts.length !== 3) return dateStr;
   const [y, m, d] = parts;
   return `${y}年${parseInt(m, 10)}月${parseInt(d, 10)}日`;
-}
-
-export function formatPrice(cents: number, currency: string): string {
-  const amount = (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2);
-  if (currency === "CNY" || currency === "RMB") return `¥${amount}`;
-  return `${amount} ${currency}`;
 }
 
 /* ── 北京时间(UTC+8,固定无夏令时)展示 ──────────────────────────────
