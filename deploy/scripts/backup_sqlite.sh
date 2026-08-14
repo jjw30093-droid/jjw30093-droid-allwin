@@ -122,7 +122,12 @@ for name in "${REQUIRED_DBS[@]}"; do
   src="$DATA_DIR/$name"
   [ -f "$src" ] || die "源文件不存在: $src(三库必须齐全才算一次完整备份,缺一律失败)"
   out="$STAGING/$name"
-  sqlite3 "$src" ".backup '$out'"
+  # .timeout 必须显式设(sqlite3 CLI 默认 0,遇到源库当下有并发写事务立即报
+  # "database is locked",不重试)——2026-08-14 真实部署在有正常线上流量的
+  # 服务器上复现:allwin.db 备份成功后 platform.db 恰好撞上一次会话写入,
+  # 直接失败退出。30000ms 与 backend/db/connections.py 的
+  # PRAGMA busy_timeout=30000 同一约定,给并发写事务让出提交窗口再重试。
+  sqlite3 "$src" ".timeout 30000" ".backup '$out'"
   check="$(sqlite3 "$out" "PRAGMA integrity_check;")"
   if [ "$check" != "ok" ]; then
     die "$name 备份 integrity_check 失败: $check"

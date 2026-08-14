@@ -294,6 +294,65 @@ class TestConcurrentBackups:
         assert leftover_incomplete == [], "备份完成后不应残留 staging 目录"
 
 
+class TestBackupUnderConcurrentWriter:
+    """2026-08-14 真实部署事故复现:测试服务器有正常线上流量(会话/审计写
+    platform.db)时跑发布,allwin.db 备份成功后 platform.db 恰好撞上一次并发
+    写事务,sqlite3 CLI 的 `.backup` 默认不带 busy 超时,直接报
+    "database is locked" 退出——备份脚本不能假设自己独占数据库。
+
+    用一个持锁 1.5s 才提交的写事务制造确定性的重叠窗口(不是靠时序偶然撞上),
+    backup 必须扛住并在事务提交后重试成功,不能立即失败退出。
+    """
+
+    def test_backup_succeeds_against_deterministically_locked_db(self, migrated_data_dir):
+        """用 PRAGMA locking_mode=EXCLUSIVE 制造确定性(不是靠时序偶然撞上)的
+        独占锁窗口:另一个真实连接持有该锁的整段时间里,.backup 必须凭
+        `.timeout` 重试到锁释放为止再成功,而不是第一次撞锁就直接退出——
+        这正是 2026-08-14 真实事故复现的机制本身(sqlite3 CLI 的 .backup
+        默认不带 busy 超时,遇锁立即失败,不重试)。"""
+        import sqlite3
+        import threading
+
+        hold_seconds = 1.5
+        errors: list[Exception] = []
+        lock_acquired = threading.Event()
+
+        def _hold_exclusive_lock():
+            conn = sqlite3.connect(migrated_data_dir / "platform.db", timeout=30)
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA locking_mode=EXCLUSIVE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS _backup_test_writes (id INTEGER PRIMARY KEY, v TEXT)"
+                )
+                conn.execute("INSERT INTO _backup_test_writes (v) VALUES ('held')")
+                # 已发生一次写入:EXCLUSIVE 锁定模式下这个连接从这一刻起独占
+                # 整个数据库文件,直到显式改回 NORMAL 或关闭连接。
+                lock_acquired.set()
+                time.sleep(hold_seconds)
+                conn.commit()
+                conn.execute("PRAGMA locking_mode=NORMAL")
+                conn.execute("SELECT 1")   # 触发锁定模式切换真正生效
+            except Exception as exc:  # noqa: BLE001 — 持锁线程,异常记下来供断言,不吞掉
+                errors.append(exc)
+            finally:
+                conn.close()
+
+        t = threading.Thread(target=_hold_exclusive_lock, daemon=True)
+        t.start()
+        lock_acquired.wait(timeout=5)
+        r = _run_backup(migrated_data_dir)   # 此时另一连接仍独占持锁未释放
+        t.join(timeout=5)
+
+        assert not errors, f"持锁线程本身出错(不是被测对象): {errors}"
+        assert r.returncode == 0, f"备份必须重试到锁释放为止,不能一撞锁就退出:\n{r.stdout}\n{r.stderr}"
+        dirs = _backup_dirs(migrated_data_dir)
+        assert len(dirs) == 1
+        meta = json.loads((dirs[0] / "backup_metadata.json").read_text())
+        assert meta["complete"] is True
+        assert meta["databases"]["platform.db"]["integrity_check"] == "ok"
+
+
 class TestS3Offline:
     def test_unconfigured_is_local_only(self, migrated_data_dir):
         r = _run_backup(migrated_data_dir)
