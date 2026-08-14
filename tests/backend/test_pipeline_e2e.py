@@ -16,12 +16,13 @@ from fastapi.testclient import TestClient
 from backend.cli.build_odds_silver import run as run_odds_silver
 from backend.cli.poll_fotmob_snapshots import run_snapshot_poll
 from backend.cli.poll_nowgoal import run_due_poll
-from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_ro, connect_rw
 from backend.db.util import normalize_utc_iso
 from backend.ingest.poll_windows import required_interval_seconds
 from backend.silver.odds_moves import final_pre_match_snapshot
 from backend.studio.bundle import build_analysis_bundle
+
+from .authflow import wechat_scan_login
 
 ORIGIN = {"Origin": "http://localhost:3000"}
 
@@ -33,8 +34,11 @@ def _iso(dt: datetime) -> str:
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
 T0 = _iso(NOW)
 T0_PLUS_5MIN = _iso(NOW + timedelta(minutes=5))
-T1 = _iso(NOW + timedelta(minutes=20))          # ≥15 分钟 → 第二轮 due
-KICKOFF = NOW + timedelta(hours=24)             # 窗口内(2–72h 档,间隔 15 分钟)
+T1 = _iso(NOW + timedelta(minutes=20))          # 20 分钟 → 第二轮 due(见下)
+# NowGoal 五段节流(Phase 4)下:距开球 2.5h 落在 1–3h 档(间隔 1200s=20 分钟)。
+# T0 首轮 due;T0+5min(300s)节流;T0+20min(1200s)到期——保持本用例
+# "先节流再到期"的原意。FotMob 快照仍用旧两档(2.5h→900s),f1/f2 同样 due。
+KICKOFF = NOW + timedelta(hours=2, minutes=30)
 KICKOFF_ISO = _iso(KICKOFF)
 # NowGoal 日程行内 kickoff 字段本身是 UTC(2026-07-21 真实 titan_id=2912218 交叉
 # 验证,见 entity_resolution.py 模块 docstring),不做时区转换。
@@ -261,6 +265,79 @@ class TestUpcomingPreciseMatchesAndMarketPhase:
         conn.close()
 
 
+class TestT7DiscoveryWindow:
+    """T+7 首次发现即采(2026-08-12 真实回归修的 gap):run_due_poll 的候选池
+    必须覆盖到 DISCOVERY_WINDOW_HOURS(168h),不能停在 poll_decision 内部的
+    72h 节流窗口——否则开球在 72h 开外的新赛季首轮(如西甲首轮 kickoff 在
+    T+3~T+10 天)永远进不了候选列表,first_discovery 判定形同虚设。"""
+
+    FAR_MATCH_ID = 7501
+    FAR_TITAN = "888501"
+    FAR_HOME_ID, FAR_AWAY_ID = 311, 322
+
+    def test_match_beyond_72h_but_within_168h_is_discovered_and_polled_once(
+        self, data_dir, tmp_path
+    ):
+        far_kickoff = NOW + timedelta(hours=120)  # 72h 外、168h 内
+        js_tuple = (
+            f"{far_kickoff.year},{far_kickoff.month - 1},{far_kickoff.day},"
+            f"{far_kickoff.hour:02d},{far_kickoff.minute:02d},00"
+        )
+        schedule_data = (
+            "var A=Array(2);\nvar matchcount=1;\n"
+            f"A[1]=[{self.FAR_TITAN},87,{self.FAR_HOME_ID},{self.FAR_AWAY_ID},"
+            f"'Alaves','Getafe','{js_tuple}',-1,0];"
+        )
+        fixture_path = tmp_path / "far.json"
+        fixture_path.write_text(
+            json.dumps({
+                "schedule_data": schedule_data,
+                "odds": {self.FAR_TITAN: _odds_payload("2.00")},
+            }),
+            encoding="utf-8",
+        )
+
+        conn = connect_rw("core")
+        try:
+            conn.execute(
+                "INSERT INTO dim_match (Match_ID, Season, League_ID, Date, Home_Team_ID,"
+                " Away_Team_ID, Home_Team_Name, Away_Team_Name, status, Match_Round,"
+                " kickoff_at_utc, kickoff_precision, kickoff_source)"
+                " VALUES (?, '2026/2027', 87, ?, ?, ?, 'Alaves', 'Getafe', 'NotStarted', '1', ?,"
+                " 'exact', 'fotmob:fixtures')",
+                (self.FAR_MATCH_ID, _iso(far_kickoff)[:10], self.FAR_HOME_ID, self.FAR_AWAY_ID,
+                 _iso(far_kickoff)),
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dim_team_i18n"
+                " (Team_ID INTEGER PRIMARY KEY, name_en TEXT, name_zh TEXT, source TEXT, updated_at TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO dim_team_i18n VALUES (?, 'Alaves', '阿拉维斯', 't', '')",
+                (self.FAR_HOME_ID,),
+            )
+            conn.execute(
+                "INSERT INTO dim_team_i18n VALUES (?, 'Getafe', '赫塔菲', 't', '')",
+                (self.FAR_AWAY_ID,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        s1 = run_due_poll(now_iso=T0, offline_fixture=str(fixture_path))
+        # 候选池必须真的包含这场 120h 外的比赛(旧实现在这里就是 0)
+        assert s1["window_candidates"] == 1
+        assert s1["resolved_auto_ok"] == 1
+        assert s1["due_matches"] == 1
+        assert s1["odds_polled"] == 1
+        assert s1["snapshots_inserted"] >= 1
+
+        # 同一时刻重放:first_discovery 只触发一次,已经 mark_polled 过了
+        s2 = run_due_poll(now_iso=T0_PLUS_5MIN, offline_fixture=str(fixture_path))
+        assert s2["due_matches"] == 0
+        assert s2["not_due_skipped"] == 0  # 72h 外仍算"窗口外",不计入节流计数
+
+
 class TestOfflinePipelineE2E:
     def test_full_chain(self, pipeline_core, data_dir, app, tmp_path, fresh_ip):
         # ── 轮 1(T0):日程发现 → xref → 赔率快照 v1 ─────────────
@@ -350,16 +427,10 @@ class TestOfflinePipelineE2E:
 
         # ── API:赔率时间轴 + 同期事件(premium) ─────────────────
         client = TestClient(app)
-        r = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                       headers={"x-real-ip": fresh_ip})
-        client.get(r.headers["location"], follow_redirects=False)
+        wechat_scan_login(client, ip=fresh_ip)
         me = client.get("/api/v1/me").json()
         assert me["authenticated"]
-        conn_p = connect_rw("platform")
-        try:
-            grant_subscription(conn_p, me["user"]["id"], "premium", 30, granted_by=None)
-        finally:
-            conn_p.close()
+        # 三段可见性(CLAUDE.md §8):登录即 member 基线,odds:history_full 无需订阅
 
         odds_resp = client.get(f"/api/v1/matches/{MATCH_ID}/odds").json()
         assert odds_resp["available"] is True

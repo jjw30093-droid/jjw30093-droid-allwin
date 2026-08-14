@@ -150,6 +150,7 @@ class TestSystemdUnitTopology:
     @pytest.mark.parametrize("unit", [
         "allwin-poll.service", "allwin-worker.service",
         "allwin-api.service", "allwin-web.service", "allwin-backup.service",
+        "allwin-opscheck.service", "allwin-digest.service",
     ])
     def test_hardening_directives_present(self, unit):
         content = (SYSTEMD_DIR / unit).read_text()
@@ -162,6 +163,8 @@ class TestSystemdUnitTopology:
         ("allwin-api.service", True),
         ("allwin-web.service", True),
         ("allwin-backup.service", True),
+        ("allwin-opscheck.service", True),
+        ("allwin-digest.service", True),
     ])
     def test_timeout_directives_present(self, unit, expect_timeout_stop):
         content = (SYSTEMD_DIR / unit).read_text()
@@ -174,3 +177,30 @@ class TestSystemdUnitTopology:
         worker_timer = (SYSTEMD_DIR / "allwin-worker.timer").read_text()
         assert "OnUnitActiveSec=5min" in poll_timer
         assert "OnUnitActiveSec=15min" in worker_timer
+
+    def test_opscheck_units(self):
+        """opscheck:30 分钟节奏、--json --notify、WARN/CRITICAL 退出码不算 unit 失败。"""
+        service = (SYSTEMD_DIR / "allwin-opscheck.service").read_text()
+        timer = (SYSTEMD_DIR / "allwin-opscheck.timer").read_text()
+        execstart = [l for l in service.splitlines() if l.strip().startswith("ExecStart=")]
+        assert len(execstart) == 1
+        assert "backend.cli.ops_check" in execstart[0]
+        assert "--json" in execstart[0] and "--notify" in execstart[0]
+        assert "SuccessExitStatus=1 2" in service, (
+            "ops_check 用退出码 1/2 表达 WARN/CRITICAL(告警已由 --notify 推送),"
+            "不声明 SuccessExitStatus 会让每次 WARN 都被 systemd 记成 unit failure"
+        )
+        assert "OnUnitActiveSec=30min" in timer
+
+    def test_digest_units(self):
+        """digest:每天 23:30 Asia/Shanghai、Persistent 补跑、--key 北京日期幂等。"""
+        service = (SYSTEMD_DIR / "allwin-digest.service").read_text()
+        timer = (SYSTEMD_DIR / "allwin-digest.timer").read_text()
+        execstart = [l for l in service.splitlines() if l.strip().startswith("ExecStart=")]
+        assert len(execstart) == 1
+        assert "daily_digest" in execstart[0]
+        assert "--key" in execstart[0], "必须以 --key <日期> 幂等,天然每天恰好一次"
+        assert "TZ=Asia/Shanghai" in execstart[0], "幂等键必须按北京日期取"
+        assert "%%Y-%%m-%%d" in execstart[0], "unit 文件里 % 必须写成 %%(systemd 转义)"
+        assert "OnCalendar=*-*-* 23:30:00 Asia/Shanghai" in timer
+        assert "Persistent=true" in timer

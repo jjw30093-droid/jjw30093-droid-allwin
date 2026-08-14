@@ -19,11 +19,13 @@ from pathlib import Path
 
 import pytest
 
+from .authflow import wechat_scan_login
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # 白名单:2xx 不返回 JSON body 的路径(decorator responses={} 中已显式声明语义)
 NON_JSON_2XX_ALLOWED = {
-    "/api/v1/auth/wechat/oa/start",              # 302 跳转微信授权页,无 body
+    "/api/v1/auth/wechat/webhook",               # text/plain(echostr/success)或被动回复 XML
     "/api/v1/analytics/events",                  # 204 无 body
     "/api/v1/studio/exports/{job_id}/download",  # application/octet-stream 文件流
 }
@@ -310,9 +312,7 @@ class TestUnifiedErrorContractRuntime:
         from fastapi.testclient import TestClient
 
         c = TestClient(app)
-        r1 = c.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                   headers={"x-real-ip": fresh_ip})
-        c.get(r1.headers["location"], follow_redirects=False)
+        wechat_scan_login(c, ip=fresh_ip)
         r = c.get("/api/v1/admin/users")
         body = _assert_unified_error_body(r, expect_code="FORBIDDEN")
         assert r.status_code == 403
@@ -328,7 +328,7 @@ class TestUnifiedErrorContractRuntime:
 
         settings = make_settings(WECHAT_AUTH_PROVIDER="real", WECHAT_AUTH_ENABLED="0")
         c = TestClient(create_app(settings))
-        r = c.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False)
+        r = c.post("/api/v1/auth/wechat/device")
         body = _assert_unified_error_body(r, expect_code="AUTH_DISABLED")
         assert r.status_code == 503
         assert body["details"] is None

@@ -3,13 +3,13 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from .authflow import wechat_scan_login
+
 ORIGIN = {"Origin": "http://localhost:3000"}
 
 
 def _login_user(client, ip="203.0.113.50"):
-    r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                    headers={"x-real-ip": ip})
-    client.get(r1.headers["location"], follow_redirects=False)
+    wechat_scan_login(client, ip=ip)
     body = client.get("/api/v1/me").json()
     assert body["authenticated"]
     return body["user"]["id"]
@@ -38,14 +38,16 @@ def _csrf(client):
 
 class TestProducts:
     def test_products_db_driven(self, client):
+        """三段可见性(0009):在售 plan 只剩 free/member;四个旧订阅商品已下架。"""
         r = client.get("/api/v1/products")
         assert r.status_code == 200
         body = r.json()
-        assert [p["id"] for p in body["plans"]] == ["free", "pro", "premium"]
-        assert len(body["products"]) >= 4
-        assert all("price_cents" in p for p in body["products"])
-        pro = next(p for p in body["plans"] if p["id"] == "pro")
-        assert "prediction:full_wdl" in pro["entitlements"]
+        assert [p["id"] for p in body["plans"]] == ["free", "member", "daily_picks"]
+        assert body["products"] == []      # 定价不写(0010):无商品行,购买走公众号联系
+        member = next(p for p in body["plans"] if p["id"] == "member")
+        assert "prediction:full_wdl" in member["entitlements"]
+        picks = next(p for p in body["plans"] if p["id"] == "daily_picks")
+        assert "reco:daily" in picks["entitlements"]
         assert "public" in r.headers["cache-control"]
 
 
@@ -54,27 +56,27 @@ class TestAdminGrant:
         user_id = _login_user(client, ip=fresh_ip)
         admin = _login_admin(app, data_dir, ip=fresh_ip)
 
-        # 授予 30 天 pro
+        # 授予 30 天 member(机制演练;付费板块 plan 落地后同一链路)
         r = admin.post(f"/api/v1/admin/users/{user_id}/grant",
-                       json={"plan_id": "pro", "duration_days": 30},
+                       json={"plan_id": "member", "duration_days": 30},
                        headers=_csrf(admin))
         assert r.status_code == 200, r.text
         first_ends = r.json()["ends_at"]
-        assert client.get("/api/v1/me").json()["plan"] == "pro"
+        assert client.get("/api/v1/me").json()["plan"] == "member"
         assert "prediction:full_wdl" in client.get("/api/v1/me").json()["entitlements"]
 
         # 再授 30 天 → 从上次 ends_at 顺延
         r2 = admin.post(f"/api/v1/admin/users/{user_id}/grant",
-                        json={"plan_id": "pro", "duration_days": 30},
+                        json={"plan_id": "member", "duration_days": 30},
                         headers=_csrf(admin))
         assert r2.json()["starts_at"] == first_ends
 
-        # 撤销两个订阅 → 回到 free
+        # 撤销两个订阅 → 展示 plan 仍是 member(登录基线;订阅只是追加)
         subs = client.get("/api/v1/account").json()["subscriptions"]
         for s in subs:
             rr = admin.post(f"/api/v1/admin/subscriptions/{s['id']}/revoke", headers=_csrf(admin))
             assert rr.status_code == 200
-        assert client.get("/api/v1/me").json()["plan"] == "free"
+        assert client.get("/api/v1/me").json()["plan"] == "member"
 
         # 全程留审计
         logs = admin.get("/api/v1/admin/audit-logs").json()["logs"]
@@ -106,7 +108,7 @@ class TestAdminGrant:
 
 class TestRedeem:
     def _make_codes(self, admin, n=1, **over):
-        payload = {"plan_id": "pro", "duration_days": 30, "count": n}
+        payload = {"plan_id": "member", "duration_days": 30, "count": n}
         payload.update(over)
         r = admin.post("/api/v1/admin/redeem-codes", json=payload, headers=_csrf(admin))
         assert r.status_code == 200, r.text
@@ -119,7 +121,9 @@ class TestRedeem:
 
         r = client.post("/api/v1/redeem", json={"code": code}, headers=_csrf(client))
         assert r.status_code == 200, r.text
-        assert client.get("/api/v1/me").json()["plan"] == "pro"
+        assert client.get("/api/v1/me").json()["plan"] == "member"
+        assert any(s["plan_id"] == "member"
+                   for s in client.get("/api/v1/account").json()["subscriptions"])
 
         # 同码复用 → used(全站统一错误契约:顶层 code/message/details,不再嵌套在 detail 下)
         r2 = client.post("/api/v1/redeem", json={"code": code}, headers=_csrf(client))

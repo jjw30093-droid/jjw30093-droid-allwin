@@ -1,0 +1,12 @@
+# 每天 23:30(Asia/Shanghai)触发 allwin-digest.service(每日管道汇总)。
+# Persistent=true:错过触发(停机/重启)开机后补跑一次——幂等键保证补跑 +
+# 正点触发同一天最多推一条。
+[Unit]
+Description=Run allwin daily digest at 23:30 Asia/Shanghai
+
+[Timer]
+OnCalendar=*-*-* 23:30:00 Asia/Shanghai
+Persistent=true
+
+[Install]
+WantedBy=timers.target

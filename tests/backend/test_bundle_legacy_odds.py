@@ -16,10 +16,11 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_rw
 
 from .coreseed import insert_match, seed_core_schema
+
+from .authflow import wechat_scan_login
 
 
 def _seed_legacy(match_id: int, period: str, price: float) -> None:
@@ -56,9 +57,7 @@ def bundle_matches(data_dir):
 
 
 def _login(client, ip):
-    r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                    headers={"x-real-ip": ip})
-    client.get(r1.headers["location"], follow_redirects=False)
+    wechat_scan_login(client, ip=ip)
     return client.get("/api/v1/me").json()["user"]["id"]
 
 
@@ -72,10 +71,7 @@ class TestBundleLegacyOdds:
 
     def test_legacy_only_match_premium_gets_both_periods(self, app, bundle_matches, fresh_ip):
         c = TestClient(app)
-        uid = _login(c, fresh_ip)
-        conn = connect_rw("platform")
-        grant_subscription(conn, uid, "premium", 30, granted_by=None, source="admin_grant")
-        conn.close()
+        _login(c, fresh_ip)   # 三段可见性:登录即 member 基线(odds:history_full)
         d = c.get("/api/v1/matches/8101/analysis").json()
         assert d["odds_coverage_tier"] == "open_close_only"
         pts = d["odds_summary_points"]

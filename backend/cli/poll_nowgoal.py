@@ -48,9 +48,15 @@ from backend.ingest.poll_windows import (
     INTERVAL_FAR_SECONDS,
     is_due,
     mark_polled,
-    required_interval_seconds,
+    poll_decision,
     upcoming_precise_matches,
 )
+
+# T+7 首次发现窗口(CLAUDE.md §6.3):候选发现范围要覆盖到"首次发现即采"
+# 那一档,不能只用 poll_decision 内部 72h 节流窗口去限定候选池本身——否则
+# 72h 外的比赛永远进不了候选列表,first_discovery 判定形同虚设(2026-08-12
+# 真实回归:西甲首轮开球在 T+3~T+10 天,72h 候选池直接是空的)。
+DISCOVERY_WINDOW_HOURS = 168
 from backend.providers import nowgoal
 
 POLLABLE_STATUSES = ("auto_ok", "confirmed")
@@ -220,7 +226,8 @@ def run_poll(date: str, offline_fixture: str | None = None) -> dict:
                   "poll_run_id": poll_run_id, "offline": fixture is not None},
         )
         summary["schedule_rows"] = len(schedule)
-        mark_polled(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date, observed_at, poll_run_id)
+        mark_polled(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date, observed_at, poll_run_id,
+                    tier="schedule")
 
         seed_team_aliases(conn_odds, conn_core)
         pollable = _resolve_schedule_rows(conn_odds, conn_core, schedule, date, summary)
@@ -231,7 +238,8 @@ def run_poll(date: str, offline_fixture: str | None = None) -> dict:
             item["fixture"] = fixture
             ok = _poll_odds_for(conn_odds, conn_core, item, observed_at, poll_run_id, summary)
             mark_polled(conn_odds, SOURCE_NOWGOAL_ODDS,
-                        item["xref"]["fotmob_match_id"], observed_at, poll_run_id)
+                        item["xref"]["fotmob_match_id"], observed_at, poll_run_id,
+                        tier="date_mode", ok=ok)
             if not ok:
                 odds_failures += 1
         if pollable:
@@ -262,7 +270,8 @@ def _beijing_dates_for(matches) -> list[str]:
 
 
 def run_due_poll(now_iso: str | None = None, offline_fixture: str | None = None) -> dict:
-    """窗口到期采集:只处理未来 72h 内有精确 kickoff 的比赛,按 poll_state 节流。"""
+    """窗口到期采集:候选池覆盖未来 T+7(168h)内有精确 kickoff 的比赛,
+    实际是否本轮真的去抓由 poll_decision 按三档节奏(首次发现/2-72h/0-2h)判定。"""
     now = now_iso or utc_now_iso()
     poll_run_id = new_uuid()
     summary = {
@@ -286,7 +295,7 @@ def run_due_poll(now_iso: str | None = None, offline_fixture: str | None = None)
     conn_odds = connect_rw("odds")
     conn_core = connect_ro("core")
     try:
-        candidates = upcoming_precise_matches(conn_core, now)
+        candidates = upcoming_precise_matches(conn_core, now, window_hours=DISCOVERY_WINDOW_HOURS)
         summary["window_candidates"] = len(candidates)
         if not candidates:
             return summary
@@ -316,7 +325,8 @@ def run_due_poll(now_iso: str | None = None, offline_fixture: str | None = None)
                         meta={"stage": "schedule", "date": date, "poll_run_id": poll_run_id},
                     )
                     summary["failures"].append(f"schedule {date}: {type(exc).__name__}: {exc}")
-                    mark_polled(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date, now, poll_run_id)
+                    mark_polled(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date, now, poll_run_id,
+                                tier="schedule", ok=False)
                     continue
                 summary["schedule_fetches"] += 1
                 summary["schedule_rows"] += len(schedule)
@@ -326,7 +336,8 @@ def run_due_poll(now_iso: str | None = None, offline_fixture: str | None = None)
                     meta={"stage": "schedule", "date": date, "rows": len(schedule),
                           "poll_run_id": poll_run_id, "offline": fixture is not None},
                 )
-                mark_polled(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date, now, poll_run_id)
+                mark_polled(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date, now, poll_run_id,
+                            tier="schedule")
                 _resolve_schedule_rows(conn_odds, conn_core, schedule, date, summary)
             # 重新装载映射
             xref_by_match = {}
@@ -343,18 +354,24 @@ def run_due_poll(now_iso: str | None = None, offline_fixture: str | None = None)
             xref = xref_by_match.get(mid)
             if xref is None or xref.get("review_status") not in POLLABLE_STATUSES:
                 continue
-            interval = required_interval_seconds(
-                c["kickoff_at_utc"], c["kickoff_precision"], c["kickoff_source"], now
+            last_row = conn_odds.execute(
+                "SELECT last_polled_at FROM poll_state WHERE source=? AND subject=?",
+                (SOURCE_NOWGOAL_ODDS, str(mid)),
+            ).fetchone()
+            last_polled_at = last_row["last_polled_at"] if last_row else None
+            decision = poll_decision(
+                SOURCE_NOWGOAL_ODDS, c["kickoff_at_utc"], c["kickoff_precision"],
+                c["kickoff_source"], last_polled_at, now,
             )
-            if interval is None:
-                continue
-            if not is_due(conn_odds, SOURCE_NOWGOAL_ODDS, mid, interval, now):
-                summary["not_due_skipped"] += 1
+            if not decision.due:
+                if decision.tier is not None:      # 在窗内但被节流
+                    summary["not_due_skipped"] += 1
                 continue
             summary["due_matches"] += 1
             item = {"titan_id": xref["provider_match_id"], "xref": xref, "fixture": fixture}
             ok = _poll_odds_for(conn_odds, conn_core, item, now, poll_run_id, summary)
-            mark_polled(conn_odds, SOURCE_NOWGOAL_ODDS, mid, now, poll_run_id)
+            mark_polled(conn_odds, SOURCE_NOWGOAL_ODDS, mid, now, poll_run_id,
+                        tier=decision.tier, ok=ok)
             if not ok:
                 odds_failures += 1
         if summary["due_matches"]:

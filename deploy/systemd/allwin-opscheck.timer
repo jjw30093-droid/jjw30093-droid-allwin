@@ -1,0 +1,13 @@
+# 每 30 分钟触发一次 allwin-opscheck.service(运维体检 + 告警推送)。
+# 频率与去重的关系:同一问题的 dedup_key 24h 内只推一次(backend/notify),
+# 所以 30 分钟的检查频率不等于 30 分钟一条推送。
+[Unit]
+Description=Run allwin ops check every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

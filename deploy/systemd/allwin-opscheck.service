@@ -1,0 +1,35 @@
+# 运维体检 + 方糖推送(oneshot,由 allwin-opscheck.timer 每 30 分钟触发)。
+# ops_check 本身只读;--notify 是唯一写例外:WARN/CRITICAL 时向 platform.db 的
+# pipeline_alerts 落一行记录并经 Server 酱推送脱敏摘要(backend/notify 统一
+# 管理配额/去重,同一问题 24h 只推一次,不会每 30 分钟推爆)。
+#
+# 退出码语义(backend/cli/ops_check.py):0=OK 1=WARN 2=CRITICAL。
+# WARN/CRITICAL 是"检查发现问题",不是"检查本身失败"——告警已经由 --notify
+# 自己的通道送达,这里把 1/2 声明为 SuccessExitStatus,避免 systemd 再把每次
+# WARN 记成 unit failure 造成 journal 噪音(检查真崩溃时是其他退出码/信号,
+# 仍会如实标 failed)。
+#
+# 安装:cp allwin-opscheck.service allwin-opscheck.timer /etc/systemd/system/
+#       systemctl daemon-reload && systemctl enable --now allwin-opscheck.timer
+[Unit]
+Description=allwin ops check (read-only health checks, ServerChan notify on WARN/CRITICAL)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.cli.ops_check --json --notify
+SuccessExitStatus=1 2
+TimeoutStartSec=300
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

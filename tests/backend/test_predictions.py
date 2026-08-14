@@ -20,6 +20,8 @@ from backend.db.connections import connect_ro, connect_rw
 from backend.eval.metrics import evaluate_all, rps
 from backend.queries.track_record import evaluation_samples, official_samples
 
+from .authflow import wechat_scan_login
+
 
 def _iso(dt):
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -340,9 +342,7 @@ class TestEditSnapshot:
         sid = _insert_official(platform, 995, (0.5, 0.3, 0.2), _past(days=1))
         platform.commit()
 
-        r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                        headers={"x-real-ip": fresh_ip})
-        client.get(r1.headers["location"], follow_redirects=False)
+        wechat_scan_login(client, ip=fresh_ip)
         assert client.get("/api/v1/me").json()["authenticated"]
 
         resp = client.post(

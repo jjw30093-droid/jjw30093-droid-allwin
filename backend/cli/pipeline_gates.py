@@ -1,0 +1,383 @@
+"""质量门(数据管道重建:每条规则配一个可执行检查)。
+
+链上最后一步(DEFAULT_CHAIN 尾,失败不 cascade 任何真活):对三库做只读体检,
+违反的门通过 backend.notify 发告警(先落 pipeline_alerts 再推,配额/去重由
+notify 统一管理)。门的"发现问题"不等于本任务失败——任务失败语义留给
+"检查本身跑不动"(崩溃),避免质量门 CRITICAL 又触发一条 pipeline_step_failure
+的重复告警。
+
+门清单(与计划一致;每门的判据在各 _gate_* 函数 docstring):
+  G1 fixtures_window_empty       赛季期内 7 天窗口 0 场            CRITICAL
+  G2 league_coverage_regression  最近一次赛程同步被反退化门禁拒写   CRITICAL
+  G3 kickoff_precision           7 天窗口内非 exact kickoff > 0    WARNING
+  G4 entity_resolution_degraded  逐联赛 pollable/in_window          <60% WARN / ==0 CRITICAL
+  G5 odds_coverage               未来 24h 有 pre_match 快照占比      <50% WARNING
+  G6 closing_coverage            完赛场 T-15min 内收盘快照占比       <80% WARN / <70% CRITICAL
+  G7 score_regression            NotStarted 却带比分(清列泄漏兜底)  >0 CRITICAL
+  G8 company_scope               近 24h 出现目标外公司 cid          CRITICAL
+  G9 source_waf_blocked          近 1h source_health 命中 WAF       CRITICAL
+
+数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
+不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
+
+用法:
+  python -m backend.cli.pipeline_gates            # 文本输出,退出码 0/1/2
+  python -m backend.cli.pipeline_gates --json
+  python -m backend.cli.pipeline_gates --no-notify  # 只检查不发告警(手工排查)
+"""
+
+import argparse
+import json
+import statistics
+import sys
+from datetime import datetime, timedelta, timezone
+
+from backend.db.connections import connect_ro
+from backend.db.util import utc_now_iso
+from backend.ingest.poll_windows import upcoming_precise_matches
+from backend.providers.nowgoal import DEFAULT_TARGET_CIDS
+from backend.queries.leagues import LEAGUE_META
+
+OK, WARNING, CRITICAL = "OK", "WARNING", "CRITICAL"
+_RANK = {OK: 0, WARNING: 1, CRITICAL: 2}
+
+POLLABLE_STATUSES = ("auto_ok", "confirmed")
+CLOSING_WINDOW_SECONDS = 900         # T-15min 收盘覆盖判据
+G4_MIN_MATCHES = 3                   # 窗口内 ≥3 场才判实体解析率
+G5_MIN_MATCHES = 3
+G6_MIN_MATCHES = 5
+
+
+def _parse_iso(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _league_name(lid: int) -> str:
+    meta = LEAGUE_META.get(lid)
+    return f"{meta['name_zh']}({lid})" if meta else str(lid)
+
+
+def _latest_ledger_by_league(conn_odds) -> dict[int, dict]:
+    rows = conn_odds.execute(
+        """SELECT l.* FROM fixture_sync_ledger l
+           JOIN (SELECT league_id, MAX(id) AS max_id FROM fixture_sync_ledger
+                 GROUP BY league_id) t ON t.max_id = l.id"""
+    ).fetchall()
+    return {int(r["league_id"]): dict(r) for r in rows}
+
+
+# ── 各门 ─────────────────────────────────────────────────────────────
+
+
+def _gate_fixtures_window(conn_core, ledger_by_league, now_iso) -> dict:
+    """G1:最近一次同步 verdict='written' 且 horizon7_rows>0 的联赛,core 里
+    7 天窗口内却查不到 NotStarted 场次 → 写入声明与真实数据不一致,CRITICAL。
+    未同步过 / off_season 的联赛如实 skipped,不误报。"""
+    hi = _iso(_parse_iso(now_iso) + timedelta(days=7))
+    violations, skipped = [], []
+    for lid in LEAGUE_META:
+        ledger = ledger_by_league.get(lid)
+        if ledger is None:
+            skipped.append({"league_id": lid, "reason": "not_synced_yet"})
+            continue
+        if ledger["verdict"] != "written" or not ledger["horizon7_rows"]:
+            skipped.append({"league_id": lid, "reason": f"ledger_{ledger['verdict']}"})
+            continue
+        n = conn_core.execute(
+            """SELECT COUNT(*) FROM dim_match
+               WHERE League_ID=? AND status='NotStarted'
+                 AND julianday(COALESCE(kickoff_at_utc, Date)) > julianday(?)
+                 AND julianday(COALESCE(kickoff_at_utc, Date)) <= julianday(?)""",
+            (lid, now_iso, hi),
+        ).fetchone()[0]
+        if n == 0:
+            violations.append({"league_id": lid, "ledger_horizon7": ledger["horizon7_rows"]})
+    level = CRITICAL if violations else OK
+    return {"gate": "fixtures_window_empty", "level": level,
+            "violations": violations, "skipped_leagues": len(skipped)}
+
+
+def _gate_coverage_regression(ledger_by_league) -> dict:
+    """G2:最近一次同步被 G-A/G-B/G-C 门禁拒写(refused_regression/refused_downgrade)
+    ——写入端已经保护了旧数据,这里负责让人知道"有联赛的新数据被拒了"。"""
+    violations = [
+        {"league_id": lid, "verdict": ledger["verdict"],
+         "detail": (ledger.get("detail") or "")[:120]}
+        for lid, ledger in ledger_by_league.items()
+        if ledger["verdict"] in ("refused_regression", "refused_downgrade")
+    ]
+    return {"gate": "league_coverage_regression",
+            "level": CRITICAL if violations else OK, "violations": violations}
+
+
+def _gate_kickoff_precision(conn_core, now_iso) -> dict:
+    """G3:7 天窗口内非 exact kickoff 的 NotStarted 行数——这些行被
+    upcoming_precise_matches 静默排除出轮询,不数出来等于悄悄少抓(事故 #3)。"""
+    hi = _iso(_parse_iso(now_iso) + timedelta(days=7))
+    rows = conn_core.execute(
+        """SELECT League_ID, COUNT(*) AS n FROM dim_match
+           WHERE status='NotStarted'
+             AND julianday(COALESCE(kickoff_at_utc, Date)) > julianday(?)
+             AND julianday(COALESCE(kickoff_at_utc, Date)) <= julianday(?)
+             AND (kickoff_precision IS NULL OR kickoff_precision <> 'exact')
+           GROUP BY League_ID""",
+        (now_iso, hi),
+    ).fetchall()
+    by_league = {int(r["League_ID"]): r["n"] for r in rows}
+    total = sum(by_league.values())
+    return {"gate": "kickoff_precision", "level": WARNING if total else OK,
+            "non_exact_in_window": total, "by_league": by_league}
+
+
+def _gate_entity_resolution(conn_core, conn_odds, now_iso) -> dict:
+    """G4:逐联赛 pollable/in_window(72h 窗口 ≥3 场才判)。==0 → 整个联赛
+    零赔率,CRITICAL 并点名;<60% → WARNING。"""
+    candidates = upcoming_precise_matches(conn_core, now_iso)
+    by_league: dict[int, list[int]] = {}
+    for c in candidates:
+        by_league.setdefault(int(c["League_ID"]), []).append(int(c["Match_ID"]))
+    pollable_ids = {
+        int(r["fotmob_match_id"])
+        for r in conn_odds.execute(
+            "SELECT fotmob_match_id FROM dim_match_xref "
+            f"WHERE provider='nowgoal' AND review_status IN ({','.join('?' for _ in POLLABLE_STATUSES)})",
+            POLLABLE_STATUSES,
+        )
+    }
+    worst, entries = OK, []
+    for lid, mids in sorted(by_league.items()):
+        if len(mids) < G4_MIN_MATCHES:
+            continue
+        pollable = sum(1 for m in mids if m in pollable_ids)
+        ratio = pollable / len(mids)
+        level = OK
+        if pollable == 0:
+            level = CRITICAL
+        elif ratio < 0.6:
+            level = WARNING
+        if level != OK:
+            entries.append({"league_id": lid, "league": _league_name(lid),
+                            "in_window": len(mids), "pollable": pollable,
+                            "ratio": round(ratio, 3), "level": level})
+        if _RANK[level] > _RANK[worst]:
+            worst = level
+    return {"gate": "entity_resolution_degraded", "level": worst, "violations": entries}
+
+
+def _xref_pollable_map(conn_odds) -> dict[int, str]:
+    """fotmob_match_id → provider_match_id(仅 pollable 状态)。"""
+    return {
+        int(r["fotmob_match_id"]): str(r["provider_match_id"])
+        for r in conn_odds.execute(
+            "SELECT fotmob_match_id, provider_match_id FROM dim_match_xref "
+            f"WHERE provider='nowgoal' AND review_status IN ({','.join('?' for _ in POLLABLE_STATUSES)})",
+            POLLABLE_STATUSES,
+        )
+    }
+
+
+def _gate_odds_coverage(conn_core, conn_odds, now_iso) -> dict:
+    """G5:未来 24h 内(精确 kickoff)比赛有 ≥1 条 pre_match 快照的占比;
+    <50% → WARNING。样本 <3 场时 skipped(不足以判定)。"""
+    candidates = [
+        c for c in upcoming_precise_matches(conn_core, now_iso, window_hours=24)
+    ]
+    if len(candidates) < G5_MIN_MATCHES:
+        return {"gate": "odds_coverage", "level": OK, "skipped": True,
+                "matches_in_24h": len(candidates)}
+    xref = _xref_pollable_map(conn_odds)
+    covered = 0
+    for c in candidates:
+        pid = xref.get(int(c["Match_ID"]))
+        if pid is None:
+            continue
+        row = conn_odds.execute(
+            "SELECT 1 FROM bronze_ng_odds_snap WHERE provider_match_id=? "
+            "AND market_phase='pre_match' LIMIT 1", (pid,),
+        ).fetchone()
+        if row:
+            covered += 1
+    ratio = covered / len(candidates)
+    return {"gate": "odds_coverage", "level": WARNING if ratio < 0.5 else OK,
+            "matches_in_24h": len(candidates), "covered": covered,
+            "ratio": round(ratio, 3)}
+
+
+def _gate_closing_coverage(conn_core, conn_odds, now_iso) -> dict:
+    """G6:近 48h 完赛且曾有 pre_match 快照的比赛中,存在"距开球 ≤15min 的
+    pre_match 快照"的占比;<80% WARN、<70% CRITICAL;同时报
+    kickoff − FINAL.observed_at 的中位数。样本 <5 场 skipped。"""
+    lo = _iso(_parse_iso(now_iso) - timedelta(hours=48))
+    finished = conn_core.execute(
+        """SELECT Match_ID, kickoff_at_utc FROM dim_match
+           WHERE status='Finish' AND kickoff_precision='exact'
+             AND kickoff_at_utc IS NOT NULL
+             AND julianday(kickoff_at_utc) >= julianday(?)
+             AND julianday(kickoff_at_utc) <= julianday(?)""",
+        (lo, now_iso),
+    ).fetchall()
+    xref = _xref_pollable_map(conn_odds)
+    sampled, closed, gaps = 0, 0, []
+    for m in finished:
+        pid = xref.get(int(m["Match_ID"]))
+        if pid is None:
+            continue
+        row = conn_odds.execute(
+            """SELECT MAX(observed_at) AS final_at FROM bronze_ng_odds_snap
+               WHERE provider_match_id=? AND market_phase='pre_match'
+                 AND julianday(observed_at) < julianday(?)""",
+            (pid, m["kickoff_at_utc"]),
+        ).fetchone()
+        if not row or not row["final_at"]:
+            continue      # 从未有过赛前快照的场次不计入收盘覆盖分母
+        sampled += 1
+        gap = (_parse_iso(m["kickoff_at_utc"]) - _parse_iso(row["final_at"])).total_seconds()
+        gaps.append(gap)
+        if gap <= CLOSING_WINDOW_SECONDS:
+            closed += 1
+    if sampled < G6_MIN_MATCHES:
+        return {"gate": "closing_coverage", "level": OK, "skipped": True,
+                "sampled": sampled}
+    ratio = closed / sampled
+    level = OK
+    if ratio < 0.7:
+        level = CRITICAL
+    elif ratio < 0.8:
+        level = WARNING
+    return {"gate": "closing_coverage", "level": level, "sampled": sampled,
+            "closed_within_15min": closed, "ratio": round(ratio, 3),
+            "median_gap_seconds": round(statistics.median(gaps), 1)}
+
+
+def _gate_score_regression(conn_core) -> dict:
+    """G7:status='NotStarted' 却有非空比分——INSERT OR REPLACE 清列/降级泄漏的
+    兜底探测(写入端 G-B/G-C 已拒绝,这里是纵深防御)。"""
+    n = conn_core.execute(
+        "SELECT COUNT(*) FROM dim_match WHERE status='NotStarted' "
+        "AND (home_score IS NOT NULL OR away_score IS NOT NULL)"
+    ).fetchone()[0]
+    return {"gate": "score_regression", "level": CRITICAL if n else OK,
+            "notstarted_with_score": n}
+
+
+def _gate_company_scope(conn_odds, now_iso) -> dict:
+    """G8:近 24h 快照出现目标三家(Bet365/澳门/皇冠)之外的 cid——
+    "静默换公司回退又回来了"的可执行证据。"""
+    lo = _iso(_parse_iso(now_iso) - timedelta(hours=24))
+    cids = {
+        str(r["company_id"])
+        for r in conn_odds.execute(
+            "SELECT DISTINCT company_id FROM bronze_ng_odds_snap "
+            "WHERE julianday(observed_at) >= julianday(?)", (lo,),
+        )
+    }
+    extras = sorted(cids - set(DEFAULT_TARGET_CIDS))
+    return {"gate": "company_scope", "level": CRITICAL if extras else OK,
+            "allowed": list(DEFAULT_TARGET_CIDS), "unexpected_cids": extras}
+
+
+def _gate_source_waf(conn_odds, now_iso) -> dict:
+    """G9:近 1h source_health 命中 WAF(错误摘要含 WAFBlockedError/WAF 拦截)。"""
+    lo = _iso(_parse_iso(now_iso) - timedelta(hours=1))
+    n = conn_odds.execute(
+        """SELECT COUNT(*) FROM source_health
+           WHERE ok=0 AND julianday(checked_at) >= julianday(?)
+             AND (error_summary LIKE '%WAFBlocked%' OR error_summary LIKE '%WAF 拦截%')""",
+        (lo,),
+    ).fetchone()[0]
+    return {"gate": "source_waf_blocked", "level": CRITICAL if n else OK,
+            "waf_hits_last_hour": n}
+
+
+# ── 汇总与告警 ───────────────────────────────────────────────────────
+
+# 门 → notify 的 source(P0 白名单来源见 backend/notify.P0_ALERT_SOURCES;
+# 不在白名单的门用自己的 gate 名作 source,级别以门为准)。
+_GATE_ALERT_SOURCE = {
+    "fixtures_window_empty": "fixtures_window_empty",
+    "league_coverage_regression": "league_coverage_regression",
+    "entity_resolution_degraded": "entity_resolution_degraded",
+    "source_waf_blocked": "source_waf_blocked",
+    "kickoff_precision": "kickoff_precision",
+    "odds_coverage": "odds_coverage",
+    "closing_coverage": "closing_coverage",
+    "score_regression": "score_regression",
+    "company_scope": "company_scope",
+}
+
+
+def run(now_iso: str | None = None, notify_alerts: bool = True) -> dict:
+    now = now_iso or utc_now_iso()
+    conn_core = connect_ro("core")
+    conn_odds = connect_ro("odds")
+    gates: list[dict] = []
+    try:
+        ledger = _latest_ledger_by_league(conn_odds)
+        checks = (
+            ("fixtures_window_empty", lambda: _gate_fixtures_window(conn_core, ledger, now)),
+            ("league_coverage_regression", lambda: _gate_coverage_regression(ledger)),
+            ("kickoff_precision", lambda: _gate_kickoff_precision(conn_core, now)),
+            ("entity_resolution_degraded", lambda: _gate_entity_resolution(conn_core, conn_odds, now)),
+            ("odds_coverage", lambda: _gate_odds_coverage(conn_core, conn_odds, now)),
+            ("closing_coverage", lambda: _gate_closing_coverage(conn_core, conn_odds, now)),
+            ("score_regression", lambda: _gate_score_regression(conn_core)),
+            ("company_scope", lambda: _gate_company_scope(conn_odds, now)),
+            ("source_waf_blocked", lambda: _gate_source_waf(conn_odds, now)),
+        )
+        for gate_name, check in checks:
+            try:
+                gates.append(check())
+            except Exception as exc:  # noqa: BLE001 — 单门崩溃如实报 gate_error,不掩盖
+                gates.append({"gate": gate_name, "level": WARNING,
+                              "detail": "gate_error", "error": f"{type(exc).__name__}"})
+    finally:
+        conn_core.close()
+        conn_odds.close()
+
+    overall = OK
+    for g in gates:
+        if _RANK[g["level"]] > _RANK[overall]:
+            overall = g["level"]
+
+    if notify_alerts:
+        from backend import notify as notify_mod
+
+        for g in gates:
+            if g["level"] == OK:
+                continue
+            source = _GATE_ALERT_SOURCE.get(g["gate"], g["gate"])
+            body = json.dumps({k: v for k, v in g.items() if k != "gate"},
+                              ensure_ascii=False, default=str)[:1500]
+            g["alert"] = notify_mod.notify(
+                level=g["level"], source=source,
+                title=f"质量门 {g['gate']} {g['level']}",
+                body=body, dedup_key=f"gate:{g['gate']}", now_iso=now,
+            )
+
+    return {"checked_at": now, "level": overall, "gates": gates}
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="质量门检查(只读;违反的门经 notify 发告警)")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-notify", action="store_true", help="只检查不发告警(手工排查)")
+    ap.add_argument("--now", default=None)
+    args = ap.parse_args(argv)
+
+    report = run(now_iso=args.now, notify_alerts=not args.no_notify)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(f"pipeline_gates: {report['level']} @ {report['checked_at']}")
+        for g in report["gates"]:
+            mark = "  " if g["level"] == OK else "! "
+            print(f"{mark}{g['gate']}: {g['level']}")
+    return _RANK[report["level"]]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

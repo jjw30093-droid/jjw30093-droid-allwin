@@ -58,9 +58,10 @@ class TestParseSchedule:
 
 class TestParseOdds:
     def test_target_cids_selected(self):
+        # 目标三家 = Bet365(8)/澳门(1)/皇冠(3);fixture 含 8/1/3 → 全选
         records = nowgoal.parse_odds(_odds_payload())
         cids = {r["company_id"] for r in records}
-        assert cids == {"8", "31"}          # 非目标公司 cid=3 不选
+        assert cids == {"8", "1", "3"}
         markets_8 = sorted(r["market"] for r in records if r["company_id"] == "8")
         assert markets_8 == ["1x2", "ah", "ou"]
 
@@ -76,16 +77,22 @@ class TestParseOdds:
 
     def test_empty_groups_dropped(self):
         records = nowgoal.parse_odds(_odds_payload())
-        # cid=31:euro 最新组全空 → latest=None 但记录保留;ah 两组全空 → 整行剔除
-        rec_31 = [r for r in records if r["company_id"] == "31"]
-        assert [r["market"] for r in rec_31] == ["1x2"]
-        assert rec_31[0]["initial"] == {"home": 2.15, "draw": 3.35, "away": 3.45}
-        assert rec_31[0]["latest"] is None
+        # cid=1(澳门,目标公司):euro 最新组全空 → latest=None 但记录保留;
+        # ah 两组全空 → 整行剔除
+        rec_1 = [r for r in records if r["company_id"] == "1"]
+        assert [r["market"] for r in rec_1] == ["1x2"]
+        assert rec_1[0]["initial"] == {"home": 2.15, "draw": 3.35, "away": 3.45}
+        assert rec_1[0]["latest"] is None
 
-    def test_fallback_to_first_valid_company(self):
-        payload = {"companies": [c for c in _odds_payload()["companies"] if c["cid"] == "3"]}
+    def test_no_fallback_when_targets_absent(self):
+        """目标公司都缺席 → 返回空,**不回退**拿别家冒充(用户要求'没有就不抓')。"""
+        # 只留一个非目标公司(cid=50,1xBet)
+        payload = {"companies": [
+            {"cid": "50", "cn": "1xBet",
+             "euro": {"f": {"u": "2.0", "g": "3.0", "d": "3.5"},
+                      "l": {"u": "2.0", "g": "3.0", "d": "3.5"}}}]}
         records = nowgoal.parse_odds(payload)
-        assert {r["company_id"] for r in records} == {"3"}
+        assert records == []   # 绝不冒充
 
     def test_no_companies(self):
         assert nowgoal.parse_odds({}) == []
@@ -111,14 +118,16 @@ class TestParseOddsRealShape:
     def test_reaches_mixodds_nested_under_data(self):
         records = nowgoal.parse_odds(self._payload())
         cids = {r["company_id"] for r in records}
-        assert cids == {"8", "31"}   # 目标 cid 8/31 命中;cid=50 非目标不选
+        # 真实存档含 8(Bet365)/31(Sbobet)/50(1xBet);目标三家=8/1/3,
+        # 只有 8 命中(1/3 不在此存档),31/50 非目标不选
+        assert cids == {"8"}
         assert records, "真实结构下 parse_odds 不应返回空列表(回归此前 0 条的 bug)"
 
     def test_company_name_from_cn_field(self):
+        # 目标三家=8/1/3;真实存档只有 8 命中(31/50 非目标)。cn 字段提取的回归点在 8。
         records = nowgoal.parse_odds(self._payload())
         names = {r["company_id"]: r["company_name"] for r in records}
         assert names["8"] == "Bet365"
-        assert names["31"] == "Sbobet"
 
     def test_field_values_correct_under_real_shape(self):
         records = nowgoal.parse_odds(self._payload())
@@ -129,7 +138,7 @@ class TestParseOddsRealShape:
     def test_legacy_companies_shape_still_supported(self):
         """companies 直接列表 + name 字段(旧项目审计构造)不能因这次修复回归。"""
         records = nowgoal.parse_odds(_odds_payload())
-        assert {r["company_id"] for r in records} == {"8", "31"}
+        assert {r["company_id"] for r in records} == {"8", "1", "3"}
 
 
 # ── 主客反转 ─────────────────────────────────────────────────────────────

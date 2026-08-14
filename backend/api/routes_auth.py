@@ -1,15 +1,18 @@
 """/api/v1/auth/* 与 /api/v1/me。
 
-流程与安全设计见 docs/auth-wechat.md;全部响应 private, no-store。
+登录路线(2026-08,CLAUDE.md §7.3 修改已获用户批准):带参数二维码 + webhook 事件。
+网页授权(snsapi_base)端点已移除——网页授权域名要求 ICP 备案,本项目部署 AWS 东京
+且不迁回大陆备案。流程与安全设计见 docs/auth-wechat.md;全部响应 private, no-store。
 """
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
-from backend.auth import service
+from backend.auth import service, wechat_webhook
 from backend.auth.config import AuthSettings
 from backend.auth.providers import AuthProviderError
 from backend.db.connections import tx
@@ -20,7 +23,6 @@ from .schemas import (
     DeviceLoginCreatedDTO,
     MeDTO,
     OkDTO,
-    WechatCallbackApprovedDTO,
     error_responses,
 )
 from .deps import (
@@ -66,17 +68,17 @@ class WechatDisabledException(Exception):
 
 
 def _ensure_wechat_enabled(settings: AuthSettings) -> None:
-    """微信相关端点(oa/start、oa/callback、device、claim)可用性闸门。
+    """微信相关端点(device、claim、webhook)可用性闸门。
 
     mock(仅 development)视为可用,便于本地 E2E;real 必须显式 WECHAT_AUTH_ENABLED=1;
     密码登录/登出/me 不经过此闸门,不受影响。
+
+    注意副作用(docs/auth-wechat.md §6):公众号后台一旦启用「服务器配置」,微信会把
+    所有用户消息推到 webhook;本站在 AUTH_DISABLED 状态下对 POST 回 503,微信侧会向
+    发消息的用户显示"该公众号暂时无法提供服务"——这是关闭态的如实行为,不是故障。
     """
     if not settings.wechat_login_available:
         raise WechatDisabledException()
-
-
-def _callback_uri(settings: AuthSettings) -> str:
-    return f"{settings.public_base_url}/api/v1/auth/wechat/oa/callback"
 
 
 def _set_session_cookies(response: Response, settings: AuthSettings, sess: dict) -> None:
@@ -122,117 +124,7 @@ def auth_methods(
     return {"wechat_enabled": settings.wechat_login_available}
 
 
-# ── 微信 OAuth(手机 / 微信内) ─────────────────────────────
-
-@router.get(
-    "/auth/wechat/oa/start",
-    status_code=302,
-    response_class=RedirectResponse,
-    responses={
-        302: {"description": "跳转微信授权页(无 body)"},
-        **AUTH_DISABLED_RESPONSE,
-    },
-)
-def wechat_oa_start(
-    request: Request,
-    next: str = "/",
-    device: str | None = None,
-    settings: AuthSettings = Depends(get_settings),
-    provider=Depends(get_provider),
-    conn=Depends(platform_rw),
-):
-    """用户点击登录后进入(前端不得在页面加载时自动跳转到这里)。"""
-    _ensure_wechat_enabled(settings)
-    if not limiter.allow(f"oa_start:{client_ip_key(request)}", 20, 60):
-        raise HTTPException(status_code=429, detail="请求过于频繁")
-    if not service.is_safe_next_path(next):
-        next = "/"
-
-    kind = "login"
-    if device is not None:
-        row = conn.execute(
-            "SELECT status, expires_at FROM device_login_requests WHERE id=?", (device,)
-        ).fetchone()
-        from backend.db.util import utc_now_iso
-
-        if row is None or row["status"] != "pending" or row["expires_at"] <= utc_now_iso():
-            raise HTTPException(status_code=410, detail="扫码请求已失效,请回到电脑刷新二维码")
-        kind = "device_approve"
-
-    with tx(conn):
-        state = service.create_oauth_state(
-            conn, kind=kind, next_path=next,
-            ttl_seconds=settings.oauth_state_ttl_seconds,
-            device_request_id=device,
-        )
-    url = provider.authorize_url(_callback_uri(settings), state)
-    resp = RedirectResponse(url, status_code=302)
-    _no_store(resp)
-    return resp
-
-
-@router.get(
-    "/auth/wechat/oa/callback",
-    response_model=WechatCallbackApprovedDTO,   # 200 仅 device_approve 分支
-    responses={
-        302: {"description": "login 分支:种会话 Cookie 后跳回站内 next(无 body)"},
-        **AUTH_DISABLED_RESPONSE,
-    },
-)
-def wechat_oa_callback(
-    request: Request,
-    code: str = "",
-    state: str = "",
-    settings: AuthSettings = Depends(get_settings),
-    provider=Depends(get_provider),
-    conn=Depends(platform_rw),
-):
-    _ensure_wechat_enabled(settings)
-    with tx(conn):
-        state_row = service.consume_oauth_state(conn, state)
-    if state_row is None:
-        # state 无效/过期/重放:一律同一响应,不泄露区分
-        raise HTTPException(status_code=400, detail="登录状态无效或已过期,请重新发起登录")
-
-    try:
-        identity = provider.exchange_code(code)
-    except AuthProviderError:
-        log.warning("wechat code exchange failed (state kind=%s)", state_row["kind"])
-        raise HTTPException(status_code=502, detail="微信登录暂时不可用,请稍后重试")
-
-    with tx(conn):
-        user_id = service.get_or_create_user_by_identity(
-            conn,
-            provider="wechat_oa",
-            provider_app_id=getattr(provider, "app_id", ""),
-            provider_subject=identity.openid,
-            union_id=identity.union_id,
-        )
-
-    if state_row["kind"] == "device_approve":
-        with tx(conn):
-            ok = service.approve_device_request(conn, state_row["device_request_id"], user_id)
-        if not ok:
-            raise HTTPException(status_code=410, detail="扫码请求已失效,请回到电脑刷新二维码")
-        resp = JSONResponse({"status": "approved", "message": "已批准登录,请回到电脑继续"})
-        _no_store(resp)
-        return resp
-
-    # kind == login:创建会话,种 Cookie,跳回 next
-    with tx(conn):
-        sess = service.create_session(
-            conn, user_id,
-            ttl_days=settings.session_ttl_days,
-            user_agent=request.headers.get("user-agent"),
-        )
-    next_path = state_row["next_path"] if service.is_safe_next_path(state_row["next_path"]) else "/"
-    resp = RedirectResponse(f"{settings.frontend_base_url}{next_path}", status_code=302)
-    _set_session_cookies(resp, settings, sess)
-    _no_store(resp)
-    return resp
-
-
-# ── Device Login(电脑扫码) ───────────────────────────────
+# ── 扫码登录:创建请求 + 带参二维码 ────────────────────────
 
 @router.post(
     "/auth/wechat/device",
@@ -242,20 +134,36 @@ def wechat_oa_callback(
 def create_device_login(
     request: Request,
     settings: AuthSettings = Depends(get_settings),
+    provider=Depends(get_provider),
     conn=Depends(platform_rw),
 ):
+    """浏览器发起扫码登录:创建一次性 request,并向微信申请带参二维码
+    (scene_str = 公开 request id;secret 只回给浏览器,绝不进二维码)。"""
     _ensure_wechat_enabled(settings)
     if not limiter.allow(f"device_create:{client_ip_key(request)}", 10, 60):
         raise HTTPException(status_code=429, detail="请求过于频繁")
     with tx(conn):
         req = service.create_device_request(conn, ttl_seconds=settings.device_request_ttl_seconds)
-    # 二维码只含公开 request id;secret 只留在浏览器内存
-    qr_url = f"{settings.public_base_url}/api/v1/auth/wechat/oa/start?device={req['request_id']}"
+    try:
+        # 网络调用不在事务内(§5.3 短事务);QR 有效期与 request 对齐
+        qr = provider.create_login_qrcode(
+            conn, scene_str=req["request_id"],
+            expire_seconds=settings.device_request_ttl_seconds,
+        )
+    except AuthProviderError as e:
+        # 失败的 request 留给 TTL 自然过期(无 QR 指向它,无法被批准,无害)
+        if e.errcode == 48001:
+            log.error("带参二维码接口无权限(errcode=48001,常见于公众号年审过期)")
+        else:
+            log.warning("创建带参二维码失败: %s", e)
+        raise HTTPException(status_code=502, detail="微信扫码服务暂时不可用,请稍后重试")
+    with tx(conn):
+        service.attach_qr_to_device_request(conn, req["request_id"], qr.ticket, qr.url)
     resp = JSONResponse(
         {
             "request_id": req["request_id"],
             "secret": req["secret"],
-            "qr_url": qr_url,
+            "qr_url": qr.url,
             "expires_at": req["expires_at"],
         }
     )
@@ -303,6 +211,141 @@ def claim_device_login(
     _set_session_cookies(resp, settings, sess)
     _no_store(resp)
     return resp
+
+
+# ── 微信消息推送 webhook(服务器对服务器,无 Cookie/CSRF) ──
+
+WEBHOOK_PLAIN_RESPONSES = {
+    200: {"content": {"text/plain": {}}, "description": "校验回显 echostr(text/plain)"},
+    403: {"model": ApiErrorDTO, "description": "签名校验失败"},
+    **AUTH_DISABLED_RESPONSE,
+}
+
+
+def _verify_webhook_signature(
+    settings: AuthSettings, signature: str, timestamp: str, nonce: str
+) -> None:
+    if not wechat_webhook.verify_signature(
+        settings.wechat_webhook_token, timestamp, nonce, signature
+    ):
+        raise HTTPException(status_code=403, detail="签名校验失败")
+
+
+@router.get(
+    "/auth/wechat/webhook",
+    response_class=PlainTextResponse,
+    responses=WEBHOOK_PLAIN_RESPONSES,
+)
+def wechat_webhook_verify(
+    signature: str = "",
+    timestamp: str = "",
+    nonce: str = "",
+    echostr: str = "",
+    settings: AuthSettings = Depends(get_settings),
+):
+    """公众号后台「服务器配置」保存时的一次性校验握手:验签通过原样回显 echostr。"""
+    _ensure_wechat_enabled(settings)
+    _verify_webhook_signature(settings, signature, timestamp, nonce)
+    resp = PlainTextResponse(echostr)
+    _no_store(resp)
+    return resp
+
+
+@router.post(
+    "/auth/wechat/webhook",
+    response_class=PlainTextResponse,
+    responses={
+        200: {
+            "content": {"application/xml": {}, "text/plain": {}},
+            "description": "被动回复 XML,或 success(text/plain)",
+        },
+        403: {"model": ApiErrorDTO, "description": "签名校验失败/时间戳过期"},
+        **AUTH_DISABLED_RESPONSE,
+    },
+)
+async def wechat_webhook_events(
+    request: Request,
+    signature: str = "",
+    timestamp: str = "",
+    nonce: str = "",
+    settings: AuthSettings = Depends(get_settings),
+    provider=Depends(get_provider),
+    conn=Depends(platform_rw),
+):
+    """微信服务器推送的事件入口。登录相关:SCAN / subscribe(带 qrscene_ 场景值)。
+
+    安全:共享 Token 签名 + 时间戳 ±300s + nonce 一次性(重放静默回 success,
+    因为微信 5 秒未收到应答会原样重试,不能把重试当攻击)。5 秒内必须应答,
+    处理只涉本地 DB,无外呼。
+    """
+    _ensure_wechat_enabled(settings)
+    _verify_webhook_signature(settings, signature, timestamp, nonce)
+    if not wechat_webhook.timestamp_fresh(timestamp, int(time.time())):
+        raise HTTPException(status_code=403, detail="时间戳超出允许窗口")
+
+    body = await request.body()
+    if len(body) > wechat_webhook.MAX_BODY_BYTES:
+        raise HTTPException(status_code=400, detail="body 过大")
+
+    with tx(conn):
+        first_seen = wechat_webhook.register_nonce(conn, nonce)
+    if not first_seen:
+        # 微信重试(同一 nonce):第一次已处理,直接确认
+        resp = PlainTextResponse("success")
+        _no_store(resp)
+        return resp
+
+    try:
+        event = wechat_webhook.parse_event_xml(body)
+    except wechat_webhook.WebhookParseError as e:
+        # 非法/非预期负载:确认掉,避免微信重试风暴;只留服务端日志
+        log.warning("webhook 负载解析失败: %s", e)
+        resp = PlainTextResponse("success")
+        _no_store(resp)
+        return resp
+
+    reply_text: str | None = None
+    if event.scene_str:
+        reply_text = _handle_login_scan(conn, provider, event)
+    # 其余事件/普通消息:本轮不处理(OTP 第二通道是下一轮独立课题)
+
+    if reply_text is not None:
+        resp = Response(
+            content=wechat_webhook.build_text_reply(event, reply_text, int(time.time())),
+            media_type="application/xml",
+        )
+    else:
+        resp = PlainTextResponse("success")
+    _no_store(resp)
+    return resp
+
+
+def _handle_login_scan(conn, provider, event: wechat_webhook.WechatEvent) -> str:
+    """按 scene_str(= device request id)批准登录请求,返回给用户的被动回复文案。"""
+    row = service.get_device_request(conn, event.scene_str)
+    if row is None:
+        return "二维码无效,请回到浏览器刷新后重新扫码"
+
+    from backend.db.util import utc_now_iso
+
+    if row["status"] in ("approved", "claimed"):
+        # 幂等:重复扫码/微信重投递,不再变更状态
+        return "已确认登录,请回到浏览器继续"
+    if row["status"] != "pending" or row["expires_at"] <= utc_now_iso():
+        return "二维码已过期,请回到浏览器刷新后重新扫码"
+
+    with tx(conn):
+        user_id = service.get_or_create_user_by_identity(
+            conn,
+            provider="wechat_oa",
+            provider_app_id=getattr(provider, "app_id", ""),
+            provider_subject=event.openid,
+        )
+        ok = service.approve_device_request(conn, event.scene_str, user_id)
+    if not ok:
+        return "二维码已过期,请回到浏览器刷新后重新扫码"
+    log.info("device request %s 已由 webhook 批准", event.scene_str)
+    return "登录成功,请回到浏览器继续"
 
 
 # ── 密码登录(仅 CLI 创建的 admin 账号使用) ─────────────────

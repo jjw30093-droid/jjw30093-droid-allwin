@@ -1,8 +1,14 @@
-"""只读运维检查:三库可读性/migration 状态/备份新鲜度/磁盘/job_runs/source_health。
+"""只读运维检查:三库可读性/migration 状态/备份新鲜度/磁盘/job_runs/source_health/告警通道。
 
 用法:
   python -m backend.cli.ops_check            # 面向 journalctl 的文本输出
   python -m backend.cli.ops_check --json      # 结构化 JSON(字段稳定)
+  python -m backend.cli.ops_check --json --notify   # WARN/CRITICAL 时经方糖推送摘要
+                                                    # (allwin-opscheck.timer 用这个)
+
+--notify 是"纯只读"的唯一例外:检查本身仍不修改任何业务数据,但推送会向
+platform.db 的 pipeline_alerts 落一行告警记录(backend/notify 的持久化优先
+纪律)。推送内容全部经本模块 _sanitize_summary 脱敏,不含凭证/路径/SQL。
 
 退出码(与 systemd 的常见约定一致,具体名称见 docs/deployment-aws-cloudflare.md):
   0  OK        全部检查项健康
@@ -43,7 +49,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from backend.db import migrate
 from backend.db.connections import connect_ro
@@ -452,6 +458,54 @@ def check_source_health(config: OpsConfig | None = None) -> dict:
         conn.close()
 
 
+ALERT_PENDING_WARN_MINUTES = 60
+
+
+def check_pipeline_alerts(config: OpsConfig | None = None) -> dict:
+    """告警通道自检("永不抛异常"不能变成"永不被发现"的第三条暴露路径):
+    - pending(已落库但 notify_result 仍为 NULL)超过 1 小时 → WARN:说明推送
+      流程中途死掉或告警器自身故障;
+    - 近 24h 出现 failed:misconfigured → WARN:启用了推送却没配 SERVERCHAN_SENDKEY。
+    表尚未迁移出来时如实报告,不视为异常(与其它 check_* 的降级风格一致)。
+    """
+    _ = config  # 本检查目前使用固定阈值(pending 1 小时),保留签名一致性
+    try:
+        conn = connect_ro("platform")
+    except Exception:
+        return {"level": WARN, "detail": "platform_db_unavailable"}
+    try:
+        has_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_alerts'"
+        ).fetchone()
+        if not has_table:
+            return {"level": OK, "detail": "no_pipeline_alerts_table_yet"}
+        cutoff = (_now() - timedelta(minutes=ALERT_PENDING_WARN_MINUTES)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ")
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM pipeline_alerts WHERE notify_result IS NULL"
+            " AND created_at < ?", (cutoff,),
+        ).fetchone()[0]
+        day_ago = (_now() - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        misconfigured = conn.execute(
+            "SELECT COUNT(*) FROM pipeline_alerts"
+            " WHERE notify_result='failed:misconfigured' AND created_at >= ?", (day_ago,),
+        ).fetchone()[0]
+        level = OK
+        entry = {"pending_over_1h": pending, "misconfigured_24h": misconfigured}
+        if pending:
+            level = WARN
+            entry["detail"] = "alerts_pending_over_1h"
+        elif misconfigured:
+            level = WARN
+            entry["detail"] = "notify_misconfigured"
+        entry["level"] = level
+        return entry
+    except Exception:
+        return {"level": WARN, "detail": "platform_db_query_error"}
+    finally:
+        conn.close()
+
+
 def run_all_checks(config: OpsConfig | None = None) -> dict:
     """resolve 一次配置(未显式传入则从环境变量解析,非法立即抛 ConfigError),
     同一份配置传给全部依赖阈值的检查项,避免同一次运行内前后阈值不一致。"""
@@ -462,11 +516,13 @@ def run_all_checks(config: OpsConfig | None = None) -> dict:
     disk_result = check_disk(config)
     jobs_result = check_job_runs(config)
     source_result = check_source_health(config)
+    alerts_result = check_pipeline_alerts(config)
 
     overall = max(
         [OK]
         + [r["level"] for r in db_results]
-        + [backup_result["level"], disk_result["level"], jobs_result["level"], source_result["level"]]
+        + [backup_result["level"], disk_result["level"], jobs_result["level"],
+           source_result["level"], alerts_result["level"]]
     )
     return {
         "level": overall,
@@ -477,6 +533,7 @@ def run_all_checks(config: OpsConfig | None = None) -> dict:
         "disk": disk_result,
         "job_runs": jobs_result,
         "source_health": source_result,
+        "alerts": alerts_result,
     }
 
 
@@ -499,11 +556,55 @@ def _print_text(report: dict) -> None:
     for src in s["sources"]:
         if src["level"] != OK:
             print(f"    - {src['source']}: {src.get('detail')}")
+    a = report.get("alerts", {})
+    if a:
+        print(f"  alerts: {_LEVEL_NAME[a['level']]} ({a.get('detail', 'ok')})")
+
+
+def _problem_components(report: dict) -> list[str]:
+    """非 OK 的检查项名(用于 dedup_key 与推送正文,全部为本模块生成的稳定标识)。"""
+    problems = []
+    for db in report["databases"]:
+        if db["level"] != OK:
+            problems.append(f"db.{db['name']}:{db['detail']}")
+    for key in ("backup", "disk", "alerts"):
+        entry = report.get(key) or {}
+        if entry.get("level", OK) != OK:
+            problems.append(f"{key}:{entry.get('detail', entry.get('used_pct', ''))}")
+    for job in report["job_runs"].get("jobs", []):
+        if job["level"] != OK:
+            problems.append(f"job.{job['job']}:{job.get('detail', job.get('last_status'))}")
+    for src in report["source_health"].get("sources", []):
+        if src["level"] != OK:
+            problems.append(f"source.{src['source']}:{src.get('detail')}")
+    if report["job_runs"].get("level", OK) != OK and not report["job_runs"].get("jobs"):
+        problems.append(f"job_runs:{report['job_runs'].get('detail')}")
+    if report["source_health"].get("level", OK) != OK and not report["source_health"].get("sources"):
+        problems.append(f"source_health:{report['source_health'].get('detail')}")
+    return problems
+
+
+def _notify_report(report: dict) -> dict:
+    """WARN/CRITICAL 时经方糖推送摘要(推送前所有自由文本已由各 check 项
+    _sanitize_summary 脱敏;这里只拼装本模块生成的稳定标识)。"""
+    from backend import notify as notify_mod
+
+    problems = _problem_components(report)
+    level = "CRITICAL" if report["level"] >= CRITICAL else "WARNING"
+    dedup = f"ops_check:{report['level_name']}:" + ",".join(sorted(problems)[:8])
+    return notify_mod.notify(
+        level=level, source="ops_check",
+        title=f"ops_check {report['level_name']}",
+        body="\n".join(problems) or "(无明细)",
+        dedup_key=dedup,
+    )
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="allwin 只读运维检查(不修改任何数据)")
+    ap = argparse.ArgumentParser(description="allwin 只读运维检查(--notify 为唯一写例外:落告警记录并推送)")
     ap.add_argument("--json", action="store_true", help="输出结构化 JSON(字段稳定)而不是文本")
+    ap.add_argument("--notify", action="store_true",
+                    help="WARN/CRITICAL 时经方糖推送摘要(先落 pipeline_alerts 再推)")
     args = ap.parse_args(argv)
 
     # 配置校验先于任何数据库/磁盘检查:非法阈值必须 fail-fast,不静默改用默认值
@@ -515,6 +616,8 @@ def main(argv=None) -> int:
         return CRITICAL
 
     report = run_all_checks(config)
+    if args.notify and report["level"] > OK:
+        report["notify"] = _notify_report(report)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

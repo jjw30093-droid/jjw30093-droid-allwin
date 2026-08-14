@@ -15,6 +15,7 @@
 """
 
 import json
+import os
 import random
 import re
 from datetime import datetime
@@ -23,7 +24,9 @@ BASE_URL = "https://www.nowgoal26.com"
 SCHEDULE_URL = BASE_URL + "/ajax/SoccerAjax"
 ODDS_URL = BASE_URL + "/ajax/soccerajax"
 
-DEFAULT_TARGET_CIDS = ("8", "31")   # Bet365 / Sbobet
+DEFAULT_TARGET_CIDS = ("8", "1", "3")   # Bet365 / 澳门 Macauslot / 皇冠 Crown
+# (数据管道重建 Phase 4:三家均在同一 type=14 面板、一次请求全拿到、三市场齐全,
+#  Phase 0 实测 3/3 场 present。原第二家 Sbobet(31)已换为用户指定的澳门+皇冠。)
 
 FETCH_TIMEOUT_SECONDS = 15.0
 
@@ -234,7 +237,8 @@ def parse_odds(payload: dict, target_cids=DEFAULT_TARGET_CIDS) -> list[dict]:
 
     - 每 (company, market) 一条:{market, company_id, company_name, initial, latest};
     - initial/latest 为 canonical 字段 dict 或 None(该组缺失);两组全空的行剔除;
-    - 公司选择:按 target_cids 顺序取全部命中的公司;一家都没命中时回退第一家有效公司。
+    - 公司选择:按 target_cids 顺序取全部命中的公司;缺哪家少哪家,一家都没命中 → 空
+      (不回退拿别家冒充,数据管道重建 Phase 4 用户口径"没有就不抓")。
     """
     if not isinstance(payload, dict):
         return []
@@ -253,8 +257,8 @@ def parse_odds(payload: dict, target_cids=DEFAULT_TARGET_CIDS) -> list[dict]:
     selected: list[dict] = []
     for cid in target_cids:
         selected.extend(by_cid.get(str(cid), []))
-    if not selected and order:
-        selected = by_cid[order[0]]
+    # 目标公司缺席就少哪家(用户要求"澳门没有就不抓"):绝不回退拿面板第一家冒充。
+    # 一家都没命中 → 返回空,空**不是** failure(由调用方逐公司缺失计数)。
     return selected
 
 
@@ -304,6 +308,24 @@ def _flesh() -> str:
 def _http_get(url: str, params: dict) -> str:
     import httpx
 
+    # 2026-08-12 真实回归:直连(本机/生产 launchd 均无代理)时 NowGoal 对
+    # SoccerAjax 请求返回 HTTP 200 + 合法 JSON,但 Data 字段静默为空
+    # (不是 WAF 拦截页,looks_blocked() 认不出来,过去被误判为"该日期没有
+    # 赛程")。THORDATA_PROXY(FotMob 用的英国出口)对 NowGoal 稳定失败
+    # (Thordata 服务端 403 "Does not support mainland China servers",
+    # HTTPS 场景下客户端库把这个拒绝页误报成 TLS 握手失败)。用独立的
+    # THORDATA_PROXY_NOWGOAL(越南出口)则能稳定拿到真实数据——两个 Thordata
+    # 配置对同一目标表现不同,具体原因未知,如实按经验值使用。真实抓取一律
+    # 要求这个代理,缺失时直接失败,不允许静默退化成"看起来成功但 Data 是空的"
+    # 这种更难发现的坏结果(与 backend/providers/nowgoal_archive.py 的
+    # NowGoalArchiveTransport 同一纪律)。
+    proxy = os.environ.get("THORDATA_PROXY_NOWGOAL")
+    if not proxy:
+        raise NowGoalError(
+            "THORDATA_PROXY_NOWGOAL 未配置——NowGoal 直连、以及 FotMob 用的"
+            "THORDATA_PROXY(英国出口)都会静默返回空数据/被拒绝"
+            "(2026-08-12 真实验证过),不允许伪装成功。"
+        )
     resp = httpx.get(
         url,
         params=params,
@@ -316,6 +338,7 @@ def _http_get(url: str, params: dict) -> str:
             "Referer": BASE_URL + "/",
         },
         follow_redirects=True,
+        proxy=proxy,
     )
     text = resp.text
     if looks_blocked(text):

@@ -1,5 +1,6 @@
 """allwin.db(core)只读查询:比赛列表/详情/近况/排名/赛程 + 中文名 JOIN。"""
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -236,6 +237,34 @@ def recent_form(
     return out
 
 
+def matches_with_shot_history(conn: sqlite3.Connection) -> set[int]:
+    """双方球队都有历史射门数据的比赛 id 集合(赛前射门分布图能否画出来的判据)。
+
+    赛前射门分布图画的是"两队各自最近 N 场的射门落点",所以它需要的不是这场比赛
+    自己的射门数据(还没踢),而是**双方球队过去有没有被采集过射门**。
+
+    实现上先取"有射门史的球队集合"(fact_shotmap 33 万行 → 223 支球队,很小),
+    再要求主客两队都在集合内 —— 比逐场 EXISTS 子查询便宜得多。
+
+    用途:首页重点比赛选场需要避开"点进去一片空白"的比赛(2026-08-12 实测:
+    未来 7 天 77 场里有 24 场射门与赔率都没有,其中英冠/巴甲/葡超/荷甲四个
+    本周赛程最多的联赛在 dim_match 里 0 场完赛、0 行射门,是纯赛程壳)。
+    """
+    try:
+        teams = {int(r[0]) for r in conn.execute("SELECT DISTINCT Team_ID FROM fact_shotmap")}
+    except sqlite3.OperationalError:
+        return set()
+    if not teams:
+        return set()
+    return {
+        int(r[0])
+        for r in conn.execute(
+            "SELECT Match_ID, Home_Team_ID, Away_Team_ID FROM dim_match"
+        )
+        if r[1] in teams and r[2] in teams
+    }
+
+
 def seasons_of_league(conn: sqlite3.Connection, league_id: int) -> list[str]:
     return [
         r[0]
@@ -265,34 +294,296 @@ def default_fixture_season(conn: sqlite3.Connection, league_id: int, seasons: li
     return seasons[-1] if seasons else None
 
 
-def standings(conn: sqlite3.Connection, league_id: int, season: str | None = None) -> dict:
+def _extra_num(raw, key: str):
+    """从 fact_league_table.extra_json 取一个数值字段;缺失/畸形一律 None。
+
+    绝不返回 0 兜底 —— 0 在"多拿/少拿分"语境下是有意义的真实取值
+    (正好兑现),不能和"没有这个数据"混为一谈。
+    """
+    if not raw:
+        return None
     try:
-        seasons = [
-            r[0]
-            for r in conn.execute(
-                "SELECT DISTINCT Season FROM fact_league_table WHERE League_ID=? ORDER BY Season",
-                (league_id,),
-            )
-        ]
+        value = json.loads(raw).get(key)
+    except (ValueError, AttributeError):
+        return None
+    return value if isinstance(value, (int, float)) else None
+
+
+def standings(
+    conn: sqlite3.Connection,
+    league_id: int,
+    season: str | None = None,
+    table_type: str = "all",
+) -> dict:
+    """联赛积分榜。
+
+    两个真实缺陷的修复(2026-08-12 实测确认,均导致页面渲染空表/全零表):
+
+    1. **分组赛制的 table_type 带后缀**。此前硬编码 `table_type='all'`,而
+       J1(223)2026 赛季在 fact_league_table 里根本没有 plain `all` 行,只有
+       `all:100 Year Vision League East` / `...West` 各 10 行(两组赛制)。
+       结果是 J1 积分榜页渲染出一张空表。改为:plain `all` 缺失时,回退到
+       `all:` 前缀的全部分组行(按组名 + 位次排序,同页展示各组)。
+
+    2. **`played` 全 0 的幽灵赛季**。英超(47)有一个 Season='2024' 共 60 行、
+       `sum(played)=0` 的赛季(真实赛季是 '2024/2025',sum=2380)。它会进入
+       available_seasons 供用户选择,选中后是一张全零表。改为:可选赛季只保留
+       真正踢过球的赛季;若全部赛季都是 0(联赛刚接入),则如实保留原列表,
+       不制造"这个联赛不存在"的假象。
+
+    `table_type` 打开此前 100% 不可见的另外三档(2026-08-12):
+    `home`(747 行)/ `away`(747)/ `form`(703)/ `xg`(695),合计 2,892 行
+    —— 此前函数硬编码 'all',这些行进不了任何 API,更进不了页面。
+    xg 档还带 x_points / x_position 与 extra_json 里预算好的 xPointsDiff,
+    是"实际拿分 vs 按 xG 应得分"这类内容的唯一数据来源。
+    """
+    try:
+        season_rows = conn.execute(
+            """SELECT Season, SUM(COALESCE(played, 0)) AS total_played
+                 FROM fact_league_table WHERE League_ID=?
+                GROUP BY Season ORDER BY Season""",
+            (league_id,),
+        ).fetchall()
     except sqlite3.OperationalError:
-        seasons = []
-    if not seasons:
+        season_rows = []
+    if not season_rows:
         return {"season": season, "available_seasons": [], "rows": []}
+    played_seasons = [r[0] for r in season_rows if (r[1] or 0) > 0]
+    seasons = played_seasons or [r[0] for r in season_rows]
     if season is None or season not in seasons:
         season = seasons[-1]
     display = team_display_map(conn)
-    rows = conn.execute(
-        """SELECT Team_ID, Team_Name, position, played, wins, draws, losses,
-                  goals_for, goals_against, goal_diff, points, qual_color
-           FROM fact_league_table
-           WHERE League_ID=? AND Season=? AND table_type='all' ORDER BY position""",
-        (league_id, season),
-    ).fetchall()
+
+    def fetch(where_type: str, params: tuple) -> list:
+        return conn.execute(
+            f"""SELECT Team_ID, Team_Name, position, played, wins, draws, losses,
+                       goals_for, goals_against, goal_diff, points, qual_color,
+                       xg, xg_conceded, x_points, x_position, extra_json,
+                       table_type
+                  FROM fact_league_table
+                 WHERE League_ID=? AND Season=? AND {where_type}
+                 ORDER BY table_type, position""",
+            params,
+        ).fetchall()
+
+    rows = fetch("table_type=?", (league_id, season, table_type))
+    if not rows:
+        # 分组赛制回退:'<type>:<组名>'(如 J1 的 'all:100 Year Vision League East')
+        rows = fetch("table_type LIKE ?", (league_id, season, f"{table_type}:%"))
     return {
         "season": season,
         "available_seasons": seasons,
         "rows": [
-            dict(r) | {"team": _team_ref(r["Team_ID"], r["Team_Name"], display)}
+            {k: r[k] for k in r.keys() if k not in ("table_type", "extra_json")}
+            | {
+                "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
+                # 分组赛制下告诉前端这一行属于哪个组;单表联赛为 None。
+                "group_name": (
+                    r["table_type"].split(":", 1)[1]
+                    if ":" in str(r["table_type"])
+                    else None
+                ),
+                # xg 档专有:实际积分 − 按 xG 应得积分(实测确认就是这个方向,
+                # 例:阿森纳 85 实得 vs 77.8 应得 → +7.18)。非 xg 档为 None。
+                "x_points_diff": _extra_num(r["extra_json"], "xPointsDiff"),
+                "x_position_diff": _extra_num(r["extra_json"], "xPositionDiff"),
+            }
             for r in rows
         ],
+    }
+
+
+def recent_shot_map_spec(
+    conn: sqlite3.Connection,
+    match_id: int,
+    window: int = 5,
+) -> dict | None:
+    """Return an honest recent-match shot-map dataset for both target teams.
+
+    The target match itself and later matches are never included.  ``same_league``
+    and ``all_covered`` keep separate match-id sets so the browser can filter
+    locally without pretending that our database covers every competition.
+    Missing shot rows remain a coverage fact; they are not converted to zero
+    shots.
+    """
+    if window < 1 or window > 10:
+        raise ValueError("shot-map window must be between 1 and 10")
+    try:
+        target = conn.execute(
+            """SELECT Match_ID, League_ID, Date, Home_Team_ID, Away_Team_ID,
+                      Home_Team_Name, Away_Team_Name
+                 FROM dim_match WHERE Match_ID=?""",
+            (match_id,),
+        ).fetchone()
+        if target is None:
+            return None
+        conn.execute("SELECT 1 FROM fact_shotmap LIMIT 1")
+    except sqlite3.OperationalError:
+        return None
+
+    display = team_display_map(conn)
+    teams = [
+        {
+            "team_id": int(target["Home_Team_ID"]),
+            "name": display_name_for_team(
+                target["Home_Team_ID"],
+                provider_name=target["Home_Team_Name"],
+                display=display,
+            ),
+            "side": "home",
+        },
+        {
+            "team_id": int(target["Away_Team_ID"]),
+            "name": display_name_for_team(
+                target["Away_Team_ID"],
+                provider_name=target["Away_Team_Name"],
+                display=display,
+            ),
+            "side": "away",
+        },
+    ]
+
+    recent_sets: dict[str, dict[str, dict]] = {}
+    all_match_ids: set[int] = set()
+    for team in teams:
+        by_scope: dict[str, dict] = {}
+        for scope in ("same_league", "all_covered"):
+            league_clause = "AND League_ID=?" if scope == "same_league" else ""
+            params: list[int | str] = [
+                target["Date"],
+                target["Date"],
+                match_id,
+                team["team_id"],
+                team["team_id"],
+            ]
+            if scope == "same_league":
+                params.append(target["League_ID"])
+            params.append(window)
+            rows = conn.execute(
+                f"""SELECT Match_ID
+                      FROM dim_match
+                     WHERE status='Finish'
+                       AND (Date < ? OR (Date = ? AND Match_ID < ?))
+                       AND (Home_Team_ID=? OR Away_Team_ID=?)
+                       {league_clause}
+                    ORDER BY Date DESC, Match_ID DESC
+                     LIMIT ?""",
+                params,
+            ).fetchall()
+            ids = [int(row["Match_ID"]) for row in rows]
+            all_match_ids.update(ids)
+            covered = 0
+            if ids:
+                placeholders = ",".join("?" for _ in ids)
+                covered = int(
+                    conn.execute(
+                        f"""SELECT COUNT(DISTINCT Match_ID)
+                              FROM fact_shotmap
+                             WHERE Match_ID IN ({placeholders})""",
+                        ids,
+                    ).fetchone()[0]
+                )
+            by_scope[scope] = {
+                "match_ids": ids,
+                "matched_games": len(ids),
+                "shot_covered_games": covered,
+            }
+        recent_sets[str(team["team_id"])] = by_scope
+
+    matches: list[dict] = []
+    shots: list[dict] = []
+    if all_match_ids:
+        ids = sorted(all_match_ids)
+        placeholders = ",".join("?" for _ in ids)
+        for row in conn.execute(
+            f"""SELECT Match_ID, League_ID, Date, Home_Team_ID, Away_Team_ID,
+                      Home_Team_Name, Away_Team_Name
+                 FROM dim_match
+                WHERE Match_ID IN ({placeholders})
+                ORDER BY Date DESC, Match_ID DESC""",
+            ids,
+        ):
+            matches.append(
+                {
+                    "match_id": int(row["Match_ID"]),
+                    "league_id": int(row["League_ID"]),
+                    "date_utc": row["Date"],
+                    "home": _team_ref(
+                        row["Home_Team_ID"], row["Home_Team_Name"], display
+                    ),
+                    "away": _team_ref(
+                        row["Away_Team_ID"], row["Away_Team_Name"], display
+                    ),
+                }
+            )
+        for index, row in enumerate(
+            conn.execute(
+                f"""SELECT Match_ID, Player_ID, Team_ID, Minute, Period,
+                           X_Coord, Y_Coord, xG, xGOT, Situation, Outcome, Shot_Type
+                      FROM fact_shotmap
+                     WHERE Match_ID IN ({placeholders})
+                       AND X_Coord BETWEEN 0 AND 105
+                       AND Y_Coord BETWEEN 0 AND 68
+                     ORDER BY Match_ID, Minute, Team_ID, Player_ID, X_Coord, Y_Coord""",
+                ids,
+            )
+        ):
+            shots.append(
+                {
+                    "shot_id": f"{row['Match_ID']}:{index}",
+                    "match_id": int(row["Match_ID"]),
+                    "player_id": row["Player_ID"],
+                    "team_id": int(row["Team_ID"]),
+                    "minute": row["Minute"],
+                    "period": row["Period"],
+                    "x": row["X_Coord"],
+                    "y": row["Y_Coord"],
+                    "xg": row["xG"],
+                    "xgot": row["xGOT"],
+                    "situation": row["Situation"],
+                    "outcome": row["Outcome"],
+                    "shot_type": row["Shot_Type"],
+                }
+            )
+    if not shots:
+        return None
+    # 官方口径射正/被封堵/总射门(fact_team_match_stats.extra_json)——单纯从
+    # fact_shotmap 的 Outcome 数逐次射门算"射正"会把 AttemptSaved 里混进的
+    # 被封堵射门也算作射正(实测 26,067 队场:场均 7.75 vs 官方 4.36,只有
+    # 6.8% 完全吻合)。前端聚合汇总数字改用这里,逐次射门点的颜色/tooltip
+    # 仍标注原始 Outcome,不假装能在单次射门层面区分扑救与封堵。
+    official_stats: list[dict] = []
+    if all_match_ids:
+        for row in conn.execute(
+            f"""SELECT Match_ID, Team_ID, extra_json
+                  FROM fact_team_match_stats
+                 WHERE Period='All' AND Match_ID IN ({placeholders})""",
+            ids,
+        ):
+            extra = json.loads(row["extra_json"] or "{}")
+            sot = extra.get("ShotsOnTarget")
+            blocked = extra.get("blocked_shots")
+            total = extra.get("total_shots")
+            if sot is None and blocked is None and total is None:
+                continue
+            official_stats.append(
+                {
+                    "match_id": int(row["Match_ID"]),
+                    "team_id": int(row["Team_ID"]),
+                    "shots_on_target": sot,
+                    "blocked_shots": blocked,
+                    "total_shots": total,
+                }
+            )
+
+    return {
+        "pitch": {"length": 105, "width": 68},
+        "coordinate_note": "FotMob normalized attacking direction",
+        "window": window,
+        "target_match_id": match_id,
+        "teams": teams,
+        "recent_sets": recent_sets,
+        "matches": matches,
+        "shots": shots,
+        "official_stats": official_stats,
     }

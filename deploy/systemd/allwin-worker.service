@@ -15,7 +15,7 @@
 #       systemctl daemon-reload → systemctl enable --now allwin-worker.timer
 # 手动跑一次:systemctl start allwin-worker.service
 [Unit]
-Description=allwin worker chain (schedule_sync -> ... -> metrics_rebuild, periodic subset)
+Description=allwin worker chain (schedule_sync_multi -> ... -> pipeline_gates, periodic subset)
 After=network.target
 
 [Service]

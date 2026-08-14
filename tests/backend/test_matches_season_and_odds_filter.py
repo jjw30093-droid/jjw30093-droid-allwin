@@ -15,12 +15,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.db.connections import connect_rw
+from tests.backend.authflow import wechat_scan_login
 from tests.backend.coreseed import insert_match, seed_core_schema
 
 
 @pytest.fixture
 def multi_season(data_dir):
-    """英超(免费层可见)两个历史赛季 + 一个自然年赛季联赛。"""
+    """英超(免费层可见)两个历史赛季 + 一个自然年赛季联赛(瑞典超 67,
+    2026-08-11 权限矩阵互换后为 league:lottery,需登录)。"""
     conn = connect_rw("core")
     seed_core_schema(conn)
     # EPL 2020/2021:2 场已完赛
@@ -61,9 +63,10 @@ class TestSeasonFilter:
         }
         assert ids == {7003}
 
-    def test_calendar_year_season_accepted(self, app, multi_season):
-        """挪超/瑞超是 "2026" 这种自然年赛季,校验正则必须放行。"""
+    def test_calendar_year_season_accepted(self, app, multi_season, fresh_ip):
+        """挪超/瑞超是 "2026" 这种自然年赛季,校验正则必须放行(67 现需登录)。"""
         c = TestClient(app)
+        wechat_scan_login(c, ip=fresh_ip)
         r = c.get("/api/v1/matches?league_id=67&season=2026&status=finished&window=all")
         assert r.status_code == 200
         assert {m["match_id"] for m in r.json()["matches"]} == {7004}
@@ -88,17 +91,29 @@ class TestSeasonFilter:
         assert by_id[47]["available_seasons"] == ["2020/2021", "2022/2023"]
         assert by_id[67]["available_seasons"] == ["2026"]
 
-    def test_season_filter_respects_entitlement(self, app, multi_season, fresh_ip):
-        """赛季参数不能成为绕过联赛门禁的旁路:匿名请求西甲赛季仍拿不到数据。"""
+    def test_season_filter_does_not_leak_locked_league_content(self, app, multi_season, fresh_ip):
+        """赛季参数不能成为绕过联赛内容门禁的旁路。
+
+        2026-08-13 用户拍板撤销"未持有权限的联赛整场从列表隐藏":比赛本身
+        现在会出现在结果里(不再因为赛季筛选而整场消失),但仍必须标记
+        requires_login 且不下发 win_probability——门禁从"看不看得见这场
+        比赛"移到了"看不看得见这场比赛的会员内容"。
+
+        2026-08-11 权限矩阵互换(platform 0012):87(西甲)现属 free 的
+        league:top5,不再适合当"匿名拿不到"的反例,改用仍需登录的
+        league:lottery(67,瑞典超)。"""
         conn = connect_rw("core")
-        insert_match(conn, 7005, league_id=87, season="2020/2021", date="2021-03-01",
+        insert_match(conn, 7005, league_id=67, season="2020", date="2021-03-01",
                      status="Finish", home_score=1, away_score=1)
         conn.commit()
         conn.close()
         c = TestClient(app)
-        r = c.get("/api/v1/matches?league_id=87&season=2020/2021&status=finished&window=all")
+        r = c.get("/api/v1/matches?league_id=67&season=2020&status=finished&window=all")
         assert r.status_code == 200
-        assert r.json()["matches"] == []      # 匿名只有 league:epl
+        matches = r.json()["matches"]
+        assert {m["match_id"] for m in matches} == {7005}
+        assert matches[0]["requires_login"] is True
+        assert matches[0]["win_probability"] is None
 
 
 class TestOddsContentFilter:

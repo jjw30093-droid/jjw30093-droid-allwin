@@ -56,44 +56,77 @@ class TestE2eSeedProvenance:
         after = _real_db_snapshot()
         assert before == after, "seed_e2e 不得改动真实 data/*.db(size,mtime 必须不变)"
 
-    def test_seeded_snapshot_is_published_locked_official_with_valid_provenance(self):
+    def test_seeded_snapshots_are_locked_official_with_verbatim_core_provenance(self):
+        """2026-08-11 起种子改为:首页 featured 全部候选(北欧 67/59 前 3 场)
+        + 一条隔离编辑目标,共 N 条快照(N 随真实赛程变化,≥2);kickoff 三元组
+        不再合成,必须逐字段等于核心库 dim_match 的真实值(比旧的
+        e2e_fixture 字符串断言更强:任何伪造/篡改来源都会与核心库对不上)。"""
         r = _run_seed()
         assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
 
         import sqlite3
 
+        seed_info = (ROOT / "data" / "e2e" / "seed_info.txt").read_text("utf-8")
+
+        def info(key: str) -> str:
+            for line in seed_info.splitlines():
+                if line.startswith(f"{key}="):
+                    return line.split("=", 1)[1]
+            raise AssertionError(f"seed_info.txt 缺 {key}")
+
+        featured_id = int(info("match_id"))
+        edit_id = int(info("edit_match_id"))
+        assert featured_id != edit_id, "编辑目标必须与主种子(48% 断言)物理隔离"
+
         conn = sqlite3.connect(f"file:{ROOT}/data/e2e/platform.db?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
+        core = sqlite3.connect(f"file:{ROOT}/data/e2e/allwin.db?mode=ro", uri=True)
+        core.row_factory = sqlite3.Row
         try:
             rows = conn.execute("SELECT * FROM prediction_snapshots").fetchall()
+            match_ids = {row["match_id"] for row in rows}
+            assert featured_id in match_ids and edit_id in match_ids
+            assert len(rows) >= 2, "至少应有主种子与编辑目标两条快照"
+
+            for row in rows:
+                assert row["status"] == "locked"
+                assert row["is_official"] == 1
+                assert row["kickoff_precision"] == "exact"
+
+                core_row = core.execute(
+                    "SELECT kickoff_at_utc, kickoff_precision, kickoff_source"
+                    " FROM dim_match WHERE Match_ID=?",
+                    (row["match_id"],),
+                ).fetchone()
+                assert core_row is not None
+                for field in ("kickoff_at_utc", "kickoff_precision", "kickoff_source"):
+                    assert row[field] == core_row[field], (
+                        f"快照 {row['match_id']} 的 {field}={row[field]!r} 必须逐字"
+                        f"等于核心库真实值 {core_row[field]!r},不得合成或冒充"
+                    )
+
+                # kickoff 必须真的是可严格解析、带显式时区的精确时刻。
+                ko = row["kickoff_at_utc"]
+                assert normalize_exact_kickoff(
+                    ko, row["kickoff_precision"], row["kickoff_source"]
+                ) == ko, "kickoff_at_utc 必须满足 normalize_exact_kickoff 的四项硬性条件"
+                assert parse_strict_utc(ko) is not None
+
+                # generated_at / published_at / locked_at 都必须严格早于 kickoff
+                # (字符串比较安全,均为同一 'YYYY-MM-DDTHH:MM:SSZ' 定宽格式)。
+                for field in ("generated_at", "published_at", "locked_at", "input_cutoff_at"):
+                    value = row[field]
+                    assert value is not None, f"{field} 不应为空"
+                    assert value < ko, f"{field}={value!r} 必须严格早于 kickoff={ko!r}"
+
+            # 编辑目标必须落在首页 7 天候选窗口之外(种子取 ≥ now+8d),
+            # 否则 priority 排序会把被改成 0.6 的它顶成 featured。
+            edit_row = next(row for row in rows if row["match_id"] == edit_id)
+            featured_row = next(row for row in rows if row["match_id"] == featured_id)
+            assert edit_row["kickoff_at_utc"] > featured_row["kickoff_at_utc"]
         finally:
             conn.close()
-
-        assert len(rows) == 1, f"E2E 种子应恰好一条正式预测快照,实际 {len(rows)} 条"
-        row = rows[0]
-
-        assert row["status"] == "locked"
-        assert row["is_official"] == 1
-        assert row["kickoff_precision"] == "exact"
-        assert row["kickoff_source"] == "e2e_fixture:synthetic_exact"
-        assert row["kickoff_source"].startswith("e2e_fixture:"), (
-            "provenance 必须诚实标注为 e2e_fixture,不得冒充 fotmob/nowgoal 等真实来源"
-        )
-
-        # kickoff 必须真的是可严格解析、带显式时区的精确时刻(不是纯日期/naive)。
-        ko = row["kickoff_at_utc"]
-        assert normalize_exact_kickoff(ko, row["kickoff_precision"], row["kickoff_source"]) == ko, (
-            "kickoff_at_utc 必须满足 normalize_exact_kickoff 的四项硬性条件"
-        )
-        kickoff_dt = parse_strict_utc(ko)
-        assert kickoff_dt is not None
-
-        # generated_at / published_at / locked_at 都必须严格早于 kickoff(字符串比较
-        # 安全,因为三者与 kickoff 均为同一 'YYYY-MM-DDTHH:MM:SSZ' 定宽格式)。
-        for field in ("generated_at", "published_at", "locked_at", "input_cutoff_at"):
-            value = row[field]
-            assert value is not None, f"{field} 不应为空"
-            assert value < ko, f"{field}={value!r} 必须严格早于 kickoff={ko!r}"
+            core.close()
 
     def test_prediction_hash_matches_stable_formula_not_bypassed(self):
         r = _run_seed()

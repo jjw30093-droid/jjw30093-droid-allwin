@@ -69,10 +69,10 @@ def load_future_fixtures(conn, league_id: int = FUTURE_LEAGUE_ID) -> pd.DataFram
     )
 
 
-def compute_team_snapshots(conn, team_ids_needed: set) -> pd.DataFrame:
+def compute_team_snapshots(conn, team_ids_needed: set, league_id: int = FUTURE_LEAGUE_ID) -> pd.DataFrame:
     """每支球队"当前"的整体 rolling xG 快照:直接取最近 N 场已完赛历史的均值
     (不做 shift——这里没有"当场"要排除,要预测的比赛本身还没发生)。"""
-    matches, team_stats_raw = _load_raw(conn)
+    matches, team_stats_raw = _load_raw(conn, league_id)
     team_stats = _extract_stats(team_stats_raw)
     long_df = _build_team_match_long(matches, team_stats)
     long_df = long_df.sort_values(["team_id", "match_date", "match_id"])

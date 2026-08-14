@@ -3,7 +3,7 @@
 
 在真实 FotMob/NowGoal ingest 产出的隔离实验库副本上跑,只做两件事:
   1. 创建管理员账号(供 Studio 选中瑞典超比赛验收);
-  2. 预置一个 pro 会员身份,绑定到 MockWechatProvider 固定返回的
+  2. 预置一个登录用户身份(member 基线),绑定到固定的
      mock-openid-user-1(provider=wechat_oa, provider_app_id=mock-app)——
      与 frontend/e2e/auth.spec.ts 复用同一套 mock 身份约定,不额外发明机制。
 
@@ -14,7 +14,6 @@
 """
 
 from backend.cli.create_admin import create_admin
-from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_rw
 from backend.db.util import new_uuid, utc_now_iso
 
@@ -43,9 +42,9 @@ def run() -> None:
                 " VALUES (?, 'wechat_oa', 'mock-app', 'mock-openid-user-1', ?, ?)",
                 (user_id, now, now),
             )
-        grant_subscription(conn, user_id, "pro", 30, granted_by=None, source="admin_grant")
+        # 三段可见性(CLAUDE.md §8):登录即 member 基线,无需订阅
         conn.commit()
-        print(f"seed_allsvenskan_pw: admin ok, pro user_id={user_id}")
+        print(f"seed_allsvenskan_pw: admin ok, member user_id={user_id}")
     finally:
         conn.close()
 

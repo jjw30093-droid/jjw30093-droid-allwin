@@ -15,6 +15,8 @@ from backend.db.connections import connect_rw
 
 from .coreseed import seed_basic_core
 
+from .authflow import wechat_scan_login
+
 ORIGIN = {"Origin": "http://localhost:3000"}
 
 
@@ -42,9 +44,7 @@ def seeded(data_dir):
 
 def _analyst_client(app, ip):
     client = TestClient(app)
-    r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                    headers={"x-real-ip": ip})
-    client.get(r1.headers["location"], follow_redirects=False)
+    wechat_scan_login(client, ip=ip)
     user_id = client.get("/api/v1/me").json()["user"]["id"]
     conn = connect_rw("platform")
     conn.execute("UPDATE users SET role='analyst' WHERE id=?", (user_id,))
@@ -72,6 +72,9 @@ class TestBundle:
         assert "features_missing" in kinds and "kickoff_precision" in kinds
         assert b["subtitle_cues"] and b["bundle_hash"]
         assert r.headers["cache-control"] == "private, no-store"
+        note = next(n for n in b["source_notes"] if n["kind"] == "probability_source")
+        assert "MODEL" in note["text"]
+        assert "概率来自预测登记簿的已发布快照" in note["text"]
 
     def test_bundle_kickoff_precision_uncertainty_by_provenance(self, app, seeded, fresh_ip):
         """15. Studio 的 kickoff 数据质量提示按 kickoff_precision 判定,不能只看
@@ -154,12 +157,18 @@ class TestBundle:
         assert b["prediction_public"] is None and b["prediction_member"] is None
         prob_sec = next(s for s in b["script_sections"] if s["id"] == "probability")
         assert "暂无已发布的模型概率" in prob_sec["text"]
+        # 2026-08-12 修复的真 bug:UNAVAILABLE 曾经落进"概率来自...已发布
+        # 快照"分支,同一句话里自相矛盾(UNAVAILABLE = 没有快照)。
+        note = next(n for n in b["source_notes"] if n["kind"] == "probability_source")
+        assert "UNAVAILABLE" in note["text"]
+        # 旧 bug 的确切措辞是"概率来自预测登记簿的已发布快照"(声称快照存在);
+        # 新文案改成"暂无已发布的预测快照"(否定句),两者不能同时出现。
+        assert "概率来自预测登记簿的已发布快照" not in note["text"]
+        assert "暂无已发布的预测快照" in note["text"]
 
     def test_studio_requires_analyst_role(self, app, seeded, fresh_ip):
         client = TestClient(app)
-        r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                        headers={"x-real-ip": fresh_ip})
-        client.get(r1.headers["location"], follow_redirects=False)
+        wechat_scan_login(client, ip=fresh_ip)
         assert client.get("/api/v1/studio/matches/9001/bundle").status_code == 403
         anon = TestClient(app)
         assert anon.get("/api/v1/studio/matches/9001/bundle").status_code == 401

@@ -15,6 +15,7 @@ class AuthSettings:
     wechat_provider_kind: str         # real / mock
     wechat_app_id: str
     wechat_app_secret: str
+    wechat_webhook_token: str         # 公众号后台「服务器配置」共享 Token(签名校验)
     public_base_url: str              # 回调与二维码的对外地址
     frontend_base_url: str            # 登录后跳转前缀;生产同域留空(相对路径)
     allowed_origins: tuple
@@ -44,6 +45,10 @@ def load_auth_settings(env=None) -> AuthSettings:
     provider_kind = e.get("WECHAT_AUTH_PROVIDER") or ("real" if app_env == "production" else "mock")
     app_id = e.get("WECHAT_OA_APP_ID", "")
     app_secret = e.get("WECHAT_OA_APP_SECRET", "")
+    # development 默认值让本地/E2E 免配置即可签名模拟扫码;production 必须显式设置
+    webhook_token = e.get(
+        "WECHAT_WEBHOOK_TOKEN", "" if app_env == "production" else "dev-webhook-token"
+    )
     public_base_url = e.get("PUBLIC_BASE_URL", "http://127.0.0.1:8000")
     allowed_origins = tuple(
         o.strip()
@@ -63,6 +68,7 @@ def load_auth_settings(env=None) -> AuthSettings:
                 for k, v in {
                     "WECHAT_OA_APP_ID": app_id,
                     "WECHAT_OA_APP_SECRET": app_secret,
+                    "WECHAT_WEBHOOK_TOKEN": webhook_token,
                 }.items()
                 if not v
             ]
@@ -81,6 +87,7 @@ def load_auth_settings(env=None) -> AuthSettings:
         wechat_provider_kind=provider_kind,
         wechat_app_id=app_id,
         wechat_app_secret=app_secret,
+        wechat_webhook_token=webhook_token,
         public_base_url=public_base_url.rstrip("/"),
         frontend_base_url=e.get("FRONTEND_BASE_URL", "").rstrip("/"),
         allowed_origins=allowed_origins,

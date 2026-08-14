@@ -18,10 +18,16 @@
   (CLAUDE.md §13):外部凭证缺失时诚实记 failed + 原因,不以"模块不存在"跳过;
   "optional" kind 仅保留给测试注入使用。
 
+- 失败告警(数据管道重建 Phase 5):run_job 的失败分支在 _finish_run 落库之后
+  经 backend.notify 推 CRITICAL(pipeline_step_failure / proxy_unavailable);
+  链上 cascade-skip 的步骤不执行、不告警——只有最初失败那一步会推。
+- 质量门 pipeline_gates 挂链尾;daily_digest 不进链(allwin-digest.timer 每天
+  23:30 Asia/Shanghai 以 --key <北京日期> 幂等调度)。
+
 用法:
   python -m backend.worker.runner --list
   python -m backend.worker.runner --job silver_build
-  python -m backend.worker.runner --job schedule_sync --key 2026-07-19
+  python -m backend.worker.runner --job daily_digest --key 2026-08-10
   python -m backend.worker.runner --chain
   python -m backend.worker.runner --chain --from silver_build
 """
@@ -147,6 +153,124 @@ def _job_metrics_rebuild() -> dict:
     return {"output_count": result.get("entries", 0), "meta": result}
 
 
+def _job_pipeline_gates() -> dict:
+    """质量门(链尾):只读体检三库,违反的门经 backend.notify 发告警。
+
+    门的"发现问题"不算本任务失败(避免再触发一条 pipeline_step_failure 的
+    重复告警);任务失败语义只留给检查本身崩溃。
+    """
+    from backend.cli.pipeline_gates import run as run_gates
+
+    report = run_gates()
+    violations = [g for g in report["gates"] if g["level"] != "OK"]
+    return {
+        "input_count": len(report["gates"]),
+        "output_count": len(violations),
+        "meta": {"level": report["level"],
+                 "violated": [{k: g.get(k) for k in ("gate", "level")} for g in violations]},
+    }
+
+
+def _job_daily_digest() -> dict:
+    """每日汇总(INFO 一条):近 24h 赛程同步/赔率快照/轮询尝试/失败任务/已推告警;
+    顺带清理 30 天前的 poll_attempt_log(append-only 表的保留策略)。"""
+    from datetime import datetime, timedelta, timezone
+
+    from backend import notify as notify_mod
+    from backend.db.connections import connect_ro
+
+    now = utc_now_iso()
+    day = now[:10]
+    now_dt = datetime.fromisoformat(now.replace("Z", "+00:00")).astimezone(timezone.utc)
+    lo24 = (now_dt - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    keep_floor = (now_dt - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    digest: dict = {"date": day}
+    conn_odds = connect_rw("odds")
+    try:
+        digest["fixture_sync_by_verdict"] = {
+            r["verdict"]: r["n"] for r in conn_odds.execute(
+                "SELECT verdict, COUNT(*) AS n FROM fixture_sync_ledger "
+                "WHERE julianday(run_at) >= julianday(?) GROUP BY verdict", (lo24,))
+        }
+        digest["fixtures_written_rows"] = conn_odds.execute(
+            "SELECT COALESCE(SUM(written_rows),0) FROM fixture_sync_ledger "
+            "WHERE julianday(run_at) >= julianday(?)", (lo24,)).fetchone()[0]
+        digest["odds_snapshots"] = conn_odds.execute(
+            "SELECT COUNT(*) FROM bronze_ng_odds_snap "
+            "WHERE julianday(observed_at) >= julianday(?)", (lo24,)).fetchone()[0]
+        digest["poll_attempts"] = conn_odds.execute(
+            "SELECT COUNT(*) FROM poll_attempt_log "
+            "WHERE julianday(attempted_at) >= julianday(?)", (lo24,)).fetchone()[0]
+        with tx(conn_odds):
+            cur = conn_odds.execute(
+                "DELETE FROM poll_attempt_log WHERE julianday(attempted_at) < julianday(?)",
+                (keep_floor,))
+            digest["attempt_log_purged"] = cur.rowcount
+    finally:
+        conn_odds.close()
+
+    conn_p = connect_ro("platform")
+    try:
+        digest["job_failures_24h"] = {
+            r["job_name"]: r["n"] for r in conn_p.execute(
+                "SELECT job_name, COUNT(*) AS n FROM job_runs "
+                "WHERE status='failed' AND julianday(created_at) >= julianday(?) "
+                "GROUP BY job_name", (lo24,))
+        }
+        digest["alerts_sent_today"] = conn_p.execute(
+            "SELECT COUNT(*) FROM pipeline_alerts WHERE notify_result='sent' "
+            "AND created_at >= ?", (day + "T00:00:00Z",)).fetchone()[0]
+    finally:
+        conn_p.close()
+
+    body_lines = [
+        f"赛程同步(24h): {digest['fixture_sync_by_verdict']} / 写入 {digest['fixtures_written_rows']} 行",
+        f"赔率快照(24h): {digest['odds_snapshots']} 条;轮询尝试 {digest['poll_attempts']} 次",
+        f"失败任务(24h): {digest['job_failures_24h'] or '无'}",
+        f"今日已推送告警: {digest['alerts_sent_today']} 条",
+    ]
+    alert = notify_mod.notify(
+        level="INFO", source="daily_digest",
+        title=f"allwin 管道日报 {day}",
+        body="\n".join(body_lines),
+        dedup_key=f"daily_digest:{day}",
+    )
+    return {"output_count": 1, "meta": {**digest, "alert": alert}}
+
+
+def _alert_job_failure(conn, run_id, job_name, error_summary,
+                       source: str = "pipeline_step_failure") -> None:
+    """任务失败 → CRITICAL 告警(调用点保证已先 _finish_run 落 job_runs)。
+
+    notify 永不抛;其结果(persisted/result)写回 job_runs.meta_json——
+    这是"告警器自己坏了"三条暴露路径的第二条(第一条 stderr 标记在 notify 内,
+    第三条 ops_check 的 pending 检查)。链上 cascade-skip 的步骤不经过 run_job
+    执行分支,天然只有最初失败的那一步会到这里。
+    """
+    from backend import notify as notify_mod
+
+    res = notify_mod.notify(
+        level="CRITICAL", source=source,
+        title=f"任务失败: {job_name}",
+        body=f"job={job_name}\nrun_id={run_id}\n{error_summary or ''}",
+        dedup_key=f"{source}:{job_name}",
+        conn=conn,
+    )
+    try:
+        row = conn.execute("SELECT meta_json FROM job_runs WHERE id=?", (run_id,)).fetchone()
+        try:
+            meta = json.loads(row["meta_json"] or "{}") if row else {}
+        except ValueError:
+            meta = {}
+        meta["alert"] = {"persisted": res.get("persisted"), "result": res.get("result")}
+        with tx(conn):
+            conn.execute("UPDATE job_runs SET meta_json=? WHERE id=?",
+                         (json.dumps(meta, ensure_ascii=False, default=str), run_id))
+    except Exception:  # noqa: BLE001 — 告警回写失败不能反过来毁掉任务记录
+        print(f"ALLWIN_ALERT_PERSIST_FAILED stage=job_meta run_id={run_id}", file=sys.stderr)
+
+
 # ── 任务注册表 ──────────────────────────────────────────────────────
 # 每项:kind ∈ {"fn", "subprocess", "optional"}
 #   fn         → {"fn": callable}
@@ -155,27 +279,31 @@ def _job_metrics_rebuild() -> dict:
 #                第一个存在的候选以子进程方式运行;都不存在 → skipped + reason。
 
 REGISTRY: dict[str, dict] = {
-    "schedule_sync": {
+    "schedule_sync_multi": {
         "kind": "subprocess",
-        "argv": [sys.executable, "ingest/ingest_future_fixtures.py", "--league-id", "47", "--season", "2026/2027"],
-        "cwd": str(BACKEND_DIR),
+        # 数据管道重建 Phase 6:取代旧 schedule_sync 的单联赛硬编码(47/2026/2027)。
+        # 全联赛 T+7 赛程刷新,poll_state 每联赛 6h 节流(15 分钟 chain 反复触发
+        # 也不会多打 FotMob),反退化/降级门禁在 CLI 内部(fixture_sync_ledger)。
+        "argv": [sys.executable, "-m", "backend.cli.sync_fixtures_window", "--due"],
+        "cwd": str(PROJECT_ROOT),
         "require_env": ("THORDATA_PROXY",),
-        "max_attempts": 3,
+        "max_attempts": 2,
         "timeout_seconds": 900,
         "backoff_seconds": 60,
-        "description": "同步未来赛程(FotMob fixtures → dim_match,需住宅代理)",
+        "description": "T+7 赛程同步:全联赛赛季发现 + 反退化门禁 + 6h/联赛节流(需住宅代理)",
     },
-    "fotmob_incremental": {
+    "fotmob_incremental_multi": {
         "kind": "subprocess",
-        # scheduler.py 的完整步 1(--skip-scrape 跳过的那步):NotStarted→Finish 增量全量落库。
-        # 步 2/3/4 由链上 silver_build / model_predict 独立任务承担,不在此重复。
-        "argv": [sys.executable, "-c", "import scheduler; scheduler.step1_ingest_newly_finished(47, '2026/2027')"],
-        "cwd": str(BACKEND_DIR),
+        # scheduler.py 的完整步 1(NotStarted→Finish 增量全量落库),按 LEAGUE_META
+        # 全联赛遍历、每联赛 6h 节流;步 2/3/4 由链上 silver_build / model_predict
+        # 独立任务承担,不在此重复。
+        "argv": [sys.executable, "-m", "backend.cli.fotmob_incremental_multi", "--due"],
+        "cwd": str(PROJECT_ROOT),
         "require_env": ("THORDATA_PROXY",),
         "max_attempts": 2,
         "timeout_seconds": 3600,
         "backoff_seconds": 120,
-        "description": "增量抓取新完赛场次(比分+xG+事件+阵容,需住宅代理)",
+        "description": "增量抓取新完赛场次(全联赛,比分+xG+事件+阵容,需住宅代理)",
     },
     "nowgoal_snapshot": {
         "kind": "subprocess",
@@ -264,11 +392,27 @@ REGISTRY: dict[str, dict] = {
         "backoff_seconds": 0,
         "description": "重建当日正式预测 manifest(内容不变不加版本)",
     },
+    "pipeline_gates": {
+        "kind": "fn",
+        "fn": _job_pipeline_gates,
+        "max_attempts": 1,
+        "timeout_seconds": 300,
+        "backoff_seconds": 0,
+        "description": "质量门检查(赛程窗口/退化/实体解析/赔率与收盘覆盖/公司口径/WAF,违反发告警)",
+    },
+    "daily_digest": {
+        "kind": "fn",
+        "fn": _job_daily_digest,
+        "max_attempts": 1,
+        "timeout_seconds": 300,
+        "backoff_seconds": 0,
+        "description": "每日汇总推送(入库场次/赛程/快照/失败步骤;--key <日期> 幂等,由 allwin-digest.timer 调度)",
+    },
 }
 
 DEFAULT_CHAIN = [
-    "schedule_sync",
-    "fotmob_incremental",
+    "schedule_sync_multi",
+    "fotmob_incremental_multi",
     "nowgoal_snapshot",
     "fotmob_snapshot",
     "entity_resolution",
@@ -279,7 +423,17 @@ DEFAULT_CHAIN = [
     "analysis_bundle_build",
     "postmatch_settle",
     "metrics_rebuild",
+    # 必须排最后:质量门"发现问题"通过告警表达,不通过任务失败表达——
+    # 即便它 failed(检查本身崩溃),也没有下游可被 cascade-skip。
+    "pipeline_gates",
 ]
+
+# 注册了但不进默认链的任务(tests/backend/test_job_order.py 的白名单——
+# 杜绝"注册了却永远不被调度"的孤儿任务):
+# - silver_build:core_silver_build 的兼容别名(见下方);
+# - daily_digest:由 allwin-digest.timer 每天 23:30(Asia/Shanghai)独立调度,
+#   --key <北京日期> 幂等,天然每天恰好一次,不挂 15 分钟链。
+NON_CHAIN_JOBS = frozenset({"silver_build", "daily_digest"})
 
 # allwin-poll.timer 每 5 分钟独立调度这两步(CLAUDE.md §6.3 的到期判断);
 # allwin-worker.timer 每 15 分钟的周期性任务链不应再重复调度同一对任务名——
@@ -534,6 +688,10 @@ def run_job(job_name: str, idempotency_key: str | None = None, force: bool = Fal
             if missing:
                 summary = _truncate(f"缺少环境变量 {', '.join(missing)},任务未执行(FotMob 抓取需要住宅代理)")
                 _finish_run(conn, run_id, "failed", error_summary=summary)
+                # 先落 job_runs(上一行),再推告警;缺代理归 proxy_unavailable
+                _alert_job_failure(conn, run_id, job_name, summary,
+                                   source=("proxy_unavailable" if "THORDATA_PROXY" in missing
+                                           else "pipeline_step_failure"))
                 return {"run_id": run_id, "status": "failed", "attempt": 1, "error_summary": summary}
 
             attempt = 0
@@ -553,6 +711,8 @@ def run_job(job_name: str, idempotency_key: str | None = None, force: bool = Fal
                     if attempt >= max_attempts:
                         _finish_run(conn, run_id, "failed", error_summary=last_error,
                                     meta_update=meta)
+                        # 先落 job_runs(上一行),再推告警(notify 永不抛)
+                        _alert_job_failure(conn, run_id, job_name, last_error)
                         return {"run_id": run_id, "status": "failed", "attempt": attempt,
                                 "error_summary": last_error}
                     if backoff > 0:

@@ -40,13 +40,25 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("GET", "/api/v1/products"),
         ("GET", "/api/v1/track-record"),
+        # 只是三个聚合时间戳,不含比赛/推荐内容,身份无关,允许共享缓存。
+        ("GET", "/api/v1/status/freshness"),
         ("GET", "/api/v1/model/metrics"),
         ("GET", "/api/v1/leagues/{league_id}/standings"),
         ("GET", "/api/v1/leagues/{league_id}/fixtures"),
         ("GET", "/api/v1/leagues/{league_id}/team-stats"),
         ("GET", "/api/v1/leagues/{league_id}/players"),
+        # 联赛赛季速览:纯赛季聚合(进球时段/比分分布/大小球阈值/主平客),
+        # 响应不随身份变化。免费联赛给 s-maxage;需登录联赛在 endpoint 内已判为
+        # NO_STORE,带 Cookie 的请求另由规则 1 强制 no-store。
+        ("GET", "/api/v1/leagues/{league_id}/season-profile"),
         ("GET", "/api/v1/matches"),
         ("GET", "/api/v1/matches/{match_id}"),
+        # 完赛事实报告:纯历史事实(阵容/事件/射门/统计),响应不随身份变化;
+        # 带 Cookie 的请求仍会被下方规则 1 强制 no-store,不会污染共享缓存。
+        ("GET", "/api/v1/matches/{match_id}/report"),
+        # 赛前市场卡:两队历史聚合 + 离线标定表查表,不区分付费档位,
+        # 响应同样不随身份变化。
+        ("GET", "/api/v1/matches/{match_id}/markets"),
         ("GET", "/api/v1/media/team-crests/{provider}/{provider_team_id}.png"),
     }
 )

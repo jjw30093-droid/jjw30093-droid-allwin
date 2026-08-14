@@ -23,6 +23,8 @@ from backend.ingest.odds_snapshots import (
 from backend.providers import nowgoal
 from backend.silver.odds_moves import build_cooccurrence, build_event_moves, build_odds_moves
 
+from .authflow import wechat_scan_login
+
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "nowgoal"
 
 ORIGIN = {"Origin": "http://localhost:3000"}
@@ -117,11 +119,11 @@ class TestHashDiff:
     def test_same_payload_ingested_once(self, odds_conn):
         records = _odds_records()
         r1 = ingest_odds_records(odds_conn, "555", records, "2026-07-19T10:00:00Z", "run1", "pre_match")
-        assert r1 == {"inserted": 4, "skipped": 0}
+        assert r1 == {"inserted": 5, "skipped": 0}  # 三家公司 8(3市场)+1+3
         r2 = ingest_odds_records(odds_conn, "555", records, "2026-07-19T10:15:00Z", "run2", "pre_match")
-        assert r2 == {"inserted": 0, "skipped": 4}
+        assert r2 == {"inserted": 0, "skipped": 5}
         n = odds_conn.execute("SELECT COUNT(*) FROM bronze_ng_odds_snap").fetchone()[0]
-        assert n == 4
+        assert n == 5
 
     def test_changed_payload_appends_new_snapshot(self, odds_conn):
         records = _odds_records()
@@ -130,7 +132,7 @@ class TestHashDiff:
         target = next(r for r in changed if r["company_id"] == "8" and r["market"] == "1x2")
         target["latest"] = dict(target["latest"]) | {"home": 1.95}
         r2 = ingest_odds_records(odds_conn, "555", changed, "2026-07-19T10:15:00Z", "run2", "pre_match")
-        assert r2 == {"inserted": 1, "skipped": 3}
+        assert r2 == {"inserted": 1, "skipped": 4}
         rows = odds_conn.execute(
             "SELECT observed_at, source_updated_at, poll_run_id FROM bronze_ng_odds_snap"
             " WHERE market='1x2' AND company_id='8' ORDER BY observed_at"
@@ -987,9 +989,7 @@ class TestPollCliOffline:
 
 
 def _login_user(client, ip):
-    r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                    headers={"x-real-ip": ip})
-    client.get(r1.headers["location"], follow_redirects=False)
+    wechat_scan_login(client, ip=ip)
     assert client.get("/api/v1/me").json()["authenticated"]
 
 

@@ -355,6 +355,12 @@ def build_analysis_bundle(
                      "home_xg_for": _fmt(feat["home_xg_for_l10"]), "home_xg_against": _fmt(feat["home_xg_against_l10"]),
                      "away_xg_for": _fmt(feat["away_xg_for_l10"]), "away_xg_against": _fmt(feat["away_xg_against_l10"])},
         })
+    shot_map = q_matches.recent_shot_map_spec(conn_core, match_id, window=5)
+    if shot_map is not None:
+        chart_specs.append({
+            "id": "recent_shot_map", "type": "shot_map_explorer", "title": "最近 5 场射门分布",
+            "data": shot_map,
+        })
 
     bundle = {
         "bundle_version": BUNDLE_VERSION,
@@ -379,13 +385,16 @@ def build_analysis_bundle(
             {"kind": "data_source", "text": "比赛与统计数据来源:FotMob(自建 Bronze 层)"},
             {
                 "kind": "probability_source",
+                # 三态各自独立成句,不能用二元 else 兜底——UNAVAILABLE 落进
+                # "概率来自已发布快照"分支曾经是自相矛盾的真 bug(既说
+                # UNAVAILABLE 又说有快照,2026-08-12 审计发现)。
                 "text": (
                     f"概率来源:{probability_source};版本:{model_version or '无'}。"
-                    + (
-                        "该值是 1X2 赔率去水结果,不是自有模型输出"
-                        if probability_source == "MARKET_BASELINE"
-                        else "概率来自预测登记簿的已发布快照"
-                    )
+                    + {
+                        "MARKET_BASELINE": "该值是 1X2 赔率去水结果,不是自有模型输出",
+                        "MODEL": "概率来自预测登记簿的已发布快照",
+                        "UNAVAILABLE": "该场比赛暂无已发布的预测快照,本页不展示概率",
+                    }[probability_source]
                 ),
             },
             {"kind": "limitation", "text": "赔率信息(如有)为系统观察到的快照时间序列,只展示同期事件,不声称因果"},

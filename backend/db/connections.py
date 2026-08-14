@@ -26,6 +26,13 @@ def connect_rw(name_or_path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
+    # append-only 触发器(schedule_* 全套 insert_guard/no_update/no_delete)只在
+    # recursive_triggers=ON 时才能拦住 INSERT OR REPLACE 的隐式 DELETE——不开这个
+    # PRAGMA,任何写连接都能绕过这些触发器悄悄改写"不可变"历史行(已在
+    # backend/migrations/odds/0003_kbisai_odds_points.sql 的迁移注释里点名过这个
+    # 洞;backend/db/migrate.py 与 backend/schedules/state.py 各自的连接已经开了,
+    # 但共享的运行时 connect_rw 工厂此前没开,是全库唯一的写路径缺口)。
+    conn.execute("PRAGMA recursive_triggers = ON")
     return conn
 
 
@@ -66,4 +73,7 @@ def get_connection() -> sqlite3.Connection:
     # WAL:写入时不阻塞并发读(长跑批期间用 sqlite3 CLI 查库是常态场景)。
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 30000")
+    # 见 connect_rw 同名 PRAGMA 的注释:多个 core ingest 脚本仍走这条 legacy 连接,
+    # 同样需要保护 append-only 触发器不被 INSERT OR REPLACE 绕过。
+    conn.execute("PRAGMA recursive_triggers = ON")
     return conn

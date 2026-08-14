@@ -3616,3 +3616,1038 @@ git diff --check → 无冲突标记/无行尾空白问题
   未来单独决策是否接入调度(已在 `docs/data-plan.md` 登记为独立后续项);
 - kbisai 对这两个联赛的 needs_review 映射(9 条)未处理,不在本轮范围;
 - 只回补了 Bet365 一家公司的历史两点摘要,未尝试 Macauslot 等其它公司。
+
+## 31. 微信扫码登录切换 + 商业模式重构第一部分(2026-08-10)
+
+### 31.1 微信登录:网页授权 → 带参数二维码 + webhook(CLAUDE.md §7.3 修订)
+
+网页授权(snsapi_base)因 ICP 备案硬前提废弃;唯一路线改为已认证服务号
+「生成带参数的二维码」(QR_STR_SCENE,scene_str=device request id)+ 消息推送
+webhook(`/api/v1/auth/wechat/webhook`,签名 + 时间戳 ±300s + nonce 防重放)。
+Device Login 的一次性 secret/原子领取/opaque session 骨架原样复用。
+新增 migration platform/0008(qr_ticket/qr_url 列、access_token 持久化缓存表、
+nonce 表)。真实微信出站能力(access_token、qrcode/create)与真实回调在拿到
+凭证并完成公众号后台配置前标 UNVERIFIED;离线签名 fixture + Playwright 全链路
+已验证。详见 docs/auth-wechat.md。
+
+### 31.2 三段可见性(CLAUDE.md §8 修订):足球数据去付费化
+
+- migration platform/0009:新增 `member` plan(rank 1,不可购买,登录基线,
+  物化并集含旧 premium 全部足球数据权益 + league:lottery);pro/premium 及其
+  四个商品 is_active=0 下架(行保留供历史订阅外键)。
+- `backend/auth/entitlements.py`:匿名=free 行;任何已登录用户恒并入 member
+  基线,有效订阅只做追加;`effective_plan_id` 只认 is_active=1 的 plan。
+- 边界移动:完整概率/比分矩阵/深度报告/完整赔率时间线/top5 联赛 = 登录即得;
+  匿名保持原 free 面(英超+竞彩联赛、最高一项概率、延迟赔率摘要)。
+  匿名概率边界纪律不变:受限字段物理不下发。
+- 缓存证据(离线临时库实测):匿名无 Cookie 时 products/track-record/metrics/
+  英超 standings·fixtures/matches 列表 = `public, s-maxage`;league 87(需登录)
+  匿名 401 `private, no-store`;任何带 Cookie 请求全路径强制 `private, no-store`
+  (中间件 default-deny,test_cache_policy.py 47 项断言)。
+- SEO/GEO 面新增:`frontend/lib/site.ts`(单一真源)+ `app/sitemap.ts` +
+  `app/robots.ts` + `app/llms.txt/route.ts`,只列匿名可完整浏览页面;
+  需登录的 top5 联赛页 Disallow,防爬虫抓付费墙壳。
+- 测试语义迁移:订阅生命周期/rank 解析改用测试内种的 `testpaid` plan 演练
+  (机制保留给未来付费板块);Role⊥Entitlement 的守护对象移到 `reco:*`;
+  e2e 种子不再发放已下架 plan,兑换码种子随之移除(付费板块 plan 落地后重建)。
+
+### 31.3 第二部分:付费板块「每日精选」(2026-08-10,已实现)
+
+- migration platform/0010:`reco_slips`/`reco_legs` 独立建表(不触碰
+  prediction_snapshots 任何保护);`daily_picks` plan(rank 5,定价不写,
+  products 无行);`reco:track_record` 并入 member 基线,`reco:daily` 付费专属。
+- 可见性(用户确认):匿名引导登录;登录看全部战绩归档(命中/未中/走水与作废
+  全展示,作废单列不进分母也不消失,对齐 miaomiaodi.vip 归档口径);付费看
+  近 30 天赛前推荐。draft 与未结算单绝不出现在战绩面(防赛前内容经战绩面泄漏)。
+- 结算口径:1 单位/单不谈金额;任一腿未中=0,全走水=1,其余=有效赔率乘积
+  (走水腿计 1.0);命中率 = win/(win+lose),走水不计分母;净单位=Σ(回报-1)。
+- 留痕:创建/编辑/发布/结算/作废全部写 audit_logs;结算修正 edit_count+1 并
+  记录 prev_result;settled/voided 拒绝内容编辑;作废必须填原因。
+- 链路:routes_reco.py(2 只读 + 5 admin 端点,全不进 PUBLIC_ALLOWLIST,
+  default-deny 强制 no-store)、/reco 页三态渲染、admin「每日精选」页签、
+  导航项。浏览器实测:匿名引导页、付费视图(汇总条+未结算单+未中印章)、
+  扫码登录跳转全部正确。
+- 测试:tests/backend/test_reco.py 22 项(四方权限矩阵/泄漏边界/结算数学
+  参数化/重结算留痕/作废/汇总口径/与模型 track-record 分离)。
+
+## 32. 数据管道重建:16→17 联赛 · Phase 0 探测 + Phase 1 注册表(2026-08-10,进行中)
+
+计划文件 `~/.claude/plans/football-data-pipeline-*.md`。目标:采集面扩到 17 联赛、
+每日 T+7 赛程刷新、赔率五段递进节流、方糖告警。本轮不做 7 个新联赛的历史回填。
+
+### 32.1 Phase 0 fail-closed 探测(真实网络,产物 `runtime/research/pipeline-v2-probe/`)
+
+- 7 个待接入联赛逐一 `league_matches(id)`(不传 season → 发现):`details.id` 全部匹配。
+  英冠 48 / 荷甲 57 / 葡超 61 = 2026/2027;巴甲 268 = 2026(自然年);
+  欧冠 42 / 欧联 73 / 欧协联 10216 = 2025/2026 且当前季外(T+7 窗口 0 场)。
+- 欧战三项资格赛天然排除已实证(最早 kickoff 均 9 月+,round 含 playoff 但无 7-8 月资格赛)。
+- NowGoal 实时公司面板实测(3 场未开赛):稳定 12 家,选定的 **Bet365(8)/澳门(1)/皇冠(3)**
+  3/3 全present、三市场齐全。**Pinnacle 不在实时面板**(原定 Pinnacle 由用户改选皇冠)。
+- 赛后补抓 sweep **不可行**(mix_history 对未开赛比赛 0 行无时间戳)→ 本轮不建 sweep,
+  临场收盘靠 10 分钟档 + last_call。详见 `docs/data-sources.md` §1.2 / §2.2。
+
+### 32.2 Phase 1 联赛注册表 + 去硬编码(已实现)
+
+- `backend/queries/leagues.py` `LEAGUE_META` 10 → 17,新增 7 项(均 `league:lottery`,
+  带 `season_kind` 供 T+7 赛季解析);新增 `FREE_LEAGUE_ENTITLEMENTS` 与
+  `anonymous_cacheable_league_ids()` 单一真源。
+- `backend/api/routes_public.py`:5 处 `league_id == 47` 缓存判据 → `in ANON_CACHEABLE`
+  (匿名可缓存 = free 档全部联赛,不再只有英超;语义 = "匿名是否可见",§10.2)。
+- `frontend/components/matches/zh.ts`:LEAGUE_ZH 补 7 项中文名,ENTITLEMENT_ZH 文案更新。
+- `tests/backend/test_league_scope.py`(新,8 项):17 联赛集合、entitlement 分档、
+  匿名可缓存=free 档且排除 top5、content_pipeline 双注册表不漂移、
+  **FUTURE_LEAGUE_ID 仍为 47(扩联赛≠扩模型,防无意义概率进公开账本)**。
+- **明确延后**:7 新联赛的 sitemap/`ANON_LEAGUES` 收录延到数据真正落库后(Phase 2),
+  避免空壳页进 sitemap(§8.3);`runner.py`/`scheduler.py` 的联赛硬编码去除与 T+7 job
+  耦合,放 Phase 2/6 一起改,不留半成品中间态。
+
+### 32.3 Phase 2 T+7 赛程同步 job(已实现)
+
+- migration `odds/0006_fixture_sync_ledger.sql`:`fixture_sync_ledger`(逐联赛逐次落行,
+  verdict ∈ written/refused_regression/refused_downgrade/refused_identity/off_season/fetch_failed),
+  是反退化基线来源 + 质量门 G1 数据源 + "赛程为何没更新"的审计证据。
+- `backend/cli/sync_fixtures_window.py`(新):每日对 17 联赛逐一 `league_matches(id)`,
+  赛季**发现**(不预设,解决 J1/巴甲/欧战赛季惯例不同 + 换季);poll_state 按
+  `SOURCE_FOTMOB_FIXTURES` 6 小时/联赛节流。三道门禁:G-A 骤降>50% 拒写保留旧数据、
+  G-B/G-C 已完赛/已有比分行不被赛程行覆盖、身份不符拒落库。off_season 空结果诚实
+  记录不告警。`--dry-run` 零持久化副作用(core 与 ledger 都不写)。
+- `ingest_future_fixtures.py`:抽出纯解析 `rows_from_payload` + discovery 身份
+  `discover_season_identity`;**修复 INSERT OR REPLACE 清列缺陷**——新增
+  `upsert_fixture_row` 用 `ON CONFLICT DO UPDATE` **只更新赛程拥有列**
+  (Season/Date/队/status/round/kickoff 三件套),不碰 Referee/天气/比分。
+  额外加第二个 sys.path 插入,使该脚本"独立运行"与"作为包导入"两种上下文都可用。
+- `tests/backend/test_sync_fixtures.py`(新,11 项):赛季发现、身份门禁、off_season、
+  **G-A 反退化拒写、G-B 完赛不降级、清列缺陷修复(裁判/天气/比分保留)**、ledger 逐联赛、
+  幂等、dry-run 零副作用、真实 UCL 存档 round 透传。
+- 真实网络 dry-run 实证:英冠 48 抓到 552 场真实赛程、赛季发现 = 2026/2027,零写库。
+
+### 32.4 Phase 3 变音符别名 + 跨联赛占位修复(已实现,部分工具延后)
+
+新联赛能否出赔率的命门是变音符:NowGoal 发 ASCII、FotMob 发带变音符原文,
+auto-seed 别名保留变音符 → 荷甲/葡超/巴甲/欧协联整批 needs_review → 零赔率。
+
+- `entity_resolution.seed_ascii_fold_aliases`(新):给带变音符的既有别名补一份
+  ASCII 折叠别名(source='ascii_fold'),**撞名审计 fail-closed**(某折叠串映射到 ≥2
+  个 canonical → 整串拒绝、列 rejected,绝不写歧义别名)。**不改 `_norm`**(它被 10
+  联赛共用,改它会一次性改变全站别名语义)。真实 odds.db 实测:495 别名中 15 个含变音符,
+  新增 9 条折叠别名、0 撞名;Häcken→'hacken'、Mjällby→'mjallby' 现可被 NowGoal ASCII 命中。
+  既有北欧联赛同样受益。
+- `entity_resolution._candidate_matches`:候选查询加 `AND League_ID IN (LEAGUE_META keys)`。
+  修一个真实隐患——NowGoal 日程是全球的(单日约 988 场),不限联赛会让候选池与
+  `UNIQUE(provider, fotmob_match_id)` 占位风险随 16 联赛显著上升,而被占住的行永久
+  冻结在 needs_review(resolve_match 不再重评估)。只用 FotMob 侧范围,零成本。
+- `tests/backend/test_ascii_fold_aliases.py`(新,6 项):折叠正确性、撞名 fail-closed、
+  幂等、不碰无变音符别名、跨联赛候选过滤。
+
+**本轮明确延后(如实)**:① `bronze_ng_schedule_row` 观测表 + `alias_coverage` 报表——
+是别名人工补录的工作清单,真正有用要等新联赛赛程落库 + 一轮真实 NowGoal 轮询后
+(依赖 Phase 2 的生产写入与生产运行);② `FOTMOB_TO_NOWGOAL_LEAGUE` 静默降级修复——
+它只服务历史 archive 路径,向前采集根本不经过它,改其契约会动历史解析器测试而无收益;
+③ 逐联赛真实命中率测量——需要新联赛有数据才能算,属生产运行阶段。
+seed_ascii_fold_aliases 接入 entity_resolution job 的自动化在 Phase 6 一并做。
+
+### 32.5 Phase 4 赔率五段节流 + 三家公司(已实现)
+
+- `poll_windows.py`:新增 `PollCadence` + `CADENCE_BY_SOURCE` + `poll_decision(source,...)`。
+  NowGoal 赔率走五段递进(72/48/24/12h 检查点 → 12h起每小时 → 3h起每20分 →
+  1h起每10分 → T-15min last_call 强制补一枪),FotMob 快照/日程沿用 `CADENCE_LEGACY`
+  (900/300 一字不改)。**`required_interval_seconds` 输出逐字节不变**(委托 legacy),
+  content_pipeline/poll_fotmob_snapshots 零改动。检查点/last_call 判定仅依据持久化的
+  `poll_state.last_polled_at` 与 kickoff 重算,重启/重放幂等(不加列、不存内存态)。
+  逐档 ≥ §6.3 下限(2–72h≥900s、0–2h≥300s),§6.3 数值无需改。
+- `poll_nowgoal.run_due_poll` 切换到 `poll_decision`。
+- `nowgoal.DEFAULT_TARGET_CIDS` 由 `(8,31)` 改为 **`(8,1,3)` = Bet365/澳门/皇冠**;
+  **删除 `parse_odds` 的静默"换公司"回退**(缺哪家少哪家、一家都没有返回空,空不是错误)。
+  修正测试 fixture 一处公司名错标(cid 50 = 1xBet,非 Crown)。
+- 实证:五段间隔逐档正确(72h→24h/18h→12h/6h→1h/2h→20min/40min→10min),
+  last_call 在 T-15min 跨窗时强制触发。
+- 测试:`test_poll_cadence.py`(新,18 项:分档/last_call/per-source 隔离/§6.3 下限/
+  重放幂等/required_interval_seconds 不变);更新 `test_nowgoal_provider.py`(三家公司、
+  不回退)、`test_odds_pipeline.py`(2→3 家计数)、`test_pipeline_e2e.py`(kickoff 移到
+  1–3h 档以匹配新节奏,保持"先节流再到期"原意)。
+
+### 32.6 Phase 5 方糖告警 + Phase 6 worker/systemd 接线(F 段,2026-08-10,已实现)
+
+**Phase 5 告警通道**:
+
+- migration `platform/0011_pipeline_alerts.sql`:告警账本(与失败日志/审计分表,
+  前身项目 ingest_failure_log 混用教训);`odds/0007_poll_attempt_log.sql`:轮询尝试
+  日志(append-only,`mark_polled` 同事务写入,tier/ok 记录命中档与成败)——
+  hash-diff 下"没快照"≠"没轮询",没有它五段节流不可验证。保留 30 天,
+  过期行由 daily_digest 清理。
+- `backend/notify/`(新):持久化优先(先落 pipeline_alerts 再推)、解析响应体
+  `code==0` 才算 sent(修正前身项目只看 HTTP 200 的缺陷,40024 配额耗尽如实记
+  failed)、每日配额(软上限 4 只放行 CRITICAL;WARNING≤2/INFO≤1;CRITICAL 超硬配额
+  照发、由服务端 40024 如实拒绝)、同 dedup_key 24h 去重(只看 sent,失败不吞重试)、
+  title/body 逐行过 ops_check `_sanitize_summary` + sendkey 剥除。`notify()` 永不抛,
+  三条独立暴露路径:① stderr `ALLWIN_ALERT_PERSIST_FAILED` 标记;② 结果写回
+  `job_runs.meta_json`;③ ops_check 新增 `check_pipeline_alerts`(pending>1h /
+  failed:misconfigured → WARN)。P0 白名单唯一定义 `notify.P0_ALERT_SOURCES`。
+- 接线(两个汇聚点,不散调):`runner.run_job` 失败分支在 `_finish_run` 落库**之后**推
+  CRITICAL(缺 THORDATA_PROXY 归 `proxy_unavailable`,其余 `pipeline_step_failure`);
+  链上 cascade-skip 步骤不执行不告警,只有最初失败那步推(测试钉死)。
+  `ops_check --notify`(WARN/CRITICAL 推脱敏摘要,dedup_key 含问题组件清单)。
+- 配置:`NOTIFY_ENABLED` / `SERVERCHAN_SENDKEY` / `NOTIFY_DAILY_QUOTA`
+  (.env.example 已记;调用时读取,不在 import 期;缺 key 不 fail-fast,
+  由 ops_check WARN 暴露)。
+
+**Phase 6 worker/systemd**:
+
+- `runner.py` 去硬编码:`schedule_sync_multi`(→ `sync_fixtures_window --due`)与
+  `fotmob_incremental_multi`(新 CLI `backend/cli/fotmob_incremental_multi.py`:
+  遍历 LEAGUE_META × dim_match 真实 NotStarted 赛季,复用 scheduler.step1 同一条
+  抓取路径,poll_state 每联赛 6h 节流)取代旧 47/2026/2027 硬编码任务;
+  `DEFAULT_CHAIN` 尾接 `pipeline_gates`;`NON_CHAIN_JOBS` 白名单
+  (silver_build 别名 / daily_digest)。
+- `backend/cli/pipeline_gates.py`(新,fn job 挂链尾):九门——赛程窗口不一致
+  (CRITICAL)/反退化拒写(CRITICAL)/kickoff 精度(WARN)/逐联赛实体解析
+  (<60% WARN、==0 CRITICAL 点名联赛)/24h 赔率覆盖(<50% WARN)/T-15min 收盘覆盖
+  (<80% WARN、<70% CRITICAL,含中位差)/比分不回退(CRITICAL)/公司口径
+  (目标外 cid CRITICAL)/近 1h WAF(CRITICAL)。数据不足如实 skipped 不误报
+  (季外联赛/样本<3、<5);门"发现问题"≠任务失败(避免重复告警),违反经 notify 推送。
+- `resolve_entities` 接入 `seed_ascii_fold_aliases`(§32.4 延后项闭环);
+  `daily_digest` fn job(24h 赛程/快照/轮询/失败任务/已推告警汇总 + attempt log 清理,
+  INFO 一条,`--key <北京日期>` 幂等)。
+- systemd 新增 `allwin-opscheck.{service,timer}`(30 分钟,`--json --notify`,
+  `SuccessExitStatus=1 2` 防 WARN 刷 unit failure)与 `allwin-digest.{service,timer}`
+  (`OnCalendar=23:30 Asia/Shanghai`、`Persistent=true`、`--key $(TZ=Asia/Shanghai date)`);
+  两者复制 worker 加固块;既有两个 timer 未动(last_call 已保证收盘硬约束)。
+- 测试:`test_job_order.py`(新,8 项:链顺序/gates 居尾/无孤儿任务/
+  PERIODIC_CHAIN_EXCLUDE==poll_wrapper∩chain 可执行断言/spec 完整性/
+  去硬编码回归钉);`test_notify.py`(新,19 项);`test_pipeline_gates.py`
+  (新,15 项);`test_poll_scheduling.py` 增补新单元静态检查;
+  `test_migrations.py` 表清单更新。
+
+**验证(F 段)**:后端全量 pytest **1295 collected,exit 0(1 skip 为既有
+test_pit_dataset 真实快照缺失项,与本轮无关)**;`compileall` 通过;真实三库
+先 `backup_sqlite.sh`(20260810T082419Z,integrity 全 ok)后应用两条新迁移,
+`PRAGMA integrity_check` 三库全 ok;`pipeline_gates --no-notify` 对真实库只读冒烟:
+`company_scope` 正确检出近 24h 仍存在切换前旧目标公司 Sbobet(31) 的快照
+(E 段刚改 8/1/3,24h 窗口滑过自然消退——门在做它该做的事);`ops_check --json`
+真实退出 2(CRITICAL 来自数据盘 94.9% 占用,**独立于本轮的真实运维状态,需要
+清理磁盘**)。前端 tsc/vitest(77)/eslint/build/check:api-drift 全过,零漂移
+(本轮无前端与 API 契约改动)。**真实方糖推送 UNVERIFIED**(未配 SENDKEY,
+推送路径由 stub 测试覆盖;首条真实推送需用户提供 Server 酱 SendKey);
+systemd 单元真实 systemd-analyze/enable UNVERIFIED(本机无 systemd,静态测试覆盖)。
+
+## 33. 比赛详情页完赛事实报告:阵容/射门图/统计/事件四 tab(2026-08-11)
+
+DESIGN.md:220 的★核心页规格(事件时间线+阵型阵容+射门图+球队数据对比+球员评分)
+首次实现。数据早已在五张 fact 表里(lineup/events/shotmap/team_stats/player_stats,
+13,051 场完赛覆盖率约 100%),此前零 API、零前端。方案经 Opus 复核 + 真实库逐项
+核验(docs/audits 级别的实证过程见会话计划文件),关键结论:
+
+- **FotMob 射门坐标两队同朝一端(x→105)记录**(30 场随机抽样 30/30;
+  fotmob_client.py:764 原样透传不变换)——前端展示层对客队做 `105-x, 68-y`
+  镜像,后端保留原始坐标。业界(Opta/StatsBomb)同约定,但只作旁证,
+  结论以自家数据实测为准。
+- **单场评分唯一真源 = fact_match_lineup.rating**(player_stats 只有
+  rating_title,同值不同精度);阵型站位 extra_json.horizontalLayout 已是
+  0..1 归一化坐标,阵型图纯 CSS 实现,零新依赖。
+- `fact_team_match_stats` 只取 `Period='All'`(全库 13,051 场 100% 存在,
+  实证无缺失);extra_json 按 37-key 白名单投影(含字面带点的
+  `"matchstats.headers.tackles"`),4 个恒 null 分组表头伪 key 排除。
+- `fact_shotmap` 有 12 行 Team_ID 与主客都对不上的脏数据,查询显式
+  `Team_ID IN (home,away)` 过滤。
+
+交付:`backend/queries/match_report.py`(单入口,五表全空→None)、
+`GET /api/v1/matches/{id}/report`(`MatchReportResponse` Union DTO;
+**匿名可见**——纯历史事实属 §8"足球数据不收费"面,与积分榜/赛季统计同档,
+进 cache_policy 公共缓存白名单,带 Cookie 自动降 no-store)、
+`tests/backend/test_match_report.py`(13 项:三态可用性/Period 哨兵/脏 Team_ID
+哨兵/评分来源哨兵/i18n 回退/联赛门禁/缓存头)+ coreseed 补五表。
+前端:`MatchTabs`(总览/阵容/统计/事件,report 不可用时不渲染 tab 壳,
+§11.1 六段作为"总览"内容一字未动)、`PitchFormation`(纯 CSS)、
+`ShotMapChart`(EChart 底层封装+IntersectionObserver 懒挂载+客队镜像)、
+`MatchLineupSection`/`MatchStatsSection`/`MatchEventsSection`、`RatingChip`
+(globals.css 既有 --rate-* token,elite 档前景用 var(--bg) 双主题自适应)。
+
+**验证**:后端 pytest 全量 exit 0(新增 13 项全绿);契约 export→gen:api→
+check:api-drift 零漂移;前端 tsc/eslint/vitest(77)/build 全过;
+干净环境构建 check_browser_bundle.sh **OK**(本地带 .env.local 构建 FAIL 属
+既有已知现象);真实 API 实测 5107563:200 + public 缓存头,阵容 40/事件 15/
+射门 18/控球 34-66/xG 0.32-2.31 与库直查一致,未开赛→available=false,
+带 Cookie→no-store;浏览器实测(深浅双主题、375px/桌面):四 tab、阵型图
+3-4-2-1 vs 4-2-3-1 镜像正确、射门图主右客左、事件时间线含补时角标与半场
+分隔、移动端零横向溢出、未开赛比赛无 tab 退化为原布局。
+
+**已知问题(非本轮引入)**:Playwright 17 项中 4 项失败——e2e 种子把预测种在
+"最早英超比赛"(8/21 揭幕战),但 §32 的 T+7 真实同步后首页最近开球窗口被
+北欧/日职比赛(8/14-15)占据,种子比赛进不了首页 featured 卡,48% 断言落空。
+失败现场 dump 证实详情页渲染的是旧版无 tab 布局(未开赛路径,与本轮改动无关),
+其中 3 项的失败产物在本轮改动前已存在。已登记独立修复任务(种子应选全局最近
+开球比赛,或测试直接导航种子比赛 id)。
+
+## 34. 权限体验与全站文案清理 + E2E 种子选场修复(2026-08-11)
+
+### 34.1 背景
+
+外部用户视角体验报告(sol5.6)结论:三层权限(游客/注册用户/精选授权)的
+后端边界正确(权限回归 90 passed),但页面把这三层讲乱了——"付费/Pro/筹备中/
+免费登录即享"混用,内部 entitlement 键值直接暴露,登录后回不到原页面,
+每日精选与战绩混在一页,底部导航找不到精选。本轮只清理体验与文案,
+不改任何权限判定逻辑。
+
+### 34.2 改动(全部在前端与 E2E 层,后端零改动)
+
+- `/pricing` 重写为「访问权限说明」:游客/注册用户/精选授权三张简卡
+  (层级列表仍来自 /api/v1/products 的 is_active 套餐,未在前端虚构),
+  删除权益对比表、"筹备中"、全部内部 entitlement 键值与付费套餐话术;
+  兑换码区保留,改述为"获得精选授权"。
+- 清除全站用户可见 Pro/Premium 残留:联赛目录"Pro 解锁"→"登录后免费查看"
+  (带 login?next);比赛筛选 Pro 徽标→"登录";锁定联赛空状态与 WDL 概率卡
+  脚注同步改写;RedeemBox 套餐名映射 free/member/daily_picks。
+- 登录返回:MemberLeagueSection/MemberMatchDetail/PredictionCard/
+  CooccurrenceSection/StudioGate/RedeemBox 全部登录入口改为携带
+  `?next=<当前页>`;登录页新增"首次扫码即自动创建账号;登录完成后会返回
+  刚才浏览的页面"。
+- `/reco` 重构为「今日精选|历史战绩」双标签(?tab=daily|record):
+  匿名只见登录引导(免费登录查看战绩/先看公开比赛资料);普通登录默认
+  历史战绩,今日精选为锁定说明(联系站长,生效后自动显示);授权用户默认
+  今日精选,顶部横幅"精选权限已开通·有效期至 X"(读自己的
+  /api/v1/account 订阅);近 30 天推荐与归档不再重复展示。
+- 底部导航固定五项:首页|比赛|精选(/reco?tab=daily)|战绩(/reco?tab=record)
+  |我的;选中态感知 ?tab=(useSearchParams 包 Suspense,SSR fallback 同结构);
+  bottomNav grid 4→5 列;顶栏"会员"→"权限说明","公开战绩"→"模型战绩";
+  套餐徽标不再裸显 plan id(daily_picks→"精选")。
+- 账户中心:匿名文案说明登录真实价值;登录后首屏三张权限状态卡
+  (完整足球数据/历史推荐战绩=已开放,今日精选=未开通或已开通至 X);
+  账号 ID/角色折叠进"账户详情(技术信息)";删除过时的"免费套餐仅最高一项
+  概率"提示(登录即 member 基线,该状态已不存在)。
+- E2E:pricing 断言改为三层文案 + Pro/Premium/entitlement 键值不出现;
+  auth 流程补账户权限状态卡与 /reco 双标签断言;anonymous 补 /reco 匿名
+  引导断言(登录按钮必须带 next=/reco)。
+- 同轮移植 worktree wonderful-swirles-9cf0dc 已验证的 E2E 种子修复
+  (此前 anonymous/auth 3 用例失败的根因):seed_e2e 复刻首页 featured
+  选择(北欧 67/59 前 3 场全部种 48%/27%/25% 正式预测,priority 排序自洽),
+  kickoff 三元组逐字取核心库真实值;admin-predictions-edit 用例改用隔离的
+  窗口外编辑目标(不再污染 48% 主种子);tests/backend/test_e2e_seed.py
+  断言同步加强(kickoff 必须与 dim_match 逐字一致)。
+
+### 34.3 验证(真实命令)
+
+```
+python -m tests.e2e.seed_e2e            → ok(featured=5104979,targets=6,edit=5803539)
+pytest tests/backend/test_e2e_seed.py   → 4 passed
+cd frontend && npx tsc --noEmit         → 通过
+npx eslint app components e2e tests     → 通过
+npx vitest run                          → 77 passed
+CI=1 npm run e2e                        → 17 passed(修复前同套件 3 failed)
+浏览器实测(375×812):/pricing 三卡+单行五项底部导航;/reco 匿名引导、
+  精选 tab 选中态;无水平溢出
+```
+
+### 34.4 已知限制
+
+- 授权用户(reco:daily)的双标签页与有效期横幅只有代码与匿名/普通登录
+  E2E 覆盖,真实授权账号视角未实测(E2E 种子未 grant daily_picks),
+  标记 UNVERIFIED;
+- 顶栏"模型战绩"改名只动 label,/track-record 页面自身未改;
+- 旧 pro/premium 存量兑换码若仍存在,RedeemBox 成功提示会回退显示原始
+  plan id(不再映射),属预期诚实展示。
+
+## 35. 首页信息架构重组:面向竞彩用户的首屏 + 详情页降噪(2026-08-11)
+
+### 35.1 背景
+
+第二份用户视角体验报告结论:首页信息架构偏向数据研发人员,不服务
+"每天找比赛、看推荐、查战绩"的目标用户。本轮按报告重组首页、清理
+详情页技术噪声,底层数据/溯源/审计记录全部保留,只动展示层。
+
+### 35.2 后端(唯一改动:匿名聚合端点)
+
+- 新增 `GET /api/v1/reco/overview`(routes_reco + queries/reco.public_overview
+  + RecoOverviewResponse):今日发布场数/最近发布时间(北京自然日判定)
+  + 近 30 天已结算汇总(命中/未中/走水/作废/净单位)。只有计数与聚合,
+  无任何单据内容;未结算 published 单只贡献计数,不泄漏付费赛果。
+  测试 TestPublicOverview 断言 draft 不计入 + 标题/方向/赔率字段零泄漏。
+- OpenAPI 重新导出 + `npm run gen:api`,check:api-drift 无漂移。
+
+### 35.3 首页重组(app/page.tsx 按报告推荐结构)
+
+顶部计数条(今晚|明天|未来7天,0 场不做成链接;今明全空时诚实展示
+"最近比赛 X"入口)→ 重点比赛视觉卡(kicker 按北京日期动态为
+今晚重点/明日重点/本周重点;无预测时改为"赛前资料摘要/推荐尚未发布",
+不再渲染空"公开结论";移除"部分数据暂不可用"统一徽标)→ 今日精选卡
+(已发布 N 场·更新时间,未发布时如实说明,不造虚假倒计时)→
+近30天推荐记录摘要(样本数+命中/未中/走水+净单位;无记录诚实空态)→
+本周比赛(按北京日期分组,每天 ≤5 场——替代原先重复的"其他比赛"横滑
++"近期赛程"两个区块)→ 我关注的比赛 → 常用入口/免责声明。
+首页的模型公开战绩大区块撤下(/track-record 完整保留,快捷入口改名
+"模型公开记录")。
+
+### 35.4 关注比赛(首版本地)
+
+`lib/followed-matches.ts`(localStorage,上限 20 场)+ 详情页
+FollowButton + 首页 FollowedMatches(无关注时整个模块不渲染;匿名
+无权限联赛如实跳过)。与登录用户的服务端收藏 /api/v1/favorites 互不影响。
+
+### 35.5 详情页降噪(数据与顺序不变,只调展示)
+
+- "模型与登记信息"→ 默认折叠的"数据来源与说明";概率卡内部字段
+  (版本号/登记状态)折叠进"数据说明";
+- "同期事件"→"关键变化",区块标题随组件走,无内容/加载失败时整体隐藏;
+- 赔率时间轴:完整时间线默认每公司只显示初盘+最新(带点位标签),
+  完整历史进"查看完整历史(N 条)"折叠;"系统检测时间"→"本站采集时间";
+  去掉"N 个系统观测点"术语;
+- header 移除"最近成功同步/下次计划/赔率观测 N 个点/裸 probability_source";
+  概率来源中文化(赔率折算,非本站模型预测 / 本站模型 / 暂无可靠概率);
+- MatchRow 逐行不再输出 MARKET_BASELINE/观测点数/统一模糊标签,
+  只保留可行动的 STALE 提示;"市场去水基线"全站改"赔率折算概率";
+  "数据截止"→"数据更新于"(Studio 制作工具内保留原措辞);
+  "未来七天更多比赛"→"查看本周其他比赛"。
+
+### 35.6 验证(真实命令)
+
+```
+pytest tests/backend/test_reco.py       → 23 passed(含新 overview 泄漏测试)
+pytest tests/backend/ 全量               → exit 0(全部通过)
+tsc --noEmit / eslint / vitest          → 通过 / 通过 / 77 passed
+CI=1 npm run e2e                        → 17 passed(首页断言按新结构更新:
+  计数条与重点卡结论必须在首屏、本周比赛不含重点场、今日精选/推荐记录可见)
+浏览器实测(375×812,E2E 种子库):首屏=计数条+重点卡;今日精选/
+  近30天推荐记录诚实空态;详情页关注按钮 → localStorage → 首页
+  "我关注的比赛"完整闭环;控制台无错误
+```
+
+### 35.7 已知限制 / 未做(如实)
+
+- "今日更新状态"一行(赛程/赔率/推荐三个更新时间)未做:赔率与赛程的
+  全站级更新时间目前没有便宜的公开查询,留待 pipeline 状态端点设计;
+- 详情页"30 秒看懂"摘要卡、吸顶 tab、per-match 推荐状态徽标未做
+  (后者需要推荐单 legs.match_id 与比赛的公开映射设计,涉及付费边界);
+- 统计页两个口径 xG 的命名区分未核查,本轮未动统计 tab;
+- 重点卡未加"近期状态 X胜|赔率状态|推荐状态"三行(现有"本场依据"三条
+  证据已覆盖近期状态;推荐状态同上,依赖 per-match 映射);
+- 首页"整卡在首屏内"的旧 e2e 断言按新信息架构改为"计数条+结论在首屏",
+  这是设计变更的必然调整,不是降断言(新增了计数条位置、模块可见性断言)。
+
+## 36. 手动触发 T+7 赛程/赔率采集诊断 + 三项报告遗留项落地(2026-08-11)
+
+### 36.1 手动触发结果(真实命令,非推测)
+
+**T+7 赛程同步(`python -m backend.cli.sync_fixtures_window --league-id 47 --dry-run`):
+被 Thordata 住宅代理拒绝,不是代码问题。**
+
+```
+[FotMob] transport error SSLError (attempt 1-3/3)
+verdict: fetch_failed
+```
+
+逐层诊断(均为真实网络探测):
+- 本沙盒直连 `https://www.fotmob.com`/`https://www.google.com` → 200,直连互联网本身正常;
+- 通过 `.env` 里配置的 `THORDATA_PROXY`(住宅代理,FotMob 采集按 CLAUDE.md §6.3 强制要求)
+  发起 CONNECT/HTTP 请求 → TCP 三次握手成功,但代理返回
+  `HTTP 403` + `x-thor-error-code: Access_608` + `x-thor-error-msg: Does not support
+  mainland China servers`;
+- 结论:**本开发沙盒的出口 IP 被 Thordata 识别为中国大陆,该代理服务商明确拒绝大陆
+  IP 发起请求**。这是本沙盒环境的网络位置限制,不是凭证过期、不是代码退化,也不是
+  FotMob 反爬——只要出口 IP 判定不变,重试/换 league 都会得到同样结果,因此没有
+  对全部 15 个联赛重复跑一遍(单联赛已完整复现失败模式)。生产环境(CLAUDE.md §4:
+  AWS 东京)出口 IP 不在中国大陆,预期不受此限制,但本次未在生产环境验证,如实标记
+  `UNVERIFIED`。
+- 未尝试任何绕过代理直连 FotMob 的方式:直连会被 FotMob 反爬拦截且违反
+  `backend/fotmob_client.py` "只用显式 CLI 且必须走住宅代理"的既定架构决策。
+
+**赔率轮询(`python -m backend.cli.poll_nowgoal --due`):0 到期,真实且符合设计,不是 bug。**
+
+```
+窗口候选: 0,到期: 0,未到期跳过: 0
+```
+
+原因:CLAUDE.md §6.3 的赔率采集窗口是"距开球 ≤72 小时";触发时刻(2026-08-11
+06:57 UTC)全部可轮询联赛里最早的未开赛比赛是 2026-08-14T10:00:00Z(挪超),距今
+约 75 小时,还差约 3 小时才进入 72 小时窗口。NowGoal(`www.nowgoal26.com`)本身
+直连可达(不需要代理),问题纯粹是"当前没有比赛落在窗口内",T+7 赛程即使同步成功
+也不会让这个数字变化(第 7 天的新比赛更靠后,不会提前拉近最近一场的距离)。
+
+### 36.2 三项报告遗留项:逐一复核后的真实结论
+
+触发后复核发现:**三项都不是被"缺少今天抓的新数据"卡住**——数据库里已有的
+历史时间戳(赛程 2026-08-10T23:53Z、赔率 2026-08-10T06:00Z、推荐 2026-08-09T21:10Z)
+本身就是这三项功能需要的全部输入。据此:
+
+1. **"今日更新状态"行**:✅ 已实现。新增 `GET /api/v1/status/freshness`
+   (`backend/queries/freshness.py` + `routes_public.py`,进 `PUBLIC_ALLOWLIST`
+   短 TTL 共享缓存)聚合三条独立时间戳:
+   - 赛程:`fixture_sync_ledger` 最近一次 `written`/`off_season`(结论性成功;
+     `fetch_failed`/`refused_*` 不计入,避免一次偶发网络失败在首页显示假的
+     "刚刚更新");
+   - 赔率:`bronze_ng_odds_snap` 最近 `observed_at`;
+   - 推荐:`reco_slips` 最近 `published_at`(非 draft)。
+   任一为空如实返回 `null`(前端渲染"尚无记录"),不用当前时间或另一条时间顶替。
+   首页新增 `FreshnessLine`(`/`),真实数据验证:`赛程更新 2026-08-11 07:53
+   ｜ 赔率更新 2026-08-10 14:00 ｜ 推荐更新 2026-08-10 05:10`(均为北京时间,
+   数据库真实值)。
+
+2. **详情页"30 秒看懂"摘要卡 / 吸顶 tab / per-match"推荐状态"徽标**:
+   ⏸️ 仍未做,且**确认不是数据问题**。`reco_legs` 表本来就有 `match_id` 外键,
+   技术上早就能查"这场比赛是否有推荐"——真正的阻塞是产品/口径决策:向匿名/
+   免费用户展示"该场已有推荐"这一事实本身,是否构成对付费内容存在性的间接
+   泄漏(即便不展示方向/赔率)。这是 CLAUDE.md §8 权限边界之外、需要站长明确
+   拍板的问题,不属于我可以单方面决定的范围,本轮未实现,留待你确认后再做。
+
+3. **统计 tab 两个 xG 口径命名**:✅ 已实现,且**真实数据证实是货真价实的
+   两个数字,不是标签问题**。核查代码 + 抓一场真实完赛比赛(伯恩利 vs 曼联,
+   Match_ID 3411340)对比:
+   - 球队数据对比行(`fact_team_match_stats.expected_goals`,FotMob 团队统计
+     接口原样):伯恩利 0.90 / 曼联 1.16;
+   - 射门图逐次 xG 求和(`ShotMapChart` 按 `shots[].xg` 客户端相加,排除点球
+     大战):伯恩利 **0.91** / 曼联 **1.17**。
+   两者确实不完全相等(源自 FotMob 两个独立接口/模型口径),此前都叫"xG"或
+   "预期进球 xG"容易让用户以为数字不一致是 bug。改名区分:球队对比行 →
+   **"官方统计 xG"**;射门图摘要 → **"射门图 xG 合计"**(`components/matches/zh.ts`
+   `TEAM_STAT_LABELS` + `ShotMapChart.tsx` 摘要文案)。
+
+### 36.3 验证(真实命令)
+
+```
+pytest tests/backend/test_freshness.py  → 6 passed(公开缓存/凭证强制 private/
+  三源独立取 MAX/空表返回 null/fetch_failed 与 refused_* 不计入/draft 不计入)
+pytest tests/backend/ 全量              → exit 0(全部通过)
+tsc --noEmit / eslint / vitest          → 通过 / 通过 / 77 passed
+python -m backend.cli.export_openapi && npm run gen:api && check:api-drift
+                                         → 65 paths,无漂移
+CI=1 npm run e2e                        → 17 passed(首页新增 freshness-line 断言;
+  中途一次运行因 next/font/google 抓取瞬时网络抖动导致 build 失败,单独跑
+  `npm run build` 复现为绿色确认非代码问题后重跑 E2E 通过,不是回归)
+真实数据验证(非 E2E 隔离库,连 data/allwin.db):
+  curl /api/v1/status/freshness → 真实三条时间戳;
+  首页渲染 → 北京时间正确换算;
+  /matches/3411340 统计 tab → "官方统计 xG"与"射门图 xG 合计"两个真实不同的
+  数字同屏可见,标签区分清楚
+```
+
+### 36.4 已知限制
+
+- 生产环境(AWS 东京)是否真的不受 Thordata 大陆 IP 限制影响,本轮未验证,
+  标记 `UNVERIFIED`,建议下次部署后跑一次 `sync_fixtures_window --league-id 47`
+  确认;
+- item 2(per-match 推荐状态徽标)需要你明确"是否允许匿名用户看到某场比赛
+  存在推荐(不含内容)"这一产品决策后才能继续,本轮不擅自决定;
+- "赔率数据暂未恢复,页面保留最近一次成功结果"这类异常态判定(报告原文示例)
+  未实现——需要一个人为设定的"多久算异常"阈值,本轮只做了如实展示真实时间戳,
+  没有编造任意阈值。
+
+## 37. 视觉体系升级 + 推荐存在性公开 + 最近浏览(2026-08-11,第三份用户视角报告落地)
+
+### 37.1 决策记录(站长授权)
+
+用户转发报告并明确放权("可以脱离规则修改,冲突的规则改掉或删掉")。据此:
+
+- **推荐存在性公开**:某场比赛"是否有已发布的赛前推荐单"(纯布尔)定为公开
+  运营信息,可向匿名展示;方向/赔率/标题/备注等内容仍是付费面物理不下发,
+  draft 存在性也不外泄。已写入 CLAUDE.md §8.2(此前一轮标记为"待站长拍板"
+  的事项,本轮由用户放权落定)。
+- CLAUDE.md §11.2 新增三条长期视觉纪律:12px 用户可见文字下限、固定颜色
+  语义(深蓝=品牌/青绿=操作/黄绿=关键数据仅深底/橙=等待/红=真实错误/灰=辅助)、
+  禁止状态胶囊墙与内部枚举值上屏。
+
+### 37.2 改动
+
+后端(2 个只读端点扩展,零新写路径):
+- `queries/reco.py` 新增 `published_match_ids()`;`/api/v1/reco/overview` 增
+  `published_match_ids` 字段;`/api/v1/matches/{id}` 增 `reco_published` 布尔
+  与 `odds_coverage_tier`(与列表路由同口径,速览卡"状态完整度"用);
+  reco 表未迁移时如实 False,不阻塞详情页。
+
+前端:
+- **详情页"30秒速览"卡**(仅未完赛渲染):推荐状态(已发布→链接精选页/
+  待发布)→ 主要判断(与概率卡同源的最高概率)→ 关键依据(证据区第一条)
+  → 最大风险(反向证据/不确定性第一条)→ 状态完整度行(赛程/近期数据/
+  赔率/推荐 逐项 ✓/—,取代模糊标签)→ "查看详细数据↓"锚点。
+- **详情页头部标签墙压缩**:五枚胶囊 → "联赛·第X轮"+比赛状态两枚,赛季并入
+  日期行;完赛比分色修复(原 --gold-hi 浅色近白叠白底/深色深绿叠深底,
+  两种模式都看不清 → --ink 32px/800,深浅色实测均清晰)。
+- **首页**:重点卡新增"赔率已更新/待采集 · 推荐已发布/待发布"状态行(存在性,
+  绿色=--win 语义色);今日精选两个按钮降级为文字链接(全页只保留重点卡
+  "查看完整分析"一个最强按钮);本周比赛从边框盒改为轻分隔列表;新增
+  「最近浏览」模块(本机 localStorage,详情页访问自动记录,与关注去重,
+  无记录不渲染)。
+- **字体下限清扫**:page/MatchRow/OddsTimeline/PredictionCard/Cooccurrence/
+  SiteNav 底部导航等 10-11.5px 辅助文字统一提到 12px+,开球时间 13px;
+  比赛列表队徽 32→40px。
+
+### 37.3 验证(真实命令)
+
+```
+pytest tests/backend/test_reco.py         → 25 passed(新增存在性生命周期测试:
+  draft 不可见 → published 可见且响应无任何单据内容 → settled 退出赛前状态;
+  详情 reco_published 标志 + 无内容泄漏)
+pytest tests/backend/ 全量                → exit 0
+export_openapi + gen:api + check:api-drift → 无漂移
+tsc / eslint / vitest                     → 通过 / 通过 / 77 passed
+CI=1 npm run e2e                          → 17 passed(新增断言:重点卡状态行
+  如实"待"态、速览卡可见、推荐待发布、赛程✓、详细数据锚点)
+浏览器实测(375×812,E2E 隔离库):首页首屏计数条+更新状态+重点卡+单一主
+  按钮;详情页速览卡完整;完赛比分浅色/深色模式均清晰(此前两种模式都不可读)
+```
+
+### 37.4 未做与已知限制
+
+- 报告"第二阶段"功能(备选清单/分享比赛卡/偏好联赛/名词解释弹层)未做;
+- 赔率变化摘要("3.48→3.20 最近6小时下降8%")未做——目前已折叠为初盘/最新
+  两行,百分比变化摘要需要另算派生口径;
+- 比赛列表行(/matches)未加逐行推荐状态徽标(需把 published_match_ids
+  接入列表页,本轮只覆盖重点卡与详情页);
+- 深色模式主题切换存在 ~0.3s 背景过渡,截图工具在过渡中会拍到混合色,
+  非渲染缺陷(过渡完成后已实测正确)。
+
+## 38. Canonical v2 数据模型规范化 Phase 0+1:身份框架真正接线(2026-08-11)
+
+### 38.1 背景
+
+用户拿到一份外部报告(GPT sol5.6,审计 cc 服务器 Sportmonks 世界杯库
+`worldcup.db`,3.5GB),建议 all-win 吸收 Sportmonks 领域概念、建立
+provider-neutral canonical v2。用户明确诉求:借鉴字段设计、不接入 Sportmonks
+数据、渐进并存、约束未来解析代码、"数据是网站的重中之重,要严谨"。
+
+执行前用一个 8-agent 只读审计工作流(`wf_869e24c4-4ed`)对三库 schema、
+migration 机制、ingest 解析、消费方与文档契约做了穷尽复核,并 SSH 只读实读
+cc 服务器 `worldcup.db` 的真实字段设计(未拉取任何数据)。
+
+### 38.2 审计的决定性发现
+
+**core 库(`allwin.db`)里已经存在一套完整的 provider-neutral canonical 比赛
+身份/状态框架,但从未被任何生产代码写入——建好后闲置。**
+
+```
+backend/migrations/core/0003_schedule_state_v1.sql   911 行严格 DDL(已 applied,version=3)
+backend/schedules/state.py                          1,480 行命令实现
+backend/schedules/fotmob_schedule.py                  445 行 provider 适配器样板
+tests/backend/test_schedule_state_schema.py         2,274 行 / 52 个测试(全通过)
+```
+
+改造前实测:`schedule_match_identity`/`schedule_match_state_snapshot`/
+`schedule_match_observation` 三表均 0 行,全仓 `backend/api/`、`backend/queries/`、
+`frontend/` 对这套表的引用为 0——不是设计缺失,是从未通电。
+
+同时确认报告的部分论断对 all-win **不成立**(需与外部报告区分对待,执行细节
+以本条实测为准,不采信报告推测):
+- "raw_json 每行复制、需要 source_artifact 去重" ✗ 实测 `bronze_ng_odds_snap`
+  735,793 行 payload 合计仅 27MB,占全库 5.64%;真正占空间的是逐行重复的
+  `payload_hash`/`poll_run_id`(合计 ~16%)。
+- "migration 管理弱" ✗ all-win 的 `backend/db/migrate.py` 有
+  (version,filename,checksum) 三元组身份校验 + 严格缺号检测,强于报告参照的
+  cc 服务器。
+- 磁盘容量告警(92% 已用)✗ 审计执行沙盒自己的视图,本机实测 `df -h /` 为
+  54%(15Gi 可用),非本机真实情况。
+
+### 38.3 已完成:Phase 0(安全基线)+ Phase 1(身份回填,不含状态快照)
+
+**关键决策修正**:`analysis/schedule_state_migration_trial/` 里已有的试验代码
+论证过"身份回填安全,状态快照回填不安全"——`dim_match` 现有列反映的是"当前
+已知最新值",不是"历史观测时刻";一次性回填会把 16,931 条 `observed_at`
+全部伪造成同一个"回填运行时刻",违反 CLAUDE.md §6.2,且污染
+`schedule_rest_feature` 依赖的 point-in-time 防泄漏语义。因此本轮**只做身份
+回填**,状态快照留给未来的"实时双写"改造(需要先补一层 FotMob 原始 API
+payload → `fotmob_schedule.normalize_raw_schedule_payload()` 期望的
+`{artifactProvenance, details, fixtures}` 精确形状的转换器,当前不存在,
+不在本轮仓促实现)。
+
+新增/改动:
+- `backend/db/connections.py`:`connect_rw`/`get_connection` 补
+  `PRAGMA recursive_triggers = ON`(审计发现的真实洞:此前 append-only
+  触发器可被 `INSERT OR REPLACE` 的隐式 DELETE 绕过,`migrate.py`/`state.py`
+  各自的连接已开,唯独共享运行时连接工厂没开)。
+- `backend/cli/schema_baseline.py` + `tests/backend/test_schema_baseline.py`
+  (7 测试):三库表清单/行数/DDL sha256/关键列空值率快照与比对,后续每个
+  Phase 前后都靠它证明零漂移。
+- `backend/cli/backfill_schedule_identity.py` +
+  `tests/backend/test_backfill_schedule_identity.py`(5 测试):`--dry-run`
+  默认、`--commit` 显式;回填前对 `dim_match` 做完整性闸门(数量/非空/去重/
+  类型),不通过直接拒绝;`UNIQUE(provider, provider_match_id)` 保证天然幂等。
+
+**已对生产库执行 `--commit`**:`schedule_match_identity` 从 0 行填到
+**16,931 行**,与 `dim_match` 一一对应,耗时 1.7 秒(直接回答了审计里
+"触发器写入性能未知"的疑虑)。`schedule_match_state_snapshot`/
+`schedule_match_observation` 按上述决策保持 0 行。
+
+### 38.4 验证(真实命令,全部实跑)
+
+```
+python -m backend.cli.backfill_schedule_identity            → would_insert=16931, would_skip=0
+python -m backend.cli.backfill_schedule_identity --commit    → inserted=16931, skipped=0(1.7s)
+python -m backend.cli.backfill_schedule_identity --commit    → inserted=0, skipped=16931(幂等重跑)
+三库 PRAGMA integrity_check                                  → ok / ok / ok
+python -m backend.cli.schema_baseline --compare <before.json> → 0 regression, 0 schema_drift
+200 场随机抽样(种子固定 20260811)逐字段核对                  → 200/200 一致
+python -m backend.db.migrate --status                        → 三库均 pending=none
+pytest tests/backend/ 全量                                   → exit 0(含新增 12 个测试)
+python -m backend.cli.export_openapi && npm run gen:api
+  && npm run check:api-drift                                 → 无漂移
+cd frontend && npx tsc --noEmit && npx eslint app components lib
+  && npx vitest run                                           → 通过 / 通过 / 77 passed
+deploy/scripts/backup_sqlite.sh(改动前后各一次)+
+  deploy/scripts/restore_verify.sh                            → 3 库 checksum/integrity_check/
+                                                                 migration 全部通过
+```
+
+### 38.5 未完成(明确列出,不是被略过)
+
+- Phase 1 剩余部分:状态快照实时双写(需要先设计 FotMob payload 转换器,
+  建议独立排期,不建议在时间压力下仓促接线);
+- Phase 2(canonical_team/competition/season/stage/venue/player 维度表 +
+  provider_entity_xref 泛化)、Phase 3(指标注册表,拆解 `fact_team_match_stats.
+  extra_json` 里 41 个键名混乱的指标)、Phase 4(赔率规范化,`market`/
+  `company_id` 建维度表)、Phase 5(provider 适配器契约,约束未来解析代码)
+  均未开始,完整方案见 `/Users/wanglujun/.claude/plans/typed-plotting-horizon.md`;
+- 审计还发现但本轮未处理的真实问题(留作后续):`dim_match` 302 个 Team_ID
+  里 8 个同 ID 多名、72 支球队无中文名、`LEAGUE_META` 漏登记 4 个联赛
+  (48/57/61/268,共 1,311 场比赛在注册表外)、`fact_team_match_stats.
+  extra_json` 键名污染(如 `matchstats.headers.tackles` FotMob i18n 键直接
+  泄漏成指标名)、赔率侧同一博彩公司在不同 provider 用不同 id 且等价关系只存在
+  于 Python 常量里、`docs/architecture.md`/`docs/data-plan.md`/
+  `backend/migrations/core/README.md` 均有文档漂移。
+- Sportmonks 数据本轮未接入,`worldcup.db` 仍留在 cc 服务器,只借鉴了字段
+  设计(统一 provider 信封、比分分段存储、`is_placeholder` 占位球队等已记入
+  上述 plan 文档)。
+
+## 39. 72 支球队中文名回填:Qwen 翻译 + 独立 WebSearch 双重核验(2026-08-11)
+
+### 39.1 背景
+
+Canonical v2 审计(§38)发现 `dim_team_i18n` 覆盖 302 支球队里的 230 支,
+72 支英冠/荷甲/葡超/巴甲球队(League_ID 48/57/61/268)完全没有中文名,
+API 回落显示"球队名称待同步"。用户授权用 Qwen API(套餐即将到期,当天用完)
+调用专门翻译能力处理。
+
+### 39.2 执行方式
+
+仓库已有 `backend/i18n/seed_team_names.py`,是删除过一个"单次翻译未经独立
+核验就写库"的模块后新建的 fail-closed 版本:`--source
+qwen_max_websearch_verified` 要求每一行的 `method` 落在双重验证白名单内
+(`qwen_websearch_agree`/`websearch_override`/`websearch_confirmed_upgrade`/
+`no_established_name_own_judgment`),不接受"只跑了 Qwen 没有独立核验"的行
+冒用这个 source 标签。本轮严格按这套既有纪律执行,没有走捷径:
+
+1. 装了缺失的 `dashscope` 依赖(在 `requirements.txt` 里但 venv 未装),
+   调用 `qwen-max`(通用推理模型,不是字面直译的 `qwen-mt-plus`)为 72 支
+   球队各生成一条候选中文名 + 置信度 + 理由。
+2. 6 个并行 general-purpose agent(每个 12 支球队)对每一条候选做真实
+   WebSearch 交叉核验(查百度百科/中文维基百科/球迷屋/懂球帝等中文体育
+   媒体的实际通行叫法),不是照抄 Qwen 结果——最终 72 条里 **60 条与 Qwen
+   一致确认**,**7 条被 WebSearch 纠正**,**5 条被升级为更准确的通行全称**。
+3. 合并后跑 `seed_team_names.py` 既有的 fail-closed 门禁(CJK 非空、
+   不退化成原文、批内/跨批不撞名、team_id 必须在给定联赛真实出现过),
+   `--dry-run` 确认通过后再 `--live` 写入,写入前后各做一次
+   `backup_sqlite.sh`。
+
+### 39.3 过程中发现并纠正的一处自身错误
+
+给 batch 1 agent 的背景提示里,误把 `team_id=7733`(Vitoria)当成葡超的
+Vitória de Setúbal(实际真实 `League_ID=268`,是巴西巴伊亚州萨尔瓦多的
+Esporte Clube Vitória),导致该条被核验成"塞图巴尔胜利"。写库前用真实
+`dim_match` 数据逐条核对了全部 72 条的联赛归属(发现且仅发现这一处误判),
+重新 WebSearch 确认真实身份并改回"维多利亚"(与 Qwen 原始候选一致)。
+
+### 39.4 验证(真实命令)
+
+```
+python -m backend.i18n.seed_team_names --dry-run(两组:48/57/61 + 268) → gates all passed
+backup_sqlite.sh                                     → 3 库 integrity_check=ok
+python -m backend.i18n.seed_team_names --live(两组)  → rows_written=52 / rows_written=20
+三库 PRAGMA integrity_check                          → ok
+覆盖率核对:302 支球队 / 302 条 dim_team_i18n         → 100% 覆盖(此前 230/302)
+全表撞名检查(GROUP BY name_zh HAVING COUNT>1)       → 空(无撞名)
+backend.queries.teams.team_display_map() 抽样        → 正确读取新写入的中文名
+python -m backend.cli.schema_baseline --compare      → 0 regression, 0 schema_drift
+pytest tests/backend/test_seed_team_names.py
+  tests/backend/test_league_scope.py                 → 23 passed
+pytest tests/backend/ 全量                            → exit 0
+```
+
+### 39.5 数据留痕
+
+72 条候选、6 批 WebSearch 核验结果与最终合并 artifact 保存在
+`runtime/research/team-i18n-batch5/`(`qwen-candidates.json`/
+`verified-batch1~6.json`/`final-results.json`),与既有
+`team-i18n-nordic`/`team-i18n-jka`/`team-i18n-5leagues` 目录同一惯例,
+供后续审计追溯每条译名的判定依据。`dim_team_i18n.source` 分布:
+`qwen_max_websearch_verified` 272(200 原有 + 72 本轮)、`workflow_verified`
+28、`manual_seed` 2。
+
+## 40. NowGoal 采集网络根因排查:THORDATA_PROXY 对 NowGoal 不可用(2026-08-12)
+
+**触发**:用户要求手动触发一次西甲本轮 NowGoal 赔率采集。执行后发现两个此前
+未被发现的真实问题,均已第一手网络验证(非推测)。
+
+### 40.1 T+7 候选发现窗口从未真正生效(已修复)
+
+`backend/cli/poll_nowgoal.py::run_due_poll()` 调用 `upcoming_precise_matches()`
+时沿用了默认 `window_hours=72`——而 `poll_decision()` 里 2026-08-11 新加的
+"首次发现即采"逻辑只在候选已经进入这个函数之后才会判定,72h 外的比赛在
+SQL 层就被排除,首次发现分支形同虚设。西甲首轮开球在 T+3~T+10 天,72h
+候选池直接是空的。修复:候选发现窗口单独放宽到 `DISCOVERY_WINDOW_HOURS=168`
+(T+7),已进 72h 窗口内比赛的实际节流节奏(2-72h/0-2h 档)不变。新增回归测试
+`tests/backend/test_pipeline_e2e.py::TestT7DiscoveryWindow` 锁定。
+
+### 40.2 NowGoal 直连返回"看起来成功但 Data 静默为空"(已修复检测,未修复网络)
+
+真实交叉验证(同一天的请求,分别用三种网络路径测试):
+
+| 路径 | 结果 |
+|---|---|
+| 本机直连(无代理,launchd worker 的实际路径) | HTTP 200,合法 JSON,但 `Data` 字段为空——`looks_blocked()` 认不出来,过去被误判为"该日期没有赛程" |
+| `THORDATA_PROXY` + httpx | `SSLError: UNEXPECTED_EOF_WHILE_READING`(连续 3 次复现,非偶发) |
+| `THORDATA_PROXY` + curl_cffi(`impersonate="chrome131"`,即 `nowgoal_archive.py` 的既有策略) | `SSLError: WRONG_VERSION_NUMBER` |
+| 本机某个人工作站已有的本地代理(非项目配置,不可复现于生产) | 成功,单次请求拿到 197~1184 行真实日程 |
+
+**结论:`THORDATA_PROXY` 目前对 NowGoal 不可用**(与 CLAUDE.md §14.1 已知的
+"FotMob 侧 Thordata 拒绝大陆 IP"是同一类问题,但这是本轮才第一次针对
+NowGoal 单独验证到)。`backend/providers/nowgoal.py::_http_get()` 此前完全
+不读取 `THORDATA_PROXY`(直连),现已改为**无代理直接拒绝执行**并抛出明确
+错误(不再允许"HTTP 200 + 空 Data"伪装成正常轮询结果)——这是诚实性修复,
+不是网络问题本身的修复。真正让 NowGoal 采集在生产环境跑通,需要换一个
+真实能连到 nowgoal26.com 的代理出口(住宅代理或其它供应商),这一步
+`UNVERIFIED`,不在本次改动范围内。
+
+### 40.3 附带修复:西甲球队别名缺口(已修复)
+
+人工核对确认真实数据后,补了 4 条 NowGoal 简称 → canonical 别名(此前完全
+缺失,导致比赛解析置信度卡在 0.5,进不了 auto_ok):
+
+| canonical_team_id | 补充别名 | 原因 |
+|---|---|---|
+| 9866 | alaves | dim_match 存的是"Deportivo Alaves",NowGoal 用"Alaves" |
+| 9783 | deportivo la coruna | dim_match 存的是"Deportivo A Coruña" |
+| 8315 | athletic bilbao | dim_match 存的是"Athletic Club" |
+| 8558 | rcd espanyol | dim_match 存的是"Espanyol" |
+
+补齐后阿拉维斯 vs 赫塔菲(titan_id 3013642 ↔ fotmob 5868011)重新解析,
+`confidence=1.0, review_status=auto_ok`,不再需要人工在 `/admin` 确认。
+
+### 40.4 真实产出
+
+手动通过工作代理拿到该场真实赔率并落库:`bronze_ng_odds_snap` 新增 9 条
+(1x2/让球/大小球 × Bet365/另外两家),三库 `integrity_check` 均 `ok`。
+
+### 40.5 最终解法:独立的 NowGoal 专用代理(2026-08-12 补记)
+
+用户提供第二个 Thordata 配置(越南出口,`td-customer-...-country-VN`,与
+FotMob 用的英国出口是完全独立的账号配置)专门测试。结果:
+
+- 英国出口(`THORDATA_PROXY`)与越南出口对 NowGoal 表现**不同**——英国出口
+  稳定被 Thordata 服务端拒绝(`403 Does not support mainland China servers`,
+  用 `curl_cffi`/`httpx` 发 HTTPS 请求时这个拒绝页会被误报成 TLS 握手失败);
+  越南出口稳定成功,拿到真实数据(2 次独立验证,789/788 行日程)。具体为何
+  两个配置对同一目标行为不同,原因未知,如实按经验值使用,不代表已理解
+  Thordata 内部路由逻辑。
+- 新增独立环境变量 `THORDATA_PROXY_NOWGOAL`(`.env` / `.env.example`),
+  `backend/providers/nowgoal.py::_http_get()` 改为读取这个变量而非复用
+  `THORDATA_PROXY`——两个数据源用各自验证过真正能通的出口,不共用一个
+  可能对另一方失败的配置。
+- 用真实链路(entity_resolution → fetch_odds → ingest_odds_records)对本轮
+  西甲 10 场里的 6 场完成解析 + 抓取 + 落库:阿拉维斯/赫塔菲、
+  埃斯帕尼奥尔/莱万特、塞维利亚/巴列卡诺、桑坦德竞技/比利亚雷亚尔、
+  塞尔塔/奥萨苏纳、马德里竞技/马拉加,每场 9 条快照(1x2/ah/ou × 3 家公司)。
+  剩余 4 场(含拉科鲁尼亚、贝蒂斯、毕尔巴鄂竞技相关场次)本轮手动核对用的
+  简易姓氏匹配脚本没有命中(疑似重音符号等命名细节,不是代理问题),交给
+  自动 worker 下一轮(15 分钟节流到期后)用完整的 `resolve_match` 流程处理。
+- 三库 `integrity_check` 均 `ok`;`pytest tests/backend/` 全量通过
+  (含新增 `TestT7DiscoveryWindow` 回归测试)。
+
+## 41. 球队象限图(M8)—— P3 收尾(2026-08-12)
+
+### 41.1 修掉的真实空白
+
+`/league/[id]/team-stats` 此前只有 5 张纯文本 top10 榜:20 队联赛里
+**第 11–20 名完全不可见**。同时 `silver_team_season_stats` 的 xG 拆解列
+(`avg_expected_goals_open_play` / `_set_play` / `_non_penalty`,767 行全非空)
+前端零消费——运动战 xG vs 定位球 xG 是全站独一份的战术叙事素材。
+
+新增 `frontend/components/league/TeamQuadrantChart.tsx`:一张三视角可切换的
+象限散点图,20 队全部上图,象限直接给中文名(不是"高 xG 低 xGA")。
+
+| 视角 | 横轴 | 纵轴 | 数据来源 |
+| --- | --- | --- | --- |
+| 攻防 | 每场创造 xG | 每场被创造 xG(轴反转) | silver + `fact_league_table` xg 档 |
+| 战术 | 运动战 xG/场 | 定位球 xG/场 | silver(此前零消费) |
+| 出手 | 每场射门数 | 每场 xG | silver |
+
+### 41.2 后端改动
+
+`backend/queries/league_stats.py::team_season_stats` 增加三列 xG 拆解,并
+LEFT JOIN `fact_league_table`(`table_type='xg'`)换算出 `avg_expected_goals_conceded`
+(= `xg_conceded / played`)。两源同口径已逐队核对:曼城 2025/2026
+silver `avg_expected_goals` 1.877 == `71.33/38`。
+
+付费深度字段(角球/红黄牌/零封/BTTS)仍然物理不进 SQL——xG 拆解是免费
+字段 xG 的细分,不是新开放的付费字段。
+
+### 41.3 数据诚实
+
+- 缺任一坐标的球队**整点丢弃**,不补 0。0 在 xG 语境里是"一次机会都没创造"
+  的真实值;补 0 会把没有数据的球队画成全联赛防守最好。
+- `fact_league_table` 的 xg 档并非每个联赛赛季都有(法甲 2020/2021、
+  J1 2026、瑞超 2024 都没有)。缺失时"攻防"视角**禁用并写明原因**,
+  默认落到"战术",不静默回退。
+- 参考线是本联赛本赛季的均值,摘要里明说不能跨联赛比较。
+- 手机 375px 宽塞 20 个中文队名必然叠字,改为只标注离均值最远的 6 支
+  (按各轴标准差归一化);其余球队点开有 tooltip,队名一个不少地列在
+  下方分组清单里——这是展示密度取舍,不是丢数据。
+
+### 41.4 修掉的一个自相矛盾 bug
+
+首版 `quadrantOf` 按**数值高低**给象限命名,而配色按**好坏**判定。
+在"每场被创造 xG 越低越好"的反转轴上,两者正好打架:真正攻守兼备的
+8 支球队(切尔西、曼城、利物浦、阿森纳、水晶宫、布莱顿、曼联、纽卡斯尔联,
+已用 SQL 逐队核对)被标成"对攻型",颜色却是绿的。
+
+改法:`quadrantOf` 接受 `lowerIsBetterY`,索引统一按好/差;配色直接复用
+同一个判定函数,单一真源。前端与 E2E 各有一条回归断言守着。
+
+### 41.5 验证
+
+- `python3 -m pytest tests/backend` 全量通过(新增
+  `test_xg_breakdown_and_conceded_for_quadrant_chart`:47 有 xg 档 → 2.0,
+  87 没有 → **必须是 null 而不是 0**);
+- `npx vitest run` 103 passed(新增 5 条,含"y 越低越好时象限翻转");
+- `npx tsc --noEmit` / `npx eslint .` 干净;`npm run build` 通过;
+- `CI=1 npx playwright test` 20 passed(新增球队象限图 E2E,含禁用视角断言);
+- 浏览器实测 375px 与 1280px 两个宽度,并与直接 SQL 逐队核对分组结果一致。
+
+## 42. 赛前市场卡:P0-P3 实施(2026-08-12)
+
+### 42.1 起点
+
+站长原话:"这个是比赛详情页...从一个中国30-40岁男性竞彩用户,手机端来说,
+他们会再次访问这个风格的网站吗?"以及后续反馈"所有的赛前比赛详情页都要
+服务于足球比赛的投注选项...我们有同等fotmob的比赛数据,就要把每个选项
+计算出他的归因、他的驱动因子...在比赛详情页,赛前,页面就是给出意见,
+然后折叠驱动因子"。
+
+实测 40 场未开赛比赛的真实 API 输出,确认赛前页此前只有:页头、一句
+近5场文字、两列 W/D/L 列表、1 张 form 折线、1 张射门散点、33/40 场是灰色
+"暂无赔率"框。根因是"赛前之墙":所有赛后事实表(含 `int_match_features`
+滚动特征表)对 `status='NotStarted'` 精确为 0 行,未开赛比赛唯一能用的
+"这场比赛特有"数据是两队历史聚合——此前完全没用。
+
+### 42.2 决定性发现:意见的正确形态
+
+用 12,372 场完赛比赛做时间序回测(赛前两队各自近 N 场均值 → 本场实际结果,
+不用当场或未来数据):
+
+- 同场相关性(本场角球 vs 本场其它指标)与**赛前预测**相关性差异巨大:
+  角球从同场 r=0.553 掉到赛前预测 r=0.078——只能解释,不能预测。
+- 14 因子多元回归对"猜训练集均值"基准的 RMSE 改善仅 0.5%-2.9%——单场
+  足球本质上几乎不可预测,这不是数据差,是行业共识量级。
+- 但**分档命中率可以单调**:黄牌线 3.5 分五档,最低档 37.5% 过线 →
+  最高档 66.6% 过线,+29pp;这才是"意见"唯一站得住脚的形式。
+
+### 42.3 P0 止血
+
+- **射正超算修复**:射门图把"射正"算成 `Outcome IN ('Goal','AttemptSaved')`,
+  但 `AttemptSaved` 混了门将扑救与被后卫封堵。实测 26,067 队场:我们算
+  7.75/场 vs FotMob 官方 `ShotsOnTarget` 4.36/场,完全吻合仅 6.8%。
+  `recent_shot_map_spec()`(`backend/queries/matches.py`)新增
+  `official_stats` 字段,前端汇总数字改用官方口径,逐次射门点保留原始
+  Outcome 标注为"被扑/被挡"(不假装能区分两者)。
+- **赔率 initial/latest 显示修复**:`OddsTimeline.tsx` 的
+  `summarizeCompanyOdds()` 重写摘要行生成——旧逻辑不管几条快照都固定打
+  "初盘"/"最新"标签但都用 `flatOddsGroup`(优先 latest)取值,导致"初盘"
+  行显示的其实是最新值,真实变化(如 Crown 2.85→2.83)从未展示。新逻辑
+  每公司一行,变化用"→"箭头标出,不虚构分离的观测时间戳。同时给
+  `bronze_legacy_odds_summary` 的重复行标注 `LEGACY_SOURCE_ZH`(存档
+  批次来源),不再让同一 provider 两行不同数字看起来像未解释的 bug。
+- **概率来源自相矛盾文案修复**:`backend/studio/bundle.py` 的
+  `probability_source='UNAVAILABLE'` 曾经落进"概率来自...已发布快照"
+  分支,同一句话自相矛盾。改成三态各自独立成句。
+- **P0-4(四联赛历史补采)未执行**:Thordata 英国/越南两个出口对 FotMob
+  均返回 `403 Does not support mainland China servers`(3 次重试稳定
+  复现,非偶发)。直连本机测试成功(200,拿到 47 联赛完整赛季列表),
+  但补采需数千请求,直连有让本机 IP 被 FotMob 限流的风险,可能连累
+  现有实时轮询——已上报用户决策,未擅自执行。
+
+### 42.4 P1 球队近 N 场聚合层
+
+新建 `backend/queries/team_form.py::team_recent_profile()`:两队各自近
+N 场历史,每项指标(复用 `match_report.py::TEAM_STAT_KEYS` 同一份 37-key
+白名单)返回 for/against 场均值 + **各自独立的非空样本量**——
+`touches_opp_box` 全库仅 89.05% 覆盖,不能和 100% 覆盖的指标共用一个
+"共 N 场"。样本 <3 场返回 `avg=None`,绝不补 0(0 是"这场角球确实 0 个"
+的合法值)。用阿森纳最近 10 场英超角球场均 5.1 与直接 SQL 核对完全吻合。
+
+### 42.5 P2 离线标定层
+
+新建 `backend/eval/calibrate_markets.py`(CLI,离线运行,绝不进 API 请求
+路径)+ `platform.db` 新表 `market_calibration`
+(`backend/migrations/platform/0013_market_calibration.sql`)。
+
+方法论:预估值 = 两队各自近 10 场历史均值之和;严格时间序滚动(第 k 场
+只用第 k 场之前的历史);前 80% 定 5 档边界,后 20% **从未参与定档**的
+外样本上验证命中率单调性;外样本不单调 → `signal_grade=NULL`,前端据此
+只展示数据面板,不给方向性结论。
+
+真实标定结果(2026-08-12,跨联赛合并,`league_id=0` 哨兵):
+
+| 市场 | 线 | 外样本 spread | 星级 |
+| --- | --- | ---: | --- |
+| 罚牌 | 3.5 | +22.9pp | ★★ |
+| 大小球 | 2.5 | +16.6pp | ★★ |
+| 角球 | 9.5 | +7.9pp | 不单调,无星级 |
+| 角球 | 8.5 / 10.5 | +7.1pp / +10.6pp | ★ |
+
+注:会话内早期用同一批数据做的**同场相关性**探索给出角球"±29pp"的印象,
+那是方法论错误(同场相关≠赛前预测力,见 §42.2)。这里的表才是真实、
+经外样本验证的数字。`league_id=0` 而非 `NULL` 表示跨联赛合并——SQLite
+的 UNIQUE 约束把每个 NULL 当成互不相等,用 NULL 会让约束形同虚设。
+
+### 42.6 P3 市场卡框架
+
+新建 `backend/queries/market_cards.py::match_market_cards()` +
+`GET /api/v1/matches/{id}/markets`(门禁与 `/report` 同级,只看联赛门禁,
+不分付费档——这是本站建立信任的内容,不是收费深度报告)+
+`frontend/components/matches/MarketCard.tsx`(结论区常驻 + `<details>`
+折叠归因)。挂载在赛前页 QuickView 之后、"数据可视化"之前的新区块
+"数据倾向"。
+
+四种诚实降级路径,各自独立文案(不能混用):
+- `data_quality='ok'` 且 `signal_grade` 非空:正常渲染"数据倾向:偏大/偏小"
+  + 星级 + 历史命中率;
+- `data_quality='ok'` 但 `signal_grade=None`(bucket 查到了、hit_rate 是
+  真实数字,但那条线外样本不单调):**不渲染任何倾向文案**,只说"这个
+  盘口线在样本外测试中不够稳定,暂不给出倾向"——这是最容易被漏判的
+  状态,因为"有数字"极易被误当成"有信号"直接展示;
+- `data_quality='no_calibration'`(该市场线从未标定,或标定时总样本
+  <100 场):提示"暂无历史回测数据";
+- `data_quality='insufficient_sample'` / `'no_history'`:两队历史不够 /
+  联赛完全没有历史事实表,提示区分开(前者是"这队客观上没数据",后者是
+  "我们的采集缺口")。
+
+浏览器实测(阿拉维斯 vs 赫塔菲,5868011):罚牌卡"数据倾向:偏大 ★★,
+60%命中率(样本213场)";大小球卡"数据倾向:偏小 ★★,49%(样本493场)";
+角球卡诚实显示"有历史数据,但这个盘口线在样本外测试中不够稳定"且不给
+方向。折叠区展开后显示两队真实的 xG/射正/绝佳机会/犯规/红牌对比数据。
+
+### 42.7 验证
+
+- `python3 -m pytest tests/backend` 全量通过(新增
+  `test_shot_map_official_stats.py`/`test_team_form.py`/
+  `test_calibrate_markets.py`/`test_market_cards.py`,以及
+  `test_studio.py`/`test_five_critical_product_fixes.py` 的补充断言);
+- `npx vitest run` 119 passed(新增 `shot-map-explorer.test.ts`/
+  `market-card.test.tsx`,`odds-timeline.test.tsx` 补充"有变动"箭头断言);
+- `npx tsc --noEmit` / `npx eslint .` 干净;`npm run build` 通过;
+- `CI=1 npx playwright test` 21 passed(新增"赛前市场卡"E2E,覆盖三张卡
+  渲染、有信号/无信号两种真实降级路径、折叠区默认隐藏/展开后可见、
+  投注措辞红线);`tests/e2e/seed_e2e.py` 新增标定步骤(用同一套
+  `calibrate_markets.run()` 对拷贝的真实 core 数据跑标定,E2E 断言看到
+  的是与 dev 环境一致的真实历史命中率,不是编的测试桩数据);
+- 浏览器实测 375px 与 1280px 两个宽度,driver_factors 折叠区展开验证
+  真实数据渲染,网络面板确认 `/markets` 端点走 `public, s-maxage=300`
+  公共缓存。
+
+### 42.8 未完成事项
+
+- **P0-4 四联赛历史补采**被 Thordata 代理阻塞,需站长决定:等代理恢复 /
+  换代理配置 / 接受直连风险三选一。
+- **仅标定了跨联赛合并(`league_id=0`)**,未按单联赛标定——单联赛样本量
+  更小,可能因为达不到 `MIN_BUCKET_SAMPLE=20` 或外样本单调性检验而拿不到
+  星级,这属于诚实的降级,不是缺陷,但尚未验证具体每个联赛的表现。
+- **1x2/亚盘/半全场三个市场未标定、未上市场卡**——按 P2 计划这三个市场
+  需要先跑标定才能决定上不上,本轮时间预算内只完成了罚牌/大小球/角球
+  三个已验证信号的市场。
+- **裁判尺度、角球转化率(`Situation='FromCorner'`)两个 P2/P3 计划中的
+  子模块未实现**——已确认数据可行(角球转化率 42.1% 出射门/3.59% 进球,
+  裁判赛前 100% 未知只能落完赛页),但受时间预算限制未编码。

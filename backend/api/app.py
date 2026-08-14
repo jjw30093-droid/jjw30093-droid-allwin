@@ -67,6 +67,7 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
         "routes_public",
         "routes_media",
         "routes_member",
+        "routes_reco",
         "routes_admin",
         "routes_admin_odds",
         "routes_studio",

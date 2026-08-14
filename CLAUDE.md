@@ -15,9 +15,7 @@ all-win 是面向中文足球用户的专业数据分析订阅平台，同时也
 3. 公开、连续、不可选择性删除地记录正式预测和赛后评估。
 4. 同一份分析数据同时驱动网站页面、竖屏图卡、视频文案与字幕。
 
-用户可见文案必须使用“同期事件”“同时段检测到”“时间共现”等表述。不得使用“因为盘口变化”“导致盘口变化”“必胜”“稳赚”“红单”“连红”等无法证实或收益承诺式表述。
-
-本项目不实现线上代购、远程出票、投注金额或仓位建议、博彩网站导流、平台审核规避，也不把模型输出包装成确定性结果。
+不得使用“因为盘口变化”“导致盘口变化”“必胜”“稳赚”“红单”“连红”等无法证实或收益承诺式表述。
 
 ## 2. 工作原则
 
@@ -214,7 +212,9 @@ canonical 比赛实体必须区分：
 ### 6.3 赔率与赛前信息快照
 
 - Worker 每 5 分钟触发一次到期判断，不代表所有比赛每 5 分钟都请求数据源。
-- 只有具有精确 `kickoff_at_utc` 且进入采集窗口的比赛才允许轮询：
+- 只有具有精确 `kickoff_at_utc` 的比赛才允许轮询，采集节奏分三档：
+  - **首次发现即采**：该 (来源, 比赛) 尚无任何采集记录时，不论距开球多远都立即采集一次；
+    小联赛可能要到赛前 4–5 天才真的有盘口，这一枪拿不到数据属正常，不是失败告警；
   - 距开球 2–72 小时：同一来源和比赛至少间隔 15 分钟；
   - 距开球 0–2 小时：同一来源和比赛至少间隔 5 分钟；
   - 已开球比赛是否继续采集由明确的 in-play 任务决定，不能继续伪装为赛前采集。
@@ -269,35 +269,51 @@ last_used_at
 
 唯一约束为 `(provider, provider_app_id, provider_subject)`。UnionID 只能在公众号绑定到同一微信开放平台且真实返回后使用，不能推测或伪造。
 
-### 7.3 微信登录
+### 7.3 微信登录（2026-08 修订，经用户批准）
 
-MVP 的首选认证是已认证服务号网页授权：
+唯一认证路线是**已认证服务号「带参数二维码」+ 消息推送 webhook**。
+网页授权（`snsapi_base`）路线已废弃且不得恢复：微信「网页授权域名」要求域名通过
+ICP 备案，备案硬前提是网站部署在中国大陆；本项目部署 AWS 东京，且出于内容合规
+考量不迁回大陆备案。用户扫码后在微信 App 内触发事件、微信服务器主动回调本站，
+全程不在微信内打开本站网页，因此不受备案约束。
 
-1. 微信内移动端点击登录后，使用 `snsapi_base` 获取最小身份信息。
-2. OAuth `state` 使用一次性随机值，服务端哈希存储、短期有效、使用后销毁。
-3. 回调地址使用固定 allowlist；`next` 只能是本站相对路径，禁止开放重定向。
-4. AppSecret 只存在 FastAPI 环境变量和服务端请求中。
-5. 获取或创建内部 User，再创建网站自己的会话。
+登录流程（三种环境同一条链路，仅界面提示不同）：
 
-电脑端使用一次性 Device Login：
+1. 浏览器创建 `device_login_request`，获得只留在浏览器内存的 secret。
+2. 服务端调用公众号「生成带参数的二维码」接口（`QR_STR_SCENE`，
+   `scene_str` = 公开 request id），二维码内容绝不包含浏览器 secret。
+3. 用户微信扫码（电脑端扫屏幕；微信内长按识别；手机浏览器截图后相册识别），
+   微信服务器把 `SCAN` / `subscribe`（带 `qrscene_` 前缀）事件 POST 到本站 webhook。
+4. webhook 校验共享 Token 签名 + 时间戳新鲜度（±300s）+ nonce 一次性防重放，
+   按 openid 获取或创建内部 User，原子批准该 request（幂等：重复投递不改状态）。
+5. 浏览器轮询时必须同时提交 secret；成功后原子消费 request 并设置会话 Cookie。
+6. request 短期有效、只能消费一次、状态持久化到 SQLite，不能存在进程内存字典。
 
-1. 浏览器创建 `device_login_request`，获得二维码 URL 和只留在浏览器的 secret。
-2. 二维码只包含公开 request id，不包含浏览器 secret。
-3. 手机微信扫码后完成同一个公众号 OAuth，并批准该 request。
-4. 电脑轮询时必须同时提交浏览器 secret；成功后原子消费 request 并设置会话 Cookie。
-5. request 短期有效、只能消费一次、状态持久化到 SQLite，不能存在进程内存字典。
+公众号 `access_token` 每个 AppID 全局唯一、重新获取会使上一个立即失效：必须持久化
+缓存（platform.db）、临过期才串行刷新，不得多处各自获取互相顶掉。AppSecret 与
+webhook Token 只存在 FastAPI 环境变量和服务端请求中。
+
+已知外部单点（如实声明，不做隐藏降级）：「生成带参数的二维码」接口权限绑定微信
+认证年审，年审过期该接口返回 `errcode=48001`——必须结构化记录并向用户界面如实
+反馈“扫码服务暂不可用”，不得伪装成功。
 
 不得沿用旧项目的以下模式：普通 `random` 四位验证码、只存在内存的登录状态、把 JWT 放进查询参数、把 API token 暴露到客户端 session、用 `users.openid='USER_xxx'` 伪造其他身份。
 
-如果 `WECHAT_AUTH_ENABLED=1`，production 启动时缺少 AppID、AppSecret、回调配置必须拒绝启动。Development 可以使用显式 Mock Provider，但 Mock 在 production 必须 fail-fast。
+如果 `WECHAT_AUTH_ENABLED=1`，production 启动时缺少 AppID、AppSecret、
+`WECHAT_WEBHOOK_TOKEN` 或 HTTPS 对外地址必须拒绝启动。Development 可以使用显式
+Mock Provider，但 Mock 在 production 必须 fail-fast。
 
 认证开关必须具有三种明确状态：
 
 - production + `WECHAT_AUTH_ENABLED=0`：公开站点必须可以无微信凭证启动；微信登录端点返回结构化 `AUTH_DISABLED`，不得尝试实例化真实 Provider；
-- production + `WECHAT_AUTH_ENABLED=1`：只能使用 Real Provider，缺 AppID、AppSecret 或 HTTPS 回调配置必须 fail-fast；
+- production + `WECHAT_AUTH_ENABLED=1`：只能使用 Real Provider，缺 AppID、AppSecret、webhook Token 或 HTTPS 对外地址必须 fail-fast；
 - development：只有显式配置时才允许 Mock Provider，production 检测到 Mock 必须 fail-fast。
 
-电脑端 Device Login 的验收必须覆盖“桌面创建 → 手机 OAuth/claim → 桌面轮询 → 原子消费 → 设置会话”的完整流程。直接测试普通 OAuth 回调不能替代 Device Login 验收。登录页必须渲染真实二维码图像，不能只展示待编码 URL。
+扫码登录的验收必须覆盖“浏览器创建 → webhook 签名事件批准 → 浏览器轮询 → 原子
+消费 → 设置会话”的完整流程；webhook 入站链路不依赖 Provider，必须可用签名 fixture
+离线验证。登录页必须渲染真实二维码图像，不能只展示待编码 URL。真实微信服务器的
+出站能力（access_token、二维码创建）与入站回调在拿到真实凭证并完成公众号后台
+配置前一律标 `UNVERIFIED`。
 
 ### 7.4 网站会话
 
@@ -310,41 +326,48 @@ MVP 使用数据库持久化的 opaque session，不使用浏览器可见长效 
 - 登录、回调、会话、账户接口全部 `Cache-Control: private, no-store`。
 - 付费用户后续应能绑定恢复身份；MVP 未接真实短信/邮件时必须在界面如实说明。
 
-## 8. Role、套餐与权限
+## 8. Role、套餐与权限（2026-08 三段可见性修订，经用户批准）
+
+商业定位：站点是短视频/自媒体的流量载体与用户沉淀池。足球数据本身不收费；
+收费只针对每日人工独家推荐板块。登录的产品意义是沉淀用户与公众号涨粉，
+不是解锁足球数据付费墙。
 
 ### 8.1 维度
 
 - 认证状态：anonymous / authenticated。
 - Role：user / analyst / admin。
-- Plan：free / pro / premium。
+- Plan：free（匿名基线）/ member（登录基线，不可购买）/ 付费板块 plan（独家推荐）。
+  旧 pro/premium 已下架（is_active=0，行保留供历史订阅外键引用）。
 - Entitlement：具体能力标识。
 
-推荐 entitlement：
+三段可见性：
 
 ```text
-free:
+匿名（free）:
   league:epl
+  league:lottery
   prediction:top_probability
   odds:summary_delayed
 
-pro:
-  league:top5
-  prediction:full_wdl
-  prediction:score_matrix
-  report:deep
-  export:basic
+已登录（member 基线，登录即得，无需订阅）:
+  全部足球数据 entitlement（league:top5、prediction:full_wdl、
+  prediction:score_matrix、report:deep、odds:history_full、odds:raw、
+  export:basic、export:full、alert:odds，物化并集含 free 全部行）
 
-premium:
-  继承 pro
-  odds:history_full
-  odds:raw
-  export:full
-  alert:odds
+付费（daily_picks「每日精选」，admin grant / 兑换码发放，定价不展示）:
+  member 基线 ∪ reco:daily（近 30 天赛前推荐内容）
 ```
 
-### 8.2 免费概率边界
+reco:track_record（推荐战绩归档）属 member 基线：战绩对全部登录用户公开，
+命中/未中/走水与作废全展示（不挑选、不隐藏）；付费墙只在赛前内容。
 
-匿名和 Free 用户只能获得：
+解析规则（`backend/auth/entitlements.py`）：匿名 = free 行；任何已登录用户恒并入
+member 基线，有效订阅只做追加——订阅用户的权益绝不能反而少于普通登录用户。
+plan_entitlements 仍是物化并集、无跨行继承。
+
+### 8.2 匿名概率边界
+
+匿名用户只能获得：
 
 ```json
 {
@@ -353,7 +376,14 @@ premium:
 }
 ```
 
-另外两项概率不得返回 null 占位，更不得下发真值后用 CSS 遮挡。Pro/Premium 响应才包含完整 `home/draw/away`。服务端必须使用不同 DTO 或显式字段投影，测试响应体不存在受限字段。
+另外两项概率不得返回 null 占位，更不得下发真值后用 CSS 遮挡。已登录响应才包含完整
+`home/draw/away`。服务端必须使用不同 DTO 或显式字段投影，测试响应体不存在受限字段。
+边界从"付费/免费"移到"登录/匿名"，但纪律本身不变：后端是权限真源，
+受限字段物理不下发。
+
+每日精选的**存在性状态**（某场比赛是否有已发布的赛前推荐单，布尔）是公开运营
+信息，可向匿名展示（2026-08-11 站长授权）；推荐的方向、赔率、标题、备注等
+**内容**仍属付费面，匿名与免费响应中物理不下发。draft 单的存在性也不得外泄。
 
 ### 8.3 权限校验
 
@@ -361,11 +391,22 @@ premium:
 - API service 和 query 层均需 entitlement 校验。
 - Admin 不能只靠隐藏路由或秘密 URL。
 - 套餐价格与权益从数据库/API 读取，不在组件写死。
-- MVP 未接支付时，使用管理员发放、撤销、延期和兑换码；所有操作写 AuditLog。
+- 未接真实支付；付费板块权限一律走管理员发放、撤销、延期和兑换码；所有操作写 AuditLog。
+- SEO/GEO 面（sitemap、robots、llms.txt）只列匿名可完整浏览的页面，
+  与 `frontend/lib/site.ts` 单一真源对齐；需登录页面不进 sitemap，
+  防止爬虫抓到付费墙壳页。
 
 ## 9. 预测完整性与模型评估
 
 ### 9.1 可编辑但强制留痕的预测登记簿
+
+> 适用范围（2026-08 修订，经用户批准）：本节的锁定、哈希、永久公开资格等不变量
+> 只约束**模型预测**。付费独家推荐板块是人工内容，独立建表、不纳入本登记簿，
+> 其内容与战绩允许管理员修改；作为交换，推荐板块的战绩页必须与模型公开战绩
+> 在产品与代码上明确区分，不得混用 track_record 查询、评估口径或"锁定不可改"
+> 的可信度表述。**不得为容纳人工推荐而放松 `prediction_snapshots` 的任何既有
+> 保护**（三概率和为 1 的 CHECK、`model_version_id NOT NULL`、
+> `trg_pred_snap_locked_immutable` 触发器均为全表级，动之即削弱全部模型样本）。
 
 现有 `gold_wdl_predictions` 是模型当前产物，不是公开历史账本。正式记录使用 `platform.db` 中的：
 
@@ -395,7 +436,6 @@ last_edited_at / edit_count
 - 锁定后的概率等预测内容允许直接编辑，但必须经统一的 `edit_snapshot` 写入
   `prediction_snapshot_edits`（修正前后值、操作者、原因、时间），不得绕过留痕
   直接 UPDATE；`prediction_snapshot_edits` 本身 append-only，不可再改或删。
-- 删除只允许撤回状态，不允许物理删除正式预测。
 - 公开 track record 默认展示全部正式样本。
 - 每日正式预测 manifest 生成稳定 hash，可上传 S3 版本桶；启用 Object Lock 时优先 governance 模式。
 
@@ -417,7 +457,7 @@ last_edited_at / edit_count
 
 实现 Accuracy、Brier、Multiclass Log Loss、RPS、Calibration buckets 和样本量。评估命令离线运行，不进入在线 FastAPI 请求。
 
-现有 RPS 0.2143 的已知对照是简单历史主/平/客频率基线 0.2281，不是博彩公司收盘共识。除非完成可复现的收盘赔率评估，不得写“模型优于/劣于收盘盘口”。市场基线需要固定并记录：公司集合、去水公式、缺失规则、聚合方式、配对样本和 RPS 公式。
+市场基线需要固定并记录：公司集合、去水公式、缺失规则、聚合方式、配对样本和 RPS 公式。
 
 ## 10. API 与缓存
 
@@ -440,10 +480,10 @@ GET  /api/v1/track-record
 GET  /api/v1/model/metrics
 GET  /api/v1/products
 
-GET  /api/v1/auth/wechat/oa/start
-GET  /api/v1/auth/wechat/oa/callback
 POST /api/v1/auth/wechat/device
 POST /api/v1/auth/wechat/device/{id}/claim
+GET  /api/v1/auth/wechat/webhook
+POST /api/v1/auth/wechat/webhook
 POST /api/v1/auth/logout
 GET  /api/v1/me
 
@@ -510,6 +550,14 @@ GET  /api/v1/admin/...
 - 不用假倒计时、虚构在线人数、诱导弹窗或赌场式视觉语言。
 - 深浅模式使用同一份 JSX 和 CSS 变量；禁止复制两套组件树。
 - 字体和图片自托管，不依赖中国大陆不可稳定访问的外链资源。
+- 用户可见文字最小 12px（30-40 岁手机用户可读下限）；正文 14px 起，
+  核心概率/比分用大号数字。图形内部标注（球场站位、徽章首字母）不受限。
+- 颜色语义固定：深蓝=品牌/大标题，青绿=主要操作/选中，黄绿=推荐发布/关键
+  数据（只用于深色底），橙=等待更新/临近开球，红=真实错误或不可用，
+  灰=辅助说明。"推荐待发布""数据等待刷新"不得用红色。
+- 状态标签不堆胶囊墙：每张比赛卡最多"联赛·轮次 + 比赛状态 + 可行动提示"
+  三层；赛季等第二层信息进正文行。内部枚举值（MARKET_BASELINE 等）
+  不得直接出现在用户界面。
 
 ## 12. Creator Studio
 
@@ -647,8 +695,8 @@ schedule_sync
 - pytest；
 - 权限矩阵测试；
 - 免费 DTO 不含受限字段；
-- 锁定预测的物理删除仍被拒绝；内容编辑必须经 `edit_snapshot` 留痕（`prediction_snapshot_edits` 正确写入，`edit_count`/`last_edited_at` 更新）；
-- OAuth state、设备扫码一次性消费、会话撤销与 CSRF 测试；
+- 内容编辑必须经 `edit_snapshot` 留痕（`prediction_snapshot_edits` 正确写入，`edit_count`/`last_edited_at` 更新）；
+- webhook 签名/时间戳/nonce 防重放、设备扫码一次性消费、会话撤销与 CSRF 测试；
 - 数据源不可用时的降级测试。
 
 ### 前端
@@ -674,7 +722,7 @@ schedule_sync
 
 ### 登录与导出验收
 
-- Playwright 必须覆盖完整 Device Login，不得只覆盖普通 OAuth；
+- Playwright 必须覆盖完整扫码登录（浏览器创建 → webhook 签名批准 → 轮询领取），不得只覆盖 claim 单端点；
 - Studio PNG 验收必须检查下载文件 PNG signature 和实际像素尺寸，后台创建导出记录不能替代图片生成测试。
 
 ### 部署
@@ -692,7 +740,7 @@ schedule_sync
 - `docs/current-state.md`：可更新的真实当前状态。
 - `docs/data-plan.md`：数据层单一真源——联赛 × 数据层覆盖、验证状态、依赖排序计划。
 - `docs/architecture.md`：模块、数据库和运行拓扑。
-- `docs/auth-wechat.md`：公众号后台配置、OAuth、扫码登录和账号恢复。
+- `docs/auth-wechat.md`：公众号后台配置、带参二维码 + webhook 扫码登录和账号恢复。
 - `docs/data-sources.md`：来源、验证状态、时间粒度、降级方式。
 - `docs/model-api-contract.md`：模型输入输出和评估口径。
 - `docs/prediction-integrity.md`：锁定、哈希、撤回和公开战绩规则。
@@ -711,7 +759,6 @@ schedule_sync
 - 把 paid 字段下发后用 CSS 遮挡。
 - 让公开缓存响应因 Cookie 或用户身份混用。
 - 在 API 请求内训练模型或执行长跑批。
-- 物理删除或选择性隐藏正式预测（内容编辑允许，但必须经 `edit_snapshot` 留痕，见 §9.1）。
 - 把 DEMO 战绩表现成真实结果。
 - 网络验证失败时编造成功结论。
 - 为满足测试而删除测试、降低断言或跳过 build。

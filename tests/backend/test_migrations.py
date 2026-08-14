@@ -16,14 +16,14 @@ PLATFORM_TABLES = {
     "products", "model_versions", "prediction_runs", "prediction_snapshots",
     "prediction_outcomes", "prediction_evaluations", "prediction_manifests",
     "favorites", "content_drafts", "export_jobs", "job_runs", "audit_logs",
-    "analytics_events", "schema_migrations",
+    "analytics_events", "schema_migrations", "pipeline_alerts",
 }
 
 ODDS_TABLES = {
     "dim_team_xref", "dim_team_alias", "dim_match_xref",
     "bronze_ng_odds_snap", "bronze_fm_lineup_snap", "bronze_fm_sideline_snap",
     "silver_odds_moves", "silver_event_moves", "gold_move_cooccurrence",
-    "source_health", "schema_migrations",
+    "source_health", "schema_migrations", "fixture_sync_ledger", "poll_attempt_log",
 }
 
 
@@ -44,10 +44,18 @@ def test_platform_fresh_init(tmp_path):
     conn = sqlite3.connect(db)
     # 种子数据齐备
     assert conn.execute("SELECT COUNT(*) FROM roles").fetchone()[0] == 3
-    assert conn.execute("SELECT COUNT(*) FROM plans").fetchone()[0] == 3
+    # 0010 起 5 个 plan(free/member/daily_picks 在售,pro/premium 下架保留行)
+    assert conn.execute("SELECT COUNT(*) FROM plans").fetchone()[0] == 5
+    assert {r[0] for r in conn.execute("SELECT id FROM plans WHERE is_active=1")} == {
+        "free", "member", "daily_picks"}
     free = {r[0] for r in conn.execute(
         "SELECT entitlement FROM plan_entitlements WHERE plan_id='free'")}
-    assert free == {"league:epl", "league:lottery", "prediction:top_probability", "odds:summary_delayed"}
+    # 2026-08-11 权限矩阵互换(platform 0012):free 换成 top5 + european_cup,
+    # 不再持有 league:lottery(见 backend/queries/leagues.py 同批注释)。
+    assert free == {
+        "league:epl", "league:top5", "league:european_cup",
+        "prediction:top_probability", "odds:summary_delayed",
+    }
     pro = {r[0] for r in conn.execute(
         "SELECT entitlement FROM plan_entitlements WHERE plan_id='pro'")}
     assert "prediction:full_wdl" in pro and free <= pro  # pro ⊇ free
@@ -214,7 +222,10 @@ def test_lottery_entitlement_present_in_all_three_plans_fresh_db(tmp_path):
     plans = {r[0] for r in conn.execute(
         "SELECT plan_id FROM plan_entitlements WHERE entitlement='league:lottery'")}
     conn.close()
-    assert plans == {"free", "pro", "premium"}
+    # 0009/0010 起 member 基线与 daily_picks 物化并集亦含 league:lottery;
+    # 0012(权限矩阵互换)把 league:lottery 从 free 移除,free 改持有
+    # league:top5 + league:european_cup(见 0012_league_access_swap.sql)。
+    assert plans == {"pro", "premium", "member", "daily_picks"}
 
 
 def test_lottery_entitlement_upgrade_from_pre_0004_db_no_duplicates(tmp_path):
@@ -238,10 +249,14 @@ def test_lottery_entitlement_upgrade_from_pre_0004_db_no_duplicates(tmp_path):
     migrate.apply_all("platform", db_file=db, quiet=True)
     conn = sqlite3.connect(db)
     after = conn.execute("SELECT COUNT(*) FROM plan_entitlements").fetchone()[0]
-    assert after == before + 3   # 恰好新增三档 league:lottery,既有行不受影响
+    # 0004 +3(league:lottery 三档);0009 +13(member 基线);
+    # 0010 +16(member 的 reco:track_record 1 行 + daily_picks 物化并集 15 行);
+    # 0012 +6/-1(free/pro/premium/member/daily_picks 各 +1 european_cup,
+    # free -1 lottery)= 净 +5
+    assert after == before + 3 + 13 + 16 + 6 - 1
     plans = {r[0] for r in conn.execute(
         "SELECT plan_id FROM plan_entitlements WHERE entitlement='league:lottery'")}
-    assert plans == {"free", "pro", "premium"}
+    assert plans == {"pro", "premium", "member", "daily_picks"}
 
     # 重复应用同一套完整迁移:不产生重复行(第三次幂等检查)
     migrate.apply_all("platform", db_file=db, quiet=True)

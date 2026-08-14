@@ -24,7 +24,8 @@ from backend.commands.predictions import get_or_create_model_version, publish_sn
 from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_rw
 
-from .coreseed import seed_basic_core
+from .authflow import wechat_scan_login
+from .coreseed import insert_match, seed_basic_core
 
 STRICT_NO_STORE = "private, no-store"
 
@@ -32,9 +33,7 @@ STRICT_NO_STORE = "private, no-store"
 # ── 通用 helper ──────────────────────────────────────────────
 
 def _login(client, ip):
-    r1 = client.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                     headers={"x-real-ip": ip})
-    client.get(r1.headers["location"], follow_redirects=False)
+    wechat_scan_login(client, ip=ip)
     return client.get("/api/v1/me").json()["user"]["id"]
 
 
@@ -44,18 +43,30 @@ def _grant(user_id, plan_id, days=30):
     conn.close()
 
 
-def _pro_client(app, ip):
+def _member_client(app, ip):
+    """三段可见性(CLAUDE.md §8):登录即 member 基线,无需订阅。"""
     c = TestClient(app)
-    uid = _login(c, ip)
-    _grant(uid, "pro")
+    _login(c, ip)
     return c
 
 
-def _premium_client(app, ip):
-    c = TestClient(app)
-    uid = _login(c, ip)
-    _grant(uid, "premium")
-    return c
+TEST_PAID_PLAN = "testpaid"
+
+
+def _seed_test_paid_plan():
+    """订阅机制测试专用:临时库内种一个高阶付费 plan(演练未来付费板块的
+    grant/过期/撤销/rank 解析;不影响生产 seed)。"""
+    conn = connect_rw("platform")
+    conn.execute(
+        "INSERT OR IGNORE INTO plans (id, name_zh, description, rank, is_active, created_at)"
+        " VALUES (?, '测试付费', 'test only', 5, 1, '2026-08-10T00:00:00Z')",
+        (TEST_PAID_PLAN,),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO plan_entitlements (plan_id, entitlement) VALUES (?, 'reco:test')",
+        (TEST_PAID_PLAN,),
+    )
+    conn.close()
 
 
 def _admin_free_client(app, ip, username="audit-admin"):
@@ -135,36 +146,46 @@ def _recursive_scan(obj, needle: str, path="$") -> list[str]:
 class TestEntitlementMatrixLeagueAccess:
     """A.1 / A.2:英超免费可见,非英超 top5 仅 pro/premium;admin 角色本身不授予。"""
 
-    def test_anonymous_and_free_epl_ok_top5_denied(self, app, data_dir, fresh_ip):
+    def test_anonymous_epl_and_top5_ok_lottery_needs_login(self, app, data_dir, fresh_ip):
+        """三段可见性(2026-08-11 权限矩阵互换,platform 0012):匿名可看英超与
+        五大联赛(top5);league:lottery 匿名 401(引导登录);登录后即 200。"""
         seed_basic_core(data_dir)
+        conn = connect_rw("core")
+        insert_match(conn, 9301, league_id=67, season="2026", date="2026-05-10",
+                     home_id=3001, away_id=3002, home="Vasteras SK", away="Orgryte IS")
+        conn.commit()
+        conn.close()
+
         client = TestClient(app)
         assert client.get("/api/v1/leagues/47/standings").status_code == 200
-        r = client.get("/api/v1/matches/9101")   # 西甲,top5-only
+        assert client.get("/api/v1/matches/9101").status_code == 200   # 西甲,现匿名可见
+        r = client.get("/api/v1/matches/9301")   # 瑞典超,league:lottery,需登录
         assert r.status_code == 401
 
         logged_in = TestClient(app)
         _login(logged_in, fresh_ip)
         assert logged_in.get("/api/v1/leagues/47/standings").status_code == 200
-        r2 = logged_in.get("/api/v1/matches/9101")
-        assert r2.status_code == 403   # 已登录但 free → 403(不是 401)
+        assert logged_in.get("/api/v1/matches/9101").status_code == 200
+        assert logged_in.get("/api/v1/matches/9301").status_code == 200
 
     def test_pro_and_premium_get_top5(self, app, data_dir, fresh_ip):
         seed_basic_core(data_dir)
-        pro = _pro_client(app, fresh_ip)
+        pro = _member_client(app, fresh_ip)
         assert pro.get("/api/v1/matches/9101").status_code == 200
-        premium = _premium_client(app, f"{fresh_ip}-b")
+        premium = _member_client(app, f"{fresh_ip}-b")
         assert premium.get("/api/v1/matches/9101").status_code == 200
 
-    def test_admin_role_alone_does_not_grant_top5(self, app, data_dir, fresh_ip):
-        """CLAUDE.md §7/§8:admin 角色只管后台访问,不代替 premium/pro entitlement。"""
+    def test_admin_login_gets_member_top5_but_no_reco(self, app, data_dir, fresh_ip):
+        """三段可见性:admin 也是已登录用户 → member 基线含 league:top5;
+        Role⊥Entitlement 的守护对象移到付费板块(admin 不自动获得 reco:*)。"""
         seed_basic_core(data_dir)
         admin = _admin_free_client(app, fresh_ip)
         me = admin.get("/api/v1/me").json()
         assert me["user"]["role"] == "admin"
-        assert me["plan"] == "free"
-        assert "league:top5" not in me["entitlements"]
-        r = admin.get("/api/v1/matches/9101")
-        assert r.status_code == 403   # 已登录(admin)但 plan=free → 403,不是 200
+        assert me["plan"] == "member"
+        assert "league:top5" in me["entitlements"]
+        assert "reco:daily" not in me["entitlements"]   # 付费板块不随 role/登录赠送
+        assert admin.get("/api/v1/matches/9101").status_code == 200
 
 
 class TestEntitlementMatrixPrediction:
@@ -193,17 +214,24 @@ class TestEntitlementMatrixPrediction:
     def test_anonymous_free_projection(self, app, seeded):
         self._assert_free_projection(TestClient(app).get("/api/v1/matches/9001/prediction"))
 
-    def test_registered_free_same_as_anonymous(self, app, seeded, fresh_ip):
+    def test_registered_user_gets_full_projection(self, app, seeded, fresh_ip):
+        """三段可见性:登录即 member 基线,完整投影(旧"注册不加成"不变量已废除)。"""
         c = TestClient(app)
         _login(c, fresh_ip)
-        self._assert_free_projection(c.get("/api/v1/matches/9001/prediction"))
+        pred = c.get("/api/v1/matches/9001/prediction").json()["prediction"]
+        assert pred["tier"] == "full"
 
-    def test_admin_with_free_plan_still_free_projection(self, app, seeded, fresh_ip):
+    def test_admin_login_gets_member_projection_not_reco(self, app, seeded, fresh_ip):
+        """三段可见性:admin 也是已登录用户 → member 基线完整投影;
+        Role⊥Entitlement 不变量改由付费板块承载(admin 不自动获得 reco:*)。"""
         admin = _admin_free_client(app, fresh_ip)
-        self._assert_free_projection(admin.get("/api/v1/matches/9001/prediction"))
+        pred = admin.get("/api/v1/matches/9001/prediction").json()["prediction"]
+        assert pred["tier"] == "full"
+        me = admin.get("/api/v1/me").json()
+        assert "reco:daily" not in me["entitlements"]   # 付费板块不随 role/登录赠送
 
     def test_pro_and_premium_get_full_wdl(self, app, seeded, fresh_ip):
-        for maker, ip_suffix in ((_pro_client, "-p"), (_premium_client, "-m")):
+        for maker, ip_suffix in ((_member_client, "-p"),):
             c = maker(app, f"{fresh_ip}{ip_suffix}")
             r = c.get("/api/v1/matches/9001/prediction")
             pred = r.json()["prediction"]
@@ -245,7 +273,7 @@ class TestEntitlementMatrixAnalysisBundle:
         assert r.headers["cache-control"] == STRICT_NO_STORE
 
     def test_pro_full_wdl_and_report_deep_but_not_full_odds(self, app, seeded, fresh_ip):
-        c = _pro_client(app, fresh_ip)
+        c = _member_client(app, fresh_ip)
         r = c.get("/api/v1/matches/9001/analysis")
         body = r.json()
         assert body["prediction_member"]["home_probability"] == self.HOME
@@ -258,17 +286,17 @@ class TestEntitlementMatrixAnalysisBundle:
         _insert_odds_snap(conn, "700001", "2026-07-19T09:00:00Z", "PREMIUM_ODDS_SENTINEL_X1")
         conn.commit()
         conn.close()
-        c = _premium_client(app, fresh_ip)
+        c = _member_client(app, fresh_ip)
         body = c.get("/api/v1/matches/9001/analysis").json()
         assert len(body["odds_timeline"]) == 1
         assert body["odds_timeline"][0]["payload"]["sentinel"] == "PREMIUM_ODDS_SENTINEL_X1"
 
-    def test_admin_with_free_plan_gets_free_projection(self, app, seeded, fresh_ip):
+    def test_admin_login_gets_member_bundle(self, app, seeded, fresh_ip):
+        """三段可见性:admin 登录即 member 基线 → 完整 bundle(匿名泄漏矩阵由
+        上面的 anonymous 用例继续钉死)。"""
         admin = _admin_free_client(app, fresh_ip)
         body = admin.get("/api/v1/matches/9001/analysis").json()
-        assert body["prediction_member"] is None
-        for s in self.NUMERIC_SENTINELS:
-            assert not _recursive_scan(body, s)
+        assert body["prediction_member"] is not None
 
 
 class TestEntitlementMatrixOdds:
@@ -293,25 +321,34 @@ class TestEntitlementMatrixOdds:
         conn.commit()
         conn.close()
 
-    def test_free_and_pro_only_see_delayed_summary(self, app, seeded, fresh_ip):
+    def test_anonymous_only_sees_delayed_summary(self, app, seeded, fresh_ip):
+        """三段可见性:延迟摘要边界移到 匿名/已登录(已登录直接有 odds:history_full)。"""
         _old, fresh = seeded
         self._add_fresh_snapshot(fresh)
         anon = TestClient(app)
-        pro = _pro_client(app, fresh_ip)
-        for c in (anon, pro):
-            r = c.get("/api/v1/matches/9001/odds")
-            assert r.status_code == 200
-            body = r.json()
-            assert body["tier"] == "delayed_summary"
-            raw = r.text
-            assert "OLD_BEFORE_THRESHOLD_S1" in raw
-            assert "FRESH_AFTER_THRESHOLD_S2" not in raw, "免费/pro 不应看到 1 小时内的新鲜快照"
-            assert r.headers["cache-control"] == STRICT_NO_STORE
+        r = anon.get("/api/v1/matches/9001/odds")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["tier"] == "delayed_summary"
+        raw = r.text
+        assert "OLD_BEFORE_THRESHOLD_S1" in raw
+        assert "FRESH_AFTER_THRESHOLD_S2" not in raw, "匿名不应看到 1 小时内的新鲜快照"
+        assert r.headers["cache-control"] == STRICT_NO_STORE
+
+    def test_member_sees_full_timeline_including_fresh(self, app, seeded, fresh_ip):
+        _old, fresh = seeded
+        self._add_fresh_snapshot(fresh)
+        member = _member_client(app, fresh_ip)
+        r = member.get("/api/v1/matches/9001/odds")
+        assert r.status_code == 200
+        assert r.json()["tier"] == "full"
+        assert "FRESH_AFTER_THRESHOLD_S2" in r.text
+        assert r.headers["cache-control"] == STRICT_NO_STORE
 
     def test_premium_sees_full_timeline_including_fresh_snapshot(self, app, seeded, fresh_ip):
         _old, fresh = seeded
         self._add_fresh_snapshot(fresh)
-        premium = _premium_client(app, fresh_ip)
+        premium = _member_client(app, fresh_ip)
         r = premium.get("/api/v1/matches/9001/odds")
         body = r.json()
         assert body["tier"] == "full"
@@ -355,16 +392,18 @@ class TestEntitlementMatrixCooccurrence:
         assert r.headers["cache-control"] == STRICT_NO_STORE
 
     def test_pro_and_premium_get_detail(self, app, seeded, fresh_ip):
-        for maker, suffix in ((_pro_client, "-p"), (_premium_client, "-m")):
+        for maker, suffix in ((_member_client, "-p"),):
             c = maker(app, f"{fresh_ip}{suffix}")
             body = c.get("/api/v1/matches/9001/cooccurrence").json()
             assert body["items"] is not None
             assert body["items"][0]["detail_json"] and "COOC_DETAIL_SENTINEL" in body["items"][0]["detail_json"]
 
-    def test_admin_with_free_plan_does_not_auto_get_detail(self, app, seeded, fresh_ip):
+    def test_admin_login_gets_member_detail(self, app, seeded, fresh_ip):
+        """三段可见性:admin 登录即 member 基线 → 同期事件明细可见
+        (匿名不可见由上面的 anonymous 用例继续钉死)。"""
         admin = _admin_free_client(app, fresh_ip)
         body = admin.get("/api/v1/matches/9001/cooccurrence").json()
-        assert body["items"] is None
+        assert body["items"] is not None
 
 
 class TestEntitlementMatrixSubscriptionState:
@@ -377,41 +416,46 @@ class TestEntitlementMatrixSubscriptionState:
     def test_expired_subscription_does_not_count(self, app, data_dir, fresh_ip):
         c = TestClient(app)
         uid = _login(c, fresh_ip)
-        _grant(uid, "pro")
+        _seed_test_paid_plan()
+        _grant(uid, TEST_PAID_PLAN)
         conn = connect_rw("platform")
         conn.execute("UPDATE subscriptions SET ends_at='2020-01-01T00:00:00Z' WHERE user_id=?", (uid,))
         conn.close()
-        assert self._me(c)["plan"] == "free"
+        # 三段可见性:订阅失效后回退到登录基线 member,不是 free
+        assert self._me(c)["plan"] == "member"
 
     def test_revoked_subscription_does_not_count(self, app, data_dir, fresh_ip):
         c = TestClient(app)
         uid = _login(c, fresh_ip)
-        _grant(uid, "premium")
+        _seed_test_paid_plan()
+        _grant(uid, TEST_PAID_PLAN)
         conn = connect_rw("platform")
         conn.execute("UPDATE subscriptions SET status='revoked' WHERE user_id=?", (uid,))
         conn.close()
-        assert self._me(c)["plan"] == "free"
+        assert self._me(c)["plan"] == "member"
 
     def test_future_start_subscription_does_not_count_yet(self, app, data_dir, fresh_ip):
         c = TestClient(app)
         uid = _login(c, fresh_ip)
+        _seed_test_paid_plan()
         far_future_start = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
         far_future_end = (datetime.now(timezone.utc) + timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
         conn = connect_rw("platform")
         conn.execute(
             "INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, ends_at, source, created_at)"
-            " VALUES ('future-sub', ?, 'premium', 'active', ?, ?, 'admin_grant', ?)",
+            " VALUES ('future-sub', ?, 'testpaid', 'active', ?, ?, 'admin_grant', ?)",
             (uid, far_future_start, far_future_end, far_future_start),
         )
         conn.close()
-        assert self._me(c)["plan"] == "free"
+        assert self._me(c)["plan"] == "member"
 
     def test_multiple_valid_subscriptions_resolve_to_highest_rank(self, app, data_dir, fresh_ip):
         c = TestClient(app)
         uid = _login(c, fresh_ip)
-        _grant(uid, "pro")
-        _grant(uid, "premium")
-        assert self._me(c)["plan"] == "premium"
+        _seed_test_paid_plan()
+        _grant(uid, "member")          # rank 1(机制上允许显式 grant 基线 plan)
+        _grant(uid, TEST_PAID_PLAN)    # rank 5
+        assert self._me(c)["plan"] == TEST_PAID_PLAN
 
     def test_role_and_entitlement_orthogonal(self, app, data_dir, fresh_ip):
         """admin 角色 + premium 订阅同时存在时,plan/entitlements 只由订阅决定,
@@ -425,11 +469,14 @@ class TestEntitlementMatrixSubscriptionState:
                     headers={"x-real-ip": fresh_ip})
         assert r.status_code == 200
         uid = c.get("/api/v1/me").json()["user"]["id"]
-        _grant(uid, "premium")
+        _seed_test_paid_plan()
+        _grant(uid, TEST_PAID_PLAN)
         me = self._me(c)
         assert me["user"]["role"] == "admin"
-        assert me["plan"] == "premium"
+        assert me["plan"] == TEST_PAID_PLAN
+        # 付费 plan 权益 = member 基线 ∪ 本 plan 行(追加,不减)
         assert "odds:history_full" in me["entitlements"]
+        assert "reco:test" in me["entitlements"]
 
 
 # ── B. HTTP/Cloudflare 缓存隔离矩阵 ───────────────────────────
@@ -481,8 +528,7 @@ class TestCacheMatrixEntitlementVaryingAlwaysPrivate:
     def test_all_tiers_get_no_store(self, app, seeded, fresh_ip, path):
         clients = [
             TestClient(app),
-            _pro_client(app, f"{fresh_ip}-{path[-3:]}-p"),
-            _premium_client(app, f"{fresh_ip}-{path[-3:]}-m"),
+            _member_client(app, f"{fresh_ip}-{path[-3:]}-p"),
         ]
         for c in clients:
             r = c.get(path)
@@ -492,11 +538,13 @@ class TestCacheMatrixEntitlementVaryingAlwaysPrivate:
 class TestCacheMatrixMemberAdminAuthAlwaysPrivate:
     def test_auth_endpoints_success_and_failure(self, app, data_dir, fresh_ip):
         c = TestClient(app)
-        r_start = c.get("/api/v1/auth/wechat/oa/start", follow_redirects=False,
-                         headers={"x-real-ip": fresh_ip})
-        assert r_start.headers["cache-control"] == STRICT_NO_STORE
-        r_bad = c.get("/api/v1/auth/wechat/oa/callback?code=x&state=forged", follow_redirects=False)
-        assert r_bad.status_code == 400
+        r_create = c.post("/api/v1/auth/wechat/device", headers={"x-real-ip": fresh_ip})
+        assert r_create.status_code == 200
+        assert r_create.headers["cache-control"] == STRICT_NO_STORE
+        # webhook 签名失败(403)同样 no-store
+        r_bad = c.post("/api/v1/auth/wechat/webhook?signature=bad&timestamp=1&nonce=n",
+                       content=b"<xml/>")
+        assert r_bad.status_code == 403
         assert r_bad.headers["cache-control"] == STRICT_NO_STORE
 
     def test_member_endpoints_success_and_failure(self, app, data_dir, fresh_ip):
@@ -576,17 +624,15 @@ class TestCacheMatrixErrorResponses:
 
         settings = make_settings(WECHAT_AUTH_PROVIDER="real", WECHAT_AUTH_ENABLED="0")
         c = TestClient(create_app(settings))
-        r = c.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False)
+        r = c.post("/api/v1/auth/wechat/device")
         assert r.status_code == 503
         assert r.headers["cache-control"] == STRICT_NO_STORE
 
 
 class TestCacheMatrixSetCookieResponses:
-    def test_oauth_callback_login_no_store(self, app, data_dir, fresh_ip):
+    def test_scan_claim_login_no_store(self, app, data_dir, fresh_ip):
         c = TestClient(app)
-        r1 = c.get("/api/v1/auth/wechat/oa/start?next=/", follow_redirects=False,
-                    headers={"x-real-ip": fresh_ip})
-        r2 = c.get(r1.headers["location"], follow_redirects=False)
+        r2 = wechat_scan_login(c, ip=fresh_ip)
         assert "allwin_session" in r2.cookies
         assert r2.headers["cache-control"] == STRICT_NO_STORE
 

@@ -1,0 +1,29 @@
+# 每日汇总推送(oneshot,由 allwin-digest.timer 每天 23:30 Asia/Shanghai 触发)。
+# --key 用北京日期做幂等键:同一天重复触发(如 Persistent 补跑 + 正点触发)时
+# 第二次在 job_runs 如实记 skipped,不会重复推送;告警侧另有
+# dedup_key=daily_digest:<日期> 的 24h 去重双保险。
+# %% 是 systemd unit 文件里 % 的转义(date 收到的是单个 %)。
+#
+# 安装:cp allwin-digest.service allwin-digest.timer /etc/systemd/system/
+#       systemctl daemon-reload && systemctl enable --now allwin-digest.timer
+[Unit]
+Description=allwin daily pipeline digest (ServerChan INFO push, idempotent by Beijing date)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/bin/sh -c 'exec /opt/allwin/current/.venv/bin/python -m backend.worker.runner --job daily_digest --key "$(TZ=Asia/Shanghai date +%%Y-%%m-%%d)"'
+TimeoutStartSec=300
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

@@ -38,6 +38,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 也把本模块所在目录(backend/ingest/)加入 path,使 `from ingest_match import`
+# 在"独立脚本运行"和"作为 backend.ingest.* 包导入"(如 cli/sync_fixtures_window)
+# 两种上下文下都可解析——原来只有独立脚本(cwd=backend/ingest)能跑通。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from db import get_connection
 from db.util import normalize_utc_iso
@@ -89,9 +93,46 @@ def _verify_season_identity(data: dict, league_id: int, season: str) -> None:
         )
 
 
+def discover_season_identity(data: dict, league_id: int) -> str:
+    """discovery 模式:硬断言 details.id == league_id,但 season 由响应**回报**。
+
+    用于 T+7 赛程同步——不预设赛季串(解决 J1 同时存在 2026 与 2026/2027 的换季、
+    以及各联赛跨年/自然年惯例不同)。返回 details.selectedSeason(非空)。
+    id 不符或赛季缺失照样抛 SeasonIdentityError,fail-closed。
+    """
+    details = data.get("details") or {}
+    observed_id = details.get("id")
+    try:
+        observed_id = int(observed_id)
+    except (TypeError, ValueError):
+        raise SeasonIdentityError(
+            f"discovery(league_id={league_id}) 的 details.id 无法解析: {observed_id!r}"
+        )
+    if observed_id != league_id:
+        raise SeasonIdentityError(
+            f"discovery(league_id={league_id}) 的 details.id={observed_id} 不一致,拒绝落库"
+        )
+    season = details.get("selectedSeason") or details.get("season")
+    if not season or not str(season).strip():
+        raise SeasonIdentityError(
+            f"discovery(league_id={league_id}) 响应未回报可用赛季串,拒绝落库"
+        )
+    return str(season)
+
+
 def fetch_fixture_rows(client: FotMobClient, league_id: int, season: str) -> list:
     data = client.league_matches(league_id, season)
     _verify_season_identity(data, league_id, season)
+    return rows_from_payload(data, league_id, season)
+
+
+def rows_from_payload(data: dict, league_id: int, season: str) -> list:
+    """纯解析:league_matches 响应 → dim_match 行(不发网络、不校验身份)。
+
+    2026-08-10 数据管道重建抽出:T+7 赛程同步(cli/sync_fixtures_window.py)走
+    赛季发现模式(不预设 season),身份校验由调用方以 discovery 口径单独执行,
+    这里只做行解析。fetch_fixture_rows 保持原签名与行为(校验 + 解析)。
+    """
     raw = (data.get("fixtures", {}) or {}).get("allMatches") or []
 
     rows = []
@@ -172,6 +213,35 @@ def write_rows(conn, rows: list) -> None:
     for row in rows:
         _upsert(conn, "dim_match", DIM_MATCH_COLUMNS, row)
     conn.commit()
+
+
+# 赛程同步"拥有"的列:赛程刷新只应更新这些(比赛身份、开球、状态、轮次)。
+# 明确**不含** Referee/Temperature/Wind_Speed(由 poll_fotmob_snapshots
+# --write-match-details 写)与 home_score/away_score(由完赛流程写)——
+# 用整行 INSERT OR REPLACE 会把它们清成 NULL(前身项目事故 #2 同型缺陷)。
+FIXTURE_OWNED_COLUMNS = (
+    "Season", "League_ID", "Date",
+    "Home_Team_ID", "Away_Team_ID", "Home_Team_Name", "Away_Team_Name",
+    "status", "Match_Round",
+    "kickoff_at_utc", "kickoff_precision", "kickoff_source",
+)
+
+
+def upsert_fixture_row(conn, row: dict) -> None:
+    """按 Match_ID upsert,但**只写赛程拥有的列**——绝不碰裁判/天气/比分。
+
+    新行:插入拥有列 + Match_ID,其余列走表默认(NULL)。
+    已有行:ON CONFLICT 只 UPDATE 拥有列,保留其它路径已写入的值。
+    """
+    cols = ("Match_ID",) + FIXTURE_OWNED_COLUMNS
+    placeholders = ", ".join("?" for _ in cols)
+    col_sql = ", ".join(cols)
+    update_sql = ", ".join(f"{c}=excluded.{c}" for c in FIXTURE_OWNED_COLUMNS)
+    conn.execute(
+        f"INSERT INTO dim_match ({col_sql}) VALUES ({placeholders}) "
+        f"ON CONFLICT(Match_ID) DO UPDATE SET {update_sql}",
+        [row.get(c) for c in cols],
+    )
 
 
 def main() -> None:

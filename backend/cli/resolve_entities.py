@@ -19,7 +19,11 @@ import sys
 from pathlib import Path
 
 from backend.db.connections import connect_ro, connect_rw
-from backend.ingest.entity_resolution import resolve_match, seed_team_aliases
+from backend.ingest.entity_resolution import (
+    resolve_match,
+    seed_ascii_fold_aliases,
+    seed_team_aliases,
+)
 
 
 def run(schedule_file: str | None = None) -> dict:
@@ -27,6 +31,10 @@ def run(schedule_file: str | None = None) -> dict:
     conn_core = connect_ro("core")
     try:
         added_aliases = seed_team_aliases(conn_odds, conn_core)
+        # 变音符 → ASCII 折叠别名(数据管道重建 Phase 3;Phase 6 接入自动化):
+        # NowGoal 发 ASCII、FotMob 发变音符原文,不折叠则荷甲/葡超/巴甲等整批
+        # needs_review。撞名 fail-closed(歧义折叠串整批拒绝,列 rejected)。
+        ascii_fold = seed_ascii_fold_aliases(conn_odds)
         resolved = {"auto_ok": 0, "needs_review": 0, "unresolved": 0}
         if schedule_file:
             rows = json.loads(Path(schedule_file).read_text(encoding="utf-8"))
@@ -48,6 +56,8 @@ def run(schedule_file: str | None = None) -> dict:
         alias_total = conn_odds.execute("SELECT COUNT(*) FROM dim_team_alias").fetchone()[0]
         return {
             "aliases_added": added_aliases,
+            "ascii_fold_added": ascii_fold.get("added", 0),
+            "ascii_fold_rejected": ascii_fold.get("rejected", []),
             "aliases_total": alias_total,
             "resolved_now": resolved,
             "xref_by_status": xref_stats,
@@ -62,7 +72,10 @@ def main(argv=None) -> int:
     ap.add_argument("--schedule-file", default=None, help="离线日程行 JSON(测试/补录)")
     args = ap.parse_args(argv)
     result = run(schedule_file=args.schedule_file)
-    print(f"[resolve_entities] 别名新增 {result['aliases_added']},总数 {result['aliases_total']}")
+    print(f"[resolve_entities] 别名新增 {result['aliases_added']},"
+          f"ASCII 折叠新增 {result['ascii_fold_added']},总数 {result['aliases_total']}")
+    if result["ascii_fold_rejected"]:
+        print(f"  ⚠ 折叠撞名整串拒绝(需人工复核): {result['ascii_fold_rejected']}")
     print(f"  本次解析: {result['resolved_now']}")
     print(f"  xref 状态: {result['xref_by_status'] or '(空)'}")
     needs = result["xref_by_status"].get("needs_review", 0)

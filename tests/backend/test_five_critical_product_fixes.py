@@ -21,6 +21,7 @@ from backend.content_status import project_freshness, public_status_for_match
 from backend.db.connections import connect_rw
 from backend.queries.matches import list_matches, standings
 from backend.queries.teams import display_name_for_team, team_display_map
+from tests.backend.authflow import wechat_scan_login
 from tests.backend.coreseed import insert_match, seed_basic_core
 
 
@@ -167,7 +168,12 @@ def _core() -> sqlite3.Connection:
           goals_against INTEGER,
           goal_diff INTEGER,
           points INTEGER,
-          qual_color TEXT
+          qual_color TEXT,
+          xg REAL,
+          xg_conceded REAL,
+          x_points REAL,
+          x_position INTEGER,
+          extra_json TEXT
         );
         """
     )
@@ -308,6 +314,8 @@ def test_standings_never_projects_numeric_team_placeholder() -> None:
             provider_name = f"Provider Club {position}"
             conn.execute(
                 """INSERT INTO fact_league_table
+                   (League_ID,Season,table_type,Team_ID,Team_Name,position,played,
+                    wins,draws,losses,goals_for,goals_against,goal_diff,points,qual_color)
                    VALUES (59,'2026','all',?,?,?,10,5,2,3,20,15,5,17,NULL)""",
                 (team_id, provider_name, position),
             )
@@ -420,7 +428,10 @@ def test_league_catalog_and_match_content_filters_are_data_driven(
     assert eliteserien["name_zh"] == "挪威超"
     assert eliteserien["current_season"] == "2026"
     assert eliteserien["data_status"] == "AVAILABLE"
-    assert eliteserien["accessible"] is True
+    # 2026-08-11 权限矩阵互换(platform 0012):挪超是 league:lottery,匿名不可访问,
+    # 登录后才可访问——本用例聚焦"目录/内容过滤是否数据驱动",登录后再验证。
+    assert eliteserien["accessible"] is False
+    wechat_scan_login(client, ip="203.0.113.201")
 
     analysis = client.get(
         "/api/v1/matches?league_id=59&status=upcoming&content=analysis"
@@ -436,6 +447,8 @@ def test_list_detail_and_standings_share_truthful_public_projection(
     app, product_seeded
 ) -> None:
     client = TestClient(app)
+    # 挪超(59)是 league:lottery,权限矩阵互换后需登录(见上一测试同样的改动)。
+    wechat_scan_login(client, ip="203.0.113.202")
     listed = client.get(
         "/api/v1/matches?league_id=59&status=upcoming"
     ).json()["matches"][0]

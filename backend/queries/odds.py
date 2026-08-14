@@ -17,8 +17,26 @@ payload_json 在 SQL(裸 TEXT)/Pydantic(payload: dict)/生成 TS(宽 dict)三层
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from backend.models.research.market_baseline import (
+    MIN_ODDS,
+    OVERROUND_BOUNDS,
+    proportional_devig,
+)
+
+# Bet365 在 bronze_ng_odds_snap 里有两个 company_id:'8' 是 2026-08-04 起的
+# 实时轮询(唯一覆盖未来比赛的),'281' 是 2026-04-06 就停更的历史回填
+# (对未来比赛贡献 0 场,但作为兜底不删)。同场两者都有时优先取 '8'。
+_WIN_PROB_COMPANY_PRIORITY = ("8", "281")
+
+# /odds 端点对无 odds:history_full 权益的请求方施加的同一条 1 小时延迟——
+# 列表层的赔率概率字段必须遵守同一条纪律,否则会从列表页漏掉一个付费层的
+# 新鲜度保证(见 routes_public.py 的 /matches/{id}/odds 实现)。
+_DELAYED_LAG = timedelta(hours=1)
 
 
 def normalize_odds_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -107,3 +125,95 @@ def odds_coverage_sets(conn_odds: sqlite3.Connection) -> tuple[set[int], set[int
     except sqlite3.OperationalError:
         legacy = set()
     return full, legacy
+
+
+def latest_1x2_by_match(
+    conn_odds: sqlite3.Connection, *, now_iso: str, delayed: bool
+) -> dict[int, dict[str, Any]]:
+    """所有比赛的最新 Bet365 1x2 去水概率——一次查询,不逐场请求。
+
+    首页/列表页的胜平负概率条共用本函数(见 CLAUDE.md 首页改版计划):字段
+    只在这一处产出,routes_public.py 的 list_matches 与 /matches/{id} 都从
+    这里取,不允许出现第二套各自实现的去水逻辑。
+
+    口径(与 backend/models/research/market_baseline.py 的研究基线同一套
+    去水公式与拒绝规则,但覆盖范围不同——那边只服务 5 大联赛已完赛比赛做
+    回测,这里服务全部联赛的当前比赛,且必须包含 company_id '8' 实时轮询):
+    - market='1x2' AND market_phase='pre_match';
+    - xref 只认 review_status ∈ (auto_ok, confirmed),无法安全映射的 fail closed;
+    - 每场每公司取 observed_at 最新一条(并列取 id 最大);
+    - 公司优先级 8 > 281(见模块顶部注释);
+    - 比例去水 p_i = (1/odds_i) / Σ_j(1/odds_j);
+    - 任一赔率缺失/≤1.01,或 overround 不在 [1.01, 1.35] → 该场剔除,不补 0、不猜;
+    - delayed=True(无 odds:history_full 权益)时只认 observed_at 早于
+      now-1h 的快照,与 /matches/{id}/odds 端点的匿名延迟策略一致。
+
+    返回的每场只有一个 observed_at——三段概率条底部必须显示这个时间,
+    不得把它当成"实时"文案(数据可能是几小时甚至更久前的快照,§6.2 不伪装)。
+    """
+    placeholders = ",".join("?" for _ in _WIN_PROB_COMPANY_PRIORITY)
+    try:
+        rows = conn_odds.execute(
+            f"""SELECT b.id, x.fotmob_match_id, b.company_id, b.payload_json, b.observed_at
+                  FROM bronze_ng_odds_snap b
+                  JOIN dim_match_xref x
+                    ON x.provider_match_id = b.provider_match_id AND x.provider='nowgoal'
+                 WHERE b.market='1x2' AND b.market_phase='pre_match'
+                   AND b.company_id IN ({placeholders})
+                   AND x.review_status IN ('auto_ok','confirmed')""",
+            _WIN_PROB_COMPANY_PRIORITY,
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+
+    cutoff = None
+    if delayed:
+        cutoff = (
+            datetime.fromisoformat(now_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+            - _DELAYED_LAG
+        )
+
+    best: dict[tuple[int, str], tuple[str, int, dict]] = {}
+    for r in rows:
+        obs = str(r["observed_at"])
+        if cutoff is not None:
+            obs_dt = datetime.fromisoformat(obs.replace("Z", "+00:00")).astimezone(timezone.utc)
+            if obs_dt > cutoff:
+                continue
+        fid = int(r["fotmob_match_id"])
+        cid = str(r["company_id"])
+        key = (fid, cid)
+        cur = best.get(key)
+        cand = (obs, int(r["id"]))
+        if cur is None or cand > (cur[0], cur[1]):
+            try:
+                payload = json.loads(r["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            best[key] = (obs, int(r["id"]), payload)
+
+    fids = {fid for fid, _cid in best}
+    out: dict[int, dict[str, Any]] = {}
+    for fid in fids:
+        chosen = None
+        for cid in _WIN_PROB_COMPANY_PRIORITY:
+            chosen = best.get((fid, cid))
+            if chosen is not None:
+                break
+        if chosen is None:
+            continue
+        obs, _id, payload = chosen
+        flat = normalize_odds_payload(payload)
+        h, d, a = flat.get("home"), flat.get("draw"), flat.get("away")
+        if not all(isinstance(v, (int, float)) and v > MIN_ODDS for v in (h, d, a)):
+            continue
+        p_home, p_draw, p_away, overround = proportional_devig(h, d, a)
+        if not (OVERROUND_BOUNDS[0] <= overround <= OVERROUND_BOUNDS[1]):
+            continue
+        out[fid] = {
+            "p_home": round(p_home, 4),
+            "p_draw": round(p_draw, 4),
+            "p_away": round(p_away, 4),
+            "observed_at": obs,
+        }
+    return out

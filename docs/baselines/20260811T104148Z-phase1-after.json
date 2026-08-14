@@ -1,0 +1,336 @@
+{
+  "captured_at": "2026-08-11T10:41:47.469685Z",
+  "databases": {
+    "core": {
+      "db": "core",
+      "tables": {
+        "dim_match": {
+          "row_count": 16931,
+          "ddl_sha256": "bc80cf740f58daebbb858bee3388f9aa8a8c7807aba19c5d4825e8b5525fbdfe",
+          "key_column_null_rates": {
+            "kickoff_at_utc": {
+              "total": 16931,
+              "nulls": 0
+            },
+            "kickoff_precision": {
+              "total": 16931,
+              "nulls": 0
+            },
+            "kickoff_source": {
+              "total": 16931,
+              "nulls": 0
+            }
+          }
+        },
+        "dim_player": {
+          "row_count": 9120,
+          "ddl_sha256": "7979628d00e288a554b60dab357e8538af4b0233e8182a2e79cea50f98a48eeb"
+        },
+        "dim_player_i18n": {
+          "row_count": 1378,
+          "ddl_sha256": "eb9ef7cda68052048cea39d667b31d2fc783357b061ba56ebb9986dc34ecef87"
+        },
+        "dim_team_i18n": {
+          "row_count": 230,
+          "ddl_sha256": "a0ffe8db15cd46219e722ee796cdc54938d30eb3756a0ac265bd651ced60a1b2"
+        },
+        "fact_league_table": {
+          "row_count": 3815,
+          "ddl_sha256": "84554c93f07392d13671a3db6d922301544d7498f79a16114b19547fc105aee4"
+        },
+        "fact_match_events": {
+          "row_count": 252825,
+          "ddl_sha256": "ff1440344c29c4bf8773c947a4f9b1eed6f4172d9ef772222033edfb28e4865a"
+        },
+        "fact_match_lineup": {
+          "row_count": 540088,
+          "ddl_sha256": "3141f21c02b1492b1ee6bbdb6465853188a4927b614f5fe1618636ad70f31149"
+        },
+        "fact_player_match_stats": {
+          "row_count": 400247,
+          "ddl_sha256": "880349019ec827dbc30e812bf351a2b65ca26bd33712b2ffbed9445d9764b25b"
+        },
+        "fact_season_player_stats": {
+          "row_count": 180164,
+          "ddl_sha256": "cedd87e1893cdcc61d26b0f8f4a95f0ed606edff9273e14970c6c14c8bc96e82"
+        },
+        "fact_shotmap": {
+          "row_count": 330217,
+          "ddl_sha256": "972641dfdb95078e03cb7fcc8bd144235fbb83fcc6ff4c99320129541f2b1cd8"
+        },
+        "fact_team_match_stats": {
+          "row_count": 59384,
+          "ddl_sha256": "dc6053cf24e3ffe15bfa456b11a22ff06c4a4fefe1cd369cf3181d19d3e5a335"
+        },
+        "gold_wdl_predictions": {
+          "row_count": 760,
+          "ddl_sha256": "edcfd33f8c49ac161b69ac7f741b7160dd44945f2f93e1ffbde46504427e0dfd"
+        },
+        "int_match_features": {
+          "row_count": 2280,
+          "ddl_sha256": "d5356e7acb6818b3ba86f584d4656ea93202d7b3050e484131bd41ae6c87c60c"
+        },
+        "schedule_match_identity": {
+          "row_count": 16931,
+          "ddl_sha256": "03feef302afad5b4a42f8f993ce15089e8f9a431027c9c102ce83db6c2d720db"
+        },
+        "schedule_match_observation": {
+          "row_count": 0,
+          "ddl_sha256": "8c1839f91f953769d067bda19ff150493508adae1547a56b791135c7c8eb7817"
+        },
+        "schedule_match_state_snapshot": {
+          "row_count": 0,
+          "ddl_sha256": "dbb098fc7c83fcc48f7fdfbc5bdb8fc8acc2285fe2b048dd7b19692cfc7efc6a"
+        },
+        "schedule_observation_event": {
+          "row_count": 0,
+          "ddl_sha256": "ccc3bf05cf6042f2f4d4419a2e86568d0d35707d50165e0539cabcaeebca6031"
+        },
+        "schedule_rest_feature": {
+          "row_count": 0,
+          "ddl_sha256": "535fb8c3b6b7463289b33479e62697443456230d0bd07bcec883a537ea823728"
+        },
+        "schedule_rest_lineage_input": {
+          "row_count": 0,
+          "ddl_sha256": "99a0afb15cfb8786074d00a6bcddf37c4f950cf45622fa5188a8c81ce6b173a1"
+        },
+        "schedule_rest_lineage_set": {
+          "row_count": 0,
+          "ddl_sha256": "b4e5d7bf7b4f8bf00ac37f341bbb6acd355c9cdfefbe5fa602c2ee9bbad212a5"
+        },
+        "schema_migrations": {
+          "row_count": 3,
+          "ddl_sha256": "363f374841ec2287e7fc5097aa635291707e2c150133872fb7d194dc51edb780"
+        },
+        "silver_goal_minute_buckets": {
+          "row_count": 312,
+          "ddl_sha256": "192a1f4c6a246e7bbcb6eb9704d6dd12e33f396f638a26494f6150e56aad6934"
+        },
+        "silver_league_season_summary": {
+          "row_count": 42,
+          "ddl_sha256": "337797e35083012ae6a236277a48d22d01fe8698e1541edaaa6a61b774f23949"
+        },
+        "silver_over_under_thresholds": {
+          "row_count": 252,
+          "ddl_sha256": "48aa112eff6b0411fb1733d3884c6387e35e787647e9cdde35d4248ea0ea1be1"
+        },
+        "silver_score_distribution": {
+          "row_count": 1278,
+          "ddl_sha256": "7a4b6f38fe705d888078147809e96678519bb4be7b8a4bb9d82fec85d481475f"
+        },
+        "silver_team_season_stats": {
+          "row_count": 767,
+          "ddl_sha256": "cd64d6d1d956c6c19fe75afabb79995e984c351beca622a86db0fb6161915044"
+        }
+      }
+    },
+    "platform": {
+      "db": "platform",
+      "tables": {
+        "account_links": {
+          "row_count": 0,
+          "ddl_sha256": "36371c7bbe35fe4990308bdc567347b2732685f173a3e6e7740c365925687069"
+        },
+        "analytics_events": {
+          "row_count": 6,
+          "ddl_sha256": "01e8ce26f3bb4c4809eb322b9fb86899ec20e7aed04509e7d240bcd9343c2915"
+        },
+        "audit_logs": {
+          "row_count": 10,
+          "ddl_sha256": "2176c0630af741167a47b50a6974777b863fc5821021774ea2c1f5062a53b5b2"
+        },
+        "auth_identities": {
+          "row_count": 3,
+          "ddl_sha256": "8aec9b0e234e8928b84acdf6868764022fdd32e0beb62928bd32a259421758b5"
+        },
+        "auth_sessions": {
+          "row_count": 8,
+          "ddl_sha256": "41803a534edb888d197e327d1da460a0810743586c98eac7fa0d9161e04a2a30"
+        },
+        "content_drafts": {
+          "row_count": 0,
+          "ddl_sha256": "5b09afb312281df512a91280972838b775bbe3b63463d20f551eb66d2917dc54"
+        },
+        "device_login_requests": {
+          "row_count": 28,
+          "ddl_sha256": "05ca5fc246363fceb244966138412fd835186e0021be7f4c51fab1de80def0ce"
+        },
+        "export_jobs": {
+          "row_count": 0,
+          "ddl_sha256": "6e0056e4522eff2339a0da843291ec3d4e4f37204d2f0a222cd372d122375fbe"
+        },
+        "favorites": {
+          "row_count": 0,
+          "ddl_sha256": "cac8fd7c1b89243b6e54016be1d0d0013e0c7f167d48727d560ad05d5f12acc2"
+        },
+        "job_runs": {
+          "row_count": 13554,
+          "ddl_sha256": "3652ffeb15d41732e139ba14a229d422c62681dbcbe2ea3e6ba4d2a4d7be40ed"
+        },
+        "model_versions": {
+          "row_count": 1,
+          "ddl_sha256": "43984b8a58ff7355658a1ea338acdc9b0740464dfdea9cb0f5df58c2d29e937a"
+        },
+        "oauth_states": {
+          "row_count": 5,
+          "ddl_sha256": "e2437b1542c5984ebc8a7fd7c18e20fce31bacb95d658f190564628d6e02351f"
+        },
+        "pipeline_alerts": {
+          "row_count": 6,
+          "ddl_sha256": "efa250d2dac8196e1e3168856ceb3f91c1569125b0b9649dee350731063572d6"
+        },
+        "plan_entitlements": {
+          "row_count": 55,
+          "ddl_sha256": "6f1b2e2be8795a66692d75a6a6b3fc27c8fe5dedca6de20b1d8b2fcb840d9cec"
+        },
+        "plans": {
+          "row_count": 5,
+          "ddl_sha256": "1fe1f4fa6db1ee61b4f7674fc46ecf20f029f2145c66838c1c0b74fcdb93b292"
+        },
+        "prediction_evaluations": {
+          "row_count": 0,
+          "ddl_sha256": "736e77ff4c72cc769acc876e2a5474344efcf76a0ab1211cc70877cf4bc50c1a"
+        },
+        "prediction_manifests": {
+          "row_count": 3,
+          "ddl_sha256": "367f29c84fca243bdbab250e3a59c4ff37ace4e7c9123c4312a20215cc4123e9"
+        },
+        "prediction_outcomes": {
+          "row_count": 380,
+          "ddl_sha256": "f0e861c85511c93ec64ce4ff1fb26082e89d9f9ef95c552d464fe9df95dff72f"
+        },
+        "prediction_runs": {
+          "row_count": 4,
+          "ddl_sha256": "14e1f91df72d7700a8dac15159103a779e868cdff19f04991896f926083ae8dc"
+        },
+        "prediction_snapshot_edits": {
+          "row_count": 0,
+          "ddl_sha256": "2e1fab1c25af72014c7b758735ba8fccaa1ebaa8ed6296c09dd8253d9966c701"
+        },
+        "prediction_snapshots": {
+          "row_count": 760,
+          "ddl_sha256": "0b2f5e6a5f7ad1621a446029da30b40653c98d53653b739324ddd511a35a5745"
+        },
+        "products": {
+          "row_count": 4,
+          "ddl_sha256": "0834b3907dc5a77eceba3451ea158f896aee803964c44addc61b65795e9fa743"
+        },
+        "reco_legs": {
+          "row_count": 3,
+          "ddl_sha256": "6609f948e19f4efc8c0a4517c19b57ca9a2d066d9ef4d25c72189a917c5cb191"
+        },
+        "reco_slips": {
+          "row_count": 2,
+          "ddl_sha256": "d77f0d267d48d3f83a67feeae18808fab90463f78330bafc7eb17bdfef4a3753"
+        },
+        "redeem_codes": {
+          "row_count": 0,
+          "ddl_sha256": "96379795531450c4fa0acc691e546dcd172aeb915b8cf7baa3ff8178bb86c4ad"
+        },
+        "roles": {
+          "row_count": 3,
+          "ddl_sha256": "a664bc7639fd086b5ba4330a808b1829cdeeac85338128862f4900c5f767e71b"
+        },
+        "schema_migrations": {
+          "row_count": 11,
+          "ddl_sha256": "363f374841ec2287e7fc5097aa635291707e2c150133872fb7d194dc51edb780"
+        },
+        "subscriptions": {
+          "row_count": 3,
+          "ddl_sha256": "39a96cef1a363ef6a96dc1531596afe383512b88e1f8b51b71dad915a972b350"
+        },
+        "team_style_profiles": {
+          "row_count": 0,
+          "ddl_sha256": "9d5e6bcd5ff29eab3e182cfce21e6e096d31f18884639e09c21259ab08d10fa6"
+        },
+        "users": {
+          "row_count": 3,
+          "ddl_sha256": "6af1e8b8119ac38f949ded4ef852a84a3ab3d8ddca110beb14954ab9963809ad"
+        },
+        "wechat_access_token_cache": {
+          "row_count": 0,
+          "ddl_sha256": "e7214b6fbbe836403422ea3d590eb304bb3e18b76fc268da5a0c1920cf7ad03b"
+        },
+        "wechat_webhook_nonces": {
+          "row_count": 1,
+          "ddl_sha256": "963987b22f45e1cf536b20a5cecf32f65f4853ed9016c7bf64605ab642d59490"
+        }
+      }
+    },
+    "odds": {
+      "db": "odds",
+      "tables": {
+        "bronze_fm_lineup_snap": {
+          "row_count": 42,
+          "ddl_sha256": "468f24bca3190fa1fe80849758f829c2f14d9bb0a02ae4436c2b9b69da27a9d5"
+        },
+        "bronze_fm_sideline_snap": {
+          "row_count": 62,
+          "ddl_sha256": "5fdebb2f87a56c8dc8de13f843a4ba587025b74ddf03f837bce47aa9e84b44ca"
+        },
+        "bronze_kbisai_odds_point": {
+          "row_count": 320,
+          "ddl_sha256": "d416e9397a930d97b042c7727c21f7d49a181799eb5c2568811d326ceedb29f6"
+        },
+        "bronze_legacy_odds_summary": {
+          "row_count": 88457,
+          "ddl_sha256": "612fa43db6c45b2e3950a0161c6e9c2c6dffa6b778acd70170bfab8d733eaddb"
+        },
+        "bronze_ng_odds_snap": {
+          "row_count": 735793,
+          "ddl_sha256": "9b345ffe1ff7282fb4efcd81071ffd469a30500861eb440ada8d0918b4f1c83e"
+        },
+        "dim_match_xref": {
+          "row_count": 2197,
+          "ddl_sha256": "aed8bb5cc828f0273544a037875180c6d1685034f97faa14e0d1e9e82d310b39",
+          "key_column_null_rates": {
+            "review_status": {
+              "total": 2197,
+              "nulls": 0
+            }
+          }
+        },
+        "dim_team_alias": {
+          "row_count": 576,
+          "ddl_sha256": "6ea4c62848e5a132bdc4f12195b89d492798cfcfd2d6935ef446955232cf8755"
+        },
+        "dim_team_xref": {
+          "row_count": 50,
+          "ddl_sha256": "6effe681a0896c43ad6ec51af39b5df93ab47d75e3c93a61a150dafce76fe022"
+        },
+        "fixture_sync_ledger": {
+          "row_count": 51,
+          "ddl_sha256": "c508b8952d5addb9236a68c951f7d2329b5d3058b45c85a0d9c9c23e890a6560"
+        },
+        "gold_move_cooccurrence": {
+          "row_count": 193,
+          "ddl_sha256": "f5131279cbe6c97569c1775a0f77ebaf23af8e52469cd367e10b33c57eddf6f4"
+        },
+        "poll_attempt_log": {
+          "row_count": 158,
+          "ddl_sha256": "5608745fff78c2bbe5c765d2410faeeadca1037e4bdc642b90e7c4585f0590c7"
+        },
+        "poll_state": {
+          "row_count": 88,
+          "ddl_sha256": "106c0b5054ff9001fe32dfef2222fc952555cd62568c73e16e459df4a20b8b83"
+        },
+        "schema_migrations": {
+          "row_count": 7,
+          "ddl_sha256": "363f374841ec2287e7fc5097aa635291707e2c150133872fb7d194dc51edb780"
+        },
+        "silver_event_moves": {
+          "row_count": 29,
+          "ddl_sha256": "1569b5da15fba8a870e9b817ecab18049eafc793dc5014ed07f388ee5767a8dc"
+        },
+        "silver_odds_moves": {
+          "row_count": 1479513,
+          "ddl_sha256": "311dadccca9abc0555d3cc3363dcb9c9a2ad1946456e87b2a20e2cbff3c9e22a"
+        },
+        "source_health": {
+          "row_count": 1671,
+          "ddl_sha256": "db9efccfafb8eff63bf73813f09fda16503bda6998892a1042dd5b019e46530e"
+        }
+      }
+    }
+  }
+}

@@ -148,7 +148,29 @@ closed_flag/statusId/goingTime/score）+ `dup_ordinal` 的 UNIQUE 键，
   `exact` 精度 kickoff。历史五大联赛旧数据在补列前落库,仍为 `date_only`
   (如实,未回填)。
 
-### 1.1 多联赛历史覆盖 probe（2026-07-30）
+### 1.2 数据管道重建 Phase 0 探测（2026-08-10,真实网络）
+
+产物:`runtime/research/pipeline-v2-probe/`(raw 原始字节 + summary.json)。7 个待接入联赛
+逐一 `league_matches(id)`(不传 season → 由响应发现赛季),`details.id` 全部匹配:
+
+| id | 联赛 | 发现赛季 | 总场次 | T+7 窗口 | 最早 kickoff |
+|---|---|---|---|---|---|
+| 48 | 英冠 | 2026/2027 | 552 | 11 | 2026-08-14 |
+| 57 | 荷甲 | 2026/2027 | 306 | 9 | 2026-08-07 |
+| 61 | 葡超 | 2026/2027 | 306 | 9 | 2026-08-07 |
+| 268 | 巴甲 | **2026(自然年)** | 380 | 9 | 2026-01-28 |
+| 42 | 欧冠 | 2025/2026 | 189 | **0(季外)** | 2025-09-16 |
+| 73 | 欧联 | 2025/2026 | 189 | **0(季外)** | 2025-09-24 |
+| 10216 | 欧协联 | 2025/2026 | 153 | **0(季外)** | 2025-10-02 |
+
+- **欧战三项资格赛天然排除已实证**:42/73/10216 的 round 集合 =
+  `{1..8(联赛阶段), playoff, 1/8, 1/4, 1/2, final}`,最早 kickoff 均在 9 月及以后,
+  **无 7-8 月资格赛**。`round='playoff'` 存在且保留(用户已确认附加赛要抓)。
+- **欧战当前是季外**:2026-08 时 FotMob 只广告上一季(2025/2026),T+7 窗口 0 场——
+  这是 `off_season` 诚实路径要处理的情形,非故障。26/27 抽签开始后 FotMob 才广告新季。
+- **巴甲是自然年赛季**(`2026`),与五大联赛的跨年串不同,赛季解析不得按月份推断。
+
+### 1.3 多联赛历史覆盖 probe（2026-07-30）
 
 真实 probe 使用同一 FotMob transport，在 gitignored private runtime 中保存
 不可变 raw artifact 和 durable request ledger。验证赛事包括 MLS 130、J. League
@@ -231,6 +253,16 @@ Bet365 记录(1x2/ah/ou,initial+latest 均非空)并成功落库
   观测不到。任何页面/文档不得把它描述为"完整多公司赔率时间序列"。
 - 公司选择:优先 CID 8(Bet365)、31(Sbobet)(`DEFAULT_TARGET_CIDS`);
   一家都没命中时回退第一家有效公司。其他公司覆盖 **UNVERIFIED**。
+- **实时公司面板已实测(2026-08-10,3 场未开赛比赛,`runtime/research/pipeline-v2-probe/`)**:
+  单场 `type=14&t=1` 稳定返回 **12 家公司**:
+  `8 Bet365 · 31 Sbobet · 50 1xBet · 17 Mansion88 · 24 12bet · 3 Crown(皇冠) ·
+  42 18Bet · 12 Easybet · 1 Macauslot(澳门) · 4 Ladbrokes · 14 Vcbet · 19 Interwetten`。
+  数据管道重建选定的三家 **Bet365(8) / 澳门(1) / 皇冠(3)** 在 3/3 场全部出现,
+  且各自 euro/ah/ou 三市场齐全。**Pinnacle 不在实时面板**(此前文档"Pinnacle 有赛前 1X2"
+  的结论仅来自历史 archive 端点对已完赛比赛的验证,不适用实时;已由用户改选皇冠)。
+- **赛后补抓 sweep 不可行(已探测,fail-closed)**:对一场未开赛比赛调 `mix_history`
+  (`type=14&t=20`)返回 0 行、无时间戳 → 该端点对未开赛/临近比赛不提供可用的带时间戳序列。
+  因此数据管道重建**不建赛后补抓 sweep**,临场收盘只靠 10 分钟档 + last_call 强制轮询保证。
 - 主客反转归一(`normalize_for_inversion`,依据 `dim_match_xref.home_away_inverted`):
   1x2 交换 home/away;AH 交换双边并把盘口线取负;OU 对称不换。
 - WAF:响应命中 `just a moment`/`cloudflare` 等标记即抛 `WAFBlockedError`,

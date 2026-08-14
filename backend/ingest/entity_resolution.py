@@ -107,6 +107,67 @@ def seed_team_aliases(conn_odds: sqlite3.Connection, conn_core: sqlite3.Connecti
     return added
 
 
+def _ascii_fold(text: str) -> str:
+    """去变音符折叠:NFKD 分解后剔除组合记号,再走 _norm(小写+压空白)。
+
+    'Häcken'→'hacken'、'Mjällby'→'mjallby'、'Deportivo A Coruña'→'deportivo a coruna'。
+    NowGoal 发 ASCII 队名,FotMob 发带变音符原文;auto-seed 的别名保留变音符(经 _norm),
+    因此需要**额外**播一份折叠形式,否则新联赛(荷甲/葡超/巴甲/欧协联)整批落 needs_review。
+    """
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return _norm(stripped)
+
+
+def seed_ascii_fold_aliases(conn_odds: sqlite3.Connection) -> dict:
+    """给带变音符的既有别名补一份 ASCII 折叠别名(source='ascii_fold'),fail-closed。
+
+    撞名审计:若某折叠串映射到 ≥2 个不同 canonical_team_id,**整串拒绝**(不写),
+    列入 rejected 供人工复核——绝不制造歧义别名(把"零撞名"从事后声称变成事前门禁)。
+    只对"折叠后与原串不同"(即真的含变音符/兼容字符)的别名生成,幂等 INSERT OR IGNORE。
+    返回 {added, rejected:[(fold, [team_ids])], candidates}。
+    """
+    rows = conn_odds.execute(
+        "SELECT canonical_team_id, alias FROM dim_team_alias"
+    ).fetchall()
+    # 已存在的别名串(避免把已有 ASCII 串当成"新折叠"重复写)
+    existing_aliases = {r["alias"] for r in rows}
+    # 折叠串 → 该串对应的 canonical 集合
+    fold_to_ids: dict[str, set[int]] = {}
+    for r in rows:
+        folded = _ascii_fold(r["alias"])
+        if not folded or folded == r["alias"]:
+            continue                     # 无变音符,折叠无意义
+        fold_to_ids.setdefault(folded, set()).add(int(r["canonical_team_id"]))
+
+    now = utc_now_iso()
+    added = 0
+    rejected = []
+    with tx(conn_odds):
+        for folded, ids in sorted(fold_to_ids.items()):
+            if len(ids) >= 2:
+                rejected.append((folded, sorted(ids)))
+                continue                 # 撞名:整串拒绝,不写
+            if folded in existing_aliases:
+                # 该 ASCII 串已作为某别名存在——只有当它指向同一 canonical 才安全;
+                # 指向不同则同样是撞名风险,交撞名审计(上面的 len>=2 已覆盖跨串情形,
+                # 这里防"折叠串恰好等于另一队的既有 ASCII 别名")
+                other = _alias_team_ids(conn_odds, folded)
+                if other and other != ids:
+                    rejected.append((folded, sorted(ids | other)))
+                    continue
+            (team_id,) = tuple(ids)
+            cur = conn_odds.execute(
+                "INSERT OR IGNORE INTO dim_team_alias (canonical_team_id, alias, source, created_at)"
+                " VALUES (?, ?, 'ascii_fold', ?)",
+                (team_id, folded, now),
+            )
+            added += cur.rowcount
+    return {"added": added, "rejected": rejected, "candidates": len(fold_to_ids)}
+
+
 def _alias_team_ids(conn_odds: sqlite3.Connection, name: str) -> set[int]:
     alias = _norm(name)
     if not alias:
@@ -288,11 +349,20 @@ def _candidate_matches(
             "SELECT fotmob_match_id FROM dim_match_xref WHERE provider=?", (PROVIDER,)
         )
     }
+    # 联赛白名单(只用 FotMob 侧范围,不需要 NowGoal 联赛 id):NowGoal 日程是全球的
+    # (单日约 988 场),不限联赛会让 16 个已登记联赛的候选池与 UNIQUE(provider,
+    # fotmob_match_id) 占位风险显著上升,而被占住的行会永久冻结在 needs_review
+    # (resolve_match 不再重评估)。限定候选到 LEAGUE_META 已登记联赛,安全且零成本。
+    from backend.queries.leagues import LEAGUE_META
+
+    league_ids = tuple(LEAGUE_META)
+    placeholders = ",".join("?" for _ in league_ids)
     rows = conn_core.execute(
-        """SELECT Match_ID, Date, kickoff_at_utc, kickoff_precision, kickoff_source,
+        f"""SELECT Match_ID, Date, kickoff_at_utc, kickoff_precision, kickoff_source,
                   Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name
-           FROM dim_match WHERE Date BETWEEN ? AND ?""",
-        (lo, hi),
+           FROM dim_match WHERE Date BETWEEN ? AND ?
+             AND League_ID IN ({placeholders})""",
+        (lo, hi, *league_ids),
     ).fetchall()
     return [r for r in rows if int(r["Match_ID"]) not in mapped]
 

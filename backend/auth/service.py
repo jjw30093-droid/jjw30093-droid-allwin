@@ -200,6 +200,22 @@ def create_device_request(conn: sqlite3.Connection, ttl_seconds: int) -> dict:
     }
 
 
+def attach_qr_to_device_request(
+    conn: sqlite3.Connection, request_id: str, ticket: str, url: str
+) -> None:
+    """把带参二维码的 ticket/url 挂到 request 上(创建成功后一次性写入)。"""
+    conn.execute(
+        "UPDATE device_login_requests SET qr_ticket=?, qr_url=? WHERE id=?",
+        (ticket, url, request_id),
+    )
+
+
+def get_device_request(conn: sqlite3.Connection, request_id: str):
+    return conn.execute(
+        "SELECT * FROM device_login_requests WHERE id=?", (request_id,)
+    ).fetchone()
+
+
 def approve_device_request(conn: sqlite3.Connection, request_id: str, user_id: str) -> bool:
     now = utc_now_iso()
     cur = conn.execute(
