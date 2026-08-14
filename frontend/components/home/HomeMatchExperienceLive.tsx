@@ -190,18 +190,17 @@ function FeaturedFreeCard({ card }: { card: HomeMatchCard }) {
       <div className={styles.pairBody}>
         <div className={styles.pairMatchup}>
           <KickoffRow match={match} />
-          <div className={styles.pairTeamRow}>
-            <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={48} eager />
-            <span className={styles.pairTeamName}>
-              {match.home.name}
-              <b>主</b>
+          <div className={styles.pairTeamsInline}>
+            <span className={styles.pairTeamInline}>
+              <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={36} eager />
+              <span className={styles.pairTeamNameInline}>{match.home.name}</span>
             </span>
-          </div>
-          <div className={styles.pairTeamRow}>
-            <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={48} eager />
-            <span className={styles.pairTeamName}>
-              {match.away.name}
-              <b>客</b>
+            <span className={styles.pairVs} aria-hidden>
+              vs
+            </span>
+            <span className={styles.pairTeamInline}>
+              <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={36} eager />
+              <span className={styles.pairTeamNameInline}>{match.away.name}</span>
             </span>
           </div>
         </div>
@@ -256,18 +255,17 @@ function FeaturedLockedCard({ card }: { card: HomeMatchCard }) {
       <div className={styles.pairBody}>
         <div className={styles.pairMatchup}>
           <KickoffRow match={match} />
-          <div className={styles.pairTeamRow}>
-            <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={48} />
-            <span className={styles.pairTeamName}>
-              {match.home.name}
-              <b>主</b>
+          <div className={styles.pairTeamsInline}>
+            <span className={styles.pairTeamInline}>
+              <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={36} />
+              <span className={styles.pairTeamNameInline}>{match.home.name}</span>
             </span>
-          </div>
-          <div className={styles.pairTeamRow}>
-            <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={48} />
-            <span className={styles.pairTeamName}>
-              {match.away.name}
-              <b>客</b>
+            <span className={styles.pairVs} aria-hidden>
+              vs
+            </span>
+            <span className={styles.pairTeamInline}>
+              <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={36} />
+              <span className={styles.pairTeamNameInline}>{match.away.name}</span>
             </span>
           </div>
         </div>
