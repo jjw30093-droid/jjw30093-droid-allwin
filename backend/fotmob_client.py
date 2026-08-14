@@ -564,8 +564,8 @@ class FotMobClient:
         """
         获取球队总览数据（含 details/fixtures/overview/table/squad/history 等）。
 
-        新增于 analysis/team_schedule_pilot 可行性 pilot（见
-        docs/audits/team-schedule-pilot.md）。
+        新增于球队赛程可行性 pilot（该研究目录已于 2026-08-14 清理删除，
+        结论见 docs/audits/team-schedule-pilot.md）。
 
         ⚠️ 实测（2026-07-23，team_id=8456）：`season` 参数对返回内容**没有
         可观测影响**——该端点不是"按赛季查询历史赛程"接口，而是以当前时刻

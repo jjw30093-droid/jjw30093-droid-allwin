@@ -1,12 +1,16 @@
 """把 Phase 0 的缺口清单(gaps.jsonl)与 Phase 1 的重映射结果
-(resolution_results.jsonl)按 match_id 拼接，切成"联赛×赛季"分片，产出可以
-直接喂给 ``nowgoal_top5_history_backfill.py --match-allowlist`` 的清单。
+(resolution_results.jsonl)按 match_id 拼接，切成"联赛×赛季"分片。
+
+分片产物由 backend/cli/ingest_nowgoal_historical_odds.py 消费(见其
+``GAP_SHARD_DIR``)。原先的研究期消费者
+``nowgoal_top5_history_backfill.py --match-allowlist`` 位于 analysis/ 下,
+该研究目录已于 2026-08-14 清理删除。
 
 只读、只写 runtime/research/ 下的产物，不碰 data/*.db、不发网络请求。
 
 每个分片两个文件：
 - ``<league_key>-<season_dash>.ready.jsonl``：``resolution.status=='auto_ok'``
-  的比赛，直接喂给 ``--match-allowlist``。
+  的比赛，即实际进入回填清单的那批。
 - ``<league_key>-<season_dash>.review.jsonl``：其余状态(needs_review /
   no_candidate / ambiguous / titan_conflict)，留给人工复核，不进爬取清单。
 """
@@ -24,9 +28,10 @@ from typing import Any
 
 DEFAULT_OUTPUT_DIR = Path("runtime/research/nowgoal-aws-gap-shards")
 
-# FotMob League_ID -> nowgoal_top5_history_backfill.py 的 --league key
-# (与 analysis/nowgoal_historical_capability_probe/...:TOP5_ARCHIVE_LEAGUES 的
-# ArchiveLeagueSpec.key 完全对应，改这里必须同步核对那边)。
+# FotMob League_ID -> 历史回填分片的 --league key
+# (原与 analysis/nowgoal_historical_capability_probe 的 TOP5_ARCHIVE_LEAGUES
+# 一一对应；该研究目录已于 2026-08-14 清理删除,这份映射现在是仓库内唯一副本,
+# 不再需要跟任何外部常量同步。)
 FOTMOB_LEAGUE_TO_ARCHIVE_KEY = {
     47: "premier_league",
     55: "serie_a",
