@@ -243,10 +243,6 @@ function FeaturedFreeCard({ card }: { card: HomeMatchCard }) {
 
 function FeaturedLockedCard({ card }: { card: HomeMatchCard }) {
   const { match } = card;
-  const leagueName = LEAGUE_ZH[match.league_id] ?? `联赛 ${match.league_id}`;
-  const kickoffLabel = match.kickoff_at_utc
-    ? formatBeijingZh(match.kickoff_at_utc)
-    : match.date_utc;
 
   return (
     <article className={styles.lockedCard}>
@@ -270,16 +266,6 @@ function FeaturedLockedCard({ card }: { card: HomeMatchCard }) {
           </div>
         </div>
       </div>
-
-      <p className={styles.pairLockedNote}>
-        <span className={styles.pairLockedNoteDesktop}>
-          左边那张的三段概率条,这场没有——「{leagueName}」的胜平负概率不对未登录用户下发。
-          登录后这块位置会出现同样的概率条、赔率走势和深度报告。
-        </span>
-        <span className={styles.pairLockedNoteMobile}>
-          {kickoffLabel} 开球。该联赛的胜平负概率不对未登录用户下发,登录后才会计算。
-        </span>
-      </p>
 
       <Link
         href={`/login?next=${encodeURIComponent(`/matches/${match.match_id}`)}`}
@@ -315,11 +301,17 @@ function SecondaryMatchCard({ card }: { card: HomeMatchCard }) {
         </span>
       </div>
       <div className={styles.secondaryTeams}>
-        <strong className={styles.secondaryTeamName}>{match.home.name}</strong>
+        <span className={styles.secondaryTeamInline}>
+          <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={24} />
+          <strong className={styles.secondaryTeamName}>{match.home.name}</strong>
+        </span>
         <span className={styles.secondaryVs} aria-hidden>
           vs
         </span>
-        <strong className={styles.secondaryTeamName}>{match.away.name}</strong>
+        <span className={styles.secondaryTeamInline}>
+          <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={24} />
+          <strong className={styles.secondaryTeamName}>{match.away.name}</strong>
+        </span>
       </div>
       {match.win_probability ? (
         <div className={styles.secondaryProb}>
