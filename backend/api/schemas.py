@@ -610,6 +610,11 @@ class MarketCardDTO(BaseModel):
     market: str
     label: str
     line: float
+    # "market" = 这场比赛真实抓到的 NowGoal 盘口线(goals/corners 有实时轮询时);
+    # "statistical" = 统计参考线(calibrate_markets.py 选定的竞彩常见线,
+    # yellow_cards 恒为这档——NowGoal 没有罚牌市场)。前端必须区分展示,
+    # 不能把统计参考线包装成"这场比赛的真实盘口"。
+    line_source: Literal["market", "statistical"]
     # 两队各自历史均值之和(与 calibrate_markets.py 标定时的定义完全一致)。
     estimate: Optional[float] = None
     bucket_index: Optional[int] = None

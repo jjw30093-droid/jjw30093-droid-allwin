@@ -26,6 +26,11 @@ const DRIVER_LABEL: Record<string, string> = Object.fromEntries(
 
 const LEAN_ZH: Record<string, string> = { over: "偏大", under: "偏小" };
 
+const LINE_SOURCE_ZH: Record<MarketCardData["line_source"], string> = {
+  market: "真实盘口",
+  statistical: "历史参考线",
+};
+
 function fmt(v: number | null | undefined, digits = 1): string {
   return v == null ? "—" : v.toFixed(digits);
 }
@@ -89,7 +94,12 @@ export function MarketCard({ card }: { card: MarketCardData }) {
       <header className={styles.head}>
         <div className={styles.label}>
           <h3>{card.label}</h3>
-          <span className={styles.line}>盘口线 {card.line}</span>
+          <span className={styles.line}>
+            盘口线 {card.line}
+            <span className={styles.lineSourceTag} data-source={card.line_source}>
+              {LINE_SOURCE_ZH[card.line_source]}
+            </span>
+          </span>
         </div>
         {degraded ? (
           <span className={styles.degradedPill}>{degraded.pill}</span>

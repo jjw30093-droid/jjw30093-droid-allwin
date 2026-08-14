@@ -126,6 +126,39 @@ def _fetch_odds(fixture, titan_id):
     return nowgoal.fetch_odds(titan_id)
 
 
+def _fetch_corner_odds_for_companies(fixture, titan_id, main_records: list[dict]) -> list[dict]:
+    """只对本轮主盘(1x2/ah/ou)已经出现过的公司抓角球大小盘,不额外扩大公司范围
+    ——主盘都没有的公司,没理由角球盘会有。单公司抓取失败(WAF 除外)不拖累
+    其它公司,也不拖累主盘三市场本身已经落库的数据。"""
+    name_by_cid: dict[str, str] = {}
+    for r in main_records:
+        name_by_cid.setdefault(r["company_id"], r.get("company_name", ""))
+
+    if fixture is not None:
+        corners_fixture = (fixture.get("corners") or {}).get(str(titan_id)) or {}
+        out = []
+        for cid, name in name_by_cid.items():
+            payload = corners_fixture.get(str(cid))
+            if not payload:
+                continue
+            rec = nowgoal.parse_corner_odds(payload, cid, name)
+            if rec:
+                out.append(rec)
+        return out
+
+    out = []
+    for cid, name in name_by_cid.items():
+        try:
+            rec = nowgoal.fetch_corner_odds(titan_id, cid, name)
+        except nowgoal.WAFBlockedError:
+            raise  # WAF 是全局性拦截,交给上层统一处理/退避,不能当成单公司失败吞掉
+        except nowgoal.NowGoalError:
+            continue  # 该公司角球盘抓取失败(超时/解析失败等):跳过,不拖累其它公司
+        if rec:
+            out.append(rec)
+    return out
+
+
 def _poll_odds_for(
     conn_odds, conn_core, item: dict, observed_at: str, poll_run_id: str, summary: dict
 ) -> bool:
@@ -133,6 +166,7 @@ def _poll_odds_for(
     titan_id = item["titan_id"]
     xref = item["xref"]
     fixture = item.get("fixture")
+    market_phase = _market_phase(conn_core, xref["fotmob_match_id"], observed_at)
     try:
         records = _fetch_odds(fixture, titan_id)
         records = [
@@ -145,15 +179,35 @@ def _poll_odds_for(
             records=records,
             observed_at=observed_at,
             poll_run_id=poll_run_id,
-            market_phase=_market_phase(conn_core, xref["fotmob_match_id"], observed_at),
+            market_phase=market_phase,
         )
         summary["odds_polled"] += 1
         summary["snapshots_inserted"] += result["inserted"]
         summary["snapshots_skipped"] += result["skipped"]
-        return True
     except Exception as exc:  # noqa: BLE001 — 采集边界:单场失败不拖垮整轮
         summary["failures"].append(f"odds titan_id={titan_id}: {type(exc).__name__}: {exc}")
         return False
+
+    # 角球大小盘:主盘(1x2/ah/ou)已经成功落库之后再抓,只对主盘出现过的公司抓,
+    # 抓取/落库失败只记一条 failure,不撤销主盘已经成功落库的结果(单个市场坏了
+    # 不该拖垮已经拿到手的其它市场——同一条纪律主盘失败逻辑已经在用)。
+    try:
+        corner_records = _fetch_corner_odds_for_companies(fixture, titan_id, records)
+        if corner_records:
+            corner_result = ingest_odds_records(
+                conn_odds,
+                provider_match_id=str(titan_id),
+                records=corner_records,
+                observed_at=observed_at,
+                poll_run_id=poll_run_id,
+                market_phase=market_phase,
+            )
+            summary["snapshots_inserted"] += corner_result["inserted"]
+            summary["snapshots_skipped"] += corner_result["skipped"]
+    except Exception as exc:  # noqa: BLE001
+        summary["failures"].append(f"corners titan_id={titan_id}: {type(exc).__name__}: {exc}")
+
+    return True
 
 
 def _resolve_schedule_rows(

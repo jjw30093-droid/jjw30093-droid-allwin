@@ -2242,7 +2242,7 @@
      "public"
     ],
     "summary": "Match Markets",
-    "description": "赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论\n(data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的\"这场比赛\n特有\"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。\n\n门禁与 /report 同级:只有联赛门禁,不区分付费档位——数据倾向是本站\n对访客建立信任的内容,不是需要登录才能看的深度报告。",
+    "description": "赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论\n(data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的\"这场比赛\n特有\"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。\n\n盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线\n(line_source=\"market\"),没有时退回统计参考线(line_source=\"statistical\");\nyellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。\n\n门禁与 /report 同级:只有联赛门禁,不区分付费档位——数据倾向是本站\n对访客建立信任的内容,不是需要登录才能看的深度报告。",
     "operationId": "match_markets_api_v1_matches__match_id__markets_get",
     "parameters": [
      {
@@ -10009,6 +10009,14 @@
       "type": "number",
       "title": "Line"
      },
+     "line_source": {
+      "type": "string",
+      "enum": [
+       "market",
+       "statistical"
+      ],
+      "title": "Line Source"
+     },
      "estimate": {
       "anyOf": [
        {
@@ -10129,6 +10137,7 @@
      "market",
      "label",
      "line",
+     "line_source",
      "data_quality",
      "driver_factors",
      "driver_factors_away"

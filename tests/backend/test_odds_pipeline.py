@@ -985,6 +985,168 @@ class TestPollCliOffline:
         assert n == 0
 
 
+# ── CLI 离线单轮采集:角球大小盘(2026-08-14 新增,corners_ou 真实盘口) ──────
+
+
+def _fixture_with_corners(tmp_path, *, corners_by_titan: dict) -> Path:
+    """在 poll_fixture.json 基础上加 "corners" 字段(fixture["corners"][titan_id][cid]
+    = type=14&t=28 原始 payload),供 _fetch_corner_odds_for_companies() 离线模式读取。"""
+    fixture = json.loads((FIXTURES / "poll_fixture.json").read_text(encoding="utf-8"))
+    sched = fixture["schedule_data"]
+    sched = sched.replace("2026,7,15,19,30,00", _js_date_tuple(QUERY_DATE))
+    sched = sched.replace("2026,7,15,22,00,00", _js_date_tuple(QUERY_DATE))
+    sched = sched.replace("2026,7,15,20,00,00", _js_date_tuple(NEXT_DATE))
+    fixture["schedule_data"] = sched
+    fixture["corners"] = corners_by_titan
+    p = tmp_path / "poll_fixture_corners.json"
+    p.write_text(json.dumps(fixture, ensure_ascii=False), encoding="utf-8")
+    return p
+
+
+class TestPollCliCornerOdds:
+    def _corner_payload(self) -> dict:
+        return json.loads((FIXTURES / "corner_odds_sample.json").read_text(encoding="utf-8"))
+
+    def test_offline_poll_ingests_corner_odds_only_for_companies_with_fixture_data(
+        self, odds_conn, core_db, tmp_path
+    ):
+        """poll_fixture.json 主盘只有 cid=8(Bet365)一家公司;corners fixture 只给
+        3001001 造了数据——验证公司范围不额外扩大、比赛范围不额外扩大(3001002 主盘
+        成功但没有对应 corners fixture,不应凭空生成一条角球盘行)。"""
+        from backend.cli.poll_nowgoal import main
+
+        fixture_path = _fixture_with_corners(
+            tmp_path, corners_by_titan={"3001001": {"8": self._corner_payload()}}
+        )
+        rc = main(["--date", QUERY_DATE, "--offline-fixture", str(fixture_path)])
+        assert rc == 0
+
+        corner_rows = odds_conn.execute(
+            "SELECT provider_match_id, company_id, market_phase, payload_json"
+            " FROM bronze_ng_odds_snap WHERE market='corners_ou'"
+        ).fetchall()
+        assert [r["provider_match_id"] for r in corner_rows] == ["3001001"]
+        assert corner_rows[0]["company_id"] == "8"
+        assert corner_rows[0]["market_phase"] == "pre_match"
+        payload = json.loads(corner_rows[0]["payload_json"])
+        assert payload["initial"] is None   # 角球盘没有初盘,不能假装有
+        assert payload["latest"] == {"over": 0.9, "line": 10.5, "under": 0.9}
+
+        # 主盘(1x2/ah)两场各 2 市场照常落库,不受角球盘新增逻辑影响。
+        main_count = odds_conn.execute(
+            "SELECT COUNT(*) FROM bronze_ng_odds_snap WHERE market IN ('1x2','ah')"
+        ).fetchone()[0]
+        assert main_count == 4
+
+    def test_offline_poll_corner_odds_hash_diff_dedup_on_rerun(self, odds_conn, core_db, tmp_path):
+        from backend.cli.poll_nowgoal import main
+
+        fixture_path = _fixture_with_corners(
+            tmp_path, corners_by_titan={"3001001": {"8": self._corner_payload()}}
+        )
+        rc1 = main(["--date", QUERY_DATE, "--offline-fixture", str(fixture_path)])
+        rc2 = main(["--date", QUERY_DATE, "--offline-fixture", str(fixture_path)])
+        assert rc1 == 0 and rc2 == 0
+        n = odds_conn.execute(
+            "SELECT COUNT(*) FROM bronze_ng_odds_snap WHERE market='corners_ou'"
+        ).fetchone()[0]
+        assert n == 1   # payload 未变,第二轮 hash-diff 跳过,不重复落库
+
+    def test_corner_fetch_failure_does_not_fail_already_ingested_main_markets(
+        self, odds_conn, core_db, tmp_path, monkeypatch
+    ):
+        """角球盘解析炸了(模拟真实抓取/解析异常):主盘(1x2/ah)已经成功落库的
+        结果不能被撤销或标记失败,只在 summary["failures"] 里单独记一条。"""
+        from backend.cli import poll_nowgoal
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("角球盘解析炸了")
+
+        monkeypatch.setattr(poll_nowgoal.nowgoal, "parse_corner_odds", boom)
+
+        fixture_path = _fixture_with_corners(
+            tmp_path, corners_by_titan={"3001001": {"8": self._corner_payload()}}
+        )
+        summary = poll_nowgoal.run_poll(QUERY_DATE, offline_fixture=str(fixture_path))
+
+        assert summary["odds_polled"] == 2   # 两场主盘照常抓完,不因角球盘炸了少抓
+        assert any(f.startswith("corners titan_id=3001001") for f in summary["failures"])
+        main_count = odds_conn.execute(
+            "SELECT COUNT(*) FROM bronze_ng_odds_snap WHERE market IN ('1x2','ah')"
+        ).fetchone()[0]
+        assert main_count == 4
+        corner_count = odds_conn.execute(
+            "SELECT COUNT(*) FROM bronze_ng_odds_snap WHERE market='corners_ou'"
+        ).fetchone()[0]
+        assert corner_count == 0
+
+
+class TestFetchCornerOddsForCompanies:
+    """直接单测 _fetch_corner_odds_for_companies() 的公司范围限定/失败隔离/WAF 透传
+    (离线 fixture 路径已经在 TestPollCliCornerOdds 里走过完整 CLI 覆盖;这里覆盖
+    非 fixture 的真实网络分支,mock 掉 nowgoal.fetch_corner_odds 本身)。"""
+
+    def test_derives_target_companies_from_main_panel_and_dedups(self, monkeypatch):
+        from backend.cli import poll_nowgoal
+
+        seen_cids = []
+
+        def fake_fetch(_titan_id, cid, name):
+            seen_cids.append(cid)
+            return {"market": "corners_ou", "company_id": cid, "company_name": name,
+                    "initial": None, "latest": {"over": 0.9, "line": 9.5, "under": 0.9}}
+
+        monkeypatch.setattr(poll_nowgoal.nowgoal, "fetch_corner_odds", fake_fetch)
+        main_records = [
+            {"market": "1x2", "company_id": "8", "company_name": "Bet365"},
+            {"market": "ah", "company_id": "8", "company_name": "Bet365"},   # 同公司第二市场,不重复抓
+            {"market": "1x2", "company_id": "3", "company_name": "皇冠"},
+        ]
+        out = poll_nowgoal._fetch_corner_odds_for_companies(None, "999", main_records)
+        assert sorted(seen_cids) == ["3", "8"]
+        assert len(out) == 2
+
+    def test_single_company_failure_is_isolated_from_other_companies(self, monkeypatch):
+        from backend.cli import poll_nowgoal
+
+        def fake_fetch(_titan_id, cid, name):
+            if cid == "8":
+                raise poll_nowgoal.nowgoal.NowGoalError("超时")
+            return {"market": "corners_ou", "company_id": cid, "company_name": name,
+                    "initial": None, "latest": {"over": 0.9, "line": 9.5, "under": 0.9}}
+
+        monkeypatch.setattr(poll_nowgoal.nowgoal, "fetch_corner_odds", fake_fetch)
+        main_records = [
+            {"market": "1x2", "company_id": "8", "company_name": "Bet365"},
+            {"market": "1x2", "company_id": "3", "company_name": "皇冠"},
+        ]
+        out = poll_nowgoal._fetch_corner_odds_for_companies(None, "999", main_records)
+        assert [r["company_id"] for r in out] == ["3"]
+
+    def test_company_with_no_corner_market_returns_none_and_is_skipped(self, monkeypatch):
+        """该公司暂无角球盘(ErrCode 非 0 / Data.ou 为空)时 fetch_corner_odds 返回
+        None——不是 failure,不应出现在结果里,也不应抛异常。"""
+        from backend.cli import poll_nowgoal
+
+        monkeypatch.setattr(poll_nowgoal.nowgoal, "fetch_corner_odds", lambda *a, **k: None)
+        main_records = [{"market": "ou", "company_id": "1", "company_name": "澳门"}]
+        out = poll_nowgoal._fetch_corner_odds_for_companies(None, "999", main_records)
+        assert out == []
+
+    def test_waf_blocked_propagates_not_swallowed(self, monkeypatch):
+        """WAF 拦截是全局性的,必须原样往上抛给调用方统一处理/退避,不能当成
+        单公司失败吞掉(否则整轮请求都在被拦,却看起来只是"没有角球盘")。"""
+        from backend.cli import poll_nowgoal
+
+        def fake_fetch(*_a, **_k):
+            raise poll_nowgoal.nowgoal.WAFBlockedError("命中 WAF")
+
+        monkeypatch.setattr(poll_nowgoal.nowgoal, "fetch_corner_odds", fake_fetch)
+        main_records = [{"market": "1x2", "company_id": "8", "company_name": "Bet365"}]
+        with pytest.raises(poll_nowgoal.nowgoal.WAFBlockedError):
+            poll_nowgoal._fetch_corner_odds_for_companies(None, "999", main_records)
+
+
 # ── admin xref 审核端点 ──────────────────────────────────────────────────
 
 

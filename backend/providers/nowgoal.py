@@ -262,6 +262,59 @@ def parse_odds(payload: dict, target_cids=DEFAULT_TARGET_CIDS) -> list[dict]:
     return selected
 
 
+# ── 角球大小盘解析(2026-08-14 真实探测新增) ────────────────────────────
+#
+# 真实探测(titan_id=3008154,cid=8/Bet365):GET .../soccerajax?type=14&id=<id>
+# &t=28&cid=<cid>&h=0&r1=0&r2=0&r3=0 → {"ErrCode":0,"Data":{"ah":[...],
+# "op":[],"ou":[{"odds":{"u":"0.9","g":"10.5","d":"0.9"},...}]},"MatchState":0}。
+# 这是 NowGoal /oddscomp/<id> 页面"Corners"标签页背后的端点——完整可用市场列表
+# (探测当天真实读取 6 个 tab)是 AH/Over-Under/Corners/Correct Score/
+# Euro Handicap/Double Chance,**没有黄牌/罚牌市场**,该网站不提供这个盘口。
+#
+# 与主盘面板(type=14&t=1,parse_odds 用)的关键差异:
+# - 这里的 Data.ou 只有"当前"一条,不像主盘那样区分初盘(f)/最新(l)两个快照;
+#   canonical 记录的 initial 因此恒为 None,不能假装拿到了完整两点快照;
+# - 响应里没有公司名字段,调用方必须传入(从同一轮主盘抓取里已经拿到的
+#   company_name 转手带过来,不在这里编造)。
+#
+# u/g/d 字段含义与既有 "ou"(大小球/总进球)市场完全一致(大/盘口线/小),
+# 复用同一份 _FIELD_MAP 解析规则;但 market 名称写成 "corners_ou",
+# 不进同一个 market='ou' 桶——总进球和总角球数是两个不同的标的。
+
+CORNERS_MARKET = "corners_ou"
+
+
+def parse_corner_odds(payload: dict, company_id: str, company_name: str = "") -> dict | None:
+    """解析 type=14&t=28 角球大小盘响应为单公司 canonical 记录。
+
+    响应结构异常、ErrCode 非 0、或 Data.ou 缺失/为空 → 返回 None(不是 failure,
+    调用方按"该公司暂无角球盘"处理,不抛异常)。
+    """
+    if not isinstance(payload, dict):
+        return None
+    if str(payload.get("ErrCode", "")) not in ("0",):
+        return None
+    data = payload.get("Data")
+    if not isinstance(data, dict):
+        return None
+    ou_list = data.get("ou")
+    if not isinstance(ou_list, list) or not ou_list:
+        return None
+    latest_entry = ou_list[-1]
+    if not isinstance(latest_entry, dict):
+        return None
+    group = _parse_group(latest_entry.get("odds"), "ou")
+    if group is None:
+        return None
+    return {
+        "market": CORNERS_MARKET,
+        "company_id": str(company_id),
+        "company_name": company_name,
+        "initial": None,
+        "latest": group,
+    }
+
+
 # ── 主客反转归一 ─────────────────────────────────────────────────────────
 
 
@@ -387,3 +440,32 @@ def fetch_odds(titan_id: str, target_cids=DEFAULT_TARGET_CIDS) -> list[dict]:
     if not isinstance(payload, dict):
         payload = {"companies": payload}
     return parse_odds(payload, target_cids=target_cids)
+
+
+def fetch_corner_odds(titan_id: str, company_id: str, company_name: str = "") -> dict | None:
+    """抓取单场单公司角球大小盘(仅"当前"一条,没有初盘)。失败/WAF 抛异常;
+    该公司暂无角球盘数据(ErrCode 非 0 或 Data.ou 为空)时返回 None,不是 failure
+    ——调用方应当只对本轮主盘(fetch_odds)已出现过的公司调用本函数,不额外
+    扩大抓取的公司范围。"""
+    text = _http_get(
+        ODDS_URL,
+        {
+            "type": "14",
+            "id": str(titan_id),
+            "t": "28",
+            "cid": str(company_id),
+            "h": "0",
+            "r1": "0",
+            "r2": "0",
+            "r3": "0",
+            "flesh": _flesh(),
+        },
+    )
+    stripped = text.strip()
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        raise NowGoalError(f"NowGoal 角球盘响应不是 JSON(前 80 字符): {stripped[:80]!r}")
+    if not isinstance(payload, dict):
+        return None
+    return parse_corner_odds(payload, str(company_id), company_name)

@@ -20,6 +20,7 @@ const BASE: MarketCardData = {
   market: "yellow_cards",
   label: "罚牌",
   line: 3.5,
+  line_source: "statistical",
   estimate: 5.2,
   bucket_index: 3,
   hit_rate: 0.58,
@@ -100,6 +101,19 @@ describe("MarketCard 结论区", () => {
     const card: MarketCardData = { ...BASE, data_quality: "no_history", estimate: null, signal_grade: null, lean: null };
     render(<MarketCard card={card} />);
     expect(screen.getByText(/该联赛历史数据补采中/)).not.toBeNull();
+  });
+
+  it("line_source='market' 时标「真实盘口」,不能和统计参考线看起来一样", () => {
+    const card: MarketCardData = { ...BASE, market: "corners", line: 10.5, line_source: "market" };
+    render(<MarketCard card={card} />);
+    expect(screen.getByText("真实盘口")).not.toBeNull();
+    expect(screen.queryByText("历史参考线")).toBeNull();
+  });
+
+  it("line_source='statistical' 时标「历史参考线」(默认态,BASE 本身就是)", () => {
+    render(<MarketCard card={BASE} />);
+    expect(screen.getByText("历史参考线")).not.toBeNull();
+    expect(screen.queryByText("真实盘口")).toBeNull();
   });
 
   it("样本不足的驱动因子显示占位符,不是 0", () => {

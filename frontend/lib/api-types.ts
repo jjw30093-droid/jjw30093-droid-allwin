@@ -422,6 +422,10 @@ export interface paths {
          *     (data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的"这场比赛
          *     特有"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。
          *
+         *     盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线
+         *     (line_source="market"),没有时退回统计参考线(line_source="statistical");
+         *     yellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。
+         *
          *     门禁与 /report 同级:只有联赛门禁,不区分付费档位——数据倾向是本站
          *     对访客建立信任的内容,不是需要登录才能看的深度报告。
          */
@@ -2376,6 +2380,11 @@ export interface components {
             label: string;
             /** Line */
             line: number;
+            /**
+             * Line Source
+             * @enum {string}
+             */
+            line_source: "market" | "statistical";
             /** Estimate */
             estimate?: number | null;
             /** Bucket Index */

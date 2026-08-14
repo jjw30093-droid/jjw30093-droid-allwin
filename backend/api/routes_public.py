@@ -788,10 +788,15 @@ def match_markets(
     ctx: AuthContext = Depends(get_auth_context),
     conn_core=Depends(core_ro),
     conn_platform=Depends(platform_ro),
+    conn_odds=Depends(odds_ro),
 ):
     """赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论
     (data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的"这场比赛
     特有"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。
+
+    盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线
+    (line_source="market"),没有时退回统计参考线(line_source="statistical");
+    yellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。
 
     门禁与 /report 同级:只有联赛门禁,不区分付费档位——数据倾向是本站
     对访客建立信任的内容,不是需要登录才能看的深度报告。
@@ -804,7 +809,8 @@ def match_markets(
         PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
     )
     cards = q_market_cards.match_market_cards(
-        conn_core, conn_platform,
+        conn_core, conn_platform, conn_odds,
+        fotmob_match_id=match_id,
         home_id=m["home"]["team_id"], away_id=m["away"]["team_id"],
         league_id=m["league_id"], before_date=m["date_utc"],
     )

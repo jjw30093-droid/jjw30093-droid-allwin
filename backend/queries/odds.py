@@ -217,3 +217,56 @@ def latest_1x2_by_match(
             "observed_at": obs,
         }
     return out
+
+
+# 与 _WIN_PROB_COMPANY_PRIORITY 同一优先级(Bet365 实时轮询优先于历史回填)。
+_REAL_LINE_COMPANY_PRIORITY = ("8", "281")
+
+
+def latest_market_line(
+    conn_odds: sqlite3.Connection, fotmob_match_id: int, market: str
+) -> dict[str, Any] | None:
+    """单场单市场(market='ou' 大小球 / 'corners_ou' 角球大小)最新真实盘口线。
+
+    只在真的抓到盘口时返回非 None,由调用方(market_cards.py)决定"没有就退回
+    统计参考线",本函数不做兜底、不猜。company_id 优先级同
+    latest_1x2_by_match(Bet365 实时轮询 '8' 优先于历史回填 '281')。
+    """
+    placeholders = ",".join("?" for _ in _REAL_LINE_COMPANY_PRIORITY)
+    try:
+        rows = conn_odds.execute(
+            f"""SELECT b.id, b.company_id, b.payload_json, b.observed_at
+                  FROM bronze_ng_odds_snap b
+                  JOIN dim_match_xref x
+                    ON x.provider_match_id = b.provider_match_id AND x.provider='nowgoal'
+                 WHERE x.fotmob_match_id=? AND b.market=?
+                   AND b.company_id IN ({placeholders})
+                   AND x.review_status IN ('auto_ok','confirmed')""",
+            (fotmob_match_id, market, *_REAL_LINE_COMPANY_PRIORITY),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+
+    best: dict[str, tuple[str, int, dict]] = {}
+    for r in rows:
+        cid = str(r["company_id"])
+        cand_key = (str(r["observed_at"]), int(r["id"]))
+        cur = best.get(cid)
+        if cur is None or cand_key > (cur[0], cur[1]):
+            try:
+                payload = json.loads(r["payload_json"])
+            except (TypeError, ValueError):
+                continue
+            best[cid] = (cand_key[0], cand_key[1], payload)
+
+    for cid in _REAL_LINE_COMPANY_PRIORITY:
+        chosen = best.get(cid)
+        if chosen is None:
+            continue
+        obs, _id, payload = chosen
+        flat = normalize_odds_payload(payload)
+        line = flat.get("line")
+        if not isinstance(line, (int, float)):
+            continue
+        return {"line": float(line), "company_id": cid, "observed_at": obs}
+    return None

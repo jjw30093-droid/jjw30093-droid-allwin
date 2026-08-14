@@ -178,6 +178,66 @@ class TestInversion:
         out["initial"]["home"] = 999
         assert rec["initial"]["home"] == 2.0
 
+    def test_corners_ou_unchanged(self):
+        """corners_ou 与 ou 同为对称市场,不换边(与 test_ou_unchanged 同规则)。"""
+        rec = self._record("corners_ou", {"over": 0.9, "line": 10.5, "under": 0.9}, None)
+        out = nowgoal.normalize_for_inversion(rec, inverted=True)
+        assert out["initial"] == {"over": 0.9, "line": 10.5, "under": 0.9}
+        assert out["latest"] is None
+
+
+# ── 角球大小盘解析(type=14&t=28,2026-08-14 真实探测) ────────────────────
+#
+# tests/fixtures/nowgoal/corner_odds_sample.json 是 2026-08-14 用
+# THORDATA_PROXY_NOWGOAL 真实抓取的响应(titan_id=3008154,cid=8/Bet365,
+# Bristol City vs Millwall,英冠),Corners O/U 线=10.5、大小水位均 0.9。
+
+
+def _corner_odds_payload() -> dict:
+    return json.loads((FIXTURES / "corner_odds_sample.json").read_text(encoding="utf-8"))
+
+
+class TestParseCornerOdds:
+    def test_parses_real_shape(self):
+        rec = nowgoal.parse_corner_odds(_corner_odds_payload(), "8", "Bet365")
+        assert rec == {
+            "market": "corners_ou",
+            "company_id": "8",
+            "company_name": "Bet365",
+            "initial": None,
+            "latest": {"over": 0.9, "line": 10.5, "under": 0.9},
+        }
+
+    def test_no_initial_snapshot_by_design(self):
+        """该端点只给"当前"一条,不像主盘那样有初盘/最新两点——不能假装有初盘。"""
+        rec = nowgoal.parse_corner_odds(_corner_odds_payload(), "8", "Bet365")
+        assert rec["initial"] is None
+
+    def test_err_code_nonzero_returns_none(self):
+        assert nowgoal.parse_corner_odds({"ErrCode": 1, "Data": {}}, "8", "Bet365") is None
+
+    def test_missing_ou_returns_none(self):
+        assert nowgoal.parse_corner_odds({"ErrCode": 0, "Data": {"ah": [], "op": []}}, "8", "Bet365") is None
+
+    def test_empty_ou_list_returns_none(self):
+        assert nowgoal.parse_corner_odds({"ErrCode": 0, "Data": {"ou": []}}, "8", "Bet365") is None
+
+    def test_non_dict_payload_returns_none(self):
+        assert nowgoal.parse_corner_odds(None, "8", "Bet365") is None
+        assert nowgoal.parse_corner_odds([], "8", "Bet365") is None
+
+    def test_incomplete_odds_group_returns_none(self):
+        """u/g/d 任一缺失/非数值 → 整组视为空(与主盘 _parse_group 同规则)。"""
+        payload = {"ErrCode": 0, "Data": {"ou": [{"odds": {"u": "0.9", "g": "10.5"}}]}}
+        assert nowgoal.parse_corner_odds(payload, "8", "Bet365") is None
+
+    def test_company_name_passthrough_not_read_from_payload(self):
+        """响应里没有公司名字段,company_name 必须原样透传调用方传入的值,
+        不会从 payload 里读出/编造。"""
+        rec = nowgoal.parse_corner_odds(_corner_odds_payload(), "31", "Sbobet")
+        assert rec["company_id"] == "31"
+        assert rec["company_name"] == "Sbobet"
+
 
 # ── canonical JSON / hash 与 WAF 检测 ────────────────────────────────────
 

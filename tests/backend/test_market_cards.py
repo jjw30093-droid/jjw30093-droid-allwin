@@ -54,6 +54,31 @@ def _seed_calibration(conn_platform, market, league_id, line, *, bucket_hit_rate
         )
 
 
+def _seed_xref(conn_odds, titan_id, fotmob_match_id):
+    conn_odds.execute(
+        """INSERT INTO dim_match_xref
+           (fotmob_match_id, provider, provider_match_id, home_away_inverted, confidence,
+            verified, method, review_status, created_at, updated_at)
+           VALUES (?, 'nowgoal', ?, 0, 1.0, 1, 'auto', 'auto_ok',
+                   '2026-08-01T00:00:00Z', '2026-08-01T00:00:00Z')""",
+        (fotmob_match_id, titan_id),
+    )
+
+
+def _seed_odds_snap(conn_odds, titan_id, market, line, *, company_id="8", observed_at="2026-08-13T09:00:00Z"):
+    """写一条扁平形状({home,line,away}/{over,line,under})的真实盘口快照——
+    与历史回填 CLI 同一形状,latest_market_line() 靠 normalize_odds_payload()
+    读扁平/嵌套两种形状(见 backend/queries/odds.py 头部注释)。"""
+    payload = json.dumps({"over": 1.9, "line": line, "under": 1.9})
+    conn_odds.execute(
+        """INSERT INTO bronze_ng_odds_snap
+           (provider_match_id, market, company_id, company_name, market_phase,
+            payload_json, payload_hash, observed_at, ingested_at, poll_run_id)
+           VALUES (?, ?, ?, 'Bet365', 'pre_match', ?, 'x', ?, ?, 'run1')""",
+        (titan_id, market, company_id, payload, observed_at, observed_at),
+    )
+
+
 @pytest.fixture
 def market_fixture(data_dir):
     conn = connect_rw("core")
@@ -76,6 +101,13 @@ def market_fixture(data_dir):
     insert_match(conn, 9502, league_id=48, season="2025/2026", date=kickoff_date,
                  home_id=2001, away_id=2002, home="戊队", away="己队", status="NotStarted")
 
+    # 9503/9504:复用 1001/1002 的历史(角球估算值同 9500,恒为 11.0),
+    # 分别验证"真实盘口线命中标定档" / "真实盘口线未命中标定档"两条路径。
+    insert_match(conn, 9503, league_id=47, season="2025/2026", date=kickoff_date,
+                 home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
+    insert_match(conn, 9504, league_id=47, season="2025/2026", date=kickoff_date,
+                 home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
+
     conn.commit()
     conn.close()
 
@@ -84,8 +116,24 @@ def market_fixture(data_dir):
     # 命中率 0.55(刻意避开 0.5 边界,不让测试掺进 lean 的边界语义歧义)
     _seed_calibration(conn_platform, "yellow_cards", 0, 3.5,
                        bucket_hit_rates=[0.30, 0.40, 0.55, 0.60, 0.70])
+    # corners line=10.5(真实盘口线,不是 default_line=9.5):估算值 11.0 落最后一档
+    # (>8),命中率 0.65——9503 用这条验证"真实盘口线 + 命中标定档"。
+    _seed_calibration(conn_platform, "corners", 47, 10.5,
+                       bucket_hit_rates=[0.20, 0.30, 0.40, 0.50, 0.65])
     conn_platform.commit()
     conn_platform.close()
+
+    conn_odds = connect_rw("odds")
+    # 9503:corners 真实盘口线 10.5(命中上面标定的档),goals 真实盘口线 2.75
+    # (无对应 calibration,验证 line_source 赋值与 data_quality 结果互不影响)。
+    _seed_xref(conn_odds, "830001", 9503)
+    _seed_odds_snap(conn_odds, "830001", "corners_ou", 10.5)
+    _seed_odds_snap(conn_odds, "830001", "ou", 2.75)
+    # 9504:corners 真实盘口线 11.5,未命中任何已标定档位(只标定了 10.5)。
+    _seed_xref(conn_odds, "830002", 9504)
+    _seed_odds_snap(conn_odds, "830002", "corners_ou", 11.5)
+    conn_odds.commit()
+    conn_odds.close()
     yield
 
 
@@ -122,6 +170,54 @@ class TestMatchMarketsRoute:
         by_market = {c["market"]: c for c in body["cards"]}
         corners = by_market["corners"]
         assert corners["estimate"] is not None  # 预估值本身算得出来
+        assert corners["data_quality"] == "no_calibration"
+        assert corners["signal_grade"] is None
+        assert corners["lean"] is None
+        # 9500 没有造 bronze_ng_odds_snap 真实盘口——line_source 必须诚实回退到
+        # 统计参考线(不能因为查询失败就悄悄留一个不带来源标记的数字)。
+        assert corners["line_source"] == "statistical"
+        assert corners["line"] == pytest.approx(9.5)
+
+    def test_real_market_line_used_when_odds_present(self, app, market_fixture):
+        """9503:corners 真实盘口线 10.5 命中标定档——line_source 必须是
+        "market"、line 必须是真实盘口线(不是 default_line=9.5),且标定结果
+        照常查得到(exact-match 精确 key 查询,真实线只要等于标定表里的 line
+        就和统计参考线走同一套 _bucket_lookup 逻辑)。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9503/markets").json()
+        by_market = {c["market"]: c for c in body["cards"]}
+
+        corners = by_market["corners"]
+        assert corners["line_source"] == "market"
+        assert corners["line"] == pytest.approx(10.5)
+        assert corners["estimate"] == pytest.approx(11.0)
+        assert corners["data_quality"] == "ok"
+        assert corners["hit_rate"] == pytest.approx(0.65)
+        assert corners["signal_grade"] == "★★"
+        assert corners["lean"] == "over"
+
+        # goals 真实盘口线 2.75 也生效(line_source 赋值先于 data_quality 判断,
+        # 两队历史没造 expected_goals,预估值算不出来,但线本身必须是真实值)。
+        goals = by_market["goals"]
+        assert goals["line_source"] == "market"
+        assert goals["line"] == pytest.approx(2.75)
+
+        # yellow_cards 在 NowGoal 上没有真实市场(§见 market_cards.py 头注),
+        # 恒为统计参考线,不受本场造的真实盘口影响。
+        yc = by_market["yellow_cards"]
+        assert yc["line_source"] == "statistical"
+        assert yc["line"] == pytest.approx(3.5)
+
+    def test_real_market_line_without_matching_calibration_is_honest(self, app, market_fixture):
+        """9504:corners 真实盘口线 11.5,标定表只标定了 10.5——真实线优先于
+        标定档位存在与否,查不到就诚实降级 no_calibration,不为了凑一个能打
+        星的档位悄悄换回统计参考线或换成已标定的 10.5。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9504/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+        assert corners["line_source"] == "market"
+        assert corners["line"] == pytest.approx(11.5)
+        assert corners["estimate"] == pytest.approx(11.0)
         assert corners["data_quality"] == "no_calibration"
         assert corners["signal_grade"] is None
         assert corners["lean"] is None
