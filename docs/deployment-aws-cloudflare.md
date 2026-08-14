@@ -136,7 +136,8 @@ bash deploy/scripts/release.sh
    - 业务冒烟:`/api/v1/products` 与 `/api/v1/matches` 必须是可解析 JSON
      (release .venv 的 `python -m json.tool`;`grep` 匹配 `SMOKE_HTML_MARKER` 时用
      `grep -qF --` 固定字符串匹配,不把用户可控的 marker 值当 grep 选项解析);
-   - 首页 HTML 必须含真实 API 数据标志(默认产品名 `Pro 月度`,可用
+   - 首页 HTML 必须含真实 API 数据标志(默认 `赛程更新`——只在
+     `/api/v1/status/freshness` 真实返回数据时才渲染,可用
      `SMOKE_HTML_MARKER` 覆盖;首页是 ISR,构建期 API 不在线时预渲染为降级态,
      脚本最长等 180s 让 revalidate 重取);
    - **任一失败 → 回滚,且回滚不是"切完就假定成功"**:切回 `previous` 并重启后,
