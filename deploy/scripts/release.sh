@@ -166,6 +166,19 @@ do_rsync() {
   assert_no_credentials_in_release
 }
 
+# 本脚本以构建用户(如 ubuntu)身份跑,构建产物默认属主/组也是它——但线上
+# 服务以 allwin-web systemd 单元的 User=allwin 运行,不在构建用户的组里,
+# 目录权限落到 rwxrwxr-x 的 "other" 档只有 r-x,没有写权限。CLAUDE.md §4
+# 要求单实例阶段用 Next.js 本地持久 ISR 缓存,这意味着 allwin-web 运行时
+# 必须能写回 .next/cache/fetch-cache 与 .next/server/app/*.html 做按需
+# 重新验证——2026-08-14 真实发布验证时在 journalctl 里发现每次重新验证都
+# 是 EACCES 静默失败(Next.js 只记日志不崩溃,不会让 release.sh 冒烟失败),
+# 说明这个缺口已经在之前的历次发布里一直存在。单独成函数,便于只测这一步。
+fix_next_permissions() {
+  sudo chgrp -R allwin "$RELEASE_DIR/frontend/.next"
+  sudo chmod -R g+w "$RELEASE_DIR/frontend/.next"
+}
+
 # ── 阶段 2b:依赖 + 前端构建 + 浏览器产物门禁 ─────────────────────────
 do_build() {
   do_rsync
@@ -179,6 +192,8 @@ do_build() {
   ( cd "$RELEASE_DIR/frontend" \
     && set -a && . "$SHARED_DIR/.env" && set +a \
     && npm ci --silent && npm run build )
+
+  fix_next_permissions
 
   bash "$RELEASE_DIR/deploy/scripts/check_browser_bundle.sh" "$RELEASE_DIR/frontend" \
     || die "浏览器构建产物含 127.0.0.1/localhost API 地址;检查 shared/.env 的 NEXT_PUBLIC_API_BASE(生产应留空)与残留的 frontend/.env.local"

@@ -259,6 +259,40 @@ class TestRsyncExcludesSecrets:
         assert "sneaked-in.pem" in (r2.stdout + r2.stderr)
 
 
+class TestFixNextPermissions:
+    """2026-08-14 真实发布事故:构建产物属主是构建用户(如 ubuntu),线上
+    allwin-web systemd 单元以 User=allwin 运行、不在构建用户的组里,不修正
+    属组的话 Next.js 本地持久 ISR 缓存写回 .next/cache 时会 EACCES 静默失败
+    (Next.js 只记日志不崩溃,不会让 release.sh 冒烟失败,问题不会被自动发现)。
+
+    chgrp 到一个测试沙箱里不存在的系统组("allwin")会真的报错,这里用记录
+    调用参数的假 sudo 替换透传版,只验证"确实以正确参数调过 sudo chgrp/chmod
+    到 .next 目录",不需要真的改权限。
+    """
+
+    def test_chgrp_and_chmod_target_next_dir_via_sudo(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        env = _base_env(app_root, tmp_path)
+        fake_bin = _ensure_fake_systemctl_sudo(tmp_path)
+        log_file = tmp_path / "sudo_calls.log"
+        (fake_bin / "sudo").write_text(f'#!/bin/sh\necho "$@" >> "{log_file}"\nexit 0\n')
+        (fake_bin / "sudo").chmod(0o755)
+
+        r = _run(
+            f'{SOURCE_RELEASE}; preflight; mkdir -p "$RELEASE_DIR/frontend/.next"; '
+            f'fix_next_permissions',
+            env,
+        )
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        calls = log_file.read_text().splitlines()
+        assert any(
+            c.startswith("chgrp -R allwin ") and c.endswith("frontend/.next") for c in calls
+        ), f"未见预期的 sudo chgrp 调用: {calls}"
+        assert any(
+            c.startswith("chmod -R g+w ") and c.endswith("frontend/.next") for c in calls
+        ), f"未见预期的 sudo chmod 调用: {calls}"
+
+
 class TestFailureOrdering:
     """用函数覆盖隔离每一段的顺序/失败语义,不需要真实 systemd/HTTP/venv/npm。"""
 
