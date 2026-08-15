@@ -117,118 +117,299 @@
   color: var(--ink-3);
 }
 
-/* ── 推荐单卡片 ─────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────
+   推荐单卡片(结果优先层级,2026-08-15 定稿)
+   ──────────────────────────────────────────────────────────────── */
 
-.slip,
-.slipVoided {
-  background: var(--surface);
+.slipCard {
+  display: grid;
+  grid-template-columns: 124px 1fr;
+  overflow: hidden;
+  margin-bottom: var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--r-card);
-  padding: 16px 18px;
-  margin-bottom: 12px;
+  background: var(--surface);
+  transition:
+    box-shadow 150ms ease,
+    border-color 150ms ease;
 }
 
-.slipVoided {
-  opacity: 0.62;
+.slipCard:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-card);
 }
 
-.slipHead {
+/* 赛前单:虚线边 + 略沉的底,和已结算单一眼分开 */
+.slipCard[data-tone="pending"] {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-soft));
+}
+
+/* ── 左列:结果色块(第一视觉层级)───────────────── */
+
+.resultBlock {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 13px;
+  color: #fff;
 }
 
-.slipDate {
-  font-size: 12.5px;
+.slipCard[data-tone="win"] .resultBlock {
+  background: var(--win);
+}
+.slipCard[data-tone="lose"] .resultBlock {
+  background: var(--loss);
+}
+.slipCard[data-tone="push"] .resultBlock {
+  background: var(--draw);
+}
+.slipCard[data-tone="void"] .resultBlock {
+  background: var(--ink-3);
+}
+.slipCard[data-tone="pending"] .resultBlock {
+  border-right: 1px dashed var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--brand-teal);
+}
+
+.resultText {
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.slipCard[data-tone="void"] .resultText {
+  text-decoration: line-through;
+}
+
+/* 色块内小字:90% 白 ≈ 4.9:1,满足 DESIGN.md §2.3 的 4.5:1 红线;
+   字号 11.5px 与全站最小辅助字号对齐,不再往下探 */
+.blockKicker,
+.comboLabel {
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+}
+
+.slipCard[data-tone="pending"] .blockKicker,
+.slipCard[data-tone="pending"] .comboLabel {
   color: var(--ink-3);
 }
 
-.slipTitle {
-  font-size: 14.5px;
+.blockKicker {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+}
+
+.blockValue {
+  font-size: 15px;
   font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+/* 纯装饰发丝线,可以低透明度 */
+.blockRule {
+  height: 1px;
+  margin: 5px 0 3px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.comboLabel {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+/* ── 右列:押的是什么(第二层级)+ 元数据(第三层级)── */
+
+.slipBody {
+  min-width: 0;
+  padding: 11px 15px 12px;
+}
+
+.metaLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
 
 .legs {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.leg {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 13px;
-  padding: 6px 0;
+.leg,
+.legLink {
+  display: grid;
+  grid-template-columns: 1fr auto 14px;
+  gap: 1px 9px;
+  padding: 9px 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.legLink:hover .legDesc {
+  color: var(--brand-teal);
+}
+
+.legLink:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-teal) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.leg,
+.legs > li {
   border-top: 1px solid var(--border);
 }
 
+.legs > li .legLink {
+  border-top: none;
+}
+
 .legDesc {
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--ink);
 }
 
+.legStamp {
+  justify-self: end;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.legStamp[data-result="win"] {
+  color: var(--win);
+}
+.legStamp[data-result="lose"] {
+  color: var(--loss);
+}
+.legStamp[data-result="push"] {
+  color: var(--draw);
+}
+
+.legChevron {
+  grid-row: 1 / span 2;
+  grid-column: 3;
+  align-self: center;
+  justify-self: end;
+  font-size: 15px;
+  color: var(--ink-3);
+}
+
 .legPick {
+  font-size: 12.5px;
   color: var(--ink-2);
 }
 
-.slipFoot {
-  display: flex;
+.legOdds {
+  justify-self: end;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ── 修正记录折叠(元数据,最弱)──────────────────── */
+
+.editFoldRow {
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--surface-soft);
+  padding-top: 7px;
+}
+
+.editFold {
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
 }
 
-.units {
-  font-size: 13px;
-  font-weight: 700;
+.editFold:hover {
+  color: var(--brand-teal);
 }
 
-.editNote {
+.editDetail {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--r-control);
+  background: var(--surface-soft);
   font-size: 11.5px;
+  line-height: 1.6;
   color: var(--ink-3);
 }
 
-/* ── 结算印章(命中/未中/走水/作废/未结算) ─────────── */
+/* ── 手机(≤640px):砍宽不砍字号 ──────────────────── */
 
-.stampWin,
-.stampLose,
-.stampPush,
-.stampVoid,
-.stampPending {
-  display: inline-block;
-  padding: 1px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 700;
-  border: 1px solid;
+@media (max-width: 640px) {
+  .slipCard {
+    grid-template-columns: 110px 1fr;
+  }
+
+  .resultBlock {
+    padding: 12px 11px;
+  }
+
+  .resultText {
+    font-size: 19px;
+  }
+
+  .blockValue {
+    font-size: 14px;
+  }
+
+  .slipBody {
+    padding: 10px 12px 11px;
+  }
+
+  .leg,
+  .legLink {
+    grid-template-columns: 1fr auto 12px;
+    padding: 8px 0;
+  }
+
+  .legDesc {
+    font-size: 13px;
+  }
+
+  .legPick {
+    font-size: 12px;
+  }
+
+  .legOdds {
+    font-size: 13.5px;
+  }
+
+  /* 点按区不小于 44px(DESIGN.md 移动端规则) */
+  .editFold {
+    min-height: 44px;
+  }
+
+  .legLink {
+    min-height: 56px;
+    align-content: center;
+  }
 }
 
-.stampWin {
-  color: var(--win);
-  border-color: var(--win);
-}
-
-.stampLose {
-  color: var(--loss);
-  border-color: var(--loss);
-}
-
-.stampPush,
-.stampPending {
-  color: var(--ink-3);
-  border-color: var(--border);
-}
-
-.stampVoid {
-  color: var(--ink-3);
-  border-color: var(--border);
-  text-decoration: line-through;
+@media (prefers-reduced-motion: reduce) {
+  .slipCard {
+    transition: none;
+  }
 }
 
 /* ── 骨架 ───────────────────────────────────────────── */

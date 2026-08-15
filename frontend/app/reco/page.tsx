@@ -51,54 +51,149 @@ function fmtDay(iso: string | null | undefined): string {
     : d.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
 }
 
-function resultClass(r: string | null): string {
-  if (r === "win") return styles.stampWin;
-  if (r === "lose") return styles.stampLose;
-  return styles.stampPush;
+/**
+ * 推荐单卡片(结果优先层级,2026-08-15 定稿)。
+ *
+ * 三层视觉权重:
+ *   1. 结果 —— 左列 124px 色块,21px/900,块底色即结果语义色(命中/未中/走水/已作废/未结算);
+ *   2. 押的是什么 —— 右列每腿两行(比赛名 / 玩法·选项 + 赔率右对齐),串关规格在左列底部;
+ *   3. 元数据 —— 日期 + 标题降为 11.5px 顶部小字,修正记录折叠成「修正记录 ›」。
+ *
+ * 赛前(status=published)单没有结果,左列换成浅底 + brand-teal 文字,
+ * 主位是「未结算 / 最早开球 / 时间」,整卡虚线边,与已结算卡一眼分开。
+ *
+ * 可点:单关整卡跳 /matches/[matchId];串关每腿行各自跳自己那场
+ * (不做整卡链接,避免 <a> 嵌套 <a>)。缺 match_id 的站外赛事不可点。
+ */
+
+type SlipTone = "win" | "lose" | "push" | "void" | "pending";
+
+const TONE_TEXT: Record<SlipTone, string> = {
+  win: "命中",
+  lose: "未中",
+  push: "走水",
+  void: "已作废",
+  pending: "未结算",
+};
+
+function slipTone(slip: Slip): SlipTone {
+  if (slip.status === "voided") return "void";
+  if (slip.status !== "settled") return "pending";
+  if (slip.result === "win") return "win";
+  if (slip.result === "lose") return "lose";
+  return "push";
+}
+
+/** 串关规格:DTO 只有 combo_type(single/parlay),几串几由腿数推导。 */
+function comboLabel(legCount: number): string {
+  return legCount === 1 ? "单关" : `${legCount}串1`;
+}
+
+/**
+ * 赛前单主位的开球时间。reco_legs 没有开球时间列,match_desc 按约定
+ * 以 "MM-DD HH:MM" 结尾(见 0010_reco_board.sql 注释),先从描述里取最早的一场;
+ * 取不到就退化为「待开赛」,不编造时间。
+ * 后端若补 earliest_kickoff_at 字段,这里换成直接读字段即可。
+ */
+function earliestKickoff(slip: Slip): string {
+  const stamps = slip.legs
+    .map((l) => l.match_desc.match(/(\d{2}-\d{2})\s+(\d{1,2}:\d{2})$/))
+    .filter((m): m is RegExpMatchArray => m != null)
+    .map((m) => ({ key: `${m[1]} ${m[2].padStart(5, "0")}`, time: m[2] }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  return stamps.length > 0 ? stamps[0].time : "待开赛";
+}
+
+/** 左列色块里的「标签 + 数值」两行。 */
+function blockMetrics(slip: Slip, tone: SlipTone): { kicker: string; value: string } {
+  if (tone === "pending") return { kicker: "最早开球", value: earliestKickoff(slip) };
+  if (tone === "void") return { kicker: "", value: "不计分母" };
+  if (slip.return_units == null) return { kicker: "净单位", value: "—" };
+  const net = slip.return_units - 1;
+  return { kicker: "净单位", value: `${net >= 0 ? "+" : ""}${net.toFixed(2)}` };
+}
+
+function LegRow({ leg }: { leg: Slip["legs"][number] }) {
+  const inner = (
+    <>
+      <span className={styles.legDesc}>{leg.match_desc}</span>
+      {leg.result ? (
+        <span className={styles.legStamp} data-result={leg.result}>
+          {RESULT_ZH[leg.result]}
+        </span>
+      ) : (
+        <span />
+      )}
+      <span className={styles.legChevron} aria-hidden>
+        ›
+      </span>
+      <span className={styles.legPick}>
+        {leg.market} · {leg.selection}
+      </span>
+      <span className={`${styles.legOdds} num`}>@{leg.odds.toFixed(2)}</span>
+    </>
+  );
+
+  if (leg.match_id == null) {
+    return <li className={styles.leg}>{inner}</li>;
+  }
+  return (
+    <li>
+      <Link className={styles.legLink} href={`/matches/${leg.match_id}`}>
+        {inner}
+      </Link>
+    </li>
+  );
 }
 
 function SlipCard({ slip }: { slip: Slip }) {
-  const voided = slip.status === "voided";
+  const [editOpen, setEditOpen] = useState(false);
+  const tone = slipTone(slip);
+  const { kicker, value } = blockMetrics(slip, tone);
+
   return (
-    <article className={voided ? styles.slipVoided : styles.slip}>
-      <header className={styles.slipHead}>
-        <span className={`${styles.slipDate} num`}>{slip.slip_date}</span>
-        <strong className={styles.slipTitle}>{slip.title}</strong>
-        {voided ? (
-          <span className={styles.stampVoid}>已作废</span>
-        ) : slip.result ? (
-          <span className={resultClass(slip.result)}>{RESULT_ZH[slip.result]}</span>
-        ) : (
-          <span className={styles.stampPending}>未结算</span>
-        )}
-      </header>
-      {slip.note && <p className={styles.note}>{slip.note}</p>}
-      <ul className={styles.legs}>
-        {slip.legs.map((l) => (
-          <li key={l.id} className={styles.leg}>
-            <span className={styles.legDesc}>{l.match_desc}</span>
-            <span className={styles.legPick}>
-              {l.market} · {l.selection} <span className="num">@{l.odds}</span>
-            </span>
-            {l.result && (
-              <span className={resultClass(l.result)}>{RESULT_ZH[l.result]}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-      <footer className={styles.slipFoot}>
-        {slip.status === "settled" && slip.return_units != null && (
-          <span className={`${styles.units} num`}>
-            回报 {slip.return_units} 单位(净 {slip.return_units >= 1 ? "+" : ""}
-            {(slip.return_units - 1).toFixed(2)})
-          </span>
-        )}
+    <article className={styles.slipCard} data-tone={tone}>
+      <div className={styles.resultBlock}>
+        <strong className={styles.resultText}>{TONE_TEXT[tone]}</strong>
+        {kicker && <span className={styles.blockKicker}>{kicker}</span>}
+        <span className={`${styles.blockValue} num`}>{value}</span>
+        <span className={styles.blockRule} aria-hidden />
+        <span className={`${styles.comboLabel} num`}>{comboLabel(slip.legs.length)}</span>
+      </div>
+
+      <div className={styles.slipBody}>
+        <div className={styles.metaLine}>
+          <span className="num">{slip.slip_date}</span>
+          <span>{slip.title}</span>
+        </div>
+
+        {slip.note && <p className={styles.note}>{slip.note}</p>}
+
+        <ul className={styles.legs}>
+          {slip.legs.map((l) => (
+            <LegRow key={l.id} leg={l} />
+          ))}
+        </ul>
+
         {slip.edit_count > 0 && (
-          <span className={styles.editNote}>
-            修正 {slip.edit_count} 次 · 最近 {fmtDate(slip.last_edited_at)}
-          </span>
+          <div className={styles.editFoldRow}>
+            <button
+              type="button"
+              className={styles.editFold}
+              aria-expanded={editOpen}
+              onClick={() => setEditOpen((v) => !v)}
+            >
+              修正记录 {editOpen ? "⌄" : "›"}
+            </button>
+            {editOpen && (
+              <p className={styles.editDetail}>
+                本单修正 {slip.edit_count} 次,最近 {fmtDate(slip.last_edited_at)}。
+                人工内容允许修正,修正次数与时间公开留痕。
+              </p>
+            )}
+          </div>
         )}
-      </footer>
+      </div>
     </article>
   );
 }
