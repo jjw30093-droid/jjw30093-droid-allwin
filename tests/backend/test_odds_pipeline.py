@@ -262,6 +262,43 @@ class TestEntityResolution:
         ).fetchone()[0]
         assert n == 0, "模糊召回不得静默创建 team xref(只有 auto_ok 才允许)"
 
+    def test_pure_single_sided_fuzzy_match_discarded_not_a_false_candidate(self, odds_conn, core_db):
+        """2026-08-17 真实生产复现的第二个坑:token 子集模糊匹配上线后,NowGoal
+        真实日程行 'Internacional de Bogota'(哥伦比亚球队,与本场无关)vs
+        'Dep.Independiente Medellin' 只靠主队一侧"internacional"模糊命中了巴西
+        Internacional 的别名,客队完全没有任何信号(0分)——却因为 fwd>0 就被
+        写成了 needs_review,抢占了 fotmob_match_id=9006 的 UNIQUE 名额,导致
+        之后真正该场次(Internacional RS vs Remo Belem)的正确候选永远因为
+        'conflict_existing_xref' 被挡在外面。
+
+        修复:纯单边模糊命中(另一边 0 分、既非精确也非模糊)必须整体丢弃,不
+        进 scored,更不能写 needs_review。只有"至少一边精确"或"两边都至少
+        模糊命中"才可信。"""
+        seed_team_aliases(odds_conn, core_db)
+        result = resolve_match(odds_conn, core_db, {
+            "titan_id": "700012", "home_name": "Internacional de Bogota",
+            "away_name": "Dep.Independiente Medellin",
+            "date": QUERY_DATE, "kickoff": _ng_kickoff(QUERY_DATE),
+            "provider_home_id": "5040", "provider_away_id": "5041",
+        })
+        assert result["resolved"] is False, "纯单边模糊命中不应该产生任何候选"
+        n = odds_conn.execute(
+            "SELECT COUNT(*) FROM dim_match_xref WHERE provider_match_id='700012'"
+        ).fetchone()[0]
+        assert n == 0
+
+        # 关键回归:清掉这个假候选之后,真正的巴西场次仍然能正常走双边模糊召回
+        # 拿到 needs_review(不会因为上面那次尝试残留任何占位而被挡住)。
+        real = resolve_match(odds_conn, core_db, {
+            "titan_id": "700013", "home_name": "Internacional RS",
+            "away_name": "Remo Belem (PA)",
+            "date": QUERY_DATE, "kickoff": _ng_kickoff(QUERY_DATE),
+            "provider_home_id": "5042", "provider_away_id": "5043",
+        })
+        assert real["resolved"] is True
+        assert real["fotmob_match_id"] == 9006
+        assert real["review_status"] == "needs_review"
+
     def test_fuzzy_recall_only_kicks_in_when_exact_match_empty(self, odds_conn, core_db):
         """模糊匹配只是精确匹配为空时的兜底召回,不改变既有精确匹配路径的行为——
         同一批既有 exact_match_auto_ok 等测试必须继续通过;这里额外确认新增的

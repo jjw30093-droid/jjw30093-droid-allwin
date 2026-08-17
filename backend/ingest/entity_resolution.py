@@ -603,11 +603,23 @@ def resolve_match(
     home_fuzzy = _fuzzy_team_ids(conn_odds, schedule_row["home_name"]) if not home_exact else set()
     away_fuzzy = _fuzzy_team_ids(conn_odds, schedule_row["away_name"]) if not away_exact else set()
 
-    def _side_score(team_id: int, exact_ids: set[int], fuzzy_ids: set[int]) -> float:
-        if team_id in exact_ids:
-            return _SIDE_SCORE_EXACT
-        if team_id in fuzzy_ids:
-            return _SIDE_SCORE_FUZZY
+    def _pair_score(
+        id1: int, exact1: set[int], fuzzy1: set[int],
+        id2: int, exact2: set[int], fuzzy2: set[int],
+    ) -> float:
+        e1, e2 = id1 in exact1, id2 in exact2
+        s1 = _SIDE_SCORE_EXACT if e1 else (_SIDE_SCORE_FUZZY if id1 in fuzzy1 else 0.0)
+        s2 = _SIDE_SCORE_EXACT if e2 else (_SIDE_SCORE_FUZZY if id2 in fuzzy2 else 0.0)
+        total = s1 + s2
+        if total <= 0:
+            return 0.0
+        # 纯单边模糊命中(另一边完全没有任何信号)风险太高,不建候选:2026-08-17
+        # 真实复现——常见词("Internacional"在巴西/哥伦比亚等多国都有同名球队)
+        # 会跟完全不相关的比赛产生噪声匹配,抢占 UNIQUE(provider,fotmob_match_id)
+        # 名额挡住真正候选(occupied 检查不分 review_status,needs_review 也会
+        # 挡住之后更好的候选)。至少一边精确命中,或两边都至少模糊命中,才可信。
+        if e1 or e2 or (s1 > 0 and s2 > 0):
+            return total
         return 0.0
 
     # (score, match_id, inverted) 全部得分组合
@@ -616,8 +628,8 @@ def resolve_match(
     for cand in _candidate_matches(conn_odds, conn_core, schedule_row["date"]):
         h, a = int(cand["Home_Team_ID"]), int(cand["Away_Team_ID"])
         cand_by_id[int(cand["Match_ID"])] = cand
-        fwd = _side_score(h, home_exact, home_fuzzy) + _side_score(a, away_exact, away_fuzzy)
-        inv = _side_score(h, away_exact, away_fuzzy) + _side_score(a, home_exact, home_fuzzy)
+        fwd = _pair_score(h, home_exact, home_fuzzy, a, away_exact, away_fuzzy)
+        inv = _pair_score(h, away_exact, away_fuzzy, a, home_exact, home_fuzzy)
         if fwd > 0:
             scored.append((fwd, int(cand["Match_ID"]), 0))
         if inv > 0:
