@@ -5862,3 +5862,88 @@ tests 通过;`npx tsc --noEmit` 0 错误;`npm run build` 成功(18 路由);
 worktree),未执行 git commit/push,未连接或修改 AWS 上的任何服务;
 本节及以上全部"实测"均为本地临时端口(8000/3000)上重启的开发态进程,
 不代表生产环境已经运行本节描述的任何代码。
+
+## 51. PIPELINE_REDESIGN_V2 P1:FotMob 阵容收敛到 poll_decision()(2026-08-17)
+
+单一到期判定权威从三处收敛为一处:`backend/ingest/poll_windows.py::poll_decision()`
+现在同时驱动 NowGoal 赔率与 FotMob 阵容/伤停两个来源;`content_pipeline.py`
+不再有第二套 `_poll_decision` 重算逻辑,`poll_fotmob_snapshots.py` 不再用
+`required_interval_seconds()+is_due()` 的旧两档路径。
+
+- `CADENCE_NOWGOAL_ODDS` 由旧六档改为三档 checkpoint(站长确认目标):
+  T-72h..T-24h 每 24h、T-24h..T-6h 每 6h、T-6h..T-0 每 1h,T-15min last_call
+  强制补一枪不变(`§6.3` 下限不变,discovery T+7 行为不变)。
+  单场预计请求数从 20+ 降到约 12-13(spec 估算,未做生产真实计数)。
+- 新增 `cadence_fotmob_lineup(league_id)`:discovery 窗口收窄到 T-24h
+  (从旧 `CADENCE_LEGACY` 72h/900s-300s 两档收窄);T-24h..watch-window-start
+  每 12h;watch-window-start..T-0 每 5 分钟到底,无早停(真正的"确认阵容
+  探测"是 P5 的事,本阶段老实全程 5 分钟)。watch-window-start 按联赛查表:
+  BIG-5(47/87/55/54/53)= T-1.5h,其余联赛(含欧战 42/73/10216)= T-1.25h
+  默认档。单场预计请求数从约 150 降到约 20(spec 估算)。
+- `poll_decision()` 新增 `league_id` 可选参数(仅 `SOURCE_FOTMOB_SNAPSHOT`
+  据此查表选 cadence)与 `PollDecision.interval_seconds` 字段(供调用方算
+  `next_due_at`,不必再自行重复 `_tier_interval` 逻辑)。
+- `poll_fotmob_snapshots.py` 的 `--due` 分支改为直接调用 `poll_decision()`
+  (候选池窗口同步收窄为 `FOTMOB_LINEUP_DISCOVERY_HOURS=24`);顺带修正
+  `mark_polled()` 的 `finally` 块默认参数 bug——此前无论抓取成功/失败都写
+  `tier=NULL, ok=1`,`poll_attempt_log` 无法区分真实失败与成功,`tier` 也
+  从未反映 `poll_decision` 命中的档。现在如实记录 `tier=decision.tier`、
+  失败时 `ok=0`。
+- `content_pipeline.py::_poll_decision` 改为薄封装:查 `poll_state` 拿
+  `last_polled_at` 后直接调用 `poll_windows.poll_decision()`,按 `reason`/
+  `tier` 映射到 `INITIAL_LOW_FREQUENCY`/`WAITING_FOR_72H_WINDOW`/
+  `T_MINUS_72H_TO_24H`/`T_MINUS_24H_TO_6H`/`T_MINUS_6H_TO_KICKOFF`/
+  `LAST_CALL`/`CLOSED` 六个 phase(旧两档 phase 名
+  `T_MINUS_72H_TO_2H`/`T_MINUS_2H_TO_KICKOFF` 废止)。`has_observation`
+  参数与其唯一的计算来源(`run_fresh()` 里对 `dim_match_xref`+
+  `bronze_ng_odds_snap` 的查询)一并删除——新引擎的 first_discovery/窗口内
+  判定只看 `poll_state.last_polled_at`,不再需要这个信号。`run_fresh()`
+  返回值里的 `odds_policy` 元数据字段同步改名并从 `CADENCE_NOWGOAL_ODDS`
+  常量取值,不再是过时的 900/300 硬编码。
+- **收敛后确认 `required_interval_seconds()` 生产调用方归零**(独立
+  `grep backend/` 复核):直接删除该函数,而不是留作"以防万一"的薄封装——
+  同一批复核也发现 `content_pipeline.py::LeagueConfig` 的
+  `odds_far_interval_seconds`/`odds_near_interval_seconds`/
+  `odds_high_frequency_hours`/`odds_near_hours` 四个字段自始至终只被赋值、
+  从未被任何生产代码读取,一并删除(三条联赛配置各删 4 行赋值)。
+  `tests/backend/test_pipeline_e2e.py::TestPollWindows` 整个类(只测
+  `required_interval_seconds`)随之删除——其边界/精度校验场景
+  (`kicked_off`/`no_exact_kickoff`/`date_only`/`naive`)在
+  `test_poll_cadence.py` 里通过 `poll_decision()` 已有等价覆盖
+  (`test_no_exact_kickoff_never_due`/`test_kicked_off_never_due*`),不是
+  裸删掉未经确认的覆盖。`test_daily_content_pipeline.py` 里同样只改名/
+  精简了 `test_league_configs_keep_content_and_polling_windows_separate`
+  (更名 `test_league_configs_hold_content_identity_not_polling_cadence`),
+  不影响该测试仍然覆盖的内容/身份字段。
+
+**测试**(RED→GREEN,均离线):`tests/backend/test_poll_cadence.py`
+(36 项,新增边界测试覆盖 NowGoal 三档每个边界 + FotMob discovery/12h 档/
+5 分钟档/BIG-5 与默认档分野边界——含最初遗漏的两项:BIG-5 自己的
+1.5h 边界双侧验证、`FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS[47]==1.5`
+的直接断言,均由独立对抗式复核补齐);新增
+`tests/backend/test_poll_decision_convergence.py`(证明
+`content_pipeline._poll_decision` 与 `poll_fotmob_snapshots.py` 的候选筛选
+和直接调用 `poll_decision()` 逐比特一致,不再各算各的);新增
+`tests/backend/test_poll_fotmob_snapshots_due.py`(证明 `mark_polled` 的
+`tier`/`ok` 如实记录成功与失败);更新
+`tests/backend/test_daily_content_pipeline.py`(`_poll_decision` 新 phase
+表,`has_observation` 参数删除,`LeagueConfig` 死字段清理)、
+`tests/backend/test_pipeline_e2e.py`(kickoff/T1 offset 调整以匹配
+NowGoal 新 1 小时档,FotMob 侧使用 League_ID=47 验证 BIG-5
+watch-window-start,`TestPollWindows` 死代码测试类删除)。
+`tests/backend/test_poll_scheduling.py`、`tests/backend/test_job_order.py`
+未改动(systemd 拓扑与 job 链顺序不在本阶段范围,`grep` 确认两个文件均无
+任何节奏数值字面量)。
+
+**未做(明确留给后续阶段)**:7 个新 systemd timer 的安装/拓扑(P3);
+"确认阵容探测"早停(需要真实网络探测,P5);`prediction_snapshots` 锁定/
+审计语义不变,本阶段未触碰。
+
+**验证**:`cd` 到 worktree 根目录,
+`.venv/bin/python -m pytest tests/backend -q` ——1720 项收集,1718 通过,
+2 项 skip(与本次改动无关,预先存在),0 失败,exit code 0(死代码清理与
+补测后重跑,结果一致)。过程中一次 `data/*.db` mtime 断言 flake
+(`test_e2e_seed.py`,size 相同、mtime 因共享 worktree 的并发进程漂移),
+单独重跑该文件 4/4 通过,确认与本次改动无关。未执行 `git commit`/`push`,
+未连接生产环境或任何真实 FotMob/NowGoal 网络请求(全部离线 fixture/
+offline-payload)。

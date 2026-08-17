@@ -5,7 +5,10 @@
   裁判/天气,见下),全部共用同一 observed_at 与 poll_run_id;
 - payload 不变(hash 相同)不重复落库(ingest 层 hash-diff);
 - FotMob 不声明阵容/伤停更新时间 → source_updated_at 恒 NULL;
-- 采集窗口与频率同赔率(2–72h 15min / 0–2h 5min),poll_state 持久化节流;
+- 采集窗口与到期判断走 poll_windows.poll_decision()/cadence_fotmob_lineup(按
+  league_id 查表,PIPELINE_REDESIGN_V2 P1):discovery 收窄到 T-24h,
+  T-24h..watch-window-start 每 12h,watch-window-start..T-0 每 5 分钟到底
+  (BIG-5=T-1.5h,其余联赛=T-1.25h),poll_state 持久化节流;
 - 真实抓取需 THORDATA_PROXY;离线用 --offline-payload 验证同一条代码链路。
 
 --write-match-details(裁判/天气赛前数据能力实测,本轮任务):
@@ -38,10 +41,10 @@ from backend.ingest.odds_snapshots import (
     record_source_health,
 )
 from backend.ingest.poll_windows import (
+    FOTMOB_LINEUP_DISCOVERY_HOURS,
     SOURCE_FOTMOB_SNAPSHOT,
-    is_due,
     mark_polled,
-    required_interval_seconds,
+    poll_decision,
     upcoming_precise_matches,
 )
 from backend.providers.fotmob_snapshots import (
@@ -143,28 +146,34 @@ def run_snapshot_poll(
                 ).fetchone()
                 for mid in match_ids
             ]
-            targets = [(r, True) for r in rows if r is not None]
+            targets = [(r, None) for r in rows if r is not None]
         else:
-            candidates = upcoming_precise_matches(conn_core, now)
+            candidates = upcoming_precise_matches(
+                conn_core, now, window_hours=FOTMOB_LINEUP_DISCOVERY_HOURS
+            )
             summary["window_candidates"] = len(candidates)
             targets = []
             for c in candidates:
-                interval = required_interval_seconds(
-                    c["kickoff_at_utc"], c["kickoff_precision"], c["kickoff_source"], now
+                state_row = conn_odds.execute(
+                    "SELECT last_polled_at FROM poll_state WHERE source=? AND subject=?",
+                    (SOURCE_FOTMOB_SNAPSHOT, str(c["Match_ID"])),
+                ).fetchone()
+                last_polled_at = state_row["last_polled_at"] if state_row is not None else None
+                decision = poll_decision(
+                    SOURCE_FOTMOB_SNAPSHOT, c["kickoff_at_utc"], c["kickoff_precision"],
+                    c["kickoff_source"], last_polled_at, now, league_id=c["League_ID"],
                 )
-                if interval is None:
-                    continue
-                due = is_due(conn_odds, SOURCE_FOTMOB_SNAPSHOT, c["Match_ID"], interval, now)
-                if not due:
+                if not decision.due:
                     summary["not_due_skipped"] += 1
                     continue
-                targets.append((c, True))
+                targets.append((c, decision.tier))
 
         failures = 0
         t0 = time.monotonic()
-        for row, _ in targets:
+        for row, tier in targets:
             mid = int(row["Match_ID"])
             summary["due_matches"] += 1
+            ok = True
             try:
                 if offline_payloads is not None:
                     payload = offline_payloads.get(str(mid))
@@ -181,9 +190,11 @@ def run_snapshot_poll(
                     summary["match_details_written"] += 1
             except Exception as exc:  # noqa: BLE001 — 采集边界:单场失败继续其余
                 failures += 1
+                ok = False
                 summary["failures"].append(f"match {mid}: {type(exc).__name__}: {exc}")
             finally:
-                mark_polled(conn_odds, SOURCE_FOTMOB_SNAPSHOT, mid, now, poll_run_id)
+                mark_polled(conn_odds, SOURCE_FOTMOB_SNAPSHOT, mid, now, poll_run_id,
+                            tier=tier, ok=ok)
         if targets:
             record_source_health(
                 conn_odds, "fotmob_snapshot", ok=failures == 0,

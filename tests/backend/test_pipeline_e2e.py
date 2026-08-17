@@ -18,7 +18,6 @@ from backend.cli.poll_fotmob_snapshots import run_snapshot_poll
 from backend.cli.poll_nowgoal import run_due_poll
 from backend.db.connections import connect_ro, connect_rw
 from backend.db.util import normalize_utc_iso
-from backend.ingest.poll_windows import required_interval_seconds
 from backend.silver.odds_moves import final_pre_match_snapshot
 from backend.studio.bundle import build_analysis_bundle
 
@@ -34,10 +33,11 @@ def _iso(dt: datetime) -> str:
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
 T0 = _iso(NOW)
 T0_PLUS_5MIN = _iso(NOW + timedelta(minutes=5))
-T1 = _iso(NOW + timedelta(minutes=20))          # 20 分钟 → 第二轮 due(见下)
-# NowGoal 五段节流(Phase 4)下:距开球 2.5h 落在 1–3h 档(间隔 1200s=20 分钟)。
-# T0 首轮 due;T0+5min(300s)节流;T0+20min(1200s)到期——保持本用例
-# "先节流再到期"的原意。FotMob 快照仍用旧两档(2.5h→900s),f1/f2 同样 due。
+T1 = _iso(NOW + timedelta(hours=1))             # 1 小时 → 第二轮 due(见下)
+# NowGoal 三段节流(PIPELINE_REDESIGN_V2 P1)下:距开球 2.5h 落在 T-6h..T-0 档
+# (间隔 3600s=1 小时)。T0 首轮 due;T0+5min(300s)节流;T0+1h(3600s)到期——
+# 保持本用例"先节流再到期"的原意。League_ID=47(英超,BIG-5)驱动 FotMob 阵容
+# watch-window-start=T-1.5h;T1=kickoff-1.5h 恰好跨进 5 分钟档,f1/f2 同样 due。
 KICKOFF = NOW + timedelta(hours=2, minutes=30)
 KICKOFF_ISO = _iso(KICKOFF)
 # NowGoal 日程行内 kickoff 字段本身是 UTC(2026-07-21 真实 titan_id=2912218 交叉
@@ -130,42 +130,6 @@ class TestNormalizeUtcIso:
     def test_garbage_is_none(self):
         assert normalize_utc_iso("Tue, May 19, 2026") is None
         assert normalize_utc_iso(None) is None
-
-
-class TestPollWindows:
-    """required_interval_seconds 现走统一验证器(precision+source+显式时区),
-    不再只判断字符串是否含 'T'。"""
-
-    EXACT = "exact"
-    SRC = "fotmob:fixtures"
-
-    def test_interval_far_and_near(self):
-        now = _iso(NOW)
-        assert required_interval_seconds(
-            _iso(NOW + timedelta(hours=24)), self.EXACT, self.SRC, now) == 900
-        assert required_interval_seconds(
-            _iso(NOW + timedelta(hours=1)), self.EXACT, self.SRC, now) == 300
-
-    def test_out_of_window(self):
-        now = _iso(NOW)
-        assert required_interval_seconds(
-            _iso(NOW + timedelta(hours=80)), self.EXACT, self.SRC, now) is None   # >72h
-        assert required_interval_seconds(
-            _iso(NOW - timedelta(minutes=1)), self.EXACT, self.SRC, now) is None  # 已开球
-        assert required_interval_seconds(None, self.EXACT, self.SRC, now) is None        # 无 kickoff
-        assert required_interval_seconds("2026-08-21", self.EXACT, self.SRC, now) is None  # 仅日期
-
-    def test_missing_provenance_never_due(self):
-        """新增:precision 非 exact、缺来源、naive 时间,即使 kickoff_at_utc 形似有效
-        也一律不满足采集窗口(不再靠字符串形状判断)。"""
-        now = _iso(NOW)
-        future = _iso(NOW + timedelta(hours=24))
-        assert required_interval_seconds(future, "date_only", self.SRC, now) is None
-        assert required_interval_seconds(future, "exact", None, now) is None
-        assert required_interval_seconds(
-            (NOW + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S"),  # naive,无 Z
-            self.EXACT, self.SRC, now,
-        ) is None
 
 
 class TestUpcomingPreciseMatchesAndMarketPhase:
