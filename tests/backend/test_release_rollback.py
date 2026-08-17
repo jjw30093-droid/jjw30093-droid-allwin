@@ -61,6 +61,8 @@ def _setup_app_root(tmp_path, name="app_root", extra_files=None, dirty=False) ->
     (shared / ".env").write_text("APP_ENV=production\n")
     for db in ("allwin.db", "platform.db", "odds.db"):
         (shared / "data" / db).write_bytes(b"")   # preflight 只检查存在,不检查内容
+    (shared / "models").mkdir(parents=True)
+    (shared / "models" / "wdl_baseline_params.pkl").write_bytes(b"fake-pickle-bytes")
     return app_root
 
 
@@ -171,6 +173,17 @@ class TestPreflight:
         r = _run(f'{SOURCE_RELEASE}; preflight', env)
         assert r.returncode != 0
         assert "磁盘" in r.stderr
+
+    def test_missing_model_artifact_rejected(self, tmp_path):
+        """2026-08-17 真实发现:模型二进制不进 Git(CLAUDE.md §14.1),此前所有
+        release 都没把它放进 shared/models/,model_predict 从未在生产成功跑过
+        一次——只是没有定时器触发过才没暴露。preflight 必须显式挡住,不能让
+        它悄悄漂到构建/迁移之后才在某个具体任务里报 FileNotFoundError。"""
+        app_root = _setup_app_root(tmp_path)
+        (app_root / "shared" / "models" / "wdl_baseline_params.pkl").unlink()
+        r = _run(f'{SOURCE_RELEASE}; preflight', _base_env(app_root))
+        assert r.returncode != 0
+        assert "wdl_baseline_params.pkl" in r.stderr
 
 
 class TestRsyncExcludesSecrets:
@@ -291,6 +304,52 @@ class TestFixNextPermissions:
         assert any(
             c.startswith("chmod -R g+w ") and c.endswith("frontend/.next") for c in calls
         ), f"未见预期的 sudo chmod 调用: {calls}"
+
+
+class TestCopyModelArtifacts:
+    """2026-08-17 真实发现:model_predict 需要的 wdl_baseline_params.pkl 不进
+    Git,rsync 从 source/ 检出天然带不上——持久化在 shared/models/ 下(与
+    shared/data、shared/.env 同一模式),每次发布显式拷贝进新 release 目录。
+    此前所有 release 都缺这一步,model_predict 从未在生产成功跑过。"""
+
+    def test_copies_artifact_into_fresh_release_dir(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        expected_bytes = (app_root / "shared" / "models" / "wdl_baseline_params.pkl").read_bytes()
+        r = _run(
+            f'{SOURCE_RELEASE}; preflight; do_rsync; copy_model_artifacts; '
+            f'echo "RELEASE_DIR=$RELEASE_DIR"',
+            _base_env(app_root),
+        )
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        release_dir = Path(next(l for l in r.stdout.splitlines() if l.startswith("RELEASE_DIR="))
+                            .split("=", 1)[1])
+        copied = release_dir / "backend" / "models" / "artifacts" / "wdl_baseline_params.pkl"
+        assert copied.exists(), "copy_model_artifacts 必须把模型参数文件放进新 release 目录"
+        assert copied.read_bytes() == expected_bytes, "拷贝内容必须与 shared/models/ 源文件字节一致"
+
+    def test_do_build_calls_copy_model_artifacts(self, tmp_path):
+        """do_build 必须自动包含这一步,不能只靠手动调用——否则每次发布又会
+        悄悄漏掉,回到 2026-08-17 之前的状态。"""
+        app_root = _setup_app_root(tmp_path)
+        marker = tmp_path / "copy_called.txt"
+        script = f'''
+{SOURCE_RELEASE}
+preflight
+do_rsync() {{ mkdir -p "$RELEASE_DIR"; }}
+copy_model_artifacts() {{ echo "COPY_CALLED" >> "{marker}"; }}
+python3() {{ :; }}
+npm() {{ :; }}
+fix_next_permissions() {{ :; }}
+check_browser_bundle_stub() {{ :; }}
+do_build
+'''
+        # do_build 内部还会走 python3 -m venv / pip install / npm ci / npm run
+        # build / check_browser_bundle.sh / verify_next_assets.py——这些在测试
+        # 沙箱里没有真实产物会失败得比 copy_model_artifacts 更早或更晚,不影响
+        # 断言本身(只要 COPY_CALLED 出现在 do_rsync 之后即证明调用链正确);
+        # 用 || true 让脚本即使后续步骤失败也不掩盖 marker 是否写入。
+        r = _run(script + " || true", _base_env(app_root))
+        assert marker.exists(), f"do_build 必须调用 copy_model_artifacts:{r.stdout}\n{r.stderr}"
 
 
 class TestFailureOrdering:

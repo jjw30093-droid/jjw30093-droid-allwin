@@ -78,6 +78,8 @@ preflight() {
   [ -d "$SOURCE_DIR/.git" ] || die "$SOURCE_DIR 不是 git 检出(本脚本面向服务器,不在开发机执行)"
   [ -f "$SHARED_DIR/.env" ] || die "缺少 $SHARED_DIR/.env(生产环境变量)"
   [ -d "$SHARED_DIR/data" ] || die "缺少 $SHARED_DIR/data(SQLite 数据目录)"
+  [ -f "$SHARED_DIR/models/wdl_baseline_params.pkl" ] \
+    || die "缺少 $SHARED_DIR/models/wdl_baseline_params.pkl(模型二进制不进 Git,首次部署需手动放置一次到 shared/models/)"
 
   for db in allwin.db platform.db odds.db; do
     [ -f "$SHARED_DIR/data/$db" ] || die "缺少 $SHARED_DIR/data/$db(三库必须齐全才能安全 migration)"
@@ -179,9 +181,21 @@ fix_next_permissions() {
   sudo chmod -R g+w "$RELEASE_DIR/frontend/.next"
 }
 
+# 模型参数文件是训练产物,不进 Git(CLAUDE.md §14.1),rsync 从 source/ 检出
+# 天然不会带上它——持久化在 shared/models/ 下(与 shared/data、shared/.env
+# 同一模式:不随 release 增删,跨 release 复用),每次发布显式拷贝进新
+# release 目录。2026-08-17 真实发现:此前所有 release 都缺这个文件,
+# model_predict 从未在生产成功跑过一次,只是没有定时器触发过才没暴露。
+copy_model_artifacts() {
+  mkdir -p "$RELEASE_DIR/backend/models/artifacts"
+  cp "$SHARED_DIR/models/wdl_baseline_params.pkl" \
+     "$RELEASE_DIR/backend/models/artifacts/wdl_baseline_params.pkl"
+}
+
 # ── 阶段 2b:依赖 + 前端构建 + 浏览器产物门禁 ─────────────────────────
 do_build() {
   do_rsync
+  copy_model_artifacts
 
   log "安装 Python 依赖"
   python3 -m venv "$RELEASE_DIR/.venv"
