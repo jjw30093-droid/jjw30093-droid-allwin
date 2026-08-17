@@ -28,13 +28,6 @@ const NAV_ITEMS = [
   { href: "/about", label: "关于我们", mobile: true },
 ];
 
-/** 顶栏套餐徽标:内部 plan id 不直接暴露给用户。 */
-const PLAN_BADGE_ZH: Record<string, string> = {
-  free: "免费",
-  member: "会员",
-  daily_picks: "精选",
-};
-
 type BottomNavIcon = "home" | "matches" | "picks" | "record" | "account";
 
 function BottomIcon({ name }: { name: BottomNavIcon }) {
@@ -220,10 +213,7 @@ export function SiteNav() {
             <div className={styles.account}>
               {me?.authenticated ? (
                 <Link href="/account" className={styles.accountLink}>
-                  <span className={styles.planBadge} data-plan={me.plan}>
-                    {PLAN_BADGE_ZH[me.plan] ?? "会员"}
-                  </span>
-                  {me.user?.display_name}
+                  {me.user?.display_name ?? "已登录"}
                 </Link>
               ) : (
                 <Link href="/login" className={styles.loginBtn}>

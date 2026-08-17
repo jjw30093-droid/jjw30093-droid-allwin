@@ -32,19 +32,18 @@ test("扫码登录 → 会员完整概率投影(API)→ 非管理员被拒", asy
     page.getByTestId("mobile-bottom-nav").getByRole("link", { name: "我的" }),
   ).toHaveAttribute("href", "/account");
 
-  // 会员解锁(CLAUDE.md §8.2 红线,API 层):登录后三项概率字段齐全。
+  // 2026-08-16 权限口径修正:PredictionDTO 恒为单一完整形状,不再有 tier
+  // 字段——登录前后响应体完全一致(API 层),三项概率字段齐全。
   // 详情页 UI 不再渲染任何概率(模型未经真实训练前不可用,见 §四②),
-  // 权限投影本身仍必须正确——断言从页面文字移到响应体。
+  // 契约本身仍必须正确——断言从页面文字移到响应体。
   const id = seedMatchId();
   const predRes = await page.request.get(`${API}/api/v1/matches/${id}/prediction`);
   expect(predRes.ok()).toBeTruthy();
   const pred = (await predRes.json()).prediction as {
-    tier: string;
     home_probability: number;
     draw_probability: number;
     away_probability: number;
   };
-  expect(pred.tier).toBe("full");
   expect(pred.home_probability).toBeCloseTo(0.48);
   expect(pred.draw_probability).toBeCloseTo(0.27);
   expect(pred.away_probability).toBeCloseTo(0.25);

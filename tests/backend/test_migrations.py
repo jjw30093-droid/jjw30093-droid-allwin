@@ -12,7 +12,7 @@ from backend.db import migrate
 
 PLATFORM_TABLES = {
     "users", "auth_identities", "auth_sessions", "oauth_states", "device_login_requests",
-    "account_links", "roles", "plans", "plan_entitlements", "subscriptions", "redeem_codes",
+    "account_links", "roles", "plans", "plan_entitlements", "subscriptions",
     "products", "model_versions", "prediction_runs", "prediction_snapshots",
     "prediction_outcomes", "prediction_evaluations", "prediction_manifests",
     "favorites", "content_drafts", "export_jobs", "job_runs", "audit_logs",
@@ -289,6 +289,269 @@ def test_model_league_scope_columns_and_league_id_editable(tmp_path):
     row = conn.execute("SELECT league_id FROM prediction_snapshots WHERE id='snap1'").fetchone()
     assert row == (999,)
     conn.close()
+
+
+# ── reco 赔率合约 migration(0014_reco_odds_contract)──────────────────────
+#
+# 背景:reco_legs.odds 一直被 settle_slip 当十进制赔率直接相乘,但 NowGoal 的
+# ou/ah/corners_ou 三个市场给的是港赔(数值经常 <1)。0014 给 reco_legs 加
+# 溯源 + canonical_decimal_odds 字段,不改变任何既有行的语义——已结算行的
+# canonical_decimal_odds 必须原样 backfill 成旧 odds 列的值(系统过去就是这样
+# 用它的),不做 HK→decimal 重新解释。
+
+
+def test_reco_odds_contract_columns_present_fresh_db(tmp_path):
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    leg_cols = {r[1] for r in conn.execute("PRAGMA table_info(reco_legs)")}
+    for col in (
+        "source_odds", "odds_format", "canonical_decimal_odds", "provider",
+        "company_id", "company_name", "snapshot_ref", "observed_at", "line",
+        "side", "payload_hash", "entry_type",
+    ):
+        assert col in leg_cols, f"reco_legs 缺少新列 {col}"
+
+    slip_cols = {r[1] for r in conn.execute("PRAGMA table_info(reco_slips)")}
+    assert "settle_source" in slip_cols
+
+    conn.execute(
+        "INSERT INTO users (id, display_name, created_at, updated_at) VALUES"
+        " ('u1', '测试用户', 'now', 'now')")
+
+    # entry_type 非法值必须被 CHECK 拒绝
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO reco_slips (id, slip_date, title, combo_type, status,"
+            " created_by, created_at, updated_at) VALUES"
+            " ('s-bad', '2026-08-16', 't', 'single', 'draft', 'u1', 'now', 'now')")
+        conn.execute(
+            "INSERT INTO reco_legs (id, slip_id, match_desc, market, selection,"
+            " odds, entry_type, sort_order, created_at) VALUES"
+            " ('l-bad', 's-bad', 'A vs B', '1x2', '主胜', 1.5, 'not_a_real_type', 0, 'now')")
+
+    # odds_format 非法值必须被 CHECK 拒绝
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO reco_legs (id, slip_id, match_desc, market, selection,"
+            " odds, odds_format, sort_order, created_at) VALUES"
+            " ('l-bad2', 's-bad', 'A vs B', '1x2', '主胜', 1.5, 'unknown', 0, 'now')")
+
+    # half_win/half_loss 现在是 reco_legs.result 与 reco_slips.result 的合法值
+    conn.execute(
+        "INSERT INTO reco_slips (id, slip_date, title, combo_type, status, result,"
+        " return_units, created_by, created_at, updated_at) VALUES"
+        " ('s-ok', '2026-08-16', 't', 'single', 'settled', 'half_loss',"
+        " 0.5, 'u1', 'now', 'now')")
+    conn.execute(
+        "INSERT INTO reco_legs (id, slip_id, match_desc, market, selection, odds,"
+        " result, canonical_decimal_odds, entry_type, sort_order, created_at) VALUES"
+        " ('l-ok', 's-ok', 'A vs B', '1x2', '主胜', 1.5, 'half_win', 1.5,"
+        " 'legacy_manual', 0, 'now')")
+    row = conn.execute(
+        "SELECT result FROM reco_legs WHERE id='l-ok'").fetchone()
+    assert row[0] == "half_win"
+    conn.close()
+
+
+def test_reco_odds_contract_backfill_preserves_existing_settled_rows(tmp_path):
+    """升级场景:0013 之前建的库里已经有一张真实结算过的推荐单(旧 5 字段
+    reco_legs schema)。升级到 0014 后,这些既有行的 result/return_units/odds
+    一个字节都不能变;新 canonical_decimal_odds 必须直接照抄旧 odds 值
+    (不做任何 HK→decimal 重新解释);odds_format 保持 NULL;entry_type 保持
+    默认 legacy_manual(诚实标注"缺乏真实溯源",不是惩罚)。"""
+    staged = tmp_path / "staged_migrations"
+    staged.mkdir()
+    src = migrate.MIGRATIONS_ROOT / "platform"
+    pre_0014 = [
+        (v, name, path)
+        for v, name, path in migrate.migration_files(src)
+        if v <= 13
+    ]
+    assert pre_0014 and pre_0014[-1][0] == 13, "0013 必须存在,否则本升级场景前提不成立"
+    for _, name, path in pre_0014:
+        shutil.copyfile(path, staged / name)
+
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, migrations_dir=staged, quiet=True)
+
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(
+        "INSERT INTO users (id, display_name, created_at, updated_at) VALUES"
+        " ('u-legacy', '旧管理员', '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z')")
+    conn.execute(
+        "INSERT INTO reco_slips (id, slip_date, title, combo_type, status, result,"
+        " return_units, published_at, settled_at, created_by, created_at, updated_at,"
+        " edit_count) VALUES ('slip-legacy', '2026-07-01', '旧单', 'parlay', 'settled',"
+        " 'win', 3.42, '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 'u-legacy',"
+        " '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 0)")
+    conn.execute(
+        "INSERT INTO reco_legs (id, slip_id, match_id, match_desc, market, selection,"
+        " odds, result, sort_order, created_at) VALUES"
+        " ('leg-legacy-1', 'slip-legacy', 1001, 'A vs B', '1x2', '主胜', 1.9, 'win', 0,"
+        " '2026-07-01T00:00:00Z')")
+    conn.execute(
+        "INSERT INTO reco_legs (id, slip_id, match_id, match_desc, market, selection,"
+        " odds, result, sort_order, created_at) VALUES"
+        " ('leg-legacy-2', 'slip-legacy', 1002, 'C vs D', 'ou', '大2.5', 1.8, 'win', 1,"
+        " '2026-07-01T00:00:00Z')")
+    conn.commit()
+    conn.close()
+
+    # 升级:指向真实迁移目录(含 0014 及之后的全部迁移)
+    applied = migrate.apply_all("platform", db_file=db, quiet=True)
+    # 0014(reco 赔率合约)+ 0015(reco 按场授权)+ 0016(兑换码改为按场,
+    # 2026-08-16)+ 0017(兑换码整体下架,2026-08-17)= 4 个新迁移。
+    assert applied == 4
+
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+    slip = conn.execute("SELECT * FROM reco_slips WHERE id='slip-legacy'").fetchone()
+    assert slip["result"] == "win"
+    assert slip["return_units"] == pytest.approx(3.42)
+
+    legs = {r["id"]: r for r in conn.execute(
+        "SELECT * FROM reco_legs WHERE slip_id='slip-legacy'").fetchall()}
+    assert legs["leg-legacy-1"]["odds"] == pytest.approx(1.9)
+    assert legs["leg-legacy-1"]["result"] == "win"
+    assert legs["leg-legacy-1"]["canonical_decimal_odds"] == pytest.approx(1.9)
+    assert legs["leg-legacy-1"]["odds_format"] is None
+    assert legs["leg-legacy-1"]["entry_type"] == "legacy_manual"
+
+    assert legs["leg-legacy-2"]["odds"] == pytest.approx(1.8)
+    assert legs["leg-legacy-2"]["canonical_decimal_odds"] == pytest.approx(1.8)
+    assert legs["leg-legacy-2"]["odds_format"] is None
+    assert legs["leg-legacy-2"]["entry_type"] == "legacy_manual"
+
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    conn.close()
+
+    # 幂等:再跑一次不应重复应用
+    assert migrate.apply_all("platform", db_file=db, quiet=True) == 0
+
+
+# ── 每日精选按场授权(0015_reco_access_grants)────────────────────────────
+#
+# 背景(2026-08-16,产品权限口径修正,经用户批准):取代旧的全局 reco:daily
+# 布尔权益,授权必须按"用户 + 单条 slip"授予。本迁移只新增表,不改写/迁移
+# 任何既有数据。
+
+
+def test_reco_access_grants_table_fresh_db(tmp_path):
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(reco_access_grants)")}
+    assert cols == {
+        "id", "user_id", "slip_id", "status", "granted_at", "granted_by",
+        "revoked_at", "revoked_by", "note", "created_at", "updated_at",
+    }
+
+    conn.execute(
+        "INSERT INTO users (id, display_name, created_at, updated_at) VALUES"
+        " ('u1', '管理员', 'now', 'now'), ('u2', '用户', 'now', 'now')")
+    conn.execute(
+        "INSERT INTO reco_slips (id, slip_date, title, combo_type, status,"
+        " created_by, created_at, updated_at) VALUES"
+        " ('s1', '2026-08-16', 't', 'single', 'draft', 'u1', 'now', 'now')")
+    conn.execute(
+        "INSERT INTO reco_access_grants (id, user_id, slip_id, status, granted_at,"
+        " granted_by, created_at, updated_at) VALUES"
+        " ('g1', 'u2', 's1', 'active', 'now', 'u1', 'now', 'now')")
+    conn.commit()
+
+    # status 非法值必须被 CHECK 拒绝
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO reco_access_grants (id, user_id, slip_id, status,"
+            " granted_at, granted_by, created_at, updated_at) VALUES"
+            " ('g-bad', 'u2', 's1', 'not_a_real_status', 'now', 'u1', 'now', 'now')")
+
+    # user_id/slip_id/granted_by 外键必须被强制
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO reco_access_grants (id, user_id, slip_id, status,"
+            " granted_at, granted_by, created_at, updated_at) VALUES"
+            " ('g-bad2', 'no-such-user', 's1', 'active', 'now', 'u1', 'now', 'now')")
+
+    # 同一用户对同一 slip 不能同时存在两条 active 授权(partial unique index)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO reco_access_grants (id, user_id, slip_id, status,"
+            " granted_at, granted_by, created_at, updated_at) VALUES"
+            " ('g-dup', 'u2', 's1', 'active', 'now', 'u1', 'now', 'now')")
+
+    # 撤销后允许对同一 (user_id, slip_id) 重新授予(新的 active 行)
+    conn.execute("UPDATE reco_access_grants SET status='revoked' WHERE id='g1'")
+    conn.execute(
+        "INSERT INTO reco_access_grants (id, user_id, slip_id, status, granted_at,"
+        " granted_by, created_at, updated_at) VALUES"
+        " ('g2', 'u2', 's1', 'active', 'now', 'u1', 'now', 'now')")
+    conn.commit()
+
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    conn.close()
+
+    # 幂等:再跑一次不应重复应用
+    assert migrate.apply_all("platform", db_file=db, quiet=True) == 0
+
+
+# ── 兑换码整体下架(0017_drop_redeem_codes)────────────────────────────────
+#
+# 背景(站长明确决定,2026-08-17):兑换码(CDKEY)功能不是简化或降级,是
+# 完整删除——redeem_codes 表连同后端命令/端点、前端组件一起移除。每日精选
+# 的授权路径不受影响,继续保留且是唯一入口:管理员直接为"用户 + 单条 slip"
+# 授权(0015_reco_access_grants.sql 建立的 reco_access_grants 表)。
+
+
+def test_redeem_codes_table_dropped_fresh_db(tmp_path):
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    assert "redeem_codes" not in _tables(db)
+    conn = sqlite3.connect(db)
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    conn.close()
+
+
+def test_redeem_codes_table_dropped_upgrade_from_pre_0017_db(tmp_path):
+    """升级场景:既有库已经跑到 0016(redeem_codes 表按新 slip_id schema
+    存在,真实 data/platform.db 在本次改动前经只读查询确认该表为空)。升级到
+    0017 后表消失,其它表不受影响,integrity_check 正常,没有任何表
+    REFERENCES redeem_codes(否则 DROP TABLE 会因外键失败)。"""
+    staged = tmp_path / "staged_migrations"
+    staged.mkdir()
+    src = migrate.MIGRATIONS_ROOT / "platform"
+    pre_0017 = [
+        (v, name, path)
+        for v, name, path in migrate.migration_files(src)
+        if v <= 16
+    ]
+    assert pre_0017 and pre_0017[-1][0] == 16, "0016 必须存在,否则本升级场景前提不成立"
+    for _, name, path in pre_0017:
+        shutil.copyfile(path, staged / name)
+
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, migrations_dir=staged, quiet=True)
+    assert "redeem_codes" in _tables(db)
+
+    applied = migrate.apply_all("platform", db_file=db, quiet=True)
+    assert applied == 1  # 只有 0017
+
+    assert "redeem_codes" not in _tables(db)
+    conn = sqlite3.connect(db)
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    conn.close()
+
+    # 幂等:再跑一次不应重复应用
+    assert migrate.apply_all("platform", db_file=db, quiet=True) == 0
 
 
 def test_cli_all_with_data_dir(tmp_path):

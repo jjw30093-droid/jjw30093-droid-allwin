@@ -3,22 +3,23 @@ api_server.py — FastAPI serving 层(ROADMAP.md Phase 1.3)。
 
 前端只读 API,不直连 DB(CLAUDE.md §2)。本文件是前端与数据之间的唯一通道。
 
-免费 / 付费边界按字段级分级(CLAUDE.md §3),gate 落在 endpoint 层:
-    - /api/league/{league_id}/overview        — 免费,不调用 require_membership。
-    - /api/league/{league_id}/betting         — 付费,调用 require_membership 占位。
-    - /api/league/{league_id}/matches         — 免费(赛程/结果)。
-    - /api/league/{league_id}/wdl-predictions — 付费核心(CLAUDE.md §3 模型概率)。
-      每场先过"7 天有效期"闸门(availability,用服务端 datetime.now() 动态
-      算,不写死日期),再叠加付费 gate,两件事分开判断、不要混在一起:
-        - availability='upcoming'(距开赛 >7 天):不管付费与否,概率/倾向
-          一律不下发(p_home/p_draw/p_away/tendency 都不放进响应体)——
-          这时候"还没到能看的时候",不是"氪不氪金"的问题。
-        - availability='live'(距开赛 ≤7 天):走原有付费 gate——未付费只
-          返回 tendency + confidence + locked:true,精确概率 p_home/
-          p_draw/p_away 根本不放进响应体;已付费额外带上精确概率。
-silver_team_season_stats 是混合表:overview 只 SELECT 免费字段
-(射门/射正/控球/xG/xGOT),betting 才 SELECT 角球/红黄牌/BTTS/零封字段,
-同表按字段拆,不整表返(CLAUDE.md §3)。
+2026-08-16 产品权限口径修正(经用户批准):除"每日精选"外,网站所有比赛
+内容全部免费,包括匿名用户——本文件 4 个 legacy 端点均不再有任何
+entitlement 门禁:
+    - /api/league/{league_id}/overview
+    - /api/league/{league_id}/betting         — 此前调用 require_membership,现已移除。
+    - /api/league/{league_id}/matches
+    - /api/league/{league_id}/wdl-predictions — 此前"付费核心"的说法已废除
+      (CLAUDE.md §3 旧修订)。仍保留"7 天有效期"闸门(availability,用服务端
+      datetime.now() 动态算,不写死日期)——这是数据就绪状态,不是付费墙:
+        - availability='upcoming'(距开赛 >7 天):概率/倾向一律不下发
+          (p_home/p_draw/p_away/tendency 都不放进响应体)——这时候"还没到
+          能看的时候",与登录/付费无关;
+        - availability='live'(距开赛 ≤7 天):恒下发完整 tendency/
+          confidence/reason/p_home/p_draw/p_away,不再有 locked 字段。
+silver_team_season_stats 是混合表:overview 只 SELECT 部分字段(射门/射正/
+控球/xG/xGOT),betting 额外 SELECT 角球/红黄牌/BTTS/零封字段——这只是两个
+端点各自的历史字段选择差异,不再是免费/付费投影边界。
 
 中文名在本层 JOIN dim_team_i18n / dim_player_i18n 返回,前端不碰映射
 (CLAUDE.md §2)。
@@ -32,7 +33,7 @@ import sqlite3
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
@@ -80,17 +81,6 @@ def get_readonly_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
-
-
-def require_membership(request: Request) -> bool:
-    """真实 entitlement 校验:cookie 会话 → 有效订阅 → prediction:full_wdl。
-
-    生产绕过入口(?simulate_membership 等)已移除(CLAUDE.md §14.1)。
-    默认(匿名/无订阅)按未付费处理,不默认放行。
-    """
-    from backend.api.deps import auth_context_for
-
-    return auth_context_for(request).has("prediction:full_wdl")
 
 
 def _rows_to_dicts(rows) -> list:
@@ -253,26 +243,14 @@ def league_overview(league_id: int, season: Optional[str] = None):
         conn.close()
 
 
-# ── 付费:GET /api/league/{league_id}/betting ─────────────────────────
+# ── GET /api/league/{league_id}/betting ───────────────────────────────
+# 2026-08-16 起不再要求任何 entitlement(除"每日精选"外全站比赛内容全部免费)。
 @app.get(
     "/api/league/{league_id}/betting",
     response_model=LeagueBettingResponse,
-    responses=error_responses(400, 401, 403, 422),
+    responses=error_responses(400, 422),
 )
-def league_betting(request: Request, league_id: int, season: Optional[str] = None):
-    from backend.api.deps import auth_context_for
-
-    ctx = auth_context_for(request)
-    if not ctx.has("report:deep"):
-        raise HTTPException(
-            status_code=403 if ctx.authenticated else 401,
-            detail={
-                "code": "membership_required",
-                "message": "需要 report:deep 权益才能访问该数据",
-                "entitlement": "report:deep",
-            },
-        )
-
+def league_betting(league_id: int, season: Optional[str] = None):
     conn = get_readonly_connection()
     try:
         season = _resolve_season(conn, league_id, season)
@@ -378,7 +356,9 @@ def league_matches(league_id: int, season: Optional[str] = None):
         conn.close()
 
 
-# ── 付费核心:GET /api/league/{league_id}/wdl-predictions ─────────────
+# ── GET /api/league/{league_id}/wdl-predictions ───────────────────────
+# 2026-08-16 起不再要求任何 entitlement;仍保留"7 天有效期"数据就绪闸门
+# (与登录/付费无关,详见文件头 docstring)。
 def _resolve_prediction_season(conn: sqlite3.Connection, league_id: int, season: Optional[str]) -> str:
     rows = conn.execute(
         "SELECT DISTINCT season FROM gold_wdl_predictions WHERE league_id = ? ORDER BY season",
@@ -426,9 +406,7 @@ def _wdl_availability(match_date_str: Optional[str]) -> tuple:
     response_model=LeagueWdlPredictionsResponse,
     responses=error_responses(400, 422),
 )
-def league_wdl_predictions(request: Request, league_id: int, season: Optional[str] = None):
-    is_paid = require_membership(request)
-
+def league_wdl_predictions(league_id: int, season: Optional[str] = None):
     conn = get_readonly_connection()
     try:
         season = _resolve_prediction_season(conn, league_id, season)
@@ -466,9 +444,11 @@ def league_wdl_predictions(request: Request, league_id: int, season: Optional[st
                 "days_until_kickoff": days_until,
             }
 
-            # 🔴 'upcoming'(距开赛 >7 天):不管付费与否,概率/倾向一律不
-            # 下发——p_home/p_draw/p_away/tendency/confidence/reason/locked
-            # 这些 key 在这一分支根本不存在,不是"付费判断"这条线管的事。
+            # 🔴 'upcoming'(距开赛 >7 天):概率/倾向一律不下发——
+            # p_home/p_draw/p_away/tendency/confidence/reason 这些 key 在
+            # 这一分支根本不存在,这是数据就绪状态,与登录/付费无关。
+            # 'live':2026-08-16 起恒下发完整概率(不再有 locked 字段区分
+            # 付费/未付费,除"每日精选"外全站比赛内容全部免费)。
             if availability == "live":
                 tendency = None
                 if p_home is not None and p_draw is not None and p_away is not None:
@@ -478,13 +458,9 @@ def league_wdl_predictions(request: Request, league_id: int, season: Optional[st
                 entry["tendency"] = tendency
                 entry["confidence"] = d["confidence"]
                 entry["reason"] = d["reason"]
-                entry["locked"] = not is_paid
-                # 精确概率只在已付费时才放进响应体;未付费时这三个 key
-                # 根本不存在(不是放了 null,更不是放了真值让前端自己藏)。
-                if is_paid:
-                    entry["p_home"] = p_home
-                    entry["p_draw"] = p_draw
-                    entry["p_away"] = p_away
+                entry["p_home"] = p_home
+                entry["p_draw"] = p_draw
+                entry["p_away"] = p_away
 
             matches.append(entry)
 

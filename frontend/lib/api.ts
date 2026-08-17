@@ -39,16 +39,16 @@ function seasonQuery(season?: string): string {
 // components/league/*)。legacy /api/league/{id}/overview 与 /matches 的
 // fetcher 已随之删除;后端兼容层端点本身仍保留(deprecated,不再扩展)。
 
-// WDL 概率卡(付费核心,CLAUDE.md §3)。三种 JSON 形状物理上互斥(后端
-// LegacyWdlUpcomingMatch / LiveLockedMatch / LiveFullMatch 判别联合,各自
-// extra=forbid),不是同一个宽松 dict 里若干字段可选/可空:
+// WDL 概率卡(legacy 端点)。2026-08-16 权限口径修正后,两种 JSON 形状
+// 物理上互斥(后端 LegacyWdlUpcomingMatch / LegacyWdlLiveMatch 判别联合,
+// 各自 extra=forbid),不再有 locked 字段区分付费/未付费:
 //   1. availability='upcoming'(距开赛 >7 天):物理上没有 tendency/confidence/
-//      reason/locked/p_home/p_draw/p_away 这些字段——时候没到,谁都看不到。
-//   2. availability='live' 且 locked=true(未付费):有 tendency/confidence/
-//      reason,物理上没有 p_home/p_draw/p_away。
-//   3. availability='live' 且 locked=false(已付费):额外带完整三项概率。
-// 因此消费方必须先按 availability 收窄,再按 locked 收窄,TypeScript 才允许
-// 访问对应字段——这是编译期强制,不是约定俗成。
+//      reason/p_home/p_draw/p_away 这些字段——时候没到,谁都看不到(数据就绪
+//      状态,不是权限门禁)。
+//   2. availability='live':恒带 tendency/confidence/reason,p_home/p_draw/
+//      p_away 只要模型算出来就下发(可能为 null,同样是数据就绪问题,不是
+//      身份分层)。
+// 消费方按 availability 收窄即可访问对应字段——这是编译期强制,不是约定俗成。
 export type WdlPredictionsResponse = GetJson<"/api/league/{league_id}/wdl-predictions">;
 export type WdlMatch = WdlPredictionsResponse["matches"][number];
 export type WdlLiveMatch = Extract<WdlMatch, { availability: "live" }>;

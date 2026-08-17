@@ -59,6 +59,9 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # 赛前市场卡:两队历史聚合 + 离线标定表查表,不区分付费档位,
         # 响应同样不随身份变化。
         ("GET", "/api/v1/matches/{match_id}/markets"),
+        # 赛前预览(阵容/伤停快照 + 风格象限 + 进攻来源 + 关键球员 + 门将):
+        # 与 /report、/markets 同级,全部历史聚合与已采集快照,不区分付费档位。
+        ("GET", "/api/v1/matches/{match_id}/preview"),
         ("GET", "/api/v1/media/team-crests/{provider}/{provider_team_id}.png"),
     }
 )

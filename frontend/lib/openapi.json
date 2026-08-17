@@ -912,26 +912,6 @@
        }
       }
      },
-     "401": {
-      "description": "Unauthorized",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "403": {
-      "description": "Forbidden",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
      "404": {
       "description": "Not Found",
       "content": {
@@ -1020,26 +1000,6 @@
        }
       },
       "description": "Bad Request"
-     },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
      },
      "404": {
       "content": {
@@ -1159,26 +1119,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1208,7 +1148,7 @@
      "public"
     ],
     "summary": "League Team Stats",
-    "description": "球队赛季统计(免费字段投影:射门/射正/控球/xG/xGOT,付费深度字段物理不在响应)。",
+    "description": "球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。",
     "operationId": "league_team_stats_api_v1_leagues__league_id__team_stats_get",
     "parameters": [
      {
@@ -1258,26 +1198,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1307,7 +1227,7 @@
      "public"
     ],
     "summary": "League Season Profile",
-    "description": "联赛速览:进球时段 / 比分分布 / 大小球阈值 / 主客胜率(免费面)。\n\n数据来自四张早已构建但前端零消费的银层表。legacy 的\n/api/league/{id}/betting 曾查过同一批数据,但 §10.1 禁止继续扩展 legacy,\n这里在 v1 新建。",
+    "description": "联赛速览:进球时段 / 比分分布 / 大小球阈值 / 主客胜率。\n\n数据来自四张早已构建但前端零消费的银层表。legacy 的\n/api/league/{id}/betting 曾查过同一批数据,但 §10.1 禁止继续扩展 legacy,\n这里在 v1 新建。",
     "operationId": "league_season_profile_api_v1_leagues__league_id__season_profile_get",
     "parameters": [
      {
@@ -1357,26 +1277,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1406,7 +1306,7 @@
      "public"
     ],
     "summary": "League Players",
-    "description": "球员榜(免费 5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。",
+    "description": "球员榜(5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。",
     "operationId": "league_players_api_v1_leagues__league_id__players_get",
     "parameters": [
      {
@@ -1456,26 +1356,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1505,7 +1385,7 @@
      "public"
     ],
     "summary": "List Matches",
-    "description": "比赛列表:所有已收录联赛的比赛都出现在列表里(2026-08-13 用户拍板撤销\n\"未持有权限的联赛整场从列表隐藏\"——五大联赛季前空窗期匿名列表会显得几乎\n没有比赛,体验上不可接受)。未持有权限的联赛比赛仍然出现,但\n`requires_login=True` 且不下发 win_probability;点击详情页仍走既有登录\n门禁,免费/付费的实际边界不变,只是\"能不能在列表里看到这场比赛\"和\"能不能\n看到这场比赛的会员内容\"两件事分开了。",
+    "description": "比赛列表:所有已收录联赛的比赛都出现在列表里,内容对任何人(含匿名)\n完全一致(2026-08-16 起除\"每日精选\"外全站比赛内容全部免费,登录与内容\n分层彻底解耦)。",
     "operationId": "list_matches_api_v1_matches_get",
     "parameters": [
      {
@@ -1610,6 +1490,23 @@
       }
      },
      {
+      "name": "boost",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(free_predicted)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Boost"
+      }
+     },
+     {
       "name": "q",
       "in": "query",
       "required": false,
@@ -1671,26 +1568,6 @@
        }
       },
       "description": "Bad Request"
-     },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
      },
      "404": {
       "content": {
@@ -1754,26 +1631,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1803,7 +1660,7 @@
      "public"
     ],
     "summary": "Match Prediction",
-    "description": "免费/匿名:只有最高一项概率(受限字段物理不存在);Pro/Premium:完整 WDL。\n\n响应随 entitlement 变化 → 永远 private, no-store,禁止共享缓存。",
+    "description": "恒为完整胜平负三项概率(2026-08-16 起除\"每日精选\"外全站比赛内容全部\n免费,包括匿名——不再有免费/付费两套投影)。\n\n响应内容会随预测发布/编辑变化 → 永远 private, no-store,禁止共享缓存。",
     "operationId": "match_prediction_api_v1_matches__match_id__prediction_get",
     "parameters": [
      {
@@ -1837,26 +1694,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1886,7 +1723,7 @@
      "public"
     ],
     "summary": "Match Analysis",
-    "description": "公开版 analysis_bundle:同一 bundle 按 entitlement 投影(与 Studio 共用生成逻辑)。\n\n- prediction_member / prob_bar 图表:仅 prediction:full_wdl;\n- odds_timeline:仅 odds:history_full;\n- cooccurring_events 明细:仅 report:deep(否则只给计数)。\n随 entitlement 变化 → private, no-store。",
+    "description": "公开版 analysis_bundle:恒完整返回(2026-08-16 起除\"每日精选\"外全站\n比赛内容全部免费,不再按 entitlement 投影;与 Studio 共用生成逻辑)。\n\n响应内容会随预测发布/赔率刷新变化 → private, no-store。",
     "operationId": "match_analysis_api_v1_matches__match_id__analysis_get",
     "parameters": [
      {
@@ -1920,26 +1757,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -1969,7 +1786,7 @@
      "public"
     ],
     "summary": "Match Odds",
-    "description": "free/pro:延迟摘要(每公司每市场最新一条,观察时间 ≥1 小时前);\npremium(odds:history_full):完整快照时间线。",
+    "description": "恒返回完整快照时间线(2026-08-16 起除\"每日精选\"外全站比赛内容全部\n免费,不再对匿名/无订阅用户施加 1 小时延迟摘要)。",
     "operationId": "match_odds_api_v1_matches__match_id__odds_get",
     "parameters": [
      {
@@ -2011,26 +1828,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -2060,7 +1857,7 @@
      "public"
     ],
     "summary": "Match Cooccurrence",
-    "description": "同期事件(时间共现,不声称因果)。匿名给计数,report:deep 给明细。",
+    "description": "同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分\n免费(计数)/付费(明细)。",
     "operationId": "match_cooccurrence_api_v1_matches__match_id__cooccurrence_get",
     "parameters": [
      {
@@ -2079,15 +1876,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "anyOf": [
-          {
-           "$ref": "#/components/schemas/CooccurrenceFullDTO"
-          },
-          {
-           "$ref": "#/components/schemas/CooccurrenceSummaryDTO"
-          }
-         ],
-         "title": "Response Match Cooccurrence Api V1 Matches  Match Id  Cooccurrence Get"
+         "$ref": "#/components/schemas/CooccurrenceResponse"
         }
        }
       }
@@ -2101,26 +1890,6 @@
        }
       },
       "description": "Bad Request"
-     },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
      },
      "404": {
       "content": {
@@ -2151,7 +1920,7 @@
      "public"
     ],
     "summary": "Match Report",
-    "description": "完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。\n\n门禁:只有联赛门禁,与 /matches/{id} 同级——本端点全部是已完赛的历史事实,\n不含模型输出、不含赔率方法论,属 CLAUDE.md §8 的\"足球数据\"面(不收费、\n匿名可见),与已匿名开放的积分榜/赛季球队统计/球员评分榜同档。\n缓存:匿名联赛可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);\n请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。",
+    "description": "完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。\n\n门禁:只有\"联赛是否已登记\"这一条(未知联赛 404),不分付费档位、不区分\n登录状态——本端点全部是已完赛的历史事实,不含模型输出、不含赔率方法论。\n缓存:任何联赛都可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);\n请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。",
     "operationId": "match_report_api_v1_matches__match_id__report_get",
     "parameters": [
      {
@@ -2193,7 +1962,7 @@
       },
       "description": "Bad Request"
      },
-     "401": {
+     "404": {
       "content": {
        "application/json": {
         "schema": {
@@ -2201,9 +1970,9 @@
         }
        }
       },
-      "description": "Unauthorized"
+      "description": "Not Found"
      },
-     "403": {
+     "422": {
       "content": {
        "application/json": {
         "schema": {
@@ -2211,7 +1980,50 @@
         }
        }
       },
-      "description": "Forbidden"
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/matches/{match_id}/preview": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Preview",
+    "description": "赛前预览:预计阵容+伤停快照、球队风格象限、进攻来源拆解、关键球员占比、\n门将对位——数据 tab 阵容/风格/球员三个子 tab 的唯一数据源。\n\n门禁与 /report、/markets 同级:只有\"联赛是否已登记\"这一条,不分付费\n档位、不区分登录状态。全部由两队各自历史聚合与已采集快照构成,赛前与\n赛后都能给,不含模型输出或赔率方法论。",
+    "operationId": "match_preview_api_v1_matches__match_id__preview_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MatchPreviewResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
      },
      "404": {
       "content": {
@@ -2242,7 +2054,7 @@
      "public"
     ],
     "summary": "Match Markets",
-    "description": "赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论\n(data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的\"这场比赛\n特有\"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。\n\n盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线\n(line_source=\"market\"),没有时退回统计参考线(line_source=\"statistical\");\nyellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。\n\n门禁与 /report 同级:只有联赛门禁,不区分付费档位——数据倾向是本站\n对访客建立信任的内容,不是需要登录才能看的深度报告。",
+    "description": "赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论\n(data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的\"这场比赛\n特有\"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。\n\n盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线\n(line_source=\"market\"),没有时退回统计参考线(line_source=\"statistical\");\nyellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。\n\n门禁与 /report 同级:只有\"联赛是否已登记\"这一条,不区分付费档位、不区分\n登录状态——数据倾向是本站对访客建立信任的内容。",
     "operationId": "match_markets_api_v1_matches__match_id__markets_get",
     "parameters": [
      {
@@ -2276,26 +2088,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -2325,7 +2117,7 @@
      "public"
     ],
     "summary": "Status Freshness",
-    "description": "首页「今日更新状态」聚合:赛程/赔率/推荐三条最近成功时间戳。\n\n只读聚合,不承载任何比赛/推荐内容,匿名公开缓存安全(短 TTL,\n因为三个来源各自独立轮询,新鲜度本身随时在变)。",
+    "description": "首页「今日更新状态」聚合:赛程/赔率/推荐三条最近成功时间戳,各自附带\nFRESH/STALE/UNAVAILABLE 三态(classify_freshness),供前端判断\"这个数据源\n现在是不是正常\"而不只是看到一个孤立的钟点数字。\n\n只读聚合,不承载任何比赛/推荐内容,匿名公开缓存安全(短 TTL,\n因为三个来源各自独立轮询,新鲜度本身随时在变)。",
     "operationId": "status_freshness_api_v1_status_freshness_get",
     "responses": {
      "200": {
@@ -2340,26 +2132,6 @@
      },
      "400": {
       "description": "Bad Request",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "401": {
-      "description": "Unauthorized",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "403": {
-      "description": "Forbidden",
       "content": {
        "application/json": {
         "schema": {
@@ -2445,26 +2217,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "404": {
       "content": {
        "application/json": {
@@ -2517,26 +2269,6 @@
        }
       }
      },
-     "401": {
-      "description": "Unauthorized",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "403": {
-      "description": "Forbidden",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
      "404": {
       "description": "Not Found",
       "content": {
@@ -2581,26 +2313,6 @@
      },
      "400": {
       "description": "Bad Request",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "401": {
-      "description": "Unauthorized",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "403": {
-      "description": "Forbidden",
       "content": {
        "application/json": {
         "schema": {
@@ -2696,87 +2408,6 @@
        }
       },
       "description": "Unprocessable Content"
-     }
-    }
-   }
-  },
-  "/api/v1/redeem": {
-   "post": {
-    "tags": [
-     "member"
-    ],
-    "summary": "Redeem",
-    "operationId": "redeem_api_v1_redeem_post",
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/RedeemBody"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/RedeemResponse"
-        }
-       }
-      }
-     },
-     "400": {
-      "description": "Bad Request",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "401": {
-      "description": "Unauthorized",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "403": {
-      "description": "Forbidden",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "404": {
-      "description": "Not Found",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
-     },
-     "422": {
-      "description": "Unprocessable Content",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      }
      }
     }
    }
@@ -3243,7 +2874,7 @@
      "reco"
     ],
     "summary": "Reco Daily",
-    "description": "付费面(reco:daily):近 30 天推荐单,含未结算(受限内容,物理不下发给无权益者)。",
+    "description": "列表面:近 30 天推荐单的存在性 + 状态对任何已登录用户可见;内容\n(标题/摘要/腿/思路说明)只对当前用户持有 active 按场授权的 slip 下发\n(access_required=false),否则只给中性投影(access_required=true)。\n列表本身也是\"每日精选权限查询\"的一种,匿名 401,已登录即可查看。",
     "operationId": "reco_daily_api_v1_reco_daily_get",
     "responses": {
      "200": {
@@ -3309,13 +2940,168 @@
     }
    }
   },
+  "/api/v1/reco/daily/{slip_id}": {
+   "get": {
+    "tags": [
+     "reco"
+    ],
+    "summary": "Reco Daily Slip",
+    "description": "正文访问(按场授权的硬性契约):未登录 401;slip 不存在或仍是 draft\n404(draft 永不外泄给普通用户面);已登录但对该 slip 没有 active 授权\n403(响应体只有中性 code/slip_id,不含任何正文字段);已登录且有 active\n授权 200,完整正文。admin 角色本身不因为是 admin 而绕过——这里与\n/admin/reco/slips/{slip_id}/preview 是两个彻底独立的端点。",
+    "operationId": "reco_daily_slip_api_v1_reco_daily__slip_id__get",
+    "parameters": [
+     {
+      "name": "slip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Slip Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoSlipDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/reco/my-access": {
+   "get": {
+    "tags": [
+     "reco"
+    ],
+    "summary": "Reco My Access",
+    "description": "个人\"每日精选权限查询\"(CLAUDE.md §8.1 允许要求登录的账户类个人\n功能之一):只列出当前用户自己的按场授权记录(含历史撤销),不含其他\n用户的任何信息。",
+    "operationId": "reco_my_access_api_v1_reco_my_access_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoMyAccessResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/reco/track-record": {
    "get": {
     "tags": [
      "reco"
     ],
     "summary": "Reco Track Record",
-    "description": "登录面(reco:track_record,member 基线):结算/作废归档全历史。\n\n命中/未中/走水全展示,作废单列不消失(对齐\"不挑选、不隐藏\");\n未结算 published 单不出现(赛前内容属付费面)。人工内容可修正,\nedit_count/last_edited_at 公开可查,不使用\"锁定不可改\"表述。",
+    "description": "匿名可见(2026-08-16 起,不再要求登录):结算/作废归档全历史。\n\n命中/未中/走水全展示,作废单列不消失(对齐\"不挑选、不隐藏\");\n未结算 published 单不出现(赛前内容属每日精选按场授权面)。这是站点\n自身的历史运营记录,与 backend/queries/track_record.py 里模型预测的\n公开战绩端点同一先例,不属于\"每日精选\"按场授权的约束范围。人工内容\n可修正,edit_count/last_edited_at 公开可查,不使用\"锁定不可改\"表述。",
     "operationId": "reco_track_record_api_v1_reco_track_record_get",
     "parameters": [
      {
@@ -3410,6 +3196,7 @@
      "admin"
     ],
     "summary": "Admin List Slips",
+    "description": "status/date_from/date_to(按 slip_date)均可选,不传即不筛选;total 是\n筛选后的计数,不是全库总数。",
     "operationId": "admin_list_slips_api_v1_admin_reco_slips_get",
     "parameters": [
      {
@@ -3430,6 +3217,36 @@
        "type": "integer",
        "default": 0,
        "title": "Offset"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Status"
+      }
+     },
+     {
+      "name": "date_from",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Date From"
+      }
+     },
+     {
+      "name": "date_to",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Date To"
       }
      }
     ],
@@ -3577,6 +3394,90 @@
     }
    }
   },
+  "/api/v1/admin/reco/slips/{slip_id}/preview": {
+   "get": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Preview Slip",
+    "description": "会员视角预览:这张单如果是 published 状态,一个真实会员在 /reco/daily\n会看到的内容形状——直接复用 daily_slips() 同一套投影(q_reco.\nslip_member_preview),不重新发明会员端字段投影逻辑。draft 也可预览\n(admin 需要在发布前看)。",
+    "operationId": "admin_preview_slip_api_v1_admin_reco_slips__slip_id__preview_get",
+    "parameters": [
+     {
+      "name": "slip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Slip Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoSlipPreviewResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
   "/api/v1/admin/reco/match-candidates": {
    "get": {
     "tags": [
@@ -3584,7 +3485,7 @@
      "admin"
     ],
     "summary": "Admin Reco Match Candidates",
-    "description": "录入每日精选时的比赛候选(从真实比赛选,不再手打描述)。\n\nadmin 身份即可见全部联赛的未开赛比赛,不受个人 Plan/Entitlement 门禁\n约束(§CLAUDE.md 8.1:Role 与 Plan 分离——建正式公开内容不能被自己的\n免费档位挡住看不到完整数据)。`q` 缺省时返回最近开球的一批,供不搜索\n直接浏览挑选。",
+    "description": "录入每日精选时的比赛候选(从真实比赛选,不再手打描述)。\n\nadmin 身份即可见全部联赛的未开赛比赛,不受个人 Plan/Entitlement 门禁\n约束(§CLAUDE.md 8.1:Role 与 Plan 分离——建正式公开内容不能被自己的\n免费档位挡住看不到完整数据)。`q` 缺省时返回最近开球的一批,供不搜索\n直接浏览挑选。\n\n`window` 默认 7 天,值域与语义完全复用 GET /api/v1/matches 已经在用的\nwindow 参数(today/tomorrow/3d/7d/all),不发明新的窗口表示法;传\nwindow=all 可以显式搜到 7 天窗口外(含没有精确 kickoff_at_utc)的比赛。",
     "operationId": "admin_reco_match_candidates_api_v1_admin_reco_match_candidates_get",
     "parameters": [
      {
@@ -3615,6 +3516,24 @@
        "minimum": 1,
        "default": 20,
        "title": "Limit"
+      }
+     },
+     {
+      "name": "window",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(today|tomorrow|3d|7d|all)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": "7d",
+       "title": "Window"
       }
      }
     ],
@@ -4128,6 +4047,305 @@
     }
    }
   },
+  "/api/v1/admin/reco/access-grants": {
+   "post": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Grant Reco Access",
+    "description": "按\"用户 + 单条 slip\"授权(幂等:同一 (user_id, slip_id) 已有 active\n授权时直接返回既有记录,不重复插入)。",
+    "operationId": "admin_grant_reco_access_api_v1_admin_reco_access_grants_post",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RecoAccessGrantBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoAccessGrantDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   },
+   "get": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin List Reco Access",
+    "description": "user_id/slip_id/status 均可选,不传即不筛选;total 是筛选后的计数,\n不是全库总数(与 admin_list_slips/list_codes 同一惯例)。",
+    "operationId": "admin_list_reco_access_api_v1_admin_reco_access_grants_get",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "slip_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Slip Id"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Status"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminRecoAccessGrantsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/reco/access-grants/{grant_id}/revoke": {
+   "post": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Revoke Reco Access",
+    "operationId": "admin_revoke_reco_access_api_v1_admin_reco_access_grants__grant_id__revoke_post",
+    "parameters": [
+     {
+      "name": "grant_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Grant Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RecoAccessRevokeBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
   "/api/v1/admin/users": {
    "get": {
     "tags": [
@@ -4368,199 +4586,6 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/OkDTO"
-        }
-       }
-      }
-     },
-     "400": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Bad Request"
-     },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
-     "404": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Not Found"
-     },
-     "409": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Conflict"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unprocessable Content"
-     }
-    }
-   }
-  },
-  "/api/v1/admin/redeem-codes": {
-   "post": {
-    "tags": [
-     "admin"
-    ],
-    "summary": "Create Codes",
-    "description": "明文兑换码只在本响应展示一次,之后只有 hash。",
-    "operationId": "create_codes_api_v1_admin_redeem_codes_post",
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/CreateCodesBody"
-       }
-      }
-     }
-    },
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AdminCodesCreatedResponse"
-        }
-       }
-      }
-     },
-     "400": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Bad Request"
-     },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
-     "404": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Not Found"
-     },
-     "409": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Conflict"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unprocessable Content"
-     }
-    }
-   },
-   "get": {
-    "tags": [
-     "admin"
-    ],
-    "summary": "List Codes",
-    "operationId": "list_codes_api_v1_admin_redeem_codes_get",
-    "parameters": [
-     {
-      "name": "batch_id",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "type": "string",
-       "default": "",
-       "title": "Batch Id"
-      }
-     },
-     {
-      "name": "limit",
-      "in": "query",
-      "required": false,
-      "schema": {
-       "type": "integer",
-       "default": 100,
-       "title": "Limit"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/AdminCodesListResponse"
         }
        }
       }
@@ -5228,7 +5253,132 @@
      "admin"
     ],
     "summary": "List Audit Logs",
+    "description": "target_type/target_id 可选(2026-08-16 新增):按具体对象查审计轨迹\n(如某张 reco_slip 的全部操作记录),不传即不筛选,数据本来就在\naudit_logs 里,这里只是补一个查询能力。",
     "operationId": "list_audit_logs_api_v1_admin_audit_logs_get",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     },
+     {
+      "name": "target_type",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Target Type"
+      }
+     },
+     {
+      "name": "target_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Target Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AuditLogsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/jobs": {
+   "get": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "List Jobs",
+    "description": "platform.db job_runs 原始行(扁平分页,不做 job_name 聚合)。\n\nerror_summary 复用 backend.cli.ops_check._sanitize_summary 脱敏\n(SQL/traceback/凭证/路径),不重新实现脱敏逻辑。",
+    "operationId": "list_jobs_api_v1_admin_jobs_get",
     "parameters": [
      {
       "name": "limit",
@@ -5257,7 +5407,111 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/AuditLogsResponse"
+         "$ref": "#/components/schemas/AdminJobsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/source-health": {
+   "get": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "List Source Health",
+    "description": "odds.db source_health 原始行(扁平分页)。\n\nerror_summary 同样复用 _sanitize_summary,不重新实现脱敏逻辑。",
+    "operationId": "list_source_health_api_v1_admin_source_health_get",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminSourceHealthResponse"
         }
        }
       }
@@ -6492,26 +6746,6 @@
       },
       "description": "Bad Request"
      },
-     "401": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unauthorized"
-     },
-     "403": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Forbidden"
-     },
      "422": {
       "content": {
        "application/json": {
@@ -6911,37 +7145,21 @@
     ],
     "title": "AccountSubscription"
    },
-   "AdminCodesCreatedResponse": {
+   "AdminJobsResponse": {
     "properties": {
-     "codes": {
+     "jobs": {
       "items": {
-       "$ref": "#/components/schemas/RedeemCodeCreatedItem"
+       "$ref": "#/components/schemas/JobRunItem"
       },
       "type": "array",
-      "title": "Codes"
+      "title": "Jobs"
      }
     },
     "type": "object",
     "required": [
-     "codes"
+     "jobs"
     ],
-    "title": "AdminCodesCreatedResponse"
-   },
-   "AdminCodesListResponse": {
-    "properties": {
-     "codes": {
-      "items": {
-       "$ref": "#/components/schemas/AdminRedeemCodeItem"
-      },
-      "type": "array",
-      "title": "Codes"
-     }
-    },
-    "type": "object",
-    "required": [
-     "codes"
-    ],
-    "title": "AdminCodesListResponse"
+    "title": "AdminJobsResponse"
    },
    "AdminPredictionItem": {
     "properties": {
@@ -7085,6 +7303,273 @@
     ],
     "title": "AdminPredictionsResponse"
    },
+   "AdminRecoAccessGrantsResponse": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "grants": {
+      "items": {
+       "$ref": "#/components/schemas/RecoAccessGrantDTO"
+      },
+      "type": "array",
+      "title": "Grants"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "grants"
+    ],
+    "title": "AdminRecoAccessGrantsResponse"
+   },
+   "AdminRecoLegDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "match_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Match Id"
+     },
+     "match_desc": {
+      "type": "string",
+      "title": "Match Desc"
+     },
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "selection": {
+      "type": "string",
+      "title": "Selection"
+     },
+     "odds": {
+      "type": "number",
+      "title": "Odds"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "win",
+         "lose",
+         "push",
+         "half_win",
+         "half_loss"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Result"
+     },
+     "entry_type": {
+      "type": "string",
+      "enum": [
+       "provenance_bound",
+       "legacy_manual"
+      ],
+      "title": "Entry Type"
+     },
+     "match_result": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecoLegMatchResultDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "corners": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecoLegCornersDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "needs_review": {
+      "type": "boolean",
+      "title": "Needs Review",
+      "default": false
+     },
+     "needs_review_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Needs Review Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "match_desc",
+     "market",
+     "selection",
+     "odds",
+     "entry_type"
+    ],
+    "title": "AdminRecoLegDTO",
+    "description": "admin 面在会员 RecoLegDTO 基础上补充的运营信息(2026-08-16):\nentry_type 供前端提前识别\"这条腿缺乏真实溯源、发布会被拒绝\";\nmatch_result/corners 是已结算腿的结算依据(现算,不新增存储,缺失时\n保持 None);needs_review 是\"待确认\"标记——绝不通过任何写路径把它\n自动变成确定结果,只读展示。"
+   },
+   "AdminRecoSlipDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "slip_date": {
+      "type": "string",
+      "title": "Slip Date"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "combo_type": {
+      "type": "string",
+      "enum": [
+       "single",
+       "parlay"
+      ],
+      "title": "Combo Type"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "draft",
+       "published",
+       "settled",
+       "voided"
+      ],
+      "title": "Status"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "win",
+         "lose",
+         "push",
+         "half_win",
+         "half_loss"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Result"
+     },
+     "return_units": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Return Units"
+     },
+     "published_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Published At"
+     },
+     "settled_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Settled At"
+     },
+     "settle_source": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "auto",
+         "manual"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Settle Source"
+     },
+     "edit_count": {
+      "type": "integer",
+      "title": "Edit Count"
+     },
+     "last_edited_at": {
+      "type": "string",
+      "title": "Last Edited At"
+     },
+     "legs": {
+      "items": {
+       "$ref": "#/components/schemas/AdminRecoLegDTO"
+      },
+      "type": "array",
+      "title": "Legs"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "slip_date",
+     "title",
+     "combo_type",
+     "status",
+     "edit_count",
+     "last_edited_at",
+     "legs"
+    ],
+    "title": "AdminRecoSlipDTO"
+   },
    "AdminRecoSlipsResponse": {
     "properties": {
      "total": {
@@ -7093,7 +7578,7 @@
      },
      "slips": {
       "items": {
-       "$ref": "#/components/schemas/RecoSlipDTO"
+       "$ref": "#/components/schemas/AdminRecoSlipDTO"
       },
       "type": "array",
       "title": "Slips"
@@ -7106,82 +7591,21 @@
     ],
     "title": "AdminRecoSlipsResponse"
    },
-   "AdminRedeemCodeItem": {
+   "AdminSourceHealthResponse": {
     "properties": {
-     "id": {
-      "type": "string",
-      "title": "Id"
-     },
-     "plan_id": {
-      "type": "string",
-      "title": "Plan Id"
-     },
-     "duration_days": {
-      "type": "integer",
-      "title": "Duration Days"
-     },
-     "batch_id": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Batch Id"
-     },
-     "status": {
-      "type": "string",
-      "title": "Status"
-     },
-     "created_at": {
-      "type": "string",
-      "title": "Created At"
-     },
-     "expires_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Expires At"
-     },
-     "used_by": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Used By"
-     },
-     "used_at": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Used At"
+     "source_health": {
+      "items": {
+       "$ref": "#/components/schemas/SourceHealthItem"
+      },
+      "type": "array",
+      "title": "Source Health"
      }
     },
     "type": "object",
     "required": [
-     "id",
-     "plan_id",
-     "duration_days",
-     "status",
-     "created_at"
+     "source_health"
     ],
-    "title": "AdminRedeemCodeItem"
+    "title": "AdminSourceHealthResponse"
    },
    "AdminUserItem": {
     "properties": {
@@ -7918,33 +8342,6 @@
     ],
     "title": "BundleUncertaintyItem"
    },
-   "CooccurrenceFullDTO": {
-    "properties": {
-     "match_id": {
-      "type": "integer",
-      "title": "Match Id"
-     },
-     "count": {
-      "type": "integer",
-      "title": "Count"
-     },
-     "items": {
-      "items": {
-       "$ref": "#/components/schemas/CooccurrenceItem"
-      },
-      "type": "array",
-      "title": "Items"
-     }
-    },
-    "type": "object",
-    "required": [
-     "match_id",
-     "count",
-     "items"
-    ],
-    "title": "CooccurrenceFullDTO",
-    "description": "report:deep:含明细。"
-   },
    "CooccurrenceItem": {
     "properties": {
      "window_seconds": {
@@ -8025,7 +8422,7 @@
     ],
     "title": "CooccurrenceItem"
    },
-   "CooccurrenceSummaryDTO": {
+   "CooccurrenceResponse": {
     "properties": {
      "match_id": {
       "type": "integer",
@@ -8036,42 +8433,13 @@
       "title": "Count"
      },
      "items": {
-      "type": "null",
+      "items": {
+       "$ref": "#/components/schemas/CooccurrenceItem"
+      },
+      "type": "array",
       "title": "Items"
      },
      "note": {
-      "type": "string",
-      "title": "Note"
-     }
-    },
-    "type": "object",
-    "required": [
-     "match_id",
-     "count",
-     "note"
-    ],
-    "title": "CooccurrenceSummaryDTO",
-    "description": "匿名/free:只有计数,items 显式为 null。"
-   },
-   "CreateCodesBody": {
-    "properties": {
-     "plan_id": {
-      "type": "string",
-      "title": "Plan Id"
-     },
-     "duration_days": {
-      "type": "integer",
-      "maximum": 3650.0,
-      "exclusiveMinimum": 0.0,
-      "title": "Duration Days"
-     },
-     "count": {
-      "type": "integer",
-      "maximum": 500.0,
-      "exclusiveMinimum": 0.0,
-      "title": "Count"
-     },
-     "expires_at": {
       "anyOf": [
        {
         "type": "string"
@@ -8080,16 +8448,17 @@
         "type": "null"
        }
       ],
-      "title": "Expires At"
+      "title": "Note"
      }
     },
     "type": "object",
     "required": [
-     "plan_id",
-     "duration_days",
-     "count"
+     "match_id",
+     "count",
+     "items"
     ],
-    "title": "CreateCodesBody"
+    "title": "CooccurrenceResponse",
+    "description": "同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分\n免费(仅计数)/付费(明细)两套 DTO。"
    },
    "CreateDraftBody": {
     "properties": {
@@ -8393,11 +8762,59 @@
        }
       ],
       "title": "Reco Updated At"
+     },
+     "schedule_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Schedule State"
+     },
+     "odds_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds State"
+     },
+     "reco_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reco State"
      }
     },
     "type": "object",
     "title": "FreshnessResponse",
-    "description": "首页「今日更新状态」:三条独立的最近成功时间戳,互不代表彼此。\n\n任一环节尚无成功记录时为 null(如实展示,不用当前时间顶替)。"
+    "description": "首页「今日更新状态」:三条独立的最近成功时间戳,互不代表彼此。\n\n任一环节尚无成功记录时为 null(如实展示,不用当前时间顶替)。\n\n每条时间戳配一个仓库统一的 FRESH/STALE/UNAVAILABLE 三态(与 MatchSummary.\nsync_state/odds_freshness_state 同一套值,backend/queries/freshness.py::\nclassify_freshness 计算)——裸 HH:mm 时间戳看不出这是今天还是好几天前,\n也看不出数据源当前是否已经失败,状态字段补上这两个判断。"
    },
    "GoalMinuteBucket": {
     "properties": {
@@ -8499,6 +8916,99 @@
      "ok"
     ],
     "title": "HealthzDTO"
+   },
+   "JobRunItem": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "job_name": {
+      "type": "string",
+      "title": "Job Name"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "attempt": {
+      "type": "integer",
+      "title": "Attempt"
+     },
+     "max_attempts": {
+      "type": "integer",
+      "title": "Max Attempts"
+     },
+     "started_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Started At"
+     },
+     "finished_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Finished At"
+     },
+     "input_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Input Count"
+     },
+     "output_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Output Count"
+     },
+     "error_summary": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error Summary"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "job_name",
+     "status",
+     "attempt",
+     "max_attempts",
+     "created_at"
+    ],
+    "title": "JobRunItem"
    },
    "LeagueBettingResponse": {
     "properties": {
@@ -8635,18 +9145,6 @@
       "type": "string",
       "title": "Name En"
      },
-     "entitlement": {
-      "type": "string",
-      "title": "Entitlement"
-     },
-     "accessible": {
-      "type": "boolean",
-      "title": "Accessible"
-     },
-     "requires_login": {
-      "type": "boolean",
-      "title": "Requires Login"
-     },
      "current_season": {
       "anyOf": [
        {
@@ -8692,12 +9190,10 @@
      "code",
      "name_zh",
      "name_en",
-     "entitlement",
-     "accessible",
-     "requires_login",
      "data_status"
     ],
-    "title": "LeagueInfo"
+    "title": "LeagueInfo",
+    "description": "2026-08-16 起:除\"每日精选\"外全部联赛对任何人(含匿名)恒可访问——\nentitlement/accessible/requires_login 三个只为登录门禁服务的字段已彻底\n从响应模型删除(不是置为恒 true/false 留着)。"
    },
    "LeagueMatchesResponse": {
     "properties": {
@@ -8968,10 +9464,7 @@
          "$ref": "#/components/schemas/LegacyWdlUpcomingMatch"
         },
         {
-         "$ref": "#/components/schemas/LegacyWdlLiveLockedMatch"
-        },
-        {
-         "$ref": "#/components/schemas/LegacyWdlLiveFullMatch"
+         "$ref": "#/components/schemas/LegacyWdlLiveMatch"
         }
        ]
       },
@@ -9719,7 +10212,7 @@
     ],
     "title": "LegacyTeamSeasonStats"
    },
-   "LegacyWdlLiveFullMatch": {
+   "LegacyWdlLiveMatch": {
     "properties": {
      "match_id": {
       "type": "integer",
@@ -9845,11 +10338,6 @@
        }
       ],
       "title": "Reason"
-     },
-     "locked": {
-      "type": "boolean",
-      "const": false,
-      "title": "Locked"
      },
      "p_home": {
       "anyOf": [
@@ -9901,167 +10389,12 @@
      "tendency",
      "confidence",
      "reason",
-     "locked",
      "p_home",
      "p_draw",
      "p_away"
     ],
-    "title": "LegacyWdlLiveFullMatch",
-    "description": "distance-to-kickoff ≤7 天且已付费:locked=false,额外带完整三项概率。"
-   },
-   "LegacyWdlLiveLockedMatch": {
-    "properties": {
-     "match_id": {
-      "type": "integer",
-      "title": "Match Id"
-     },
-     "date": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Date"
-     },
-     "round": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Round"
-     },
-     "status": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Status"
-     },
-     "home_team_id": {
-      "type": "integer",
-      "title": "Home Team Id"
-     },
-     "away_team_id": {
-      "type": "integer",
-      "title": "Away Team Id"
-     },
-     "home_team_name_zh": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Home Team Name Zh"
-     },
-     "away_team_name_zh": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Away Team Name Zh"
-     },
-     "days_until_kickoff": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Days Until Kickoff"
-     },
-     "availability": {
-      "type": "string",
-      "const": "live",
-      "title": "Availability"
-     },
-     "tendency": {
-      "anyOf": [
-       {
-        "type": "string",
-        "enum": [
-         "home",
-         "draw",
-         "away"
-        ]
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Tendency"
-     },
-     "confidence": {
-      "anyOf": [
-       {
-        "type": "string",
-        "enum": [
-         "normal",
-         "low"
-        ]
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Confidence"
-     },
-     "reason": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Reason"
-     },
-     "locked": {
-      "type": "boolean",
-      "const": true,
-      "title": "Locked"
-     }
-    },
-    "additionalProperties": false,
-    "type": "object",
-    "required": [
-     "match_id",
-     "date",
-     "round",
-     "status",
-     "home_team_id",
-     "away_team_id",
-     "home_team_name_zh",
-     "away_team_name_zh",
-     "days_until_kickoff",
-     "availability",
-     "tendency",
-     "confidence",
-     "reason",
-     "locked"
-    ],
-    "title": "LegacyWdlLiveLockedMatch",
-    "description": "distance-to-kickoff ≤7 天且未付费:有 tendency/confidence/reason/locked=true,\n物理上没有 p_home/p_draw/p_away(不是放了真值再指望前端隐藏)。"
+    "title": "LegacyWdlLiveMatch",
+    "description": "distance-to-kickoff ≤7 天:恒下发完整 tendency/confidence/reason/\np_home/p_draw/p_away(2026-08-16 起除\"每日精选\"外全站比赛内容全部免费,\n不再有 locked 字段区分付费/未付费)。"
    },
    "LegacyWdlUpcomingMatch": {
     "properties": {
@@ -10164,7 +10497,7 @@
      "availability"
     ],
     "title": "LegacyWdlUpcomingMatch",
-    "description": "distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/locked/\np_home/p_draw/p_away——不是\"这几个字段为 null\",是这个 JSON 形状根本不含它们。"
+    "description": "distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/\np_home/p_draw/p_away——不是\"这几个字段为 null\",是这个 JSON 形状根本不含\n它们(这是数据就绪状态,不是付费墙,2026-08-16 起未改变这条既有规则)。"
    },
    "MarketBaselineDTO": {
     "properties": {
@@ -10512,10 +10845,7 @@
      },
      "tier": {
       "type": "string",
-      "enum": [
-       "full",
-       "delayed_summary"
-      ],
+      "const": "full",
       "title": "Tier"
      },
      "coverage_tier": {
@@ -10611,6 +10941,1050 @@
      "reason"
     ],
     "title": "MatchOddsUnavailableDTO"
+   },
+   "MatchPreviewAttackChainDTO": {
+    "properties": {
+     "tier": {
+      "type": "string",
+      "title": "Tier"
+     },
+     "matches": {
+      "type": "integer",
+      "title": "Matches"
+     },
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "volume_keys": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Volume Keys"
+     },
+     "conversion_keys": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Conversion Keys"
+     },
+     "opp_half_pass_share": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "touches_opp_box": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "shots": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "shots_on_target": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "xg": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "xgot": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "shots_per_100_box_touches": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "shot_on_target_rate": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "xg_per_shot": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "xgot_per_sot": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "tier",
+     "matches",
+     "label_zh",
+     "volume_keys",
+     "conversion_keys",
+     "opp_half_pass_share",
+     "touches_opp_box",
+     "shots",
+     "shots_on_target",
+     "xg",
+     "xgot",
+     "shots_per_100_box_touches",
+     "shot_on_target_rate",
+     "xg_per_shot",
+     "xgot_per_sot"
+    ],
+    "title": "MatchPreviewAttackChainDTO"
+   },
+   "MatchPreviewAttackChainsDTO": {
+    "properties": {
+     "home": {
+      "$ref": "#/components/schemas/MatchPreviewAttackChainDTO"
+     },
+     "away": {
+      "$ref": "#/components/schemas/MatchPreviewAttackChainDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewAttackChainsDTO"
+   },
+   "MatchPreviewAttackSourceDTO": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "shots": {
+      "type": "integer",
+      "title": "Shots"
+     },
+     "shot_pct": {
+      "type": "number",
+      "title": "Shot Pct"
+     },
+     "xg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Xg"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label",
+     "shots",
+     "shot_pct"
+    ],
+    "title": "MatchPreviewAttackSourceDTO"
+   },
+   "MatchPreviewAttackSourcesDTO": {
+    "properties": {
+     "home": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewAttackSourceDTO"
+      },
+      "type": "array",
+      "title": "Home"
+     },
+     "away": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewAttackSourceDTO"
+      },
+      "type": "array",
+      "title": "Away"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewAttackSourcesDTO"
+   },
+   "MatchPreviewChainMetricDTO": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "complete": {
+      "type": "boolean",
+      "title": "Complete",
+      "default": false
+     },
+     "matches_with_data": {
+      "type": "integer",
+      "title": "Matches With Data",
+      "default": 0
+     }
+    },
+    "type": "object",
+    "title": "MatchPreviewChainMetricDTO"
+   },
+   "MatchPreviewDefensivePressureDTO": {
+    "properties": {
+     "tier": {
+      "type": "string",
+      "title": "Tier"
+     },
+     "matches": {
+      "type": "integer",
+      "title": "Matches"
+     },
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "shots_faced": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "shots_on_target_faced": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "xga": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "box_shots_faced": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "tier",
+     "matches",
+     "label_zh",
+     "shots_faced",
+     "shots_on_target_faced",
+     "xga",
+     "box_shots_faced"
+    ],
+    "title": "MatchPreviewDefensivePressureDTO"
+   },
+   "MatchPreviewDefensivePressuresDTO": {
+    "properties": {
+     "home": {
+      "$ref": "#/components/schemas/MatchPreviewDefensivePressureDTO"
+     },
+     "away": {
+      "$ref": "#/components/schemas/MatchPreviewDefensivePressureDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewDefensivePressuresDTO"
+   },
+   "MatchPreviewKeeperDTO": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "appearances": {
+      "type": "integer",
+      "title": "Appearances"
+     },
+     "saves": {
+      "type": "number",
+      "title": "Saves"
+     },
+     "xgot_faced": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Xgot Faced"
+     },
+     "xgot_faced_complete": {
+      "type": "boolean",
+      "title": "Xgot Faced Complete",
+      "default": false
+     },
+     "goals_conceded": {
+      "type": "number",
+      "title": "Goals Conceded"
+     },
+     "goals_prevented": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Goals Prevented"
+     }
+    },
+    "type": "object",
+    "required": [
+     "player_id",
+     "name",
+     "appearances",
+     "saves",
+     "goals_conceded"
+    ],
+    "title": "MatchPreviewKeeperDTO"
+   },
+   "MatchPreviewKeepersDTO": {
+    "properties": {
+     "home": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewKeeperDTO"
+      },
+      "type": "array",
+      "title": "Home"
+     },
+     "away": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewKeeperDTO"
+      },
+      "type": "array",
+      "title": "Away"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewKeepersDTO"
+   },
+   "MatchPreviewKeyPlayersDTO": {
+    "properties": {
+     "home": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewPlayerShareBlockDTO"
+      },
+      "type": "array",
+      "title": "Home"
+     },
+     "away": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewPlayerShareBlockDTO"
+      },
+      "type": "array",
+      "title": "Away"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewKeyPlayersDTO"
+   },
+   "MatchPreviewLineupSideDTO": {
+    "properties": {
+     "team_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Id"
+     },
+     "formation": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Formation"
+     },
+     "starters": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewPlayerDTO"
+      },
+      "type": "array",
+      "title": "Starters"
+     },
+     "subs": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewPlayerDTO"
+      },
+      "type": "array",
+      "title": "Subs"
+     }
+    },
+    "type": "object",
+    "required": [
+     "starters",
+     "subs"
+    ],
+    "title": "MatchPreviewLineupSideDTO"
+   },
+   "MatchPreviewLineupsDTO": {
+    "properties": {
+     "lineup_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lineup Type"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source"
+     },
+     "observed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Observed At"
+     },
+     "home": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchPreviewLineupSideDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "away": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchPreviewLineupSideDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "title": "MatchPreviewLineupsDTO",
+    "description": "lineup_type 绝大多数真实值是 \"lastStarting11\"(上一场首发,不是本场\n确认阵容)——必须原样透传,前端负责翻译成\"预计首发·基于上一场\"这类\n措辞,后端不得转译成\"首发\"造成误读。两队都无快照时 home/away 为 None。"
+   },
+   "MatchPreviewMatchupProfileDTO": {
+    "properties": {
+     "tier": {
+      "type": "string",
+      "title": "Tier"
+     },
+     "matches": {
+      "type": "integer",
+      "title": "Matches"
+     },
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "situations": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewMatchupSituationDTO"
+      },
+      "type": "array",
+      "title": "Situations"
+     }
+    },
+    "type": "object",
+    "required": [
+     "tier",
+     "matches",
+     "label_zh",
+     "situations"
+    ],
+    "title": "MatchPreviewMatchupProfileDTO"
+   },
+   "MatchPreviewMatchupProfilesDTO": {
+    "properties": {
+     "home": {
+      "$ref": "#/components/schemas/MatchPreviewMatchupProfileDTO"
+     },
+     "away": {
+      "$ref": "#/components/schemas/MatchPreviewMatchupProfileDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewMatchupProfilesDTO"
+   },
+   "MatchPreviewMatchupSituationDTO": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "own_shots_pg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Own Shots Pg"
+     },
+     "own_xg_pg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Own Xg Pg"
+     },
+     "own_xg_complete": {
+      "type": "boolean",
+      "title": "Own Xg Complete",
+      "default": false
+     },
+     "conceded_shots_pg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Conceded Shots Pg"
+     },
+     "conceded_xg_pg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Conceded Xg Pg"
+     },
+     "conceded_xg_complete": {
+      "type": "boolean",
+      "title": "Conceded Xg Complete",
+      "default": false
+     },
+     "comparison_metric": {
+      "type": "string",
+      "title": "Comparison Metric",
+      "default": "xg"
+     },
+     "own_comparison_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Own Comparison Value"
+     },
+     "conceded_comparison_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Conceded Comparison Value"
+     },
+     "own_baseline_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Own Baseline Value"
+     },
+     "conceded_baseline_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Conceded Baseline Value"
+     },
+     "comparison_complete": {
+      "type": "boolean",
+      "title": "Comparison Complete",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "key",
+     "label"
+    ],
+    "title": "MatchPreviewMatchupSituationDTO"
+   },
+   "MatchPreviewPlayerDTO": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "shirt_number": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shirt Number"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "name"
+    ],
+    "title": "MatchPreviewPlayerDTO"
+   },
+   "MatchPreviewPlayerShareBlockDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "metric": {
+      "type": "string",
+      "title": "Metric"
+     },
+     "rows": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewPlayerShareRowDTO"
+      },
+      "type": "array",
+      "title": "Rows"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "title",
+     "metric",
+     "rows"
+    ],
+    "title": "MatchPreviewPlayerShareBlockDTO"
+   },
+   "MatchPreviewPlayerShareRowDTO": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "pct": {
+      "type": "number",
+      "title": "Pct"
+     },
+     "appearances": {
+      "type": "integer",
+      "title": "Appearances"
+     },
+     "minutes": {
+      "type": "number",
+      "title": "Minutes"
+     },
+     "count": {
+      "type": "number",
+      "title": "Count"
+     }
+    },
+    "type": "object",
+    "required": [
+     "player_id",
+     "name",
+     "pct",
+     "appearances",
+     "minutes",
+     "count"
+    ],
+    "title": "MatchPreviewPlayerShareRowDTO"
+   },
+   "MatchPreviewPossessionControlDTO": {
+    "properties": {
+     "tier": {
+      "type": "string",
+      "title": "Tier"
+     },
+     "matches": {
+      "type": "integer",
+      "title": "Matches"
+     },
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "possession": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "pass_accuracy": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "opp_half_pass_share": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     },
+     "touches_opp_box": {
+      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "tier",
+     "matches",
+     "label_zh",
+     "possession",
+     "pass_accuracy",
+     "opp_half_pass_share",
+     "touches_opp_box"
+    ],
+    "title": "MatchPreviewPossessionControlDTO"
+   },
+   "MatchPreviewPossessionControlsDTO": {
+    "properties": {
+     "home": {
+      "$ref": "#/components/schemas/MatchPreviewPossessionControlDTO"
+     },
+     "away": {
+      "$ref": "#/components/schemas/MatchPreviewPossessionControlDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewPossessionControlsDTO"
+   },
+   "MatchPreviewResponse": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "observed_at": {
+      "type": "string",
+      "title": "Observed At"
+     },
+     "home_window": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchPreviewWindowDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "away_window": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchPreviewWindowDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "lineups": {
+      "$ref": "#/components/schemas/MatchPreviewLineupsDTO"
+     },
+     "sidelined": {
+      "$ref": "#/components/schemas/MatchPreviewSidelinedDTO"
+     },
+     "style_views": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewStyleViewDTO"
+      },
+      "type": "array",
+      "title": "Style Views"
+     },
+     "attack_sources": {
+      "$ref": "#/components/schemas/MatchPreviewAttackSourcesDTO"
+     },
+     "attack_chains": {
+      "$ref": "#/components/schemas/MatchPreviewAttackChainsDTO"
+     },
+     "possession_controls": {
+      "$ref": "#/components/schemas/MatchPreviewPossessionControlsDTO"
+     },
+     "defensive_pressures": {
+      "$ref": "#/components/schemas/MatchPreviewDefensivePressuresDTO"
+     },
+     "matchup_profiles": {
+      "$ref": "#/components/schemas/MatchPreviewMatchupProfilesDTO"
+     },
+     "key_players": {
+      "$ref": "#/components/schemas/MatchPreviewKeyPlayersDTO"
+     },
+     "keepers": {
+      "$ref": "#/components/schemas/MatchPreviewKeepersDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "observed_at",
+     "lineups",
+     "sidelined",
+     "style_views",
+     "attack_sources",
+     "attack_chains",
+     "possession_controls",
+     "defensive_pressures",
+     "matchup_profiles",
+     "key_players",
+     "keepers"
+    ],
+    "title": "MatchPreviewResponse"
+   },
+   "MatchPreviewSidelinedDTO": {
+    "properties": {
+     "home": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewSidelinedPlayerDTO"
+      },
+      "type": "array",
+      "title": "Home"
+     },
+     "away": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewSidelinedPlayerDTO"
+      },
+      "type": "array",
+      "title": "Away"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "MatchPreviewSidelinedDTO"
+   },
+   "MatchPreviewSidelinedPlayerDTO": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "expected_return": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Return"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "name"
+    ],
+    "title": "MatchPreviewSidelinedPlayerDTO"
+   },
+   "MatchPreviewStylePointDTO": {
+    "properties": {
+     "team_id": {
+      "type": "integer",
+      "title": "Team Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "x": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "X"
+     },
+     "y": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Y"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team_id",
+     "name"
+    ],
+    "title": "MatchPreviewStylePointDTO"
+   },
+   "MatchPreviewStyleViewDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "tab": {
+      "type": "string",
+      "title": "Tab"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "x_label": {
+      "type": "string",
+      "title": "X Label"
+     },
+     "y_label": {
+      "type": "string",
+      "title": "Y Label"
+     },
+     "digits": {
+      "type": "integer",
+      "title": "Digits"
+     },
+     "quadrants": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Quadrants"
+     },
+     "points": {
+      "items": {
+       "$ref": "#/components/schemas/MatchPreviewStylePointDTO"
+      },
+      "type": "array",
+      "title": "Points"
+     },
+     "y_lower_is_better": {
+      "type": "boolean",
+      "title": "Y Lower Is Better",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "tab",
+     "title",
+     "x_label",
+     "y_label",
+     "digits",
+     "quadrants",
+     "points"
+    ],
+    "title": "MatchPreviewStyleViewDTO"
+   },
+   "MatchPreviewWindowDTO": {
+    "properties": {
+     "matches": {
+      "type": "integer",
+      "title": "Matches"
+     },
+     "from": {
+      "type": "string",
+      "title": "From"
+     },
+     "to": {
+      "type": "string",
+      "title": "To"
+     }
+    },
+    "type": "object",
+    "required": [
+     "matches",
+     "from",
+     "to"
+    ],
+    "title": "MatchPreviewWindowDTO",
+    "description": "单支球队\"近 N 场\"的真实场次数与日期区间(CLAUDE.md §11.2 措辞纪律:\n不能只写\"近 5 场\"三个字了事)。主客队各自独立的窗口,不合并成一个——\n历史场次不同(如升班马)时合并会掩盖其中一队样本更少的事实。"
    },
    "MatchReportAvailableDTO": {
     "properties": {
@@ -12067,6 +13441,33 @@
       ],
       "title": "Odds Coverage Tier"
      },
+     "odds_last_observed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Last Observed At"
+     },
+     "odds_freshness_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Freshness State"
+     },
      "win_probability": {
       "anyOf": [
        {
@@ -12076,11 +13477,6 @@
         "type": "null"
        }
       ]
-     },
-     "requires_login": {
-      "type": "boolean",
-      "title": "Requires Login",
-      "default": false
      }
     },
     "type": "object",
@@ -12646,48 +14042,8 @@
     ],
     "title": "PlayersResponse"
    },
-   "PredictionFreeDTO": {
+   "PredictionDTO": {
     "properties": {
-     "tier": {
-      "type": "string",
-      "const": "free",
-      "title": "Tier",
-      "default": "free"
-     },
-     "top_outcome": {
-      "type": "string",
-      "enum": [
-       "home",
-       "draw",
-       "away"
-      ],
-      "title": "Top Outcome"
-     },
-     "top_probability": {
-      "type": "number",
-      "title": "Top Probability"
-     },
-     "meta": {
-      "$ref": "#/components/schemas/PredictionMeta"
-     }
-    },
-    "type": "object",
-    "required": [
-     "top_outcome",
-     "top_probability",
-     "meta"
-    ],
-    "title": "PredictionFreeDTO",
-    "description": "匿名/Free:只有最高一项。禁止出现另外两项概率的任何形式。"
-   },
-   "PredictionFullDTO": {
-    "properties": {
-     "tier": {
-      "type": "string",
-      "const": "full",
-      "title": "Tier",
-      "default": "full"
-     },
      "top_outcome": {
       "type": "string",
       "enum": [
@@ -12748,8 +14104,8 @@
      "prediction_hash",
      "meta"
     ],
-    "title": "PredictionFullDTO",
-    "description": "Pro/Premium:完整 WDL。"
+    "title": "PredictionDTO",
+    "description": "公开正式预测(2026-08-16 起恒为完整 WDL):除\"每日精选\"外普通比赛内容\n全部免费,包括匿名——不再有 free/full 两套 DTO,也不再有 tier 字段。"
    },
    "PredictionMeta": {
     "properties": {
@@ -12873,16 +14229,12 @@
      "prediction": {
       "anyOf": [
        {
-        "$ref": "#/components/schemas/PredictionFullDTO"
-       },
-       {
-        "$ref": "#/components/schemas/PredictionFreeDTO"
+        "$ref": "#/components/schemas/PredictionDTO"
        },
        {
         "type": "null"
        }
-      ],
-      "title": "Prediction"
+      ]
      }
     },
     "type": "object",
@@ -13036,6 +14388,182 @@
     "title": "ReadyzProblemsDTO",
     "description": "/readyz 503 时的诚实故障说明。"
    },
+   "RecoAccessGrantBody": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "slip_id": {
+      "type": "string",
+      "title": "Slip Id"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "slip_id"
+    ],
+    "title": "RecoAccessGrantBody"
+   },
+   "RecoAccessGrantDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "slip_id": {
+      "type": "string",
+      "title": "Slip Id"
+     },
+     "slip_title": {
+      "type": "string",
+      "title": "Slip Title"
+     },
+     "slip_date": {
+      "type": "string",
+      "title": "Slip Date"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "active",
+       "revoked"
+      ],
+      "title": "Status"
+     },
+     "granted_at": {
+      "type": "string",
+      "title": "Granted At"
+     },
+     "granted_by": {
+      "type": "string",
+      "title": "Granted By"
+     },
+     "revoked_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Revoked At"
+     },
+     "revoked_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Revoked By"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "title": "Updated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "user_id",
+     "slip_id",
+     "slip_title",
+     "slip_date",
+     "status",
+     "granted_at",
+     "granted_by",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "RecoAccessGrantDTO"
+   },
+   "RecoAccessRevokeBody": {
+    "properties": {
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     }
+    },
+    "type": "object",
+    "title": "RecoAccessRevokeBody"
+   },
+   "RecoDailyLockedSlipDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "slip_date": {
+      "type": "string",
+      "title": "Slip Date"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "published",
+       "settled",
+       "voided"
+      ],
+      "title": "Status"
+     },
+     "access_required": {
+      "type": "boolean",
+      "const": true,
+      "title": "Access Required",
+      "default": true
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "slip_date",
+     "status"
+    ],
+    "title": "RecoDailyLockedSlipDTO",
+    "description": "当前用户对该 slip 没有 active 按场授权时的中性投影(2026-08-16,\n取代旧的全局 reco:daily 布尔权益门禁):只暴露\"存在性 + 状态\",标题/\n摘要/腿的市场选择赔率/思路说明整体不出现——受限字段物理不下发,不是\n置 null(与 CLAUDE.md §8.2 匿名概率边界同一纪律)。"
+   },
    "RecoDailyResponse": {
     "properties": {
      "window_days": {
@@ -13044,7 +14572,14 @@
      },
      "slips": {
       "items": {
-       "$ref": "#/components/schemas/RecoSlipDTO"
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/RecoDailyUnlockedSlipDTO"
+        },
+        {
+         "$ref": "#/components/schemas/RecoDailyLockedSlipDTO"
+        }
+       ]
       },
       "type": "array",
       "title": "Slips"
@@ -13056,7 +14591,155 @@
      "slips"
     ],
     "title": "RecoDailyResponse",
-    "description": "付费面(reco:daily):近 30 天推荐单(含未结算)。"
+    "description": "登录面(2026-08-16 起按\"用户 + 单条 slip\"授权,取代旧的 reco:daily\n付费全局布尔权益):近 30 天推荐单存在性全部可见,内容按 slip 分别授权\n(见 RecoDailySlipItem)。"
+   },
+   "RecoDailyUnlockedSlipDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "slip_date": {
+      "type": "string",
+      "title": "Slip Date"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "combo_type": {
+      "type": "string",
+      "enum": [
+       "single",
+       "parlay"
+      ],
+      "title": "Combo Type"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "draft",
+       "published",
+       "settled",
+       "voided"
+      ],
+      "title": "Status"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "win",
+         "lose",
+         "push",
+         "half_win",
+         "half_loss"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Result"
+     },
+     "return_units": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Return Units"
+     },
+     "published_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Published At"
+     },
+     "settled_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Settled At"
+     },
+     "edit_count": {
+      "type": "integer",
+      "title": "Edit Count"
+     },
+     "last_edited_at": {
+      "type": "string",
+      "title": "Last Edited At"
+     },
+     "legs": {
+      "items": {
+       "$ref": "#/components/schemas/RecoLegDTO"
+      },
+      "type": "array",
+      "title": "Legs"
+     },
+     "access_required": {
+      "type": "boolean",
+      "const": false,
+      "title": "Access Required",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "slip_date",
+     "title",
+     "combo_type",
+     "status",
+     "edit_count",
+     "last_edited_at",
+     "legs"
+    ],
+    "title": "RecoDailyUnlockedSlipDTO",
+    "description": "当前用户对该 slip 持有 active 按场授权时的完整投影(RecoSlipDTO 原样\n+access_required=False,供前端统一判断是否需要引导授权)。"
+   },
+   "RecoLegCornersDTO": {
+    "properties": {
+     "home": {
+      "type": "number",
+      "title": "Home"
+     },
+     "away": {
+      "type": "number",
+      "title": "Away"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home",
+     "away"
+    ],
+    "title": "RecoLegCornersDTO"
    },
    "RecoLegDTO": {
     "properties": {
@@ -13098,7 +14781,9 @@
         "enum": [
          "win",
          "lose",
-         "push"
+         "push",
+         "half_win",
+         "half_loss"
         ]
        },
        {
@@ -13146,6 +14831,120 @@
        }
       ],
       "title": "Match Id"
+     },
+     "source_odds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source Odds"
+     },
+     "odds_format": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "decimal",
+         "hk"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Format"
+     },
+     "provider": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Provider"
+     },
+     "company_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Company Id"
+     },
+     "company_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Company Name"
+     },
+     "snapshot_ref": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Snapshot Ref"
+     },
+     "observed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Observed At"
+     },
+     "line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line"
+     },
+     "side": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Side"
+     },
+     "payload_hash": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Payload Hash"
      }
     },
     "type": "object",
@@ -13156,6 +14955,24 @@
      "odds"
     ],
     "title": "RecoLegInput"
+   },
+   "RecoLegMatchResultDTO": {
+    "properties": {
+     "home_score": {
+      "type": "integer",
+      "title": "Home Score"
+     },
+     "away_score": {
+      "type": "integer",
+      "title": "Away Score"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home_score",
+     "away_score"
+    ],
+    "title": "RecoLegMatchResultDTO"
    },
    "RecoMatchCandidateDTO": {
     "properties": {
@@ -13244,6 +15061,23 @@
     ],
     "title": "RecoMatchOddsOptionsResponse"
    },
+   "RecoMyAccessResponse": {
+    "properties": {
+     "grants": {
+      "items": {
+       "$ref": "#/components/schemas/RecoAccessGrantDTO"
+      },
+      "type": "array",
+      "title": "Grants"
+     }
+    },
+    "type": "object",
+    "required": [
+     "grants"
+    ],
+    "title": "RecoMyAccessResponse",
+    "description": "个人\"每日精选权限查询\"(CLAUDE.md §8.1 允许要求登录的账户类个人\n功能之一):只含当前用户自己的授权记录。"
+   },
    "RecoOddsOptionDTO": {
     "properties": {
      "market": {
@@ -13269,6 +15103,46 @@
      "observed_at": {
       "type": "string",
       "title": "Observed At"
+     },
+     "snapshot_id": {
+      "type": "integer",
+      "title": "Snapshot Id"
+     },
+     "company_id": {
+      "type": "string",
+      "title": "Company Id"
+     },
+     "line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Line"
+     },
+     "side": {
+      "type": "string",
+      "title": "Side"
+     },
+     "odds_format": {
+      "type": "string",
+      "enum": [
+       "decimal",
+       "hk"
+      ],
+      "title": "Odds Format"
+     },
+     "freshness": {
+      "type": "string",
+      "enum": [
+       "FRESH",
+       "STALE",
+       "UNAVAILABLE"
+      ],
+      "title": "Freshness"
      }
     },
     "type": "object",
@@ -13278,10 +15152,15 @@
      "selection",
      "odds",
      "company_name",
-     "observed_at"
+     "observed_at",
+     "snapshot_id",
+     "company_id",
+     "side",
+     "odds_format",
+     "freshness"
     ],
     "title": "RecoOddsOptionDTO",
-    "description": "真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。"
+    "description": "真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。\n\nodds 字段延续原有语义:来源原始数值(1x2 是十进制;ou/corners_ou 是港赔,\n常 <1)。新增字段供 admin 提交腿时一并回传,后端据此判定 provenance_bound\n并正确换算(见 RecoLegInput/backend/commands/reco_odds_contract.py)。"
    },
    "RecoOverviewResponse": {
     "properties": {
@@ -13324,6 +15203,14 @@
       "type": "integer",
       "title": "Push Count"
      },
+     "half_win_count": {
+      "type": "integer",
+      "title": "Half Win Count"
+     },
+     "half_loss_count": {
+      "type": "integer",
+      "title": "Half Loss Count"
+     },
      "voided_count": {
       "type": "integer",
       "title": "Voided Count"
@@ -13361,6 +15248,8 @@
      "win_count",
      "lose_count",
      "push_count",
+     "half_win_count",
+     "half_loss_count",
      "voided_count",
      "net_units"
     ],
@@ -13375,7 +15264,9 @@
        "enum": [
         "win",
         "lose",
-        "push"
+        "push",
+        "half_win",
+        "half_loss"
        ]
       },
       "type": "object",
@@ -13395,7 +15286,9 @@
       "enum": [
        "win",
        "lose",
-       "push"
+       "push",
+       "half_win",
+       "half_loss"
       ],
       "title": "Result"
      },
@@ -13511,7 +15404,9 @@
         "enum": [
          "win",
          "lose",
-         "push"
+         "push",
+         "half_win",
+         "half_loss"
         ]
        },
        {
@@ -13635,6 +15530,19 @@
     "type": "object",
     "title": "RecoSlipEditBody"
    },
+   "RecoSlipPreviewResponse": {
+    "properties": {
+     "slip": {
+      "$ref": "#/components/schemas/RecoSlipDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "slip"
+    ],
+    "title": "RecoSlipPreviewResponse",
+    "description": "admin 用:该单如果 published,一个真实会员在 /reco/daily 会看到的内容\n形状——与 RecoDailyResponse 里的单据字段完全一致(同一个 RecoSlipDTO,\n同一套投影函数 q_reco.slip_member_preview/_slip_dto),不重新发明一套\n会员端 DTO。"
+   },
    "RecoTrackRecordResponse": {
     "properties": {
      "summary": {
@@ -13659,7 +15567,7 @@
      "slips"
     ],
     "title": "RecoTrackRecordResponse",
-    "description": "登录面(reco:track_record):结算/作废归档全历史,命中未中全展示。"
+    "description": "匿名可见(2026-08-16 起不再要求登录):结算/作废归档全历史,命中未中\n全展示——站点自身的历史运营记录,不属于\"每日精选\"按场授权的约束范围。"
    },
    "RecoTrackRecordSummaryDTO": {
     "properties": {
@@ -13678,6 +15586,14 @@
      "push_count": {
       "type": "integer",
       "title": "Push Count"
+     },
+     "half_win_count": {
+      "type": "integer",
+      "title": "Half Win Count"
+     },
+     "half_loss_count": {
+      "type": "integer",
+      "title": "Half Loss Count"
      },
      "voided_count": {
       "type": "integer",
@@ -13705,6 +15621,8 @@
      "win_count",
      "lose_count",
      "push_count",
+     "half_win_count",
+     "half_loss_count",
      "voided_count",
      "net_units"
     ],
@@ -13722,73 +15640,6 @@
      "reason"
     ],
     "title": "RecoVoidBody"
-   },
-   "RedeemBody": {
-    "properties": {
-     "code": {
-      "type": "string",
-      "maxLength": 32,
-      "minLength": 6,
-      "title": "Code"
-     }
-    },
-    "type": "object",
-    "required": [
-     "code"
-    ],
-    "title": "RedeemBody"
-   },
-   "RedeemCodeCreatedItem": {
-    "properties": {
-     "id": {
-      "type": "string",
-      "title": "Id"
-     },
-     "code": {
-      "type": "string",
-      "title": "Code"
-     }
-    },
-    "type": "object",
-    "required": [
-     "id",
-     "code"
-    ],
-    "title": "RedeemCodeCreatedItem"
-   },
-   "RedeemResponse": {
-    "properties": {
-     "status": {
-      "type": "string",
-      "const": "ok",
-      "title": "Status"
-     },
-     "subscription_id": {
-      "type": "string",
-      "title": "Subscription Id"
-     },
-     "plan_id": {
-      "type": "string",
-      "title": "Plan Id"
-     },
-     "starts_at": {
-      "type": "string",
-      "title": "Starts At"
-     },
-     "ends_at": {
-      "type": "string",
-      "title": "Ends At"
-     }
-    },
-    "type": "object",
-    "required": [
-     "status",
-     "subscription_id",
-     "plan_id",
-     "starts_at",
-     "ends_at"
-    ],
-    "title": "RedeemResponse"
    },
    "RetractBody": {
     "properties": {
@@ -13867,6 +15718,56 @@
     },
     "type": "object",
     "title": "ScoreDistributionRow"
+   },
+   "SourceHealthItem": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "checked_at": {
+      "type": "string",
+      "title": "Checked At"
+     },
+     "ok": {
+      "type": "integer",
+      "title": "Ok"
+     },
+     "latency_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Latency Ms"
+     },
+     "error_summary": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error Summary"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "source",
+     "checked_at",
+     "ok"
+    ],
+    "title": "SourceHealthItem"
    },
    "StandingRow": {
     "properties": {
@@ -14781,6 +16682,83 @@
        }
       ],
       "title": "Avg Expected Goals Conceded"
+     },
+     "avg_corners": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Corners"
+     },
+     "avg_fouls": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Fouls"
+     },
+     "avg_yellow_cards": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Yellow Cards"
+     },
+     "avg_red_cards": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Avg Red Cards"
+     },
+     "clean_sheets": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clean Sheets"
+     },
+     "btts_matches": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Btts Matches"
+     },
+     "btts_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Btts Pct"
      }
     },
     "type": "object",
@@ -14788,7 +16766,7 @@
      "team"
     ],
     "title": "TeamSeasonStatRow",
-    "description": "silver_team_season_stats 免费字段投影。角球/红黄牌/零封/BTTS 是付费深度\n报告字段,物理上不在本 DTO(不是 null 占位,更不是取了再藏)。"
+    "description": "silver_team_season_stats 全字段投影(2026-08-16 起,除\"每日精选\"外\n普通比赛内容全部免费——角球/红黄牌/零封/BTTS 与射门/xG 等字段同属免费\n内容,不再是付费深度报告字段)。"
    },
    "TeamStatsResponse": {
     "properties": {

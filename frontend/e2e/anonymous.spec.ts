@@ -304,15 +304,20 @@ test("详情页免费概率投影(API 层)+ 本场看点不渲染任何概率(UI
 }) => {
   const id = seedMatchId();
 
-  // API 层:免费/权限投影红线保留(CLAUDE.md §8.2),匿名响应体不含受限字段。
+  // API 层(2026-08-16 权限口径修正):PredictionDTO 恒为单一完整形状
+  // (home_probability/draw_probability/away_probability 恒为必填数字),
+  // 不再有 free/full 两套 DTO,也不再有 top_probability 这个字段名。
   // 模型未经真实训练前详情页 UI 不渲染概率(用户拍板,见比赛详情页重设计
-  // 计划 §四②),但后端端点与字段级权限投影原样保留、测试红线不降级。
+  // 计划 §四②),但后端端点契约本身不降级。
   const res = await request.get(`${API}/api/v1/matches/${id}/prediction`);
   expect(res.ok()).toBeTruthy();
-  const body = await res.text();
-  expect(body).toContain("top_probability");
-  expect(body).not.toContain("draw_probability");
-  expect(body).not.toContain("away_probability");
+  const predictionBody = await res.json();
+  expect(JSON.stringify(predictionBody)).not.toContain("top_probability");
+  if (predictionBody.available) {
+    expect(typeof predictionBody.prediction.home_probability).toBe("number");
+    expect(typeof predictionBody.prediction.draw_probability).toBe("number");
+    expect(typeof predictionBody.prediction.away_probability).toBe("number");
+  }
 
   // UI 层:详情页完全不渲染概率数字(种子固定灌 48%/27%/25%,任一出现
   // 都说明概率 UI 未被摘除干净)。

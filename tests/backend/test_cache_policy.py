@@ -144,11 +144,14 @@ def _recursive_scan(obj, needle: str, path="$") -> list[str]:
 # ── A. 会员权益投影矩阵 ──────────────────────────────────────
 
 class TestEntitlementMatrixLeagueAccess:
-    """A.1 / A.2:英超免费可见,非英超 top5 仅 pro/premium;admin 角色本身不授予。"""
+    """A.1 / A.2:2026-08-16 产品权限口径修正——除"每日精选"外全站比赛内容
+    全部免费,包括匿名;admin 角色本身不授予付费板块权益。"""
 
-    def test_anonymous_epl_and_top5_ok_lottery_needs_login(self, app, data_dir, fresh_ip):
-        """三段可见性(2026-08-11 权限矩阵互换,platform 0012):匿名可看英超与
-        五大联赛(top5);league:lottery 匿名 401(引导登录);登录后即 200。"""
+    def test_anonymous_gets_full_access_including_former_lottery_leagues(
+        self, app, data_dir, fresh_ip
+    ):
+        """除"每日精选"外全站比赛内容全部免费:原 league:lottery 联赛不再
+        需要登录。这条断言正是要推翻的旧规则(此前匿名 401)。"""
         seed_basic_core(data_dir)
         conn = connect_rw("core")
         insert_match(conn, 9301, league_id=67, season="2026", date="2026-05-10",
@@ -158,9 +161,9 @@ class TestEntitlementMatrixLeagueAccess:
 
         client = TestClient(app)
         assert client.get("/api/v1/leagues/47/standings").status_code == 200
-        assert client.get("/api/v1/matches/9101").status_code == 200   # 西甲,现匿名可见
-        r = client.get("/api/v1/matches/9301")   # 瑞典超,league:lottery,需登录
-        assert r.status_code == 401
+        assert client.get("/api/v1/matches/9101").status_code == 200   # 西甲
+        r = client.get("/api/v1/matches/9301")   # 瑞典超,原 league:lottery
+        assert r.status_code == 200
 
         logged_in = TestClient(app)
         _login(logged_in, fresh_ip)
@@ -189,10 +192,9 @@ class TestEntitlementMatrixLeagueAccess:
 
 
 class TestEntitlementMatrixPrediction:
-    """A.3:免费层任意 JSON 深度只有 top_outcome/top_probability;pro/premium 完整三项;
-    admin+free plan 仍是免费投影。"""
-
-    SENTINELS = ("0.612", "0.239", "0.149", "61.2", "23.9", "14.9")
+    """A.3:2026-08-16 产品权限口径修正——预测响应恒为完整胜平负三项概率,
+    不再有免费(仅 top_outcome)/付费(完整三项)两套投影;匿名与已登录
+    用户(含 admin+free plan)逐字段一致,不再有 tier 字段。"""
 
     @pytest.fixture
     def seeded(self, data_dir):
@@ -200,52 +202,44 @@ class TestEntitlementMatrixPrediction:
         _seed_prediction(9001, 0.612, 0.239, 0.149)
         return data_dir
 
-    def _assert_free_projection(self, r):
+    def _assert_full_projection(self, r):
         assert r.status_code == 200
         body = r.json()
-        assert body["prediction"]["tier"] == "free"
-        assert body["prediction"]["top_outcome"] == "home"
-        assert body["prediction"]["top_probability"] == 0.61
-        raw = r.text
-        for s in ("0.239", "0.149", "23.9", "14.9"):
-            assert s not in raw, f"免费预测响应泄漏受限概率 {s}"
+        pred = body["prediction"]
+        assert pred["top_outcome"] == "home"
+        assert pred["home_probability"] == 0.612
+        assert pred["draw_probability"] == 0.239
+        assert pred["away_probability"] == 0.149
+        assert "tier" not in pred, "tier 是旧付费裁剪字段,不应再出现"
         assert r.headers["cache-control"] == STRICT_NO_STORE
 
-    def test_anonymous_free_projection(self, app, seeded):
-        self._assert_free_projection(TestClient(app).get("/api/v1/matches/9001/prediction"))
+    def test_anonymous_gets_full_projection(self, app, seeded):
+        """这条断言正是要推翻的旧规则(此前匿名只有 top_outcome/top_probability,
+        受限字段 key 物理不存在)。"""
+        self._assert_full_projection(TestClient(app).get("/api/v1/matches/9001/prediction"))
 
-    def test_registered_user_gets_full_projection(self, app, seeded, fresh_ip):
-        """三段可见性:登录即 member 基线,完整投影(旧"注册不加成"不变量已废除)。"""
+    def test_registered_user_gets_identical_projection_to_anonymous(self, app, seeded, fresh_ip):
         c = TestClient(app)
         _login(c, fresh_ip)
-        pred = c.get("/api/v1/matches/9001/prediction").json()["prediction"]
-        assert pred["tier"] == "full"
+        self._assert_full_projection(c.get("/api/v1/matches/9001/prediction"))
 
-    def test_admin_login_gets_member_projection_not_reco(self, app, seeded, fresh_ip):
-        """三段可见性:admin 也是已登录用户 → member 基线完整投影;
+    def test_admin_login_gets_same_projection_not_reco(self, app, seeded, fresh_ip):
+        """admin 也是已登录用户 → 与匿名相同的完整投影;
         Role⊥Entitlement 不变量改由付费板块承载(admin 不自动获得 reco:*)。"""
         admin = _admin_free_client(app, fresh_ip)
-        pred = admin.get("/api/v1/matches/9001/prediction").json()["prediction"]
-        assert pred["tier"] == "full"
+        self._assert_full_projection(admin.get("/api/v1/matches/9001/prediction"))
         me = admin.get("/api/v1/me").json()
         assert "reco:daily" not in me["entitlements"]   # 付费板块不随 role/登录赠送
 
-    def test_pro_and_premium_get_full_wdl(self, app, seeded, fresh_ip):
-        for maker, ip_suffix in ((_member_client, "-p"),):
-            c = maker(app, f"{fresh_ip}{ip_suffix}")
-            r = c.get("/api/v1/matches/9001/prediction")
-            pred = r.json()["prediction"]
-            assert pred["tier"] == "full"
-            assert pred["home_probability"] == 0.612
-            assert pred["draw_probability"] == 0.239
-            assert pred["away_probability"] == 0.149
-            assert r.headers["cache-control"] == STRICT_NO_STORE
+    def test_member_client_gets_identical_projection(self, app, seeded, fresh_ip):
+        c = _member_client(app, fresh_ip)
+        self._assert_full_projection(c.get("/api/v1/matches/9001/prediction"))
 
 
 class TestEntitlementMatrixAnalysisBundle:
-    """A.4:analysis bundle 在任意嵌套位置(prediction_member/chart_specs/script_sections/
-    counter_evidence/subtitle_cues 等)都不得向免费层泄漏完整概率;pro 有 report:deep
-    与完整 WDL,但没有 premium 的 odds:history_full;premium 两者都有。"""
+    """A.4:2026-08-16 产品权限口径修正——analysis bundle 恒完整返回
+    (prediction_member/chart_specs/counter_evidence/odds_timeline 等),
+    不再按 entitlement 投影;匿名与登录用户拿到逐字段一致的内容。"""
 
     HOME, DRAW, AWAY = 0.501, 0.317, 0.182   # draw>=0.28 触发 bundle.py 的 draw_risk 分支
     NUMERIC_SENTINELS = ("0.501", "0.317", "0.182", "50.1", "31.7", "18.2")
@@ -256,52 +250,51 @@ class TestEntitlementMatrixAnalysisBundle:
         _seed_prediction(9001, self.HOME, self.DRAW, self.AWAY)
         conn = connect_rw("odds")
         _insert_xref(conn, "700001", 9001)
+        _insert_odds_snap(conn, "700001", "2026-07-19T09:00:00Z", "ODDS_SENTINEL_X1")
         conn.commit()
         conn.close()
         return data_dir
 
-    def test_free_leaks_nothing_at_any_depth(self, app, seeded):
+    def test_anonymous_gets_full_bundle_at_any_depth(self, app, seeded):
+        """这条断言正是要推翻的旧规则(此前匿名 prediction_member 恒为 None、
+        odds_timeline 恒为空、counter_evidence 里的 draw_risk 条目被过滤)。"""
         r = TestClient(app).get("/api/v1/matches/9001/analysis")
         assert r.status_code == 200
         body = r.json()
-        assert body["prediction_member"] is None
-        raw = json.dumps(body, ensure_ascii=False)
-        for s in self.NUMERIC_SENTINELS:
-            hits = _recursive_scan(body, s)
-            assert not hits, f"免费层 analysis bundle 在 {hits} 泄漏受限数值 {s}\n{raw[:500]}"
-        assert "subtitle_cues" not in body   # 页面用不到,整体不下发
-        assert r.headers["cache-control"] == STRICT_NO_STORE
-
-    def test_pro_full_wdl_and_report_deep_but_not_full_odds(self, app, seeded, fresh_ip):
-        c = _member_client(app, fresh_ip)
-        r = c.get("/api/v1/matches/9001/analysis")
-        body = r.json()
         assert body["prediction_member"]["home_probability"] == self.HOME
         assert body["prediction_member"]["draw_probability"] == self.DRAW
+        raw = json.dumps(body, ensure_ascii=False)
+        hits = []
+        for s in self.NUMERIC_SENTINELS:
+            hits += _recursive_scan(body, s)
+        assert hits, f"完整概率数值应在响应体中出现,实际未命中任何位置\n{raw[:500]}"
         assert any(cs["type"] == "probability_bar" for cs in body["chart_specs"])
-        assert body["odds_timeline"] == []   # pro 没有 odds:history_full
-
-    def test_premium_gets_full_odds_timeline(self, app, seeded, fresh_ip):
-        conn = connect_rw("odds")
-        _insert_odds_snap(conn, "700001", "2026-07-19T09:00:00Z", "PREMIUM_ODDS_SENTINEL_X1")
-        conn.commit()
-        conn.close()
-        c = _member_client(app, fresh_ip)
-        body = c.get("/api/v1/matches/9001/analysis").json()
         assert len(body["odds_timeline"]) == 1
-        assert body["odds_timeline"][0]["payload"]["sentinel"] == "PREMIUM_ODDS_SENTINEL_X1"
+        assert body["odds_timeline"][0]["payload"]["sentinel"] == "ODDS_SENTINEL_X1"
+        assert any(c.get("kind") == "draw_risk" for c in body["counter_evidence"])
+        assert "subtitle_cues" not in body   # 页面用不到,整体不下发(与权限无关)
+        assert r.headers["cache-control"] == STRICT_NO_STORE
 
-    def test_admin_login_gets_member_bundle(self, app, seeded, fresh_ip):
-        """三段可见性:admin 登录即 member 基线 → 完整 bundle(匿名泄漏矩阵由
-        上面的 anonymous 用例继续钉死)。"""
+    def test_logged_in_user_gets_identical_bundle(self, app, seeded, fresh_ip):
+        """登录与内容分层彻底解耦:登录后的 bundle 必须与匿名逐字段一致
+        (built_at 是每次请求即时生成的构建时间戳,不代表投影内容差异,
+        两次独立请求可能跨秒——比较时排除这一个纯时效性字段)。"""
+        anon = TestClient(app).get("/api/v1/matches/9001/analysis").json()
+        c = _member_client(app, fresh_ip)
+        member = c.get("/api/v1/matches/9001/analysis").json()
+        anon.pop("built_at", None)
+        member.pop("built_at", None)
+        assert member == anon
+
+    def test_admin_login_gets_full_bundle(self, app, seeded, fresh_ip):
         admin = _admin_free_client(app, fresh_ip)
         body = admin.get("/api/v1/matches/9001/analysis").json()
         assert body["prediction_member"] is not None
 
 
 class TestEntitlementMatrixOdds:
-    """A.5:free/pro 只有延迟摘要,premium 完整时间线——用"延迟阈值前/后"两条快照区分,
-    不是只比较数组长度(数组长度相等也可能两者内容不同/都错)。"""
+    """A.5:2026-08-16 起 /matches/{id}/odds 恒返回完整时间线(不延迟)——
+    用"延迟阈值前/后"两条快照区分,证明匿名不再受 1 小时延迟。"""
 
     @pytest.fixture
     def seeded(self, data_dir):
@@ -311,54 +304,32 @@ class TestEntitlementMatrixOdds:
         old = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
         fresh = (datetime.now(timezone.utc) - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
         _insert_odds_snap(conn, "700002", old, "OLD_BEFORE_THRESHOLD_S1")
+        _insert_odds_snap(conn, "700002", fresh, "FRESH_AFTER_THRESHOLD_S2")
         conn.commit()
         conn.close()
-        return old, fresh
+        return data_dir
 
-    def _add_fresh_snapshot(self, fresh_ts):
-        conn = connect_rw("odds")
-        _insert_odds_snap(conn, "700002", fresh_ts, "FRESH_AFTER_THRESHOLD_S2")
-        conn.commit()
-        conn.close()
-
-    def test_anonymous_only_sees_delayed_summary(self, app, seeded, fresh_ip):
-        """三段可见性:延迟摘要边界移到 匿名/已登录(已登录直接有 odds:history_full)。"""
-        _old, fresh = seeded
-        self._add_fresh_snapshot(fresh)
+    def test_anonymous_sees_full_timeline_including_fresh_snapshot(self, app, seeded):
+        """这条断言正是要推翻的旧规则(此前匿名只有延迟摘要,1 小时内的新鲜
+        快照不下发)。"""
         anon = TestClient(app)
         r = anon.get("/api/v1/matches/9001/odds")
         assert r.status_code == 200
         body = r.json()
-        assert body["tier"] == "delayed_summary"
-        raw = r.text
-        assert "OLD_BEFORE_THRESHOLD_S1" in raw
-        assert "FRESH_AFTER_THRESHOLD_S2" not in raw, "匿名不应看到 1 小时内的新鲜快照"
-        assert r.headers["cache-control"] == STRICT_NO_STORE
-
-    def test_member_sees_full_timeline_including_fresh(self, app, seeded, fresh_ip):
-        _old, fresh = seeded
-        self._add_fresh_snapshot(fresh)
-        member = _member_client(app, fresh_ip)
-        r = member.get("/api/v1/matches/9001/odds")
-        assert r.status_code == 200
-        assert r.json()["tier"] == "full"
-        assert "FRESH_AFTER_THRESHOLD_S2" in r.text
-        assert r.headers["cache-control"] == STRICT_NO_STORE
-
-    def test_premium_sees_full_timeline_including_fresh_snapshot(self, app, seeded, fresh_ip):
-        _old, fresh = seeded
-        self._add_fresh_snapshot(fresh)
-        premium = _member_client(app, fresh_ip)
-        r = premium.get("/api/v1/matches/9001/odds")
-        body = r.json()
         assert body["tier"] == "full"
         sentinels = {s["payload"]["sentinel"] for s in body["snapshots"]}
         assert sentinels == {"OLD_BEFORE_THRESHOLD_S1", "FRESH_AFTER_THRESHOLD_S2"}
+        assert r.headers["cache-control"] == STRICT_NO_STORE
+
+    def test_member_sees_identical_timeline_to_anonymous(self, app, seeded, fresh_ip):
+        anon = TestClient(app).get("/api/v1/matches/9001/odds").json()
+        member = _member_client(app, fresh_ip).get("/api/v1/matches/9001/odds").json()
+        assert member == anon
 
 
 class TestEntitlementMatrixCooccurrence:
-    """A.6:free/pro-without-report:deep 见计数或 null;report:deep(pro/premium)见明细;
-    admin+free 不因角色自动拿到明细。"""
+    """A.6:2026-08-16 起同期事件明细恒完整返回,不再区分免费(计数)/
+    付费(明细)——匿名与登录用户拿到逐字段一致的内容。"""
 
     @pytest.fixture
     def seeded(self, data_dir):
@@ -383,24 +354,22 @@ class TestEntitlementMatrixCooccurrence:
         conn.close()
         return data_dir
 
-    def test_anonymous_and_free_get_count_only(self, app, seeded):
+    def test_anonymous_gets_full_detail(self, app, seeded):
+        """这条断言正是要推翻的旧规则(此前匿名 items 恒为 null,只有计数)。"""
         r = TestClient(app).get("/api/v1/matches/9001/cooccurrence")
         body = r.json()
         assert body["count"] == 1
-        assert body["items"] is None
-        assert "COOC_DETAIL_SENTINEL" not in r.text
+        assert body["items"] is not None
+        assert body["items"][0]["detail_json"] and "COOC_DETAIL_SENTINEL" in body["items"][0]["detail_json"]
         assert r.headers["cache-control"] == STRICT_NO_STORE
 
-    def test_pro_and_premium_get_detail(self, app, seeded, fresh_ip):
-        for maker, suffix in ((_member_client, "-p"),):
-            c = maker(app, f"{fresh_ip}{suffix}")
-            body = c.get("/api/v1/matches/9001/cooccurrence").json()
-            assert body["items"] is not None
-            assert body["items"][0]["detail_json"] and "COOC_DETAIL_SENTINEL" in body["items"][0]["detail_json"]
+    def test_member_gets_identical_detail_to_anonymous(self, app, seeded, fresh_ip):
+        anon = TestClient(app).get("/api/v1/matches/9001/cooccurrence").json()
+        c = _member_client(app, fresh_ip)
+        member = c.get("/api/v1/matches/9001/cooccurrence").json()
+        assert member == anon
 
-    def test_admin_login_gets_member_detail(self, app, seeded, fresh_ip):
-        """三段可见性:admin 登录即 member 基线 → 同期事件明细可见
-        (匿名不可见由上面的 anonymous 用例继续钉死)。"""
+    def test_admin_login_gets_detail(self, app, seeded, fresh_ip):
         admin = _admin_free_client(app, fresh_ip)
         body = admin.get("/api/v1/matches/9001/cooccurrence").json()
         assert body["items"] is not None
@@ -715,9 +684,12 @@ class TestCacheMatrixLegacyBothApps:
         ok = c.get("/api/league/47/overview?season=2025/2026")
         assert ok.status_code == 200
         assert ok.headers["cache-control"] == STRICT_NO_STORE
-        unauth = c.get("/api/league/47/betting")
-        assert unauth.status_code == 401
-        assert unauth.headers["cache-control"] == STRICT_NO_STORE
+        # 2026-08-16 起 /betting 不再要求 report:deep(除"每日精选"外全站比赛
+        # 内容全部免费)——这里仍验证同一条不变量(legacy 端点即便成功也绝不
+        # 进共享缓存),只是不再能用 401 作为示例路径。
+        betting = c.get("/api/league/47/betting")
+        assert betting.status_code == 200
+        assert betting.headers["cache-control"] == STRICT_NO_STORE
         bad = c.get("/api/league/not-an-int/overview")
         assert bad.status_code == 422
         assert bad.headers["cache-control"] == STRICT_NO_STORE
@@ -730,9 +702,12 @@ class TestCacheMatrixLegacyBothApps:
         ok = c.get("/api/league/47/overview?season=2025/2026")
         assert ok.status_code == 200
         assert ok.headers["cache-control"] == STRICT_NO_STORE
-        unauth = c.get("/api/league/47/betting")
-        assert unauth.status_code == 401
-        assert unauth.headers["cache-control"] == STRICT_NO_STORE
+        # 2026-08-16 起 /betting 不再要求 report:deep(除"每日精选"外全站比赛
+        # 内容全部免费)——这里仍验证同一条不变量(legacy 端点即便成功也绝不
+        # 进共享缓存),只是不再能用 401 作为示例路径。
+        betting = c.get("/api/league/47/betting")
+        assert betting.status_code == 200
+        assert betting.headers["cache-control"] == STRICT_NO_STORE
         bad = c.get("/api/league/not-an-int/overview")
         assert bad.status_code == 422
         assert bad.headers["cache-control"] == STRICT_NO_STORE

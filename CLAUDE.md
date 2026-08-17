@@ -326,75 +326,97 @@ MVP 使用数据库持久化的 opaque session，不使用浏览器可见长效 
 - 登录、回调、会话、账户接口全部 `Cache-Control: private, no-store`。
 - 付费用户后续应能绑定恢复身份；MVP 未接真实短信/邮件时必须在界面如实说明。
 
-## 8. Role、套餐与权限（2026-08 三段可见性修订，经用户批准）
+## 8. Role、每日精选授权（2026-08-17 权限口径修正，经用户批准，废止此前的
+「三段可见性」模型）
 
-商业定位：站点是短视频/自媒体的流量载体与用户沉淀池。足球数据本身不收费；
-收费只针对每日人工独家推荐板块。登录的产品意义是沉淀用户与公众号涨粉，
-不是解锁足球数据付费墙。
+商业定位：站点是短视频/自媒体的流量载体与用户沉淀池。**除"每日精选"外，
+全站比赛内容对任何人（含匿名）都免费**，不存在"登录才免费"或"付费/免费"
+的内容分层。登录只用于身份类个人功能（收藏、关注、个人记录、账户设置、
+每日精选权限查询），不解锁任何比赛数据。当前不接支付、不设订阅套餐、不设
+Premium 层级——付费板块「每日精选」的授权只能由管理员按"用户 + 单场比赛/
+单条精选"逐条发放（含兑换码，兑换码同样只对应一条精选，不是一整个套餐）。
+
+Creator Studio（管理后台同理）不属于上面这类"任何登录用户都能用"的身份类
+个人功能——**Studio 是 analyst/admin 专用工具，普通登录用户（role=user）
+登录后依然看不到，未登录用户同样看不到**（`backend/api/routes_studio.py::
+require_analyst` 要求 `ctx.role in ("analyst","admin")`，`frontend/app/
+studio/page.tsx` 页面注释同样写明"analyst/admin 专用"）。这一次每日精选
+按场授权改造完全没有触碰 Studio 的这层角色门禁，二者是两套独立机制，不要
+混为一谈。
 
 ### 8.1 维度
 
-- 认证状态：anonymous / authenticated。
-- Role：user / analyst / admin。
-- Plan：free（匿名基线）/ member（登录基线，不可购买）/ 付费板块 plan（独家推荐）。
-  旧 pro/premium 已下架（is_active=0，行保留供历史订阅外键引用）。
-- Entitlement：具体能力标识。
+- 认证状态：anonymous / authenticated——**只影响能否使用身份类个人功能，
+  不影响任何普通比赛内容的可见性**。
+- Role：user / analyst / admin，只表达身份，不承载**付费**能力（不因为
+  Role 不同而看到不同的比赛数据分层）；但 Role 仍然是 Creator Studio 这类
+  内部工具的合法功能性门禁——`role=user` 的普通登录用户和管理员一样都不能
+  进入 Studio，这不是本次任务要移除的"免费/Premium"分层，是产品既有的
+  "内部工具 vs 面向用户的产品"边界，不受影响。
+- Plan/Subscription/Entitlement（`backend/auth/entitlements.py`、
+  `plans`/`plan_entitlements`/`subscriptions` 表）仍然存在，但**不再驱动任何
+  普通比赛内容的可见性**——free/member/daily_picks（以及已下架的 pro/premium，
+  is_active=0，行保留供历史订阅外键引用）这套 Plan 机制目前只是历史遗留的
+  账户身份展示层，不得在任何新代码里用它裁剪比赛内容。
+- 每日精选真正的访问控制单位是 `reco_access_grants` 表（见 §8.2），不是
+  entitlement。
 
-三段可见性：
+普通比赛内容（首页比赛卡片、比赛详情、胜平负概率、MODEL/MARKET_BASELINE
+概率、积分榜、近期及赛季数据、数据可视化、射门图、xG/xGA、阵容和伤停、
+赔率当前值和时间线、比赛分析要点、同期事件、联赛和球队资料）**对匿名和
+登录用户返回完全相同的响应字段**——没有 `requires_login`、`tier`、
+`free_outcome`、`locked_outcomes`、`is_premium` 这类裁剪字段，也没有
+"登录才能看完整概率/完整赔率时间线/完整联赛列表"这类分支。
+
+`reco:track_record`（每日精选战绩归档）同样对匿名开放：命中/未中/走水与
+作废全展示（不挑选、不隐藏），与模型公开战绩（`/api/v1/track-record`）
+是同一先例——这是站点自身的公开运营记录，不是"个人"内容，不受每日精选
+按场授权约束。
+
+### 8.2 每日精选按场授权
+
+每日精选是全站唯一需要管理员授权的内容，且**必须按"用户 + 单条精选
+（reco_slip）"授予**——拿到一场比赛的授权不能看到其它场次，全局
+entitlement/plan/subscription 都不能作为授权判据。
 
 ```text
-匿名（free）:
-  league:epl
-  league:lottery
-  prediction:top_probability
-  odds:summary_delayed
-
-已登录（member 基线，登录即得，无需订阅）:
-  全部足球数据 entitlement（league:top5、prediction:full_wdl、
-  prediction:score_matrix、report:deep、odds:history_full、odds:raw、
-  export:basic、export:full、alert:odds，物化并集含 free 全部行）
-
-付费（daily_picks「每日精选」，admin grant / 兑换码发放，定价不展示）:
-  member 基线 ∪ reco:daily（近 30 天赛前推荐内容）
+reco_access_grants
+  id / user_id / slip_id / status(active|revoked)
+  granted_at / granted_by / revoked_at / revoked_by / note
 ```
 
-reco:track_record（推荐战绩归档）属 member 基线：战绩对全部登录用户公开，
-命中/未中/走水与作废全展示（不挑选、不隐藏）；付费墙只在赛前内容。
-
-解析规则（`backend/auth/entitlements.py`）：匿名 = free 行；任何已登录用户恒并入
-member 基线，有效订阅只做追加——订阅用户的权益绝不能反而少于普通登录用户。
-plan_entitlements 仍是物化并集、无跨行继承。
-
-### 8.2 匿名概率边界
-
-匿名用户只能获得：
-
-```json
-{
-  "top_outcome": "home",
-  "top_probability": 0.48
-}
-```
-
-另外两项概率不得返回 null 占位，更不得下发真值后用 CSS 遮挡。已登录响应才包含完整
-`home/draw/away`。服务端必须使用不同 DTO 或显式字段投影，测试响应体不存在受限字段。
-边界从"付费/免费"移到"登录/匿名"，但纪律本身不变：后端是权限真源，
-受限字段物理不下发。
-
-每日精选的**存在性状态**（某场比赛是否有已发布的赛前推荐单，布尔）是公开运营
-信息，可向匿名展示（2026-08-11 站长授权）；推荐的方向、赔率、标题、备注等
-**内容**仍属付费面，匿名与免费响应中物理不下发。draft 单的存在性也不得外泄。
+- `GET /api/v1/reco/daily`（列表）：未登录 401；已登录 200，每条 slip 按
+  当前用户是否有 active 授权二选一投影——有授权给完整正文，无授权只给
+  存在性 + `access_required:true`（标题/腿/赔率/理由等字段物理不下发，
+  不是置 null）。
+- `GET /api/v1/reco/daily/{slip_id}`（单条正文）：未登录 401；已登录但
+  无 active 授权 403（响应体只有 `{code:"reco_access_required"}`，不含
+  任何正文字段）；已登录且有 active 授权 200。撤销后立即再次访问变回 403。
+- `GET /api/v1/reco/my-access`：已登录用户查询自己的授权记录（个人功能，
+  允许要求登录）。
+- Admin 授权/撤销（`POST /admin/reco/access-grants`、
+  `POST /admin/reco/access-grants/{id}/revoke`）：admin + CSRF，每次操作
+  写 AuditLog；admin 角色本身不自动获得任何精选内容访问权，管理端预览走
+  独立的 `GET /admin/reco/slips/{id}/preview`，不能污染普通用户接口。
+- 兑换码（`backend/commands/redeem.py`）：一个兑换码只对应一条具体的
+  `slip_id`，兑换成功即调用 `grant_access(user_id, slip_id)`，不再是
+  "兑换一整个 daily_picks 订阅"。
+- 旧的全局 `reco:daily` entitlement 不再驱动任何内容访问判定；历史
+  `subscriptions` 行保留（不做破坏性删除），但持有历史订阅不会让用户
+  无条件解锁任何 slip——必须由 `reco_access_grants` 显式授权。
 
 ### 8.3 权限校验
 
-- 前端只负责体验，后端是权限真源。
-- API service 和 query 层均需 entitlement 校验。
+- 前端只负责体验，后端是权限真源；普通比赛内容的后端查询/路由层不得再有
+  entitlement 分支。
+- 每日精选的访问判定必须查 `reco_access_grants`，不得回退到 plan/
+  entitlement/subscription。
 - Admin 不能只靠隐藏路由或秘密 URL。
-- 套餐价格与权益从数据库/API 读取，不在组件写死。
-- 未接真实支付；付费板块权限一律走管理员发放、撤销、延期和兑换码；所有操作写 AuditLog。
-- SEO/GEO 面（sitemap、robots、llms.txt）只列匿名可完整浏览的页面，
-  与 `frontend/lib/site.ts` 单一真源对齐；需登录页面不进 sitemap，
-  防止爬虫抓到付费墙壳页。
+- 未接真实支付；每日精选授权一律走管理员发放、撤销和按场兑换码；所有
+  操作写 AuditLog。
+- SEO/GEO 面（sitemap、robots、llms.txt）：普通比赛内容页面现在对匿名
+  完全可见，可以按需纳入可索引范围；每日精选正文页面仍需登录+授权，不
+  纳入 sitemap。
 
 ## 9. 预测完整性与模型评估
 
@@ -534,7 +556,7 @@ GET  /api/v1/admin/...
 比赛详情是核心页，顺序为：
 
 1. 比赛头部与数据更新时间；
-2. 免费最高一项概率 / 会员完整概率；
+2. 完整主胜/平局/客胜概率（对匿名与登录用户一致）；
 3. 支持证据与反向证据；
 4. xG、射门、近期表现等可视化；
 5. 赔率时间轴；
@@ -693,8 +715,8 @@ schedule_sync
 - migration 可在临时副本执行且可重复运行；
 - SQLite `integrity_check`；
 - pytest；
-- 权限矩阵测试；
-- 免费 DTO 不含受限字段；
+- 权限矩阵测试（普通比赛内容对匿名与登录一致；每日精选按场授权 401/403/200）；
+- 普通比赛内容 DTO 不含 requires_login/tier/free_outcome 等已废止的裁剪字段；
 - 内容编辑必须经 `edit_snapshot` 留痕（`prediction_snapshot_edits` 正确写入，`edit_count`/`last_edited_at` 更新）；
 - webhook 签名/时间戳/nonce 防重放、设备扫码一次性消费、会话撤销与 CSRF 测试；
 - 数据源不可用时的降级测试。
@@ -703,7 +725,8 @@ schedule_sync
 
 - ESLint、TypeScript、Vitest；
 - `npm run build`；
-- Playwright 覆盖：匿名浏览、免费概率、微信 Mock 登录、会员解锁、Admin 拒绝、Studio 导出。
+- Playwright 覆盖：匿名浏览完整比赛内容、微信 Mock 登录、每日精选按场授权与撤销、
+  Admin 拒绝、Studio 导出。
 
 ### 核心链路验收
 

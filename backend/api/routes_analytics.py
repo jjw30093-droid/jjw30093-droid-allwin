@@ -23,7 +23,6 @@ ALLOWED_EVENTS = {
     "login_completed",
     "premium_preview_viewed",
     "pricing_viewed",
-    "redeem_completed",
     "favorite_added",
     "studio_exported",
 }

@@ -148,27 +148,43 @@ class TestLeagueMatches:
 
 
 class TestLeagueBetting:
-    def test_anonymous_gets_unified_401(self, legacy_core, legacy_client):
-        r = legacy_client.get("/api/league/47/betting?season=2025/2026")
-        assert r.status_code == 401
-        body = r.json()
-        assert set(body.keys()) == {"code", "message", "details"}
-        assert body == {
-            "code": "membership_required",
-            "message": "需要 report:deep 权益才能访问该数据",
-            "details": {"entitlement": "report:deep"},
-        }
+    """2026-08-16 产品权限口径修正:除"每日精选"外全站比赛内容全部免费,
+    包括匿名——legacy /api/league/{id}/betting 不再要求 report:deep。
+    这两条断言正是要被推翻的旧规则(此前匿名恒 401 membership_required)。"""
 
-    def test_simulate_membership_param_still_dead(self, legacy_core, legacy_client):
-        """?simulate_membership=paid 早已移除,不应有任何效果(CLAUDE.md §14.1)。"""
-        r = legacy_client.get("/api/league/47/betting?simulate_membership=paid")
-        assert r.status_code == 401
+    def test_anonymous_gets_full_betting_data(self, legacy_core, legacy_client):
+        r = legacy_client.get("/api/league/47/betting?season=2025/2026")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        stats = body["team_betting_stats"][0]
+        assert stats["avg_corners"] == 5.0
+        assert stats["avg_yellow_cards"] == 1.0
+        assert stats["avg_red_cards"] == 0.1
+        assert stats["clean_sheets"] == 3
+        assert stats["btts_matches"] == 4
+        assert stats["btts_pct"] == 40.0
+        assert body["over_under"][0]["threshold"] == 2.5
+
+    def test_simulate_membership_param_has_no_effect(self, legacy_core, legacy_client):
+        """?simulate_membership=paid 早已移除,不应有任何效果(CLAUDE.md §14.1)——
+        带不带这个参数,响应都是同一份完整数据(不再有"未付费"分支可切换)。"""
+        with_param = legacy_client.get("/api/league/47/betting?simulate_membership=paid&season=2025/2026")
+        without_param = legacy_client.get("/api/league/47/betting?season=2025/2026")
+        assert with_param.status_code == without_param.status_code == 200
+        assert with_param.json() == without_param.json()
 
 
 class TestWdlPredictionsFieldGating:
-    """三态判别联合(LegacyWdlUpcomingMatch / LiveLockedMatch / LiveFullMatch,
-    backend/api/schemas.py):三种 JSON 形状物理上互斥(每个变体 extra=forbid),
-    不是同一个宽松 dict 靠字段可选/可空掩盖差异。"""
+    """两态判别联合(LegacyWdlUpcomingMatch / LegacyWdlLiveMatch,
+    backend/api/schemas.py):两种 JSON 形状物理上互斥(每个变体 extra=forbid)。
+
+    2026-08-16 产品权限口径修正(除"每日精选"外全站比赛内容全部免费,包括
+    匿名):'live' 阶段不再区分"付费/未付费"——locked 字段与按付费二分的
+    第三个 variant(原 LegacyWdlLiveLockedMatch/LegacyWdlLiveFullMatch)已
+    彻底删除,'live' 恒下发完整 tendency/confidence/reason/p_home/p_draw/
+    p_away。唯一仍然存在的判别只是"upcoming"(距开赛 >7 天,数据尚未生成)
+    与"live"(数据已存在)——这是数据就绪状态,不是付费墙,本次任务不改变
+    这条既有规则。"""
 
     def test_upcoming_entry_lacks_gated_keys_entirely(self, legacy_core, legacy_client):
         r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
@@ -181,50 +197,42 @@ class TestWdlPredictionsFieldGating:
         for key in ("date", "round", "status", "home_team_name_zh", "days_until_kickoff"):
             assert key in upcoming
 
-    def test_live_unpaid_has_tendency_but_lacks_probabilities(self, legacy_core, legacy_client):
-        r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
-        matches = r.json()["matches"]
-        live = next(m for m in matches if m["availability"] == "live")
-        assert live["locked"] is True
-        assert live["tendency"] == "home"
-        for key in ("p_home", "p_draw", "p_away"):
-            assert key not in live, f"未付费不应下发 {key}"
-
-    def test_live_unpaid_raw_json_has_no_probability_leakage(self, legacy_core, legacy_client):
-        """未付费响应的原始 JSON 文本里不得出现真实概率数值(不是放了真值再指望
-        前端隐藏)。用可辨识的概率值(0.777/0.123)反证。"""
-        r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
-        assert "0.777" not in r.text and "0.123" not in r.text
-
-    def test_live_paid_via_monkeypatch_has_full_probabilities(
-        self, legacy_core, legacy_client, monkeypatch
-    ):
-        """真实 HTTP 付费分支(monkeypatch require_membership=True,而非只测内部
-        模型):locked=false,p_home/p_draw/p_away 三项齐全且为真实值。"""
-        import backend.api_server as legacy_mod
-
-        monkeypatch.setattr(legacy_mod, "require_membership", lambda request: True)
+    def test_live_entry_has_full_probabilities_and_no_locked_field(self, legacy_core, legacy_client):
+        """2026-08-16 起:'live' 恒下发完整概率,不再有 locked 字段——这条断言
+        正是要推翻的旧规则(此前"未付费只给 tendency,精确概率缺席")。"""
         r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
         assert r.status_code == 200, r.text
         live = next(m for m in r.json()["matches"] if m["availability"] == "live")
-        assert live["locked"] is False
-        assert live["p_home"] == 0.4 and live["p_draw"] == 0.35 and live["p_away"] == 0.25
-        # upcoming 分支不受付费状态影响,依旧完全缺席门禁字段
+        assert "locked" not in live, "locked 是旧付费裁剪字段,不应再出现"
+        assert live["tendency"] == "home"
+        assert live["p_home"] == 0.4
+        assert live["p_draw"] == 0.35
+        assert live["p_away"] == 0.25
+
+    def test_upcoming_branch_still_lacks_gated_keys_regardless_of_login(
+        self, legacy_core, legacy_client, fresh_ip
+    ):
+        """upcoming 分支(距开赛 >7 天,数据尚未生成)依旧完全缺席门禁字段——
+        这是数据就绪状态,与登录/付费无关,本次任务不改变这条既有规则。"""
+        from .authflow import wechat_scan_login
+
+        wechat_scan_login(legacy_client, ip=fresh_ip)
+        r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
         upcoming = next(m for m in r.json()["matches"] if m["availability"] == "upcoming")
         assert not any(
             k in upcoming for k in ("tendency", "confidence", "reason", "locked",
                                     "p_home", "p_draw", "p_away")
         )
 
-    def test_openapi_declares_three_named_variants(self, legacy_core, legacy_client, app):
-        """OpenAPI 契约层面确实是三个具名模型的 Union,不是一个宽松模型。"""
+    def test_openapi_declares_two_named_variants_no_locked_variant(self, legacy_core, legacy_client, app):
+        """OpenAPI 契约层面是两个具名模型的 Union(Upcoming/Live),不再有按
+        付费状态二分的第三个 variant,也不再有 locked 字段。"""
         spec = app.openapi()
         comps = spec["components"]["schemas"]
         assert "LegacyWdlUpcomingMatch" in comps
-        assert "LegacyWdlLiveLockedMatch" in comps
-        assert "LegacyWdlLiveFullMatch" in comps
-        assert comps["LegacyWdlLiveLockedMatch"]["properties"]["locked"]["const"] is True
-        assert comps["LegacyWdlLiveFullMatch"]["properties"]["locked"]["const"] is False
+        assert "LegacyWdlLiveMatch" in comps
+        assert "LegacyWdlLiveLockedMatch" not in comps, "LegacyWdlLiveLockedMatch 应已删除"
+        assert "LegacyWdlLiveFullMatch" not in comps, "LegacyWdlLiveFullMatch 应已删除"
         assert "p_home" not in comps["LegacyWdlUpcomingMatch"]["properties"]
-        assert "p_home" not in comps["LegacyWdlLiveLockedMatch"]["properties"]
-        assert "p_home" in comps["LegacyWdlLiveFullMatch"]["properties"]
+        assert "p_home" in comps["LegacyWdlLiveMatch"]["properties"]
+        assert "locked" not in comps["LegacyWdlLiveMatch"]["properties"]

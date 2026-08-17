@@ -109,7 +109,7 @@
   word-break: break-all;
 }
 
-.planFree {
+.planDefault {
   color: var(--ink-2);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
@@ -118,7 +118,7 @@
   font-size: 12.5px;
 }
 
-.planPaid {
+.planHighlight {
   color: #2a1b06;
   background: var(--gold-grad);
   border-radius: var(--r-pill);

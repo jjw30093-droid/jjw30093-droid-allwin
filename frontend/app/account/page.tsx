@@ -15,6 +15,7 @@ import styles from "./account.module.css";
 type AccountResponse = GetJson<"/api/v1/account">;
 type FavoritesResponse = GetJson<"/api/v1/favorites">;
 type ProductsResponse = GetJson<"/api/v1/products">;
+type MyAccessResponse = GetJson<"/api/v1/reco/my-access">;
 
 /* ── 工具 ──────────────────────────────────────────────── */
 
@@ -55,6 +56,8 @@ export default function AccountPage() {
   const [state, setState] = useState<PageState>({ phase: "loading" });
   const [favorites, setFavorites] = useState<FavoritesResponse | null>(null);
   const [favError, setFavError] = useState<string | null>(null);
+  const [recoAccess, setRecoAccess] = useState<MyAccessResponse | null>(null);
+  const [recoAccessError, setRecoAccessError] = useState<string | null>(null);
   const [planNames, setPlanNames] = useState<Record<string, string>>({});
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -86,12 +89,16 @@ export default function AccountPage() {
     void Promise.resolve().then(() => load());
   }, [load]);
 
-  // 收藏与套餐名称(套餐中文名来自 /api/v1/products,不在组件写死)
+  // 收藏、每日精选按场授权记录、套餐名称(套餐中文名来自 /api/v1/products,
+  // 不在组件写死)
   useEffect(() => {
     if (state.phase !== "ready") return;
     clientFetch<FavoritesResponse>("/api/v1/favorites")
       .then(setFavorites)
       .catch((e) => setFavError(apiErrorMessage(e, "收藏列表加载失败")));
+    clientFetch<MyAccessResponse>("/api/v1/reco/my-access")
+      .then(setRecoAccess)
+      .catch((e) => setRecoAccessError(apiErrorMessage(e, "每日精选授权记录加载失败")));
     clientFetch<ProductsResponse>("/api/v1/products")
       .then((r) => {
         const m: Record<string, string> = {};
@@ -153,8 +160,8 @@ export default function AccountPage() {
         <h1 className={styles.title}>账户中心</h1>
         <section className={styles.card}>
           <p className={styles.note}>
-            尚未登录。免费登录后可查看全部联赛资料、模型完整概率、完整赔率时间线和
-            每日精选的历史战绩;首次微信扫码会自动创建账号。
+            尚未登录。登录后可使用收藏、每日精选历史战绩查看、精选授权状态查询等
+            账户功能;首次微信扫码会自动创建账号。
           </p>
           <Link className={styles.btnPrimary} href="/login?next=/account">
             前往登录
@@ -184,11 +191,10 @@ export default function AccountPage() {
     (s) => s.status === "active" && s.ends_at > nowIso,
   );
   const planLabel = (id: string) => planNames[id] ?? id;
-  const hasDaily = account.entitlements.includes("reco:daily");
-  const dailyEndsAt =
-    activeSubs
-      .filter((s) => s.plan_id === "daily_picks")
-      .sort((a, b) => b.ends_at.localeCompare(a.ends_at))[0]?.ends_at ?? null;
+  // 每日精选按"用户 + 单条 slip"授权(2026-08-16),不再有任何全局布尔权益——
+  // "已授权 N 场"必须数当前 active 的按场授权记录,不能再用 entitlements 或
+  // plan_id="daily_picks" 的订阅到期时间代替。
+  const activeRecoGrants = recoAccess?.grants.filter((g) => g.status === "active") ?? [];
 
   return (
     <main className={styles.page}>
@@ -223,21 +229,25 @@ export default function AccountPage() {
           </span>
         </div>
         <div className={styles.accessCard}>
-          <span className={styles.accessName}>今日精选</span>
-          {hasDaily ? (
+          <span className={styles.accessName}>每日精选</span>
+          {recoAccessError ? (
+            <span className={styles.accessHint}>{recoAccessError}</span>
+          ) : recoAccess === null ? (
+            <span className={styles.accessHint}>加载中…</span>
+          ) : activeRecoGrants.length > 0 ? (
             <>
               <span className={`${styles.accessState} ${styles.accessOn}`}>
-                已开通{dailyEndsAt ? `至 ${fmtLocal(dailyEndsAt)}` : ""}
+                已授权 {activeRecoGrants.length} 场
               </span>
               <span className={styles.accessHint}>
-                <Link href="/reco?tab=daily">查看赛前推荐 →</Link>
+                <Link href="/reco?tab=daily">查看已授权场次 →</Link>
               </span>
             </>
           ) : (
             <>
-              <span className={`${styles.accessState} ${styles.accessOff}`}>未开通</span>
+              <span className={`${styles.accessState} ${styles.accessOff}`}>暂无授权场次</span>
               <span className={styles.accessHint}>
-                由站长为账号开通,<Link href="/pricing">查看权限说明</Link>
+                由站长按场为账号开通,<Link href="/pricing">查看权限说明</Link>
               </span>
             </>
           )}
@@ -255,7 +265,7 @@ export default function AccountPage() {
           <div className={styles.dlRow}>
             <dt>当前身份</dt>
             <dd>
-              <span className={account.plan === "free" ? styles.planFree : styles.planPaid}>
+              <span className={account.plan === "free" ? styles.planDefault : styles.planHighlight}>
                 {planLabel(account.plan)}
               </span>
               {activeSubs.length > 0 && (
@@ -329,6 +339,48 @@ export default function AccountPage() {
                           ? "兑换码"
                           : s.source}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* 每日精选授权记录(2026-08-16 按"用户 + 单条 slip"授权;含历史撤销,
+          "每日精选权限查询"——CLAUDE.md §8.1 允许要求登录的账户类个人功能) */}
+      <section className={styles.card}>
+        <h2 className={styles.cardTitle}>每日精选授权记录</h2>
+        {recoAccessError ? (
+          <p className={styles.errText}>{recoAccessError}</p>
+        ) : recoAccess === null ? (
+          <SectionSkeleton />
+        ) : recoAccess.grants.length === 0 ? (
+          <p className={styles.empty}>暂无任何场次的每日精选授权记录</p>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>场次</th>
+                  <th>状态</th>
+                  <th>授权时间</th>
+                  <th>撤销时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recoAccess.grants.map((g) => (
+                  <tr key={g.id}>
+                    <td>
+                      <span className="num">{g.slip_date}</span> {g.slip_title}
+                    </td>
+                    <td>
+                      <span className={g.status === "active" ? styles.stateOk : styles.stateDim}>
+                        {g.status === "active" ? "生效中" : "已撤销"}
+                      </span>
+                    </td>
+                    <td className="num">{fmtLocal(g.granted_at)}</td>
+                    <td className="num">{fmtLocal(g.revoked_at)}</td>
                   </tr>
                 ))}
               </tbody>

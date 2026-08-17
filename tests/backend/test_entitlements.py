@@ -1,4 +1,4 @@
-"""P0.4 测试:products、订阅授予/延期/撤销、兑换码、admin 权限矩阵、审计日志。"""
+"""P0.4 测试:products、订阅授予/延期/撤销、admin 权限矩阵、审计日志。"""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -86,9 +86,6 @@ class TestAdminGrant:
     def test_admin_endpoints_reject_non_admin(self, app, client, fresh_ip):
         _login_user(client, ip=fresh_ip)
         assert client.get("/api/v1/admin/users").status_code == 403
-        assert client.post("/api/v1/admin/redeem-codes",
-                           json={"plan_id": "pro", "duration_days": 30, "count": 1},
-                           headers=_csrf(client)).status_code == 403
         anon = TestClient(app)
         assert anon.get("/api/v1/admin/users").status_code == 401
 
@@ -104,42 +101,3 @@ class TestAdminGrant:
         admin = _login_admin(app, data_dir, ip=fresh_ip)
         assert client.get("/api/v1/account").headers["cache-control"] == "private, no-store"
         assert admin.get("/api/v1/admin/users").headers["cache-control"] == "private, no-store"
-
-
-class TestRedeem:
-    def _make_codes(self, admin, n=1, **over):
-        payload = {"plan_id": "member", "duration_days": 30, "count": n}
-        payload.update(over)
-        r = admin.post("/api/v1/admin/redeem-codes", json=payload, headers=_csrf(admin))
-        assert r.status_code == 200, r.text
-        return [c["code"] for c in r.json()["codes"]]
-
-    def test_redeem_flow_and_reuse_blocked(self, app, client, data_dir, fresh_ip):
-        _login_user(client, ip=fresh_ip)
-        admin = _login_admin(app, data_dir, ip=fresh_ip)
-        code = self._make_codes(admin)[0]
-
-        r = client.post("/api/v1/redeem", json={"code": code}, headers=_csrf(client))
-        assert r.status_code == 200, r.text
-        assert client.get("/api/v1/me").json()["plan"] == "member"
-        assert any(s["plan_id"] == "member"
-                   for s in client.get("/api/v1/account").json()["subscriptions"])
-
-        # 同码复用 → used(全站统一错误契约:顶层 code/message/details,不再嵌套在 detail 下)
-        r2 = client.post("/api/v1/redeem", json={"code": code}, headers=_csrf(client))
-        assert r2.status_code == 400
-        assert r2.json()["code"] == "used"
-
-    def test_redeem_invalid_and_expired(self, app, client, data_dir, fresh_ip):
-        _login_user(client, ip=fresh_ip)
-        admin = _login_admin(app, data_dir, ip=fresh_ip)
-        r = client.post("/api/v1/redeem", json={"code": "AW-XXXX-XXXX-XXXX"}, headers=_csrf(client))
-        assert r.status_code == 400 and r.json()["code"] == "invalid"
-        expired = self._make_codes(admin, expires_at="2020-01-01T00:00:00Z")[0]
-        r2 = client.post("/api/v1/redeem", json={"code": expired}, headers=_csrf(client))
-        assert r2.status_code == 400 and r2.json()["code"] == "expired"
-
-    def test_redeem_requires_login_and_csrf(self, app, data_dir):
-        anon = TestClient(app)
-        assert anon.post("/api/v1/redeem", json={"code": "AW-AAAA-BBBB-CCCC"},
-                         headers=ORIGIN).status_code == 401

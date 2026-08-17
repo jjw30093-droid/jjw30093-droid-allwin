@@ -1,10 +1,9 @@
 """/api/v1 响应 DTO(Pydantic 单一真源,OpenAPI → TypeScript 代码生成)。
 
-字段级门禁核心(CLAUDE.md §8.2):
-- PredictionFreeDTO 物理上只有 top_outcome/top_probability——受限字段连 key 都不存在,
-  不是 null 占位;
-- PredictionFullDTO 才包含完整 home/draw/away。
-服务端按 entitlement 选择 DTO 类构造,测试扫描完整 JSON 证明免费响应无受限字段。
+预测字段(2026-08-16 产品权限口径修正,经用户批准):除"每日精选"外,网站
+所有比赛内容全部免费,包括匿名用户——登录与内容分层彻底解耦。PredictionDTO
+是唯一的预测 DTO,恒含完整 home/draw/away 胜平负概率,不再有按 entitlement
+二选一的 free/full 两套 DTO。
 """
 
 from typing import Any, Literal, Optional, Union
@@ -46,19 +45,10 @@ class PredictionMeta(BaseModel):
     last_edited_at: Optional[str] = None
 
 
-class PredictionFreeDTO(BaseModel):
-    """匿名/Free:只有最高一项。禁止出现另外两项概率的任何形式。"""
+class PredictionDTO(BaseModel):
+    """公开正式预测(2026-08-16 起恒为完整 WDL):除"每日精选"外普通比赛内容
+    全部免费,包括匿名——不再有 free/full 两套 DTO,也不再有 tier 字段。"""
 
-    tier: Literal["free"] = "free"
-    top_outcome: Literal["home", "draw", "away"]
-    top_probability: float
-    meta: PredictionMeta
-
-
-class PredictionFullDTO(BaseModel):
-    """Pro/Premium:完整 WDL。"""
-
-    tier: Literal["full"] = "full"
     top_outcome: Literal["home", "draw", "away"]
     home_probability: float
     draw_probability: float
@@ -73,7 +63,7 @@ class PredictionResponse(BaseModel):
     match_id: int
     available: bool
     reason: Optional[str] = None          # 不可用时的诚实说明
-    prediction: Optional[Union[PredictionFullDTO, PredictionFreeDTO]] = None
+    prediction: Optional[PredictionDTO] = None
 
 
 class MeUser(BaseModel):
@@ -132,16 +122,20 @@ class MatchSummary(BaseModel):
     # 两点摘要 / none=无赔率。列表徽标据此渲染,避免 content=odds 把两档混为一谈。
     # 保持 Optional:联赛 fixtures 端点不算这个字段(None=未计算,不是"无赔率")。
     odds_coverage_tier: Optional[Literal["full_timeline", "open_close_only", "none"]] = None
+    # 赔率新鲜度(P1.1,修复数据诚实性缺陷):odds_coverage_tier 只回答"这场比赛
+    # 历史上有没有过赔率数据"——哪怕最后一次真实观测是好几天前,只要曾经采集
+    # 成功过,tier 依然是 full_timeline。这两个字段回答"数据是不是新的":
+    # odds_last_observed_at 是该场 NowGoal 完整时间线赔率最后一次真实 observed_at
+    # (只覆盖 full_timeline;legacy 两点摘要是一次性历史导入,不伪造它的新鲜度,
+    # 该场此字段为 None);odds_freshness_state 复用全仓库统一的
+    # FRESH/STALE/UNAVAILABLE 三态(与 sync_state 同一套值但语义不同——sync_state
+    # 描述"每日内容生成 run 的状态",这个字段描述"这场比赛赔率数据本身多久没刷新",
+    # 二者不得混用)。
+    odds_last_observed_at: Optional[str] = None
+    odds_freshness_state: Optional[Literal["FRESH", "STALE", "UNAVAILABLE"]] = None
     # 首页/列表页胜平负概率条(由 Bet365 1x2 折算,见 WinProbabilityDTO)。
     # 缺赔率或去水失败的比赛此字段为 None——前端据此不画条,不补 0、不猜。
     win_probability: Optional[WinProbabilityDTO] = None
-    # 2026-08-13:匿名/免费用户现在能在列表里看到所有联赛的比赛(不再整场隐藏
-    # 未持有的联赛),但内容仍按权限投影——本场所属联赛不在请求者权限内时为
-    # True,此时 win_probability 恒为 None(不下发再靠前端遮挡),点击详情页
-    # 走既有登录门禁。默认 False:仅 /matches 列表端点按权限显式计算,其余复用
-    # MatchSummary 的端点(如 /leagues/{id}/fixtures)本身已在端点层做整体
-    # 403 门禁,能返回的比赛必然不受限。
-    requires_login: bool = False
 
 
 class MatchListResponse(BaseModel):
@@ -195,13 +189,14 @@ class MatchDetailResponse(BaseModel):
 
 
 class LeagueInfo(BaseModel):
+    """2026-08-16 起:除"每日精选"外全部联赛对任何人(含匿名)恒可访问——
+    entitlement/accessible/requires_login 三个只为登录门禁服务的字段已彻底
+    从响应模型删除(不是置为恒 true/false 留着)。"""
+
     league_id: int
     code: str
     name_zh: str
     name_en: str
-    entitlement: str                       # 访问所需 entitlement
-    accessible: bool                       # 按当前请求者的 entitlement 计算
-    requires_login: bool                   # 三段可见性:该联赛是否需登录(league:top5)
     current_season: Optional[str] = None
     # 该联赛在 dim_match 里真实存在的全部赛季(升序,来自数据而非配置)。
     # 全站比赛列表用它渲染赛季筛选,避免前端写死赛季名单。
@@ -268,11 +263,19 @@ class FreshnessResponse(BaseModel):
     """首页「今日更新状态」:三条独立的最近成功时间戳,互不代表彼此。
 
     任一环节尚无成功记录时为 null(如实展示,不用当前时间顶替)。
+
+    每条时间戳配一个仓库统一的 FRESH/STALE/UNAVAILABLE 三态(与 MatchSummary.
+    sync_state/odds_freshness_state 同一套值,backend/queries/freshness.py::
+    classify_freshness 计算)——裸 HH:mm 时间戳看不出这是今天还是好几天前,
+    也看不出数据源当前是否已经失败,状态字段补上这两个判断。
     """
 
     schedule_updated_at: Optional[str] = None   # 最近一次赛程同步结论性成功(written/off_season)
     odds_updated_at: Optional[str] = None       # 最近一次赔率观测(observed_at)
     reco_updated_at: Optional[str] = None       # 最近一次推荐单发布(非 draft)
+    schedule_state: Optional[Literal["FRESH", "STALE", "UNAVAILABLE"]] = None
+    odds_state: Optional[Literal["FRESH", "STALE", "UNAVAILABLE"]] = None
+    reco_state: Optional[Literal["FRESH", "STALE", "UNAVAILABLE"]] = None
 
 
 # ── 通用 ───────────────────────────────────────────────────
@@ -338,8 +341,9 @@ class StandingsResponse(BaseModel):
 # ── 联赛球队/球员赛季统计(免费字段投影,CLAUDE.md §3) ──────
 
 class TeamSeasonStatRow(BaseModel):
-    """silver_team_season_stats 免费字段投影。角球/红黄牌/零封/BTTS 是付费深度
-    报告字段,物理上不在本 DTO(不是 null 占位,更不是取了再藏)。"""
+    """silver_team_season_stats 全字段投影(2026-08-16 起,除"每日精选"外
+    普通比赛内容全部免费——角球/红黄牌/零封/BTTS 与射门/xG 等字段同属免费
+    内容,不再是付费深度报告字段)。"""
 
     team: TeamRef
     matches_played: Optional[int] = None
@@ -356,6 +360,14 @@ class TeamSeasonStatRow(BaseModel):
     # 每场被创造 xG(fact_league_table 的 xg 档换算,与 xG 运气榜同源)。
     # 不是每个联赛赛季都有该档,缺失时为 None —— 不补 0。
     avg_expected_goals_conceded: Optional[float] = None
+    # 原付费深度报告字段(2026-08-16 起全字段免费投影)
+    avg_corners: Optional[float] = None
+    avg_fouls: Optional[float] = None
+    avg_yellow_cards: Optional[float] = None
+    avg_red_cards: Optional[float] = None
+    clean_sheets: Optional[int] = None
+    btts_matches: Optional[int] = None
+    btts_pct: Optional[float] = None
 
 
 class TeamStatsResponse(BaseModel):
@@ -540,17 +552,18 @@ class AnalysisBundleDTO(BaseModel):
     model_version: Optional[str] = None
     probability_source: Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]
     prediction_public: Optional[BundlePredictionPublic] = None
-    prediction_member: Optional[BundlePredictionMember] = None   # 免费层置 None,受限字段不下发
+    # None 仅表示该场尚无已发布预测(与权限无关,2026-08-16 起恒完整投影)
+    prediction_member: Optional[BundlePredictionMember] = None
     evidence: list[BundleEvidenceItem]
     counter_evidence: list[BundleEvidenceItem]
     uncertainty: list[BundleUncertaintyItem]
-    odds_timeline: list[BundleOddsPoint]         # 仅 odds:history_full,否则空数组
+    odds_timeline: list[BundleOddsPoint]         # 恒完整返回(2026-08-16 起不再按权限投影)
     # 赔率覆盖档位:full_timeline=真实观测时间序列 / open_close_only=旧资产
     # 两点摘要(8,336 场,审计 B6 前 bundle 对它们完全失明)/ none=无赔率
     odds_coverage_tier: Literal["full_timeline", "open_close_only", "none"] = "none"
-    # 两点摘要(无时间戳,绝不混入 odds_timeline);仅 odds:history_full,否则 None
+    # 两点摘要(无时间戳,绝不混入 odds_timeline);None 仅表示该场没有两点摘要数据
     odds_summary_points: Optional[list[LegacyOddsPointItem]] = None
-    cooccurring_events: list[BundleCoocEvent]    # 仅 report:deep,否则空数组
+    cooccurring_events: list[BundleCoocEvent]    # 恒完整返回(2026-08-16 起不再按权限投影)
     chart_specs: list[BundleChartSpec]
     script_sections: list[BundleScriptSection]
     source_notes: list[BundleSourceNote]
@@ -652,7 +665,9 @@ class OddsSnapshotItem(BaseModel):
 class MatchOddsAvailableDTO(BaseModel):
     match_id: int
     available: Literal[True]
-    tier: Literal["full", "delayed_summary"]
+    # 2026-08-16 起恒为 "full"(不再有 delayed_summary 分层,除"每日精选"外
+    # 全站比赛内容与登录/付费彻底解耦)。
+    tier: Literal["full"]
     # full_timeline: 真实观测时间序列(bronze_ng_odds_snap);
     # open_close_only: 旧项目两点摘要(bronze_legacy_odds_summary),无时间戳,
     # 前端不得将其渲染为走势图。
@@ -689,24 +704,14 @@ class CooccurrenceItem(BaseModel):
     event_moved_at: str
 
 
-class CooccurrenceFullDTO(BaseModel):
-    """report:deep:含明细。"""
+class CooccurrenceResponse(BaseModel):
+    """同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
+    免费(仅计数)/付费(明细)两套 DTO。"""
 
     match_id: int
     count: int
     items: list[CooccurrenceItem]
-
-
-class CooccurrenceSummaryDTO(BaseModel):
-    """匿名/free:只有计数,items 显式为 null。"""
-
-    match_id: int
-    count: int
-    items: None = None
-    note: str
-
-
-CooccurrenceResponse = Union[CooccurrenceFullDTO, CooccurrenceSummaryDTO]
+    note: Optional[str] = None
 
 
 # ── 单场完赛事实报告(/matches/{id}/report,详情页 阵容/统计/事件 tab) ──
@@ -877,6 +882,261 @@ class MatchReportUnavailableDTO(BaseModel):
 MatchReportResponse = Union[MatchReportAvailableDTO, MatchReportUnavailableDTO]
 
 
+# ── 赛前预览(/matches/{id}/preview,详情页"数据"tab 阵容/风格/球员子tab) ──
+#
+# 与 MatchReport 不同:这里全是"赛前也能给"的历史聚合与已采集快照,不是赛后
+# 事实——各模块各自独立降级(阵容缺快照/象限视角点数不足/球员未达出场门槛/
+# 门将字段部分缺失),不设全局 available=False 开关。
+
+
+class MatchPreviewWindowDTO(BaseModel):
+    """单支球队"近 N 场"的真实场次数与日期区间(CLAUDE.md §11.2 措辞纪律:
+    不能只写"近 5 场"三个字了事)。主客队各自独立的窗口,不合并成一个——
+    历史场次不同(如升班马)时合并会掩盖其中一队样本更少的事实。"""
+
+    matches: int
+    from_: str = Field(alias="from")
+    to: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class MatchPreviewPlayerDTO(BaseModel):
+    id: int
+    name: str
+    shirt_number: Optional[str] = None
+
+
+class MatchPreviewLineupSideDTO(BaseModel):
+    team_id: Optional[int] = None
+    formation: Optional[str] = None
+    starters: list[MatchPreviewPlayerDTO]
+    subs: list[MatchPreviewPlayerDTO]
+
+
+class MatchPreviewLineupsDTO(BaseModel):
+    """lineup_type 绝大多数真实值是 "lastStarting11"(上一场首发,不是本场
+    确认阵容)——必须原样透传,前端负责翻译成"预计首发·基于上一场"这类
+    措辞,后端不得转译成"首发"造成误读。两队都无快照时 home/away 为 None。"""
+
+    lineup_type: Optional[str] = None
+    source: Optional[str] = None
+    observed_at: Optional[str] = None
+    home: Optional[MatchPreviewLineupSideDTO] = None
+    away: Optional[MatchPreviewLineupSideDTO] = None
+
+
+class MatchPreviewSidelinedPlayerDTO(BaseModel):
+    id: int
+    name: str
+    reason: Optional[str] = None
+    # 原样保留来源口径("A few days" / "Day to day"),不换算成具体日期
+    expected_return: Optional[str] = None
+
+
+class MatchPreviewSidelinedDTO(BaseModel):
+    home: list[MatchPreviewSidelinedPlayerDTO]
+    away: list[MatchPreviewSidelinedPlayerDTO]
+
+
+class MatchPreviewStylePointDTO(BaseModel):
+    team_id: int
+    name: str
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+
+class MatchPreviewStyleViewDTO(BaseModel):
+    id: str
+    tab: str
+    title: str
+    x_label: str
+    y_label: str
+    digits: int
+    quadrants: list[str]
+    points: list[MatchPreviewStylePointDTO]
+    # 前端象限判定(quadOf)靠这个字段决定"y 高是不是好",不能假定越高越好——
+    # 见 backend/queries/team_style_preview.py 的方向语义注释。
+    y_lower_is_better: bool = False
+
+
+class MatchPreviewAttackSourceDTO(BaseModel):
+    label: str
+    shots: int
+    shot_pct: float
+    xg: Optional[float] = None
+
+
+class MatchPreviewAttackSourcesDTO(BaseModel):
+    home: list[MatchPreviewAttackSourceDTO]
+    away: list[MatchPreviewAttackSourceDTO]
+
+
+class MatchPreviewChainMetricDTO(BaseModel):
+    value: Optional[float] = None
+    # False 表示窗口内至少有一场缺这个字段——前端不得把 value 当"完整合计"
+    # 展示,必须用 matches_with_data / complete 标注部分覆盖(同 Phase 0.2 教训)。
+    complete: bool = False
+    matches_with_data: int = 0
+
+
+class MatchPreviewAttackChainDTO(BaseModel):
+    tier: str
+    matches: int
+    label_zh: str
+    # 显式声明分组——前端不用自己猜哪个字段属于"进攻产量"还是"转化效率"。
+    volume_keys: list[str]
+    conversion_keys: list[str]
+    opp_half_pass_share: MatchPreviewChainMetricDTO
+    touches_opp_box: MatchPreviewChainMetricDTO
+    shots: MatchPreviewChainMetricDTO
+    shots_on_target: MatchPreviewChainMetricDTO
+    xg: MatchPreviewChainMetricDTO
+    xgot: MatchPreviewChainMetricDTO
+    # 转化效率:同场配对相除,零分母/无配对场次时 value=None(见
+    # backend/queries/attack_chain.py 模块 docstring)。
+    shots_per_100_box_touches: MatchPreviewChainMetricDTO
+    shot_on_target_rate: MatchPreviewChainMetricDTO
+    xg_per_shot: MatchPreviewChainMetricDTO
+    xgot_per_sot: MatchPreviewChainMetricDTO
+
+
+class MatchPreviewAttackChainsDTO(BaseModel):
+    home: MatchPreviewAttackChainDTO
+    away: MatchPreviewAttackChainDTO
+
+
+class MatchPreviewPossessionControlDTO(BaseModel):
+    tier: str
+    matches: int
+    label_zh: str
+    possession: MatchPreviewChainMetricDTO
+    pass_accuracy: MatchPreviewChainMetricDTO
+    opp_half_pass_share: MatchPreviewChainMetricDTO
+    touches_opp_box: MatchPreviewChainMetricDTO
+
+
+class MatchPreviewPossessionControlsDTO(BaseModel):
+    home: MatchPreviewPossessionControlDTO
+    away: MatchPreviewPossessionControlDTO
+
+
+class MatchPreviewDefensivePressureDTO(BaseModel):
+    tier: str
+    matches: int
+    label_zh: str
+    shots_faced: MatchPreviewChainMetricDTO
+    shots_on_target_faced: MatchPreviewChainMetricDTO
+    xga: MatchPreviewChainMetricDTO
+    box_shots_faced: MatchPreviewChainMetricDTO
+
+
+class MatchPreviewDefensivePressuresDTO(BaseModel):
+    home: MatchPreviewDefensivePressureDTO
+    away: MatchPreviewDefensivePressureDTO
+
+
+class MatchPreviewMatchupSituationDTO(BaseModel):
+    key: str
+    label: str
+    own_shots_pg: Optional[float] = None
+    own_xg_pg: Optional[float] = None
+    own_xg_complete: bool = False
+    conceded_shots_pg: Optional[float] = None
+    conceded_xg_pg: Optional[float] = None
+    conceded_xg_complete: bool = False
+    # 验收返工二(独立复核第二轮,P1):显式声明这一类该用哪个字段判定
+    # "关键对位",前端不得再用 `own_xg_pg ?? own_shots_pg` 隐式猜单位——
+    # 那在 xG 不完整时会把射门次数当 xG 用,去跟 xG 口径的联赛基准比
+    # (真实复现:比赛 5868022/球队 10205)。运动战/反击/定位球恒为 "xg",
+    # 禁区内射门(没有 xG 拆分)恒为 "shots"。
+    comparison_metric: str = "xg"
+    # 己方/对手的"比较值"——xg 类型时就是 own_xg_pg/conceded_xg_pg 本身
+    # (且要求 xg_complete),shots 类型时就是 own_shots_pg/conceded_shots_pg。
+    own_comparison_value: Optional[float] = None
+    conceded_comparison_value: Optional[float] = None
+    # 联赛在同主客场景、同 tier(venue_full 目标只用 venue_full 参考队,
+    # venue_partial 目标只用 venue_partial 参考队,不跨档位混算)、同
+    # Situation、同 comparison_metric 口径下的基准均值。目标自己是
+    # mixed/unavailable 时恒为 None(不生成基准)。
+    own_baseline_value: Optional[float] = None
+    conceded_baseline_value: Optional[float] = None
+    # 己方比较值、对手比较值、己方基准、对手基准四者是否都非空——只有
+    # True 时前端才允许把这一类计入"关键对位"候选,不再用单一的
+    # baseline_available 布尔糊住"己方/对手基准是否各自齐全"这两件事。
+    comparison_complete: bool = False
+
+
+class MatchPreviewMatchupProfileDTO(BaseModel):
+    tier: str
+    matches: int
+    label_zh: str
+    situations: list[MatchPreviewMatchupSituationDTO]
+
+
+class MatchPreviewMatchupProfilesDTO(BaseModel):
+    home: MatchPreviewMatchupProfileDTO
+    away: MatchPreviewMatchupProfileDTO
+
+
+class MatchPreviewPlayerShareRowDTO(BaseModel):
+    player_id: str
+    name: str
+    pct: float
+    appearances: int
+    minutes: float
+    count: float
+
+
+class MatchPreviewPlayerShareBlockDTO(BaseModel):
+    id: str
+    title: str
+    metric: str
+    rows: list[MatchPreviewPlayerShareRowDTO]
+
+
+class MatchPreviewKeyPlayersDTO(BaseModel):
+    home: list[MatchPreviewPlayerShareBlockDTO]
+    away: list[MatchPreviewPlayerShareBlockDTO]
+
+
+class MatchPreviewKeeperDTO(BaseModel):
+    player_id: str
+    name: str
+    appearances: int
+    saves: float
+    # None 表示该门将窗口内一场 expected_goals_on_target_faced 都没有(不是
+    # "面对 0 次射正")。xgot_faced_complete 标注这个合计是否覆盖了全部出场
+    # 场次——只有 True 时前端才能放心用它现算"阻止进球"估算,否则连估算
+    # 都不该给(用不完整分母算出的数会看似精确、实则误导)。
+    xgot_faced: Optional[float] = None
+    xgot_faced_complete: bool = False
+    goals_conceded: float
+    goals_prevented: Optional[float] = None
+
+
+class MatchPreviewKeepersDTO(BaseModel):
+    home: list[MatchPreviewKeeperDTO]
+    away: list[MatchPreviewKeeperDTO]
+
+
+class MatchPreviewResponse(BaseModel):
+    match_id: int
+    observed_at: str
+    home_window: Optional[MatchPreviewWindowDTO] = None
+    away_window: Optional[MatchPreviewWindowDTO] = None
+    lineups: MatchPreviewLineupsDTO
+    sidelined: MatchPreviewSidelinedDTO
+    style_views: list[MatchPreviewStyleViewDTO]
+    attack_sources: MatchPreviewAttackSourcesDTO
+    attack_chains: MatchPreviewAttackChainsDTO
+    possession_controls: MatchPreviewPossessionControlsDTO
+    defensive_pressures: MatchPreviewDefensivePressuresDTO
+    matchup_profiles: MatchPreviewMatchupProfilesDTO
+    key_players: MatchPreviewKeyPlayersDTO
+    keepers: MatchPreviewKeepersDTO
+
+
 # ── 模型指标与产品 ─────────────────────────────────────────
 
 class ModelVersionDTO(BaseModel):
@@ -939,14 +1199,6 @@ class ProductsResponse(BaseModel):
 
 
 # ── 登录用户(会员/账户) ───────────────────────────────────
-
-class RedeemResponse(BaseModel):
-    status: Literal["ok"]
-    subscription_id: str
-    plan_id: str
-    starts_at: str
-    ends_at: str
-
 
 class FavoriteItem(BaseModel):
     match_id: int
@@ -1037,31 +1289,6 @@ class GrantResultDTO(BaseModel):
     ends_at: str
 
 
-class RedeemCodeCreatedItem(BaseModel):
-    id: str
-    code: str                              # 明文只在创建响应展示一次
-
-
-class AdminCodesCreatedResponse(BaseModel):
-    codes: list[RedeemCodeCreatedItem]
-
-
-class AdminRedeemCodeItem(BaseModel):
-    id: str
-    plan_id: str
-    duration_days: int
-    batch_id: Optional[str] = None
-    status: str
-    created_at: str
-    expires_at: Optional[str] = None
-    used_by: Optional[str] = None
-    used_at: Optional[str] = None
-
-
-class AdminCodesListResponse(BaseModel):
-    codes: list[AdminRedeemCodeItem]
-
-
 class AdminPredictionItem(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
@@ -1117,6 +1344,39 @@ class AuditLogItem(BaseModel):
 
 class AuditLogsResponse(BaseModel):
     logs: list[AuditLogItem]
+
+
+# ── 任务健康(job_runs)与来源健康(source_health,只读,P1.5) ──────────
+
+class JobRunItem(BaseModel):
+    id: str
+    job_name: str
+    status: str
+    attempt: int
+    max_attempts: int
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    input_count: Optional[int] = None
+    output_count: Optional[int] = None
+    error_summary: Optional[str] = None    # 已经过 _sanitize_summary 脱敏
+    created_at: str
+
+
+class AdminJobsResponse(BaseModel):
+    jobs: list[JobRunItem]
+
+
+class SourceHealthItem(BaseModel):
+    id: int
+    source: str
+    checked_at: str
+    ok: int
+    latency_ms: Optional[int] = None
+    error_summary: Optional[str] = None    # 已经过 _sanitize_summary 脱敏
+
+
+class AdminSourceHealthResponse(BaseModel):
+    source_health: list[SourceHealthItem]
 
 
 class XrefItem(BaseModel):
@@ -1371,39 +1631,28 @@ class _LegacyWdlMatchBase(BaseModel):
 
 
 class LegacyWdlUpcomingMatch(_LegacyWdlMatchBase):
-    """distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/locked/
-    p_home/p_draw/p_away——不是"这几个字段为 null",是这个 JSON 形状根本不含它们。"""
+    """distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/
+    p_home/p_draw/p_away——不是"这几个字段为 null",是这个 JSON 形状根本不含
+    它们(这是数据就绪状态,不是付费墙,2026-08-16 起未改变这条既有规则)。"""
 
     availability: Literal["upcoming"]
 
 
-class LegacyWdlLiveLockedMatch(_LegacyWdlMatchBase):
-    """distance-to-kickoff ≤7 天且未付费:有 tendency/confidence/reason/locked=true,
-    物理上没有 p_home/p_draw/p_away(不是放了真值再指望前端隐藏)。"""
+class LegacyWdlLiveMatch(_LegacyWdlMatchBase):
+    """distance-to-kickoff ≤7 天:恒下发完整 tendency/confidence/reason/
+    p_home/p_draw/p_away(2026-08-16 起除"每日精选"外全站比赛内容全部免费,
+    不再有 locked 字段区分付费/未付费)。"""
 
     availability: Literal["live"]
     tendency: Optional[Literal["home", "draw", "away"]]
     confidence: Optional[Literal["normal", "low"]]
     reason: Optional[str]
-    locked: Literal[True]
-
-
-class LegacyWdlLiveFullMatch(_LegacyWdlMatchBase):
-    """distance-to-kickoff ≤7 天且已付费:locked=false,额外带完整三项概率。"""
-
-    availability: Literal["live"]
-    tendency: Optional[Literal["home", "draw", "away"]]
-    confidence: Optional[Literal["normal", "low"]]
-    reason: Optional[str]
-    locked: Literal[False]
     p_home: Optional[float]
     p_draw: Optional[float]
     p_away: Optional[float]
 
 
-LegacyWdlMatchEntry = Union[
-    LegacyWdlUpcomingMatch, LegacyWdlLiveLockedMatch, LegacyWdlLiveFullMatch
-]
+LegacyWdlMatchEntry = Union[LegacyWdlUpcomingMatch, LegacyWdlLiveMatch]
 
 
 class LeagueWdlPredictionsResponse(BaseModel):
@@ -1421,7 +1670,7 @@ class RecoLegDTO(BaseModel):
     market: str
     selection: str
     odds: float
-    result: Optional[Literal["win", "lose", "push"]] = None   # 命中/未中/走水
+    result: Optional[Literal["win", "lose", "push", "half_win", "half_loss"]] = None
 
 
 class RecoSlipDTO(BaseModel):
@@ -1431,7 +1680,7 @@ class RecoSlipDTO(BaseModel):
     note: Optional[str] = None
     combo_type: Literal["single", "parlay"]
     status: Literal["draft", "published", "settled", "voided"]
-    result: Optional[Literal["win", "lose", "push"]] = None
+    result: Optional[Literal["win", "lose", "push", "half_win", "half_loss"]] = None
     return_units: Optional[float] = None      # 1 单位注;净盈亏 = return_units - 1
     published_at: Optional[str] = None
     settled_at: Optional[str] = None
@@ -1440,11 +1689,44 @@ class RecoSlipDTO(BaseModel):
     legs: list[RecoLegDTO]
 
 
+class RecoDailyUnlockedSlipDTO(RecoSlipDTO):
+    """当前用户对该 slip 持有 active 按场授权时的完整投影(RecoSlipDTO 原样
+    +access_required=False,供前端统一判断是否需要引导授权)。"""
+
+    access_required: Literal[False] = False
+
+
+class RecoDailyLockedSlipDTO(BaseModel):
+    """当前用户对该 slip 没有 active 按场授权时的中性投影(2026-08-16,
+    取代旧的全局 reco:daily 布尔权益门禁):只暴露"存在性 + 状态",标题/
+    摘要/腿的市场选择赔率/思路说明整体不出现——受限字段物理不下发,不是
+    置 null(与 CLAUDE.md §8.2 匿名概率边界同一纪律)。"""
+
+    id: str
+    slip_date: str
+    status: Literal["published", "settled", "voided"]
+    access_required: Literal[True] = True
+
+
+RecoDailySlipItem = Union[RecoDailyUnlockedSlipDTO, RecoDailyLockedSlipDTO]
+
+
 class RecoDailyResponse(BaseModel):
-    """付费面(reco:daily):近 30 天推荐单(含未结算)。"""
+    """登录面(2026-08-16 起按"用户 + 单条 slip"授权,取代旧的 reco:daily
+    付费全局布尔权益):近 30 天推荐单存在性全部可见,内容按 slip 分别授权
+    (见 RecoDailySlipItem)。"""
 
     window_days: int
-    slips: list[RecoSlipDTO]
+    slips: list[RecoDailySlipItem]
+
+
+class RecoSlipPreviewResponse(BaseModel):
+    """admin 用:该单如果 published,一个真实会员在 /reco/daily 会看到的内容
+    形状——与 RecoDailyResponse 里的单据字段完全一致(同一个 RecoSlipDTO,
+    同一套投影函数 q_reco.slip_member_preview/_slip_dto),不重新发明一套
+    会员端 DTO。"""
+
+    slip: RecoSlipDTO
 
 
 class RecoTrackRecordSummaryDTO(BaseModel):
@@ -1452,13 +1734,19 @@ class RecoTrackRecordSummaryDTO(BaseModel):
     win_count: int
     lose_count: int
     push_count: int
+    # 四分之一盘口半赢/半输(2026-08-16):必须独立可见,不得被并入 win/lose,
+    # 也不得从任何分类桶里消失——win+lose+push+half_win+half_loss == settled_count。
+    half_win_count: int
+    half_loss_count: int
     voided_count: int                          # 作废单列,不进分母也不消失
-    hit_rate: Optional[float] = None           # win/(win+lose),push 不计分母
+    # (win + 0.5*half_win) / (win+lose+half_win+half_loss);push 不计分母。
+    hit_rate: Optional[float] = None
     net_units: float
 
 
 class RecoTrackRecordResponse(BaseModel):
-    """登录面(reco:track_record):结算/作废归档全历史,命中未中全展示。"""
+    """匿名可见(2026-08-16 起不再要求登录):结算/作废归档全历史,命中未中
+    全展示——站点自身的历史运营记录,不属于"每日精选"按场授权的约束范围。"""
 
     summary: RecoTrackRecordSummaryDTO
     total: int
@@ -1476,8 +1764,13 @@ class RecoOverviewResponse(BaseModel):
     win_count: int
     lose_count: int
     push_count: int
+    # 四分之一盘口半赢/半输(2026-08-16):同 RecoTrackRecordSummaryDTO,必须
+    # 独立可见,不得并入 win/lose 也不得凭空消失。
+    half_win_count: int
+    half_loss_count: int
     voided_count: int                          # 作废单列,不进分母也不消失
-    hit_rate: Optional[float] = None           # win/(win+lose),push 不计分母
+    # (win + 0.5*half_win) / (win+lose+half_win+half_loss);push 不计分母。
+    hit_rate: Optional[float] = None
     net_units: float
     # 当前有已发布(赛前)推荐的比赛 id 列表——只有存在性,不含内容
     # (2026-08-11 站长授权;首页比赛卡"推荐已发布/待发布"状态用)。
@@ -1490,6 +1783,23 @@ class RecoLegInput(BaseModel):
     selection: str
     odds: float
     match_id: Optional[int] = None
+    # ── 赔率合约溯源(可选;2026-08-16)──────────────────────────
+    # 齐全(match_id + source_odds + odds_format + snapshot_ref)时后端判定
+    # entry_type='provenance_bound',canonical_decimal_odds 由
+    # backend/commands/reco_odds_contract.py::to_canonical_decimal() 计算,
+    # 不直接采信这里传入的 odds(NowGoal 的 ou/ah/corners_ou 是港赔,常 <1)。
+    # 缺任一字段则整条腿退回 entry_type='legacy_manual',odds 按原语义直接
+    # 当十进制赔率使用(向后兼容旧的手打赔率入口)。
+    source_odds: Optional[float] = None
+    odds_format: Optional[Literal["decimal", "hk"]] = None
+    provider: Optional[str] = None
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
+    snapshot_ref: Optional[str] = None
+    observed_at: Optional[str] = None
+    line: Optional[float] = None
+    side: Optional[str] = None
+    payload_hash: Optional[str] = None
 
 
 class RecoSlipCreateBody(BaseModel):
@@ -1507,7 +1817,8 @@ class RecoSlipEditBody(BaseModel):
 
 
 class RecoSettleBody(BaseModel):
-    leg_results: dict[str, Literal["win", "lose", "push"]]   # leg_id → 结果
+    # leg_id → 结果(half_win/half_loss = 四分之一盘口半赢半输,2026-08-16)
+    leg_results: dict[str, Literal["win", "lose", "push", "half_win", "half_loss"]]
 
 
 class RecoVoidBody(BaseModel):
@@ -1519,13 +1830,61 @@ class RecoSlipCreatedDTO(BaseModel):
 
 
 class RecoSettledDTO(BaseModel):
-    result: Literal["win", "lose", "push"]
+    result: Literal["win", "lose", "push", "half_win", "half_loss"]
     return_units: float
+
+
+class RecoLegMatchResultDTO(BaseModel):
+    home_score: int
+    away_score: int
+
+
+class RecoLegCornersDTO(BaseModel):
+    home: float
+    away: float
+
+
+class AdminRecoLegDTO(BaseModel):
+    """admin 面在会员 RecoLegDTO 基础上补充的运营信息(2026-08-16):
+    entry_type 供前端提前识别"这条腿缺乏真实溯源、发布会被拒绝";
+    match_result/corners 是已结算腿的结算依据(现算,不新增存储,缺失时
+    保持 None);needs_review 是"待确认"标记——绝不通过任何写路径把它
+    自动变成确定结果,只读展示。"""
+
+    id: str
+    match_id: Optional[int] = None
+    match_desc: str
+    market: str
+    selection: str
+    odds: float
+    result: Optional[Literal["win", "lose", "push", "half_win", "half_loss"]] = None
+    entry_type: Literal["provenance_bound", "legacy_manual"]
+    match_result: Optional[RecoLegMatchResultDTO] = None
+    corners: Optional[RecoLegCornersDTO] = None
+    needs_review: bool = False
+    needs_review_reason: Optional[str] = None
+
+
+class AdminRecoSlipDTO(BaseModel):
+    id: str
+    slip_date: str
+    title: str
+    note: Optional[str] = None
+    combo_type: Literal["single", "parlay"]
+    status: Literal["draft", "published", "settled", "voided"]
+    result: Optional[Literal["win", "lose", "push", "half_win", "half_loss"]] = None
+    return_units: Optional[float] = None
+    published_at: Optional[str] = None
+    settled_at: Optional[str] = None
+    settle_source: Optional[Literal["auto", "manual"]] = None
+    edit_count: int
+    last_edited_at: str
+    legs: list[AdminRecoLegDTO]
 
 
 class AdminRecoSlipsResponse(BaseModel):
     total: int
-    slips: list[RecoSlipDTO]
+    slips: list[AdminRecoSlipDTO]
 
 
 class RecoMatchCandidateDTO(BaseModel):
@@ -1545,7 +1904,12 @@ class RecoMatchCandidatesResponse(BaseModel):
 
 
 class RecoOddsOptionDTO(BaseModel):
-    """真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。"""
+    """真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。
+
+    odds 字段延续原有语义:来源原始数值(1x2 是十进制;ou/corners_ou 是港赔,
+    常 <1)。新增字段供 admin 提交腿时一并回传,后端据此判定 provenance_bound
+    并正确换算(见 RecoLegInput/backend/commands/reco_odds_contract.py)。
+    """
 
     market: str
     market_label: str
@@ -1553,8 +1917,64 @@ class RecoOddsOptionDTO(BaseModel):
     odds: float
     company_name: str
     observed_at: str
+    # ── 溯源字段(2026-08-16)──────────────────────────────────
+    snapshot_id: int              # bronze_ng_odds_snap.id,可当稳定引用
+    company_id: str
+    line: Optional[float] = None  # ou/corners_ou/ah 的盘口线
+    side: str                     # 程序可读选边(home/away/draw/over/under)
+    odds_format: Literal["decimal", "hk"]   # 按 market 从 MARKET_ODDS_FORMAT 查出
+    # 新鲜度(2026-08-16):复用既有 backend/queries/odds.py::
+    # classify_odds_freshness/ODDS_FRESHNESS_STALE_HOURS,不新发明阈值。
+    # 沿用仓库里已经在用的 FRESH/STALE/UNAVAILABLE 三态词汇(而不是另造一个
+    # is_stale 布尔),与其它新鲜度展示位保持同一套前端词汇表。这里的
+    # observed_at 恒非空,UNAVAILABLE 理论上不会命中,但保留三态是为了不让
+    # 前端认识两套不同粒度的新鲜度语言。
+    freshness: Literal["FRESH", "STALE", "UNAVAILABLE"]
 
 
 class RecoMatchOddsOptionsResponse(BaseModel):
     match_id: int
     options: list[RecoOddsOptionDTO]
+
+
+# ── 每日精选按场授权(2026-08-16,取代旧的 reco:daily 全局布尔权益) ──
+
+class RecoAccessGrantDTO(BaseModel):
+    id: str
+    user_id: str
+    slip_id: str
+    # 具体到场次(2026-08-16):标题 + 日期,供"每日精选权限查询"和 admin
+    # 授权面把一条授权记录识别为"是哪一场",不是只给一个不透明 UUID——这不是
+    # 按场授权保护的正文本身(腿/赔率/理由仍然只在完整 RecoSlipDTO 里)。
+    slip_title: str
+    slip_date: str
+    status: Literal["active", "revoked"]
+    granted_at: str
+    granted_by: str
+    revoked_at: Optional[str] = None
+    revoked_by: Optional[str] = None
+    note: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class RecoAccessGrantBody(BaseModel):
+    user_id: str
+    slip_id: str
+    note: Optional[str] = None
+
+
+class RecoAccessRevokeBody(BaseModel):
+    reason: Optional[str] = None
+
+
+class AdminRecoAccessGrantsResponse(BaseModel):
+    total: int
+    grants: list[RecoAccessGrantDTO]
+
+
+class RecoMyAccessResponse(BaseModel):
+    """个人"每日精选权限查询"(CLAUDE.md §8.1 允许要求登录的账户类个人
+    功能之一):只含当前用户自己的授权记录。"""
+
+    grants: list[RecoAccessGrantDTO]

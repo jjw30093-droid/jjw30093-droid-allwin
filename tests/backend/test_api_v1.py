@@ -18,10 +18,12 @@ from .coreseed import seed_basic_core
 
 from .authflow import wechat_scan_login
 
-FORBIDDEN_FREE_KEYS = [
-    "home_probability", "draw_probability", "away_probability",
-    "home_win", "away_win", '"draw"',
-    "expected_home_goals", "expected_away_goals",
+# 2026-08-16 产品权限口径修正(除"每日精选"外全站比赛内容全部免费,包括匿名;
+# 登录与内容分层彻底解耦):普通预测响应必须恒含完整三项概率,不再有
+# 免费/付费两套 DTO。这些字段名此前只为付费裁剪服务,现在必须彻底不存在。
+FORBIDDEN_PAYWALL_FIELDS = [
+    '"tier"', '"free_outcome"', '"locked_outcomes"',
+    '"is_premium"', '"premium_required"', '"top_probability"',
 ]
 
 
@@ -72,45 +74,36 @@ def _login_user(client, ip="203.0.113.99"):
 
 
 class TestPredictionFieldGate:
-    def test_anonymous_gets_only_top_probability(self, app, seeded):
+    """2026-08-16 产品权限口径修正:除"每日精选"外普通比赛内容全部免费,
+    包括匿名用户;登录与内容分层彻底解耦——普通预测响应对匿名和已登录用户
+    逐字段完全一致,恒含完整胜平负三项概率。"""
+
+    def test_anonymous_gets_full_wdl_probability(self, app, seeded):
         client = TestClient(app)
         r = client.get("/api/v1/matches/9001/prediction")
         assert r.status_code == 200
         body = r.json()
         assert body["available"] is True
         pred = body["prediction"]
-        assert pred["tier"] == "free"
         assert pred["top_outcome"] == "home"
-        assert pred["top_probability"] == 0.48
-        # 全 JSON 扫描:受限字段连 key 都不存在(不是 null)
-        raw = r.text
-        for key in FORBIDDEN_FREE_KEYS:
-            assert key not in raw, f"免费响应泄漏受限字段 {key}: {raw}"
-        assert r.headers["cache-control"] == "private, no-store"
-
-    def test_logged_in_gets_full_projection(self, app, seeded, fresh_ip):
-        """三段可见性(CLAUDE.md §8):登录即 member 基线 → 完整投影。"""
-        client = TestClient(app)
-        _login_user(client, ip=fresh_ip)
-        r = client.get("/api/v1/matches/9001/prediction")
-        assert r.json()["prediction"]["tier"] == "full"
-
-    def test_member_gets_full_wdl(self, app, seeded, fresh_ip):
-        client = TestClient(app)
-        _login_user(client, ip=fresh_ip)
-        r = client.get("/api/v1/matches/9001/prediction")
-        pred = r.json()["prediction"]
-        assert pred["tier"] == "full"
         assert pred["home_probability"] == 0.48
         assert pred["draw_probability"] == 0.29
         assert pred["away_probability"] == 0.23
         assert pred["expected_home_goals"] == 1.62
         assert pred["prediction_hash"]
+        raw = r.text
+        for key in FORBIDDEN_PAYWALL_FIELDS:
+            assert key not in raw, f"响应仍带有旧付费裁剪字段 {key}: {raw}"
+        assert r.headers["cache-control"] == "private, no-store"
 
-    def test_member_baseline_gets_full_wdl_alias(self, app, seeded, fresh_ip):
+    def test_logged_in_user_gets_identical_projection_to_anonymous(self, app, seeded, fresh_ip):
+        """登录只是身份状态,不是内容分层依据——普通用户(无任何订阅)登录后
+        拿到的响应体必须与匿名逐字段完全一致,不能有任何额外/更少字段。"""
+        anon_pred = TestClient(app).get("/api/v1/matches/9001/prediction").json()["prediction"]
         client = TestClient(app)
         _login_user(client, ip=fresh_ip)
-        assert client.get("/api/v1/matches/9001/prediction").json()["prediction"]["tier"] == "full"
+        member_pred = client.get("/api/v1/matches/9001/prediction").json()["prediction"]
+        assert member_pred == anon_pred
 
     def test_draft_never_exposed(self, app, seeded, fresh_ip):
         client = TestClient(app)
@@ -133,19 +126,27 @@ class TestPredictionFieldGate:
 
 
 class TestLeagueGate:
-    def test_anonymous_sees_epl_and_top5_matches(self, app, seeded):
-        """2026-08-11 权限矩阵互换:free 现持有 league:epl + league:top5 +
-        league:european_cup(platform 0012),87(西甲)随五大联赛一起对匿名开放。"""
+    """2026-08-16 产品权限口径修正:除"每日精选"外全部比赛内容对匿名完全
+    开放,不再有任何联赛级登录门禁;LeagueInfo.accessible/entitlement/
+    requires_login 三个只为登录门禁服务的字段已从响应模型整体删除。"""
+
+    def test_anonymous_sees_all_leagues_with_full_content(self, app, seeded):
         client = TestClient(app)
         r = client.get("/api/v1/matches")
         ids = {m["league_id"] for m in r.json()["matches"]}
-        assert ids <= {47, 87}
+        assert ids <= {47, 87}   # 本 fixture 只布景了这两个联赛的比赛
+        for m in r.json()["matches"]:
+            assert "requires_login" not in m
         assert client.get("/api/v1/matches/9101").status_code == 200
         assert client.get("/api/v1/leagues/87/standings").status_code == 200
+        # 原 league:lottery(需登录)联赛现同样匿名 200,不再 401
+        assert client.get("/api/v1/leagues/67/standings").status_code == 200
         leagues = client.get("/api/v1/leagues").json()
-        acc = {l["league_id"]: l["accessible"] for l in leagues}
-        assert acc[47] is True and acc[87] is True
-        assert acc[67] is False   # league:lottery 现在需登录
+        by_id = {l["league_id"]: l for l in leagues}
+        assert 47 in by_id and 67 in by_id
+        for l in leagues:
+            for key in ("accessible", "entitlement", "requires_login"):
+                assert key not in l, f"LeagueInfo 不应再暴露 {key}"
 
     def test_member_sees_top5(self, app, seeded, fresh_ip):
         client = TestClient(app)
@@ -165,13 +166,37 @@ class TestLeagueGate:
         assert det["match"]["home"]["name"] == "阿森纳"
 
 
-# silver_team_season_stats 是混合表:付费深度字段(角球/牌/零封/BTTS)绝不能
-# 出现在 team-stats 免费投影响应里——布景造了哨兵值,全 JSON 扫描断言
-FORBIDDEN_TEAM_STAT_KEYS = [
-    "avg_corners", "avg_yellow_cards", "avg_red_cards",
-    "clean_sheets", "btts_matches", "btts_pct",
-    "777.7", "888.8", "999.9",  # 布景哨兵值本身也不能泄漏
-]
+# 原 9 个 league:lottery 联赛(2026-08-11 权限矩阵互换时曾对匿名整体隐藏,
+# 2026-08-16 起随本次权限口径修正彻底放开)。
+PREVIOUSLY_LOTTERY_LEAGUE_IDS = (67, 59, 223, 9080, 113, 48, 57, 61, 268)
+
+
+class TestPreviouslyLotteryLeaguesFullyOpenAnonymously:
+    """任务验收标准:匿名访问这 9 个联赛的 standings/fixtures/team-stats/
+    players/season-profile 全部 200,不再 401/403(不要求每个联赛都有布景
+    数据——空态本身也必须是 200 诚实空响应,而不是门禁 401/403)。"""
+
+    @pytest.mark.parametrize("league_id", PREVIOUSLY_LOTTERY_LEAGUE_IDS)
+    def test_standings_fixtures_stats_players_profile_all_200(self, app, seeded, league_id):
+        client = TestClient(app)
+        for path in (
+            f"/api/v1/leagues/{league_id}/standings",
+            f"/api/v1/leagues/{league_id}/fixtures",
+            f"/api/v1/leagues/{league_id}/team-stats",
+            f"/api/v1/leagues/{league_id}/players",
+            f"/api/v1/leagues/{league_id}/season-profile",
+        ):
+            r = client.get(path)
+            assert r.status_code == 200, f"{path} 应对匿名 200,实际 {r.status_code}: {r.text}"
+
+
+# silver_team_season_stats 现在全字段免费投影(2026-08-16 起,除"每日精选"
+# 外普通比赛内容与登录/付费彻底解耦)——布景造的哨兵值必须原样出现在响应里,
+# 不再是被禁止出现的付费深度字段。
+REQUIRED_TEAM_STAT_SENTINELS = {
+    "avg_corners": 777.7, "avg_yellow_cards": 888.8, "avg_red_cards": 999.9,
+    "clean_sheets": 21, "btts_matches": 17, "btts_pct": 44.7,
+}
 
 
 class TestLeagueSeasonStats:
@@ -187,8 +212,8 @@ class TestLeagueSeasonStats:
         row = body["rows"][0]
         assert row["team"]["name"] == "阿森纳"
         assert row["avg_total_shots"] == 15.2
-        for key in FORBIDDEN_TEAM_STAT_KEYS:
-            assert key not in r.text, f"免费投影泄漏付费字段/哨兵值 {key}"
+        for key, value in REQUIRED_TEAM_STAT_SENTINELS.items():
+            assert row[key] == value, f"team-stats 现在应恒下发 {key}(2026-08-16 起全字段免费)"
         assert r.headers["cache-control"].startswith("public")
 
     def test_xg_breakdown_and_conceded_for_quadrant_chart(self, app, seeded):
@@ -211,13 +236,19 @@ class TestLeagueSeasonStats:
         assert missing["avg_expected_goals_conceded"] is None
 
     def test_anonymous_epl_players_ok(self, app, seeded):
+        """2026-08-16 起球员榜全字段免费投影(不再只有 5 个"免费"维度)——
+        这条断言正是要推翻的旧规则(此前 boards 恒为固定 5 项集合)。"""
         client = TestClient(app)
         r = client.get("/api/v1/leagues/47/players")
         assert r.status_code == 200
         body = r.json()
         boards = {b["stat_name"]: b for b in body["boards"]}
-        assert set(boards) == {"goals", "goal_assist", "expected_goals",
-                               "expected_goalsontarget", "rating"}
+        # 原 5 个"免费"维度仍在,且不再是唯一维度——新增的付费深度维度
+        # (黄牌/红牌/扑救等)同样出现在响应里
+        assert {"goals", "goal_assist", "expected_goals",
+                "expected_goalsontarget", "rating"} <= set(boards)
+        assert "yellow_card" in boards, "原付费深度维度(黄牌)现在应恒下发"
+        assert "saves" in boards, "原付费深度维度(扑救)现在应恒下发"
         top = boards["goals"]["entries"][0]
         assert top["name"] == "测试前锋"          # 中文短名优先
         assert top["name_en"] == "Test Striker"
@@ -226,27 +257,25 @@ class TestLeagueSeasonStats:
         assert r.headers["cache-control"].startswith("public")
 
     def test_anonymous_top5_team_stats_ok(self, app, seeded):
-        """2026-08-11 权限矩阵互换:top5(87)现对匿名开放,与 EPL 同一投影规则。"""
+        """top5(87)对匿名开放,与 EPL 同一投影规则(2026-08-16 起全字段免费)。"""
         client = TestClient(app)
         r = client.get("/api/v1/leagues/87/team-stats")
         assert r.status_code == 200
-        assert r.json()["rows"][0]["avg_possession"] == 58.3
-        for key in FORBIDDEN_TEAM_STAT_KEYS:
-            assert key not in r.text, f"免费投影泄漏付费字段/哨兵值 {key}"
+        row = r.json()["rows"][0]
+        assert row["avg_possession"] == 58.3
+        for key, value in REQUIRED_TEAM_STAT_SENTINELS.items():
+            assert row[key] == value
         assert r.headers["cache-control"].startswith("public")
 
-    def test_anonymous_lottery_league_gated(self, app, seeded):
-        """2026-08-11 权限矩阵互换:top5(87)现对匿名开放,league:lottery(67)
-        改为登录门槛——本用例随之从"匿名验证 top5 被挡"改为验证 67 被挡。"""
+    def test_anonymous_lottery_league_now_open(self, app, seeded):
+        """2026-08-16 起:除每日精选外全部比赛内容对匿名开放,原 league:lottery
+        联赛(67)不再需要登录——本用例随之从"匿名验证 67 被挡"改为验证 67
+        直接可访问且拿到完整投影。"""
         client = TestClient(app)
-        assert client.get("/api/v1/leagues/67/team-stats").status_code == 401
-        assert client.get("/api/v1/leagues/67/players").status_code == 401
-        # 门禁响应体也不能带出任何统计数据
-        r = client.get("/api/v1/leagues/67/team-stats")
-        assert "avg_total_shots" not in r.text and "58.3" not in r.text
+        assert client.get("/api/v1/leagues/67/team-stats").status_code == 200
+        assert client.get("/api/v1/leagues/67/players").status_code == 200
 
     def test_logged_in_top5_stats_ok(self, app, seeded, fresh_ip):
-        """三段可见性:top5 统计登录即得(匿名 401 由 test_epl_public_endpoints_ok 钉死)。"""
         client = TestClient(app)
         _login_user(client, ip=fresh_ip)
         assert client.get("/api/v1/leagues/87/team-stats").status_code == 200
@@ -257,10 +286,11 @@ class TestLeagueSeasonStats:
         _login_user(client, ip=fresh_ip)
         ts = client.get("/api/v1/leagues/87/team-stats")
         assert ts.status_code == 200
-        assert ts.json()["rows"][0]["avg_possession"] == 58.3
-        # 登录拿到的也是本端点的基础字段投影(深度字段属 report:deep 面,不在本端点)
-        for key in FORBIDDEN_TEAM_STAT_KEYS:
-            assert key not in ts.text
+        row = ts.json()["rows"][0]
+        assert row["avg_possession"] == 58.3
+        # 登录拿到的内容与匿名逐字段一致(登录与内容分层彻底解耦)
+        for key, value in REQUIRED_TEAM_STAT_SENTINELS.items():
+            assert row[key] == value
         assert ts.headers["cache-control"] == "private, no-store"
         pl = client.get("/api/v1/leagues/87/players")
         assert pl.status_code == 200
@@ -491,43 +521,42 @@ def seeded_allsvenskan(seeded):
 
 
 class TestAllsvenskanLeagueOnboarding:
-    """瑞典超(FotMob league id 67)接入:元数据/entitlement/API 联赛门禁/
-    概率投影必须与既有联赛遵守同一套规则,不额外开洞、不遗漏。
+    """瑞典超(FotMob league id 67)接入:元数据/API 联赛访问/概率投影必须与
+    既有联赛遵守同一套规则,不额外开洞、不遗漏。
 
-    2026-08-11 权限矩阵互换(platform 0012):league:lottery 改为登录门槛,
-    67 与其余 8 个原免费小联赛一样,现在匿名 401、登录后可访问——本类断言
-    随之从"验证匿名可访问"改为"验证登录门槛正确生效"。"""
+    2026-08-16 产品权限口径修正:除"每日精选"外全站比赛内容全部免费,包括
+    匿名——league:lottery 现在只是描述性分类元数据(用于竞彩语境归类/报表),
+    不再是访问门禁。本类断言随之从"验证登录门槛生效"改为"验证 67 与其它
+    联赛享有完全相同的匿名可访问性"。"""
 
-    def test_league_67_listed_with_lottery_entitlement_requires_login(self, app, seeded):
+    def test_league_67_listed_without_gating_fields(self, app, seeded):
         client = TestClient(app)
         leagues = {l["league_id"]: l for l in client.get("/api/v1/leagues").json()}
         assert 67 in leagues
-        assert leagues[67]["entitlement"] == "league:lottery"
-        assert leagues[67]["accessible"] is False   # 互换后匿名需登录(与 top5 相反)
         assert leagues[67]["name_zh"] == "瑞典超"
+        for key in ("accessible", "entitlement", "requires_login"):
+            assert key not in leagues[67], f"LeagueInfo 不应再暴露 {key}"
 
     def test_unknown_league_id_still_404(self, app, seeded):
         client = TestClient(app)
         assert client.get("/api/v1/leagues/9999/standings").status_code == 404
         assert client.get("/api/v1/leagues/9999/fixtures").status_code == 404
 
-    def test_fixtures_and_standings_require_login(self, app, seeded_allsvenskan):
+    def test_fixtures_and_standings_open_to_anonymous(self, app, seeded_allsvenskan):
         client = TestClient(app)
-        assert client.get("/api/v1/leagues/67/fixtures").status_code == 401
-        assert client.get("/api/v1/leagues/67/standings").status_code == 401
+        assert client.get("/api/v1/leagues/67/fixtures").status_code == 200
+        assert client.get("/api/v1/leagues/67/standings").status_code == 200
 
-    def test_anonymous_sees_league_67_in_list_but_locked(self, app, seeded_allsvenskan):
-        """2026-08-13 用户拍板撤销"未持有权限的联赛整场从列表隐藏":瑞典超仍是
-        login-gated 联赛,但比赛本身现在应该出现在匿名 /matches 列表里,只是
-        标记 requires_login=True 且不下发概率——不是从结果集里整场消失。"""
+    def test_anonymous_sees_league_67_in_list_without_gating_field(self, app, seeded_allsvenskan):
+        """瑞典超比赛出现在匿名 /matches 列表里,且不再带 requires_login
+        这类只为登录门禁服务的字段(该字段已从 MatchSummary 整体删除)。"""
         client = TestClient(app)
         matches = client.get("/api/v1/matches").json()["matches"]
         by_league = {m["league_id"]: m for m in matches}
         assert 67 in by_league
-        assert by_league[67]["requires_login"] is True
-        assert by_league[67]["win_probability"] is None
+        assert "requires_login" not in by_league[67]
         assert 47 in by_league
-        assert by_league[47]["requires_login"] is False
+        assert "requires_login" not in by_league[47]
 
     def test_member_sees_league_67_match_detail_with_chinese_names(
         self, app, seeded_allsvenskan, fresh_ip
@@ -538,21 +567,21 @@ class TestAllsvenskanLeagueOnboarding:
         assert det["match"]["home"]["name"] == "韦斯特罗斯"
         assert det["match"]["away"]["name"] == "厄尔格里特"
 
-    def test_anonymous_gets_401_for_league_67_match_prediction(self, app, seeded_allsvenskan):
-        """联赛门禁先于概率投影门禁生效:匿名对瑞典超场次直接 401,
-        不会先看到任何概率字段。"""
+    def test_anonymous_gets_full_wdl_for_league_67_match_prediction(self, app, seeded_allsvenskan):
+        """联赛不再有任何访问门禁:匿名对瑞典超场次直接拿到完整三项概率,
+        不再是 401。"""
         client = TestClient(app)
         r = client.get("/api/v1/matches/9201/prediction")
-        assert r.status_code == 401
-        raw = r.text
-        for key in FORBIDDEN_FREE_KEYS:
-            assert key not in raw, f"瑞典超门禁响应泄漏受限字段 {key}: {raw}"
+        assert r.status_code == 200
+        pred = r.json()["prediction"]
+        assert pred["home_probability"] == 0.4
+        assert pred["draw_probability"] == 0.32
+        assert pred["away_probability"] == 0.28
 
     def test_member_gets_full_wdl_for_league_67_match(self, app, seeded_allsvenskan, fresh_ip):
         client = TestClient(app)
         _login_user(client, ip=fresh_ip)
         pred = client.get("/api/v1/matches/9201/prediction").json()["prediction"]
-        assert pred["tier"] == "full"
         assert pred["home_probability"] == 0.4
         assert pred["draw_probability"] == 0.32
         assert pred["away_probability"] == 0.28
@@ -622,13 +651,15 @@ class TestLeagueSeasonProfile:
         # 公开面必须可进共享缓存(§10.2)
         assert r.headers["cache-control"].startswith("public")
 
-    def test_gated_league_requires_login(self, app, seeded):
-        """league:lottery 联赛(权限矩阵互换后需登录)匿名拿不到,且响应体不带统计。"""
+    def test_previously_gated_league_now_open_to_anonymous(self, app, seeded):
+        """原 league:lottery 联赛(2026-08-16 起不再需要登录)匿名直接拿到统计。"""
         self._seed_profile(league_id=67, season="2026")
         client = TestClient(app)
         r = client.get("/api/v1/leagues/67/season-profile")
-        assert r.status_code == 401
-        assert "42.63" not in r.text and "total_matches" not in r.text
+        assert r.status_code == 200
+        body = r.json()
+        assert body["summary"]["total_matches"] == 380
+        assert r.headers["cache-control"].startswith("public")
 
     def test_no_data_league_honest_empty(self, app, seeded):
         """没有银层数据的联赛返回诚实空态,不是 500、也不补零。"""

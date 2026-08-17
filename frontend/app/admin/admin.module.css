@@ -281,36 +281,6 @@
   border: 1px solid var(--loss);
 }
 
-.codesBox {
-  background: var(--bg-2);
-  border: 1px dashed var(--gold-700);
-  border-radius: var(--r-control);
-  padding: 12px 14px;
-  margin-bottom: 14px;
-}
-
-.codesBoxHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 12.5px;
-  color: var(--gold-300);
-  margin-bottom: 8px;
-}
-
-.codesPre {
-  font-family: var(--font-latin), monospace;
-  font-size: 13px;
-  color: var(--ink);
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
 .detailSummary {
   cursor: pointer;
   color: var(--ink-2);
@@ -468,4 +438,18 @@
   border-radius: 999px;
   font-size: 11.5px;
   color: var(--ink-3);
+}
+
+/* 待确认(needs_review,2026-08-16):published 单里比赛已完赛但腿结果尚未
+ * 判定——克制的提示色(--brand-teal,与 /reco 页"未结算"同一语义色),刻意
+ * 不用 --loss(红,同"未中")或 --win(绿,同"命中"),避免让 admin 误以为
+ * 这条腿已经有确定结果。 */
+.needsReview {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--brand-teal);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--brand-teal);
 }

@@ -32,6 +32,9 @@ export type GetJson<P extends keyof paths> = paths[P] extends { get: infer G }
 export type PostJson<P extends keyof paths> = paths[P] extends { post: infer G }
   ? JsonOf<G>
   : never;
+export type PatchJson<P extends keyof paths> = paths[P] extends { patch: infer G }
+  ? JsonOf<G>
+  : never;
 
 export type MeResponse = GetJson<"/api/v1/me">;
 export type LeagueInfo = GetJson<"/api/v1/leagues">[number];
@@ -47,6 +50,7 @@ export type WinProbability = NonNullable<MatchSummary["win_probability"]>;
 export type MatchDetailResponse = GetJson<"/api/v1/matches/{match_id}">;
 export type PredictionResponse = GetJson<"/api/v1/matches/{match_id}/prediction">;
 export type MatchReportResponse = GetJson<"/api/v1/matches/{match_id}/report">;
+export type MatchPreviewResponse = GetJson<"/api/v1/matches/{match_id}/preview">;
 export type MatchMarketCardsResponse = GetJson<"/api/v1/matches/{match_id}/markets">;
 export type MarketCard = MatchMarketCardsResponse["cards"][number];
 export type TrackRecordResponse = GetJson<"/api/v1/track-record">;
@@ -200,7 +204,7 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
 
 export async function clientFetch<T>(
   path: string,
-  opts: { method?: "GET" | "POST" | "DELETE"; body?: unknown } = {},
+  opts: { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown } = {},
 ): Promise<T> {
   const method = opts.method ?? "GET";
   const headers: Record<string, string> = {};
@@ -236,9 +240,3 @@ export const claimDeviceLogin = (requestId: string, secret: string) =>
     `/api/v1/auth/wechat/device/${requestId}/claim`,
     { method: "POST", body: { secret } },
   );
-
-export const redeemCode = (code: string) =>
-  clientFetch<PostJson<"/api/v1/redeem">>("/api/v1/redeem", {
-    method: "POST",
-    body: { code },
-  });

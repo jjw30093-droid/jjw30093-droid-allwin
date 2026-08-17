@@ -265,11 +265,16 @@ def _fm_payload():
     return {
         "content": {
             "lineup": {
+                "lineupType": "lastStarting11",
+                "source": "lastStartingLineups",
                 "homeTeam": {
                     "id": 9825,
                     "formation": "4-3-3",
-                    "starters": [{"id": 20, "name": "B"}, {"id": 10, "name": "A"}],
-                    "subs": [{"id": 30, "name": "C"}],
+                    "starters": [
+                        {"id": 20, "name": "B", "shirtNumber": 7},
+                        {"id": 10, "name": "A", "shirtNumber": 1},
+                    ],
+                    "subs": [{"id": 30, "name": "C", "shirtNumber": 22}],
                     "unavailable": [
                         {"id": 90, "name": "Injured One",
                          "unavailability": {"type": "injury", "expectedReturn": "2026-08-01"}},
@@ -278,7 +283,7 @@ def _fm_payload():
                 "awayTeam": {
                     "id": 8455,
                     "formation": "4-4-2",
-                    "starters": [{"id": 40, "name": "D"}],
+                    "starters": [{"id": 40, "name": "D", "shirtNumber": 9}],
                     "subs": [],
                     "unavailable": [],
                 },
@@ -295,6 +300,33 @@ class TestFotmobSnapshots:
         assert [p["id"] for p in snap["home"]["starters"]] == [10, 20]
         assert snap["away"]["subs"] == []
 
+    def test_lineup_type_and_source_extracted_from_top_level(self):
+        """2026-08-15 真实探测:lineupType/source 是 content.lineup 顶层字段,
+        homeTeam/awayTeam 的兄弟节点,不是每队各自一份。"""
+        snap = fotmob_snapshots.extract_lineup_snapshot(_fm_payload())
+        assert snap["lineup_type"] == "lastStarting11"
+        assert snap["source"] == "lastStartingLineups"
+
+    def test_lineup_type_missing_gives_none_not_a_guess(self):
+        snap = fotmob_snapshots.extract_lineup_snapshot({"content": {"lineup": {"homeTeam": {}}}})
+        assert snap["lineup_type"] is None
+        assert snap["source"] is None
+
+    def test_shirt_number_extracted_per_player(self):
+        snap = fotmob_snapshots.extract_lineup_snapshot(_fm_payload())
+        by_id = {p["id"]: p["shirt_number"] for p in snap["home"]["starters"]}
+        assert by_id == {10: 1, 20: 7}
+        assert snap["home"]["subs"][0]["shirt_number"] == 22
+
+    def test_shirt_number_missing_gives_none_not_zero(self):
+        payload = _fm_payload()
+        starters = payload["content"]["lineup"]["homeTeam"]["starters"]
+        del next(p for p in starters if p["id"] == 10)["shirtNumber"]
+        snap = fotmob_snapshots.extract_lineup_snapshot(payload)
+        # 排序后 id=10(无 shirtNumber)排在 id=20 前面
+        assert snap["home"]["starters"][0]["id"] == 10
+        assert snap["home"]["starters"][0]["shirt_number"] is None
+
     def test_lineup_hash_stable_regardless_of_player_order(self):
         p1, p2 = _fm_payload(), _fm_payload()
         p2["content"]["lineup"]["homeTeam"]["starters"].reverse()
@@ -306,6 +338,7 @@ class TestFotmobSnapshots:
         snap = fotmob_snapshots.extract_lineup_snapshot({"content": {}})
         assert snap["home"]["team_id"] is None
         assert snap["home"]["starters"] == []
+        assert snap["lineup_type"] is None
 
     def test_sideline_extraction(self):
         snap = fotmob_snapshots.extract_sideline_snapshot(_fm_payload(), 9825)

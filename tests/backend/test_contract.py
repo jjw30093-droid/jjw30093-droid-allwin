@@ -86,33 +86,26 @@ class TestEveryJsonOperationHasSchema:
                         )
 
 
-class TestFreePredictionSchemaGate:
-    """§8.2:免费层受限字段在 schema 层就不存在(不是运行时遮挡)。"""
+class TestPredictionSchemaAlwaysFull:
+    """2026-08-16 产品权限口径修正:除"每日精选"外普通比赛内容全部免费,
+    包括匿名——预测响应不再有 free/full 两套 variant,PredictionResponse.
+    prediction 是单一 DTO,在 schema 层就恒含完整胜平负三项概率,不再有
+    只为付费裁剪服务的 tier 字段。"""
 
-    def test_prediction_union_contains_free_and_full_variants(self, app):
-        spec = app.openapi()
-        comps = spec["components"]["schemas"]
-        prediction = comps["PredictionResponse"]["properties"]["prediction"]
-        refs = {r["$ref"] for r in prediction.get("anyOf", []) if "$ref" in r}
-        assert "#/components/schemas/PredictionFreeDTO" in refs
-        assert "#/components/schemas/PredictionFullDTO" in refs
-
-    def test_free_variant_physically_lacks_restricted_fields(self, app):
+    def test_free_and_full_variant_dtos_removed(self, app):
         comps = app.openapi()["components"]["schemas"]
-        free_props = comps["PredictionFreeDTO"]["properties"]
-        for key in (
-            "home_probability", "draw_probability", "away_probability",
-            "home_win", "draw", "away_win",
-            "expected_home_goals", "expected_away_goals",
-        ):
-            assert key not in free_props, f"免费 variant 泄漏受限字段 {key}"
-        assert "top_outcome" in free_props and "top_probability" in free_props
+        assert "PredictionFreeDTO" not in comps, "PredictionFreeDTO 应已删除(不再有免费裁剪 DTO)"
+        assert "PredictionFullDTO" not in comps, "PredictionFullDTO 应已删除(不再有 free/full 两套 DTO)"
 
-    def test_full_variant_has_complete_wdl(self, app):
+    def test_prediction_dto_has_complete_wdl_and_no_tier(self, app):
         comps = app.openapi()["components"]["schemas"]
-        full_props = comps["PredictionFullDTO"]["properties"]
-        for key in ("home_probability", "draw_probability", "away_probability"):
-            assert key in full_props, f"pro/premium variant 缺少 {key}"
+        assert "PredictionDTO" in comps, "应存在单一的 PredictionDTO"
+        props = comps["PredictionDTO"]["properties"]
+        for key in ("home_probability", "draw_probability", "away_probability",
+                    "top_outcome", "prediction_hash"):
+            assert key in props, f"PredictionDTO 缺少 {key}"
+        assert "tier" not in props, "tier 是旧付费裁剪字段,不应再出现"
+        assert "top_probability" not in props, "top_probability 是旧免费单项字段,不应再出现"
 
 
 class TestOpenapiExportSync:
@@ -278,12 +271,19 @@ class TestUnifiedErrorContractRuntime:
         )
         assert real_shm_after == real_shm_before
 
-    def test_legacy_membership_required_401_dict_detail_preserved(self, client):
-        """dict-shaped HTTPException(detail={code,message,entitlement}):code 不丢失,
-        entitlement 进入 details,不再整体嵌套在 detail 下。"""
+    def test_legacy_betting_no_longer_gated_by_membership(self, client):
+        """2026-08-16 起:除"每日精选"外全站比赛内容全部免费,legacy
+        /api/league/{id}/betting 不再要求 report:deep。本测试用的 `client`
+        fixture 是空迁移库(dim_match 表存在但无行),移除门禁后请求会穿透到
+        真实的"无数据"分支(400 no_data_for_league)而不是门禁本身——这正是
+        用来证明门禁已被移除的证据:此前无论有没有数据,匿名永远先被
+        401 membership_required 拦下,现在则是走到了数据层判断。完整
+        200 成功路径(真实数据)见 test_legacy_league_api.py::TestLeagueBetting。"""
         r = client.get("/api/league/47/betting")
-        body = _assert_unified_error_body(r, expect_code="membership_required")
-        assert body["details"] == {"entitlement": "report:deep"}
+        body = _assert_unified_error_body(r, expect_code="no_data_for_league")
+        assert r.status_code == 400
+        assert "report:deep" not in str(body)
+        assert "membership_required" not in str(body)
 
     def test_legacy_membership_required_403_dict_detail_via_normalizer(self):
         """已登录但缺少 report:deep 权益的 403 分支(`status_code=403 if
@@ -411,18 +411,25 @@ class TestStandaloneApiServerAppUsesUnifiedHandlers:
         assert body["code"] == "no_data_for_league"
         assert body["details"] is None
 
-    def test_legacy_401_anonymous_betting_unified_on_standalone_app(self, data_dir):
-        """匿名访问付费 legacy 端点:401 + membership_required,entitlement 保留
-        在 details 里。require_membership 的鉴权检查先于任何 core db 访问,
-        不需要 monkeypatch DB_PATH;data_dir 提供已迁移(含 plan/entitlement 种子)
-        的临时 platform.db。"""
+    def test_legacy_anonymous_betting_no_longer_membership_gated_on_standalone_app(
+        self, data_dir, monkeypatch
+    ):
+        """2026-08-16 起 legacy /api/league/{id}/betting 不再要求 report:deep——
+        匿名请求不再被 401 membership_required 拦下,而是穿透到真实数据层
+        (空迁移库 → 400 no_data_for_league)。这条断言正是要被推翻的旧规则:
+        此前门禁检查先于任何 core db 访问,不需要 monkeypatch DB_PATH;现在
+        门禁已被移除,请求会真正touch核心库,因此必须像其它到达数据层的
+        standalone 用例一样绑定 DB_PATH 到临时 core.db。"""
+        import backend.api_server as legacy_mod
+        from backend.db.paths import db_path
+
+        monkeypatch.setattr(legacy_mod, "DB_PATH", db_path("core"))
         c = self._standalone_client()
         r = c.get("/api/league/47/betting")
-        assert r.status_code == 401
+        assert r.status_code == 400
         body = r.json()
         assert set(body.keys()) == {"code", "message", "details"}
-        assert body["code"] == "membership_required"
-        assert body["details"] == {"entitlement": "report:deep"}
+        assert body["code"] == "no_data_for_league"
 
     def test_uncaught_exception_500_unified_on_standalone_app(self, data_dir, monkeypatch):
         """未捕获异常在 standalone app 上同样归一为 500 INTERNAL_ERROR,响应体

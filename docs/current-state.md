@@ -4651,3 +4651,1214 @@ N 场历史,每项指标(复用 `match_report.py::TEAM_STAT_KEYS` 同一份 37-k
 - **裁判尺度、角球转化率(`Situation='FromCorner'`)两个 P2/P3 计划中的
   子模块未实现**——已确认数据可行(角球转化率 42.1% 出射门/3.59% 进球,
   裁判赛前 100% 未知只能落完赛页),但受时间预算限制未编码。
+
+## 43. 赛前手机端数据可视化 Phase 0–3:四大联赛第 1 轮(2026-08-15)
+
+范围收窄按站长指定:只做英超(47)/西甲(87)/德甲(54)/意甲(55)即将开赛的
+第 1 轮(39 场,39/39 有精确开球时间,32/39 两队都有 ≥10 场同主客场历史,
+7 场含升班马需诚实降级)。完整方案见执行前写的
+`/Users/wanglujun/.claude/plans/sorted-gathering-tower.md`
+(PREMATCH_MOBILE_DATA_VISUALIZATION_V2)。
+
+### 43.1 Phase 0:四个正确性缺陷(先写 RED 测试,确认真失败,再修)
+
+1. **风格象限方向语义未传播**——`league_style_views()` 返回值缺
+   `y_lower_is_better`,导致 xg-for-against 视角四个象限标签全错(把"两头
+   都强"和"对攻型"搞反)。修法:方向语义端到端传播
+   query→DTO(`MatchPreviewStyleViewDTO.y_lower_is_better`)→API→
+   `TeamStyleQuadrant.tsx::quadrantIndex()`,象限标签由 (x方向,y方向)
+   共同决定。回归测试:`test_team_style_preview.py::
+   test_direction_semantics_propagated_and_quadrant_labels_correct`、
+   `frontend/tests/team-style-quadrant.test.ts`。
+2. **部分 xG 缺失被前端补 0 再重新归一化**——`AttackSourceCard` 原来
+   `rows.reduce((s,r)=>s+(r.xg??0),0)` 求和,任一来源缺 xG 时卡头显示看似
+   完整的合计,`Bar` 组件又只对已知行归一化到 100% 宽度。修法:任一来源
+   缺失时不显示合计(文案「xG 部分来源数据缺失」)、条形不重新归一化、
+   `Bar` 新增 `incomplete` 分支显式说明。回归测试:
+   `frontend/tests/attack-source-card.test.tsx`。
+3. **门将 xGOT 的 NULL 被 COALESCE 成 0**——`SUM(COALESCE(expected_goals_
+   on_target_faced,0))` 低估"面对 xGOT",前端再拿这个低估值算"阻止进球"
+   会把缺数据的门将显示成表现更差。修法:改用原生 `SUM()`(SQLite 已跳过
+   NULL)+ 新增 `xgot_n`/`xgot_faced_complete` 覆盖率标志,前端只有
+   `xgot_faced_complete=True` 才允许现算估算,否则显示「数据不足,无法
+   估算阻止进球」。**同时重算并废弃了线上写的"68.3%"覆盖率文案**——
+   实测(`is_goalkeeper=1 AND minutes_played>0`,26,402 行,10 联赛,
+   2020-08-21~2026-08-10)`expected_goals_on_target_faced` 真实覆盖率
+   **97.2%**,`goals_prevented` 直接来源覆盖率 **39.0%**,产物见
+   `docs/audits/`(见 §43.4)。回归测试:
+   `tests/backend/test_player_form.py` 三条新测试、
+   `frontend/tests/goalkeeper-section.test.tsx`。
+4. **时间边界用 `Date` 而非 `kickoff_at_utc`,排序无 tiebreaker**——
+   `match_preview.py` 用 `match["date_utc"]` 而非
+   `match["kickoff_at_utc"]`;多处 `ORDER BY m.Date DESC` 无
+   `Match_ID` 兜底,同日多场时窗口内容随查询计划漂移。修法:统一
+   `COALESCE(kickoff_at_utc, Date)` 边界 + `ORDER BY ..., Match_ID DESC`
+   排序,这套约定此后在本轮新建的所有查询模块(`window.py`/
+   `opponent_adjust.py`/`venue_baseline.py`/`attack_chain.py`/
+   `possession_control.py`/`defensive_pressure.py`/`matchup.py`)里
+   保持一致。回归测试:`test_team_style_preview.py` 两条新测试
+   (同日不同开球时刻的 tiebreaker、同日更晚开球被正确排除)。
+
+### 43.2 Phase 1:方法与指标层(每条结论都有可重跑脚本 + 落盘产物)
+
+- **指标注册表** `backend/metrics/registry.py`:18 个指标,每个声明
+  `canonical_key/中文名/一句话解释/分子分母/单位/方向/最小样本/缺失
+  策略/适用位置/主客场敏感性/对手校正策略/覆盖率/来源字段/方法论版本`,
+  四类语义(`performance`/`style`/`outcome_variance`/`unavailable`)。
+  结构性测试 `tests/backend/test_metrics_registry.py`(11 条,含
+  `test_field_tilt_naming_red_line` 防止 `opp_half_pass_share` 被冒充
+  成官方 Field Tilt)。真实覆盖率重算脚本
+  `backend/scripts/recompute_metric_coverage.py`,产物
+  `docs/audits/prematch-metric-coverage-v1.json`。
+- **窗口模块** `backend/queries/window.py::venue_window()`:同主客场
+  分级 fallback(`venue_full`≥10 场 → `venue_partial`≥5 场 →
+  `mixed`(合并主客场,前端必须显式标注)→ `unavailable`),exact
+  pre-kickoff 边界、`MAX_LOOKBACK_DAYS=730` 硬上限、确定性排序。9 条
+  永久测试覆盖四档 fallback、最大回溯、稳定排序、future-match 排除、
+  联赛隔离。
+- **窗口长度重验证**(上一轮"10 场最佳"是同集选择,不可信,本轮改为按
+  时间切分的样本外回测):`backend/scripts/validate_window_length.py`,
+  `CUTOFF=2025-01-01`,验证目标只取 cutoff 之后且两组窗口都要求凑满历史
+  场次才可比。**口径限定**:这是"当前这一次时间切分回测支持 N=10"的
+  结论,不是独立最终验证,不代表 N=10 是所有场景下的最优窗口长度,换一批
+  切分时间点重跑结论可能变化。四大联赛在这一次回测里 N=10 都不弱于 N=5
+  (用历史均值预测下一场真实 xG 的相关系数):英超 0.2493→0.2982、
+  西甲 0.3984→0.4133、德甲 0.3747→0.4047、意甲 0.2752→0.3221。当前默认值
+  采用 N=10。产物 `docs/audits/window-length-validation-v1.json`,5 条
+  测试守护 `_corr()` 正确性与样本外切分。
+- **对手强度校正**(严格 PIT、排除当前比赛、升班马/小样本收缩
+  `shrunk_ratio=1+(raw-1)*n/(n+8)`,进攻/防守/比例三类分别验证不共用
+  同一乘法):`backend/scripts/validate_opponent_adjustment.py`。
+  进攻类(创造 xG,按对手近两年场均让出 xG 校正)四联赛全部提升
+  (英超 0.2982→0.3151、西甲 0.4133→0.4191、德甲 0.4047→0.4052、
+  意甲 0.3221→0.3298)**采用**;防守类(讓出 xG,按对手近两年场均创造 xG
+  校正,方向相反)四联赛全部提升(0.257→0.2632、0.1913→0.1922、
+  0.2019→0.2164、0.1545→0.1573)**采用**;比例类(控球率)校正**全部四
+  个联赛都变差**(0.4347→0.3939 等)——**明确不采用**,生产查询层
+  `backend/queries/opponent_adjust.py` 因此只提供
+  `adjust_attack_window()`/`adjust_defense_window()` 两个方向相反的
+  独立函数,**不提供任何比例类校正函数、没有通用 `adjusted_mean()`**。
+  产物 `docs/audits/opponent-adjustment-validation-v1.json`,
+  `test_validate_opponent_adjustment.py`(7 条)+
+  `test_opponent_adjust.py`(6 条,含 PIT 泄漏防护测试)。**注**:本轮
+  Phase 2 的四张核心图暂未接入这个已验证的校正模块(见 §43.5 未完成)。
+- **主客场分离百分位基准** `backend/queries/venue_baseline.py::
+  league_percentile()`:主队主场样本与客队客场样本各自建一套联赛分布
+  百分位(不共用同一原始联赛均值),联赛分布球队数(排除自身)不足
+  `MIN_LEAGUE_SAMPLE=5` 时诚实返回 `percentile=None`。真实数据冒烟
+  (Brighton 英超主场创造 xG,45 百分位,样本 22 队)。5 条测试。**本轮
+  Phase 2 的四张核心图暂未接入这个基准**(见 §43.5 未完成)。
+
+### 43.3 Phase 2:四张核心图(均已用真实第 1 轮比赛在浏览器验证)
+
+全部走 `venue_window()` 分级窗口(N=10 是 §43.2 那次时间切分回测支持的
+取值,非独立最终验证),挂载在比赛详情页"数据"
+tab →"风格"子 tab,免费/付费同一份数据(`/matches/{id}/preview` 只有
+联赛门禁,不分付费档)。
+
+1. **图1·进攻转化链**(`backend/queries/attack_chain.py` +
+   `frontend/components/matches/AttackChainSection.tsx`):进攻半场传球
+   占比→禁区触球→射门→射正→xG→xGOT,主队 teal / 客队蓝配对条,xG/xGOT
+   任一来源缺失时该值 `complete=False` 但仍展示均值(星号标注部分场次),
+   不补 0。4 条后端测试 + 4 条前端测试。
+2. **图2·控球与场面控制**(`possession_control.py` +
+   `PossessionControlSection.tsx`):控球率/传球成功率/进攻半场传球占比/
+   禁区触球四条对比,文案区分"控球和禁区触球是否同步"。命名红线测试
+   守住"进攻半场传球占比"不冒充官方 Field Tilt。3+4 条测试。
+3. **图3·防守承压与限制能力**(`defensive_pressure.py` +
+   `DefensivePressureSection.tsx`):被射门/被射正/xGA/禁区内被射门,
+   全部来自对手同场 join(`_avg_opponent_field`),**结构性测试确保代码
+   里不出现 tackle/interception/clearance/block 字样**——拦截解围是
+   防守动作或风格,不是这张图的结果指标。4+3 条测试。
+4. **图4·本场攻防对位**(`matchup.py` + `MatchupSection.tsx`,最高
+   优先级差异化模块):运动战/反击/定位球(含角球)/禁区内射门四类交叉
+   (己方进攻场均 vs 对方防守让出场均),"禁区内射门"改用已验证 100%
+   覆盖率的 `shots_inside_box` 字段而不是现算射门坐标几何(未验证坐标系
+   换算关系,不冒然引入)。**浏览器实测中发现并修复一个真实 bug**:
+   排序"关键对位"（最多高亮两个)最初把 xG 分数和射门次数分数混在一起
+   排序,"禁区内射门"没有 xG 拆分只能退回次数,次数量级(6~10)天然大于
+   其余三类的 xG 量级(0.1~0.7),导致这一类永远排第一、掩盖真正的威胁
+   信号(真实数据复现:巴萨 vs 毕尔巴鄂本该是"运动战"最值得关注,却被
+   "禁区内射门"抢占)。修法:排序只用同一量纲(xG),缺 xG 的行不参与
+   排序但数字仍展示。新增回归测试
+   `matchup-section.test.tsx::"禁区内射门没有xG...不应因量纲不同抢占
+   关键对位"`。3+5 条测试。
+
+真实浏览器验证(见 §43.4):数据齐全态(塞维利亚 vs 巴列卡诺、
+拜仁 vs 斯图加特)四张图全部正常渲染真实数字;升班马降级态
+(阿森纳 vs 考文垂、埃尔沃斯堡 vs 勒沃库森)客队/主队一侧四张图全部
+诚实显示「数据不足」/「暂无可比较的历史比赛」,不伪装成 0,"关键对位"
+在双方都缺数据时如实说"暂无法给出关键对位"而不是编一个。
+
+### 43.4 验证(命令、退出码、真实产物)
+
+```bash
+cd /Users/wanglujun/projects/all-win && .venv/bin/python -m pytest tests/backend --ignore=tests/backend/test_backup_restore.py -q
+# exit=0,1497 passed,5 skipped(既有条件跳过,如 test_e2e_seed.py 缺真实
+# data/allwin.db 时跳过),0 failed
+```
+```bash
+cd /Users/wanglujun/projects/all-win/frontend && npx tsc --noEmit && npx eslint . && npx vitest run && npm run build
+# tsc/eslint 干净;vitest 27 files / 160 tests passed;build 成功,
+# 18 个路由全部生成
+```
+```bash
+cd /Users/wanglujun/projects/all-win/frontend && CI=1 npx playwright test
+# 33 passed(既有 28 条 + 本轮新增 e2e/match-detail-charts.spec.ts 5 条:
+# 360/390/430 三档渲染且无横向溢出、进攻转化链缺失显示"数据不足"不伪装
+# 成 0、本场攻防对位文案不含统计黑话)
+```
+
+产物:`docs/audits/prematch-metric-coverage-v1.json`、
+`docs/audits/window-length-validation-v1.json`、
+`docs/audits/opponent-adjustment-validation-v1.json`——全部可用
+`.venv/bin/python -m backend.scripts.<name> --out <path>` 重跑复现。
+
+浏览器实测方法论说明:本轮验证过程中发现 `preview_start`(工具内建的
+按名启动)锚定的是本会话被分配的 git worktree 目录,而本次任务全程的
+真实文件改动落在主仓库工作区(`/Users/wanglujun/projects/all-win`,与
+方案文档 §0 记录的 `main @ 0433f84` 基线一致)——两者是不同的工作目录。
+发现方式:按名启动的前端在真实改动后仍然渲染不含新组件的旧版本 HTML。
+修法:改为在主仓库工作区手动起 `npm run dev`/`uvicorn`,再用
+`preview_start({url:...})` 把浏览器工具指向那个真实端口。此后所有截图
+与 `get_page_text` 验证都确认命中了真实改动后的代码。
+
+### 43.5 明确延后
+
+- **Phase 1.4(对手强度校正)/Phase 1.5(主客场百分位基准)已完成验证并
+  产出生产模块**(`opponent_adjust.py`/`venue_baseline.py`),但**尚未
+  接入 Phase 2 四张核心图**——四张图目前展示的是未校正的窗口均值 /
+  原始百分比,不是对手校正后的值,也不带"高于联赛 X% 的球队"这类百分位
+  措辞。这是本轮范围内最大的已知缺口,不是被否定,只是时间预算下先把
+  四张图的骨架和诚实降级做对,校正/百分位增强留待下一轮迭代。
+- **第二梯队三个模块未实现**:射门数量×质量散点图、门将双卡(扑救结果 vs
+  行为风格分区)、威胁来源拆解——方案 §三"第二梯队"明确标注为"按覆盖
+  决定是否同批",本轮聚焦四张核心图,未触碰这三个。
+- **Phase 3 的文案生成目前是每个组件各自的规则函数**
+  (`chainSummary`/`controlSummary`/`pressureSummary`/matchup 排序
+  逻辑),不是一个跨图表共享的规则引擎——四个函数各自独立可测,但如果
+  后续要新增第 5 张图,需要判断是复用现有模式还是抽公共层,本轮未预先
+  抽象。
+- **正文字号沿用既有设计系统的 11.5–13px 密集数据卡片惯例**,未按方案
+  §四字面的"正文 ≥14px"重新设计——查过现有 `AttackSourceCard`/
+  `GoalkeeperSection`/`KeyPlayersSection` 等已上线组件全部是这个字号
+  区间,本轮四张新图保持一致是为了避免"数据"tab 内部字号不统一,但这
+  确实是与方案文字要求的一个已知偏差,留给站长判断是否要连既有组件一起
+  调整。
+- **本地开发遗留状态说明(非缺陷)**:`frontend/.env.local`(已 gitignore,
+  不提交)里本地开发用的 `NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000`
+  处于取消注释状态,导致 `deploy/scripts/check_browser_bundle.sh` 在
+  本机直接跑会报"浏览器产物包含服务端回环地址"——这是该文件自己注释里
+  写明的已知行为(本地开发要么手动注释、要么用 shell 变量覆盖),真实
+  生产构建不会读取这个文件的取消注释状态,不是本轮改动引入的问题。
+
+## 44. §43 验收返工:8 项真实缺陷修复(2026-08-16)
+
+对 §43 的窄幅验收返工,不是新功能扩展。保留四张图、API、数据库和 Phase 0
+的正确性修复不动;只处理验收发现的 8 项真实缺陷。全程不联网、不写真实
+数据库、不改模型/赔率/权限/其他联赛/第二梯队图表、未 commit/push/stash/
+clean、保留 dirty worktree。每项都先写 RED 测试记录旧实现真实失败,确认
+失败后再实施修复。完整过程记录见
+`docs/audits/prematch-mobile-viz-v2-implementation-self-check.md`
+(该文件已从"独立复核报告"改名为"实施与自验报告"——这仍然是同一批人
+自验,不是第三方复核)。
+
+### 44.1 已接入产品的能力(本轮新增)
+
+- **`attack_chain.py` 转化效率**:`shots_per_100_box_touches` /
+  `shot_on_target_rate` / `xg_per_shot` / `xgot_per_sot`,同一场比赛内
+  两个字段配对相除(`_ratio_field` 新增 `scale` 参数复用),分母为 0 或
+  缺失的场次不计入配对,配对场次为 0 时 `value=None`。DTO 新增
+  `volume_keys`/`conversion_keys` 显式声明分组,`AttackChainSection.tsx`
+  分"进攻产量"/"转化效率"两组渲染。9 条新增后端测试(含同场配对不受
+  独立均值污染的专项测试)。
+- **`matchup.py::league_situation_baseline()`**:同联赛、同主客场景、
+  同 Situation 的己方产出/对手让出两个基准均值,只用 `venue_full`/
+  `venue_partial` 兼容档位球队(复用 `venue_baseline.py` 的
+  `_league_team_ids`/`_COMPATIBLE_TIERS`),样本队数 < `MIN_BASELINE_SAMPLE`
+  (5)时基准记 `None`。`team_matchup_profile()` 每个 situation 携带
+  `own_baseline_avg`/`conceded_baseline_avg`/`baseline_available`。
+  前端"关键对位"改为:进攻方产出、防守方让出都高于各自基准才合格,
+  排序只用相对基准的超出比例(量纲无关),不再用原始 xG/次数直接比大小。
+  7 条新增后端测试 + 前端专门的反例测试(运动战双方贴基准、定位球双方
+  显著超基准,新算法必须选定位球)。
+- **`comparability.ts::tiersComparable()`**:四张图(`AttackChainSection`/
+  `PossessionControlSection`/`DefensivePressureSection`/`MatchupSection`)
+  的比较结论函数在双方 `tier` 不兼容(如一方 `mixed`、一方 `venue_full`)
+  时统一输出"样本口径不同,暂不作高低判断",不生成胜负式摘要/最大差距/
+  关键对位——原始数字仍照常展示,只是不下比较结论。`venue_baseline.py::
+  _team_scenario_mean()` 同步收紧:只有 `venue_full`/`venue_partial` 档位
+  才计入联赛百分位分布,`mixed` 档位(自己同场景样本不足退回合并主客场)
+  不再污染分布(真实复现:一支只有 3 场主场历史、退回 mixed 的球队曾把
+  同分布里另一支球队的百分位从 40% 拉到 33%)。4 张图各一条 + venue_baseline
+  一条 + matchup 一条,共 6 条新增前端/后端专项测试。
+
+> **上面两条(`league_situation_baseline()` 和 `tiersComparable()`)已被
+> §45 进一步修正,`own_baseline_avg`/`conceded_baseline_avg`/
+> `baseline_available` 三个字段已被替换、`tiersComparable()` 的判定矩阵
+> 已收紧——本节保留原文只为如实记录,以 §45 为准。**
+
+### 44.2 仅有实验实现但未接入产品的能力
+
+- **`opponent_adjust.py`**(Phase 1.4,对手强度校正):方法论已通过
+  §43.2 的样本外验证,函数实现和永久测试都在,但**四张核心图没有一张
+  调用它**——图上展示的是未校正窗口均值。模块 docstring 已补充明确的
+  DEFERRED 状态说明。
+- **`venue_baseline.py::league_percentile()`**(Phase 1.5,球队级主客场
+  百分位):同样**没有任何图表调用**,前台不出现"高于联赛 X% 的球队"
+  这类措辞。但模块内部的 `_league_team_ids`/`_lookback_floor`/
+  `_COMPATIBLE_TIERS` 已经是 `matchup.py::league_situation_baseline()`
+  的真实依赖——**这部分底层基础设施本轮已经进入生产路径**,只是面向
+  球队整体的百分位函数本身还没有直接消费者。
+
+### 44.3 fallback 比较限制(本轮新增的硬规则)
+
+> **本节第三条已被 §45 推翻,不再成立——见 §45.2。** 原文保留在此处
+> 只为如实记录当时的实现状态,不得再引用"venue_full 与 venue_partial
+> 视为同一口径"这句话。
+
+- `unavailable`:不参与任何比较。
+- `mixed`:可以独立展示自己的原始数字,但不得跟 `venue_full`/
+  `venue_partial` 生成比较结论。
+- ~~`venue_full` 与 `venue_partial` 视为同一口径(纯同场景窗口,只是样本
+  量不同),可以互相比较;`mixed` 与 `mixed` 视为同一口径,可以互相比较。~~
+  **[已推翻,见 §45.2]** 独立复核第二轮指出这条判定过宽,已收紧为只有
+  精确同一个 tier(`venue_full`-`venue_full` 或 `venue_partial`-
+  `venue_partial`)才可比,`mixed` 不论跟谁比(含 `mixed`-`mixed`)都不可比。
+- 图4"关键对位"额外要求:进攻方窗口 tier 与防守方窗口 tier 也必须满足
+  上述兼容规则,否则这个方向整体不产生关键对位(即使双方数字看起来都
+  "超基准")。
+- `league_situation_baseline()`/`venue_baseline.py` 的联赛分布只用
+  `venue_full`/`venue_partial` 档位球队,`mixed` 档位球队不计入任何
+  联赛分布或基准;§45 进一步要求这两档参考队也不能混进同一个分布
+  (venue_full 目标只用 venue_full 参考队,venue_partial 目标只用
+  venue_partial 参考队)。
+
+### 44.4 剩余 P2 性能债(真实测量值)
+
+- `league_situation_baseline()` 遍历联赛全部球队(约 20~28 支),每支
+  球队各跑一遍 `venue_window()` + 4 个 situation 的 own/conceded shotmap
+  查询——这是本轮已知最贵的新增查询,首版接受这个成本,未做缓存或批量
+  优化。
+- `venue_baseline.py::league_percentile()`(尚未接入产品,见 §44.2)
+  若后续接入,同样是遍历全联赛球队的量级,需要一并评估。
+- **真实测量**(只读连接,`backend.queries.match_preview.build_match_preview`
+  对真实比赛 5868019 的完整调用,`sqlite3.Connection.set_trace_callback`
+  统计实际执行的 SELECT 语句数,本机连续跑 3 次取值):
+  - core 库 SELECT 数:**493**;odds 库 SELECT 数:**3**;
+  - 冷启动(进程刚连接、无预热)单次调用耗时:**≈648ms**;
+  - 热态(同连接第二次及以后调用,页缓存已预热)单次调用耗时:
+    **≈197~200ms**(三次独立测量:199.9ms / 198.0ms / 197.6ms);
+  - 响应体 JSON 序列化后大小:**≈20.3KB**。
+  - 独立复核第二轮报告中给出的对照测量(核心 SELECT=499、odds
+    SELECT=3、冷≈784ms、热≈201ms、响应≈18.7KB)与本次测量量级一致,
+    SELECT 数量/延迟的小幅差异来自本轮新增的转化率字段
+    (`shots_per_100_box_touches` 等 4 个 `_ratio_field` 查询)和机器/
+    负载差异,不是回归。
+  - 本轮不优化,继续登记为 P2;后续若要优化,`league_situation_baseline()`
+    是唯一值得先处理的热点(占绝大多数 SELECT 次数)。
+
+### 44.5 真实命令、退出码、最终实跑测试计数
+
+```bash
+cd /Users/wanglujun/projects/all-win && .venv/bin/python -m pytest tests/backend --ignore=tests/backend/test_backup_restore.py -q -rs
+# exit=0, 1504 passed, 1 skipped(real read-only snapshot not present in
+# this environment,tests/backend/test_pit_dataset.py:355,与本轮改动无关的
+# 既有环境依赖跳过), 0 failed
+```
+```bash
+cd /Users/wanglujun/projects/all-win/frontend && npx tsc --noEmit && npx eslint . && npx vitest run && npm run build
+# 全部干净;vitest 27 files / 169 tests passed;build 成功,18 个路由全部生成
+```
+```bash
+cd /Users/wanglujun/projects/all-win && .venv/bin/python -m backend.cli.export_openapi && cd frontend && npm run check:api-drift
+# api-types.ts 与 openapi.json 无漂移
+```
+```bash
+cd /Users/wanglujun/projects/all-win/frontend && CI=1 npx playwright test
+# 31 passed(28 既有全部通过,含首版新增的 5 条 + 本轮新增的 2 条近期战绩
+# 移除回归测试)
+```
+```bash
+cd /Users/wanglujun/projects/all-win && git diff --check
+# exit=0,无空白符冲突
+```
+
+真实数据验证(只读,未修改真实数据库):
+- 双方 `venue_full` 的正常比赛:塞维利亚 vs 巴列卡诺(5868019)、
+  拜仁 vs 斯图加特(5881143)——四张图数字与后端 `/preview` 响应一致。
+- 升班马/`unavailable` 比赛:阿森纳 vs 考文垂(5795363)、
+  埃尔沃斯堡 vs 勒沃库森(5881146)——缺失一侧全部诚实显示"数据不足"/
+  "暂无可比较的历史比赛",不伪装成 0,"关键对位"在数据不足时如实说
+  "暂无法给出关键对位"。
+- 人工构造的 mixed/venue_full 反例(本轮新增测试用例,非真实数据库):
+  `test_venue_baseline.py::TestMixedTierExcludedFromDistribution`(mixed
+  队污染分布的真实复现与修复验证)、`matchup-section.test.tsx`/
+  `attack-chain-section.test.tsx`/`possession-control-section.test.tsx`/
+  `defensive-pressure-section.test.tsx` 里的 tier 不兼容用例——全部是
+  合成 fixture,没有修改任何真实数据库文件。
+
+### 44.6 逐项验收结论
+
+| 项目 | 结论 |
+| --- | --- |
+| Real conversion semantics | **VALIDATED** |
+| Matchup normalization | ~~VALIDATED~~ **[被 §45 独立复核第二轮推翻,见 §45]** |
+| Fallback comparability | ~~VALIDATED~~ **[被 §45 独立复核第二轮推翻,见 §45]** |
+| Mobile readability | **VALIDATED** |
+| Recent-form removal | **VALIDATED** |
+| Documentation honesty | **CURRENT** |
+| Tests | 1504 passed / 0 failed / 1 skipped(既有环境依赖)/ 169 前端 vitest passed / 31 playwright passed / 0 warnings 影响结果 |
+
+状态:~~READY_FOR_INDEPENDENT_RE_REVIEW~~ **本表已被 §45 取代,不再是
+当前状态——独立复核第二轮在本表发布后发现 Matchup normalization 和
+Fallback comparability 仍有真实缺陷(量纲错配、tier 可比性判定过宽),
+两项结论当时被证明为不成立。当前状态见 §45.6。**
+
+---
+
+## 45. §44 验收返工二次收紧:2 个 P1 修复(2026-08-16,独立复核第二轮)
+
+对 §44 的第二次窄幅返工。独立复核确认 §44 的"进攻转化链四个转化率/
+近期表现移除/字号调整/opponent adjustment/其他图表/第二梯队功能"六项
+真实有效、不重做;只处理独立复核确认的两个 P1 和两个直接关联的
+文案/文档问题。全程不联网、不写真实数据库、不改模型/赔率/权限/其他
+联赛/第二梯队图表、未 commit/push/tag/stash/clean、保留 dirty
+worktree、所有真实数据库检查用 `mode=ro`、pytest 用
+`-p no:cacheprovider` 禁用缓存并配合 `PYTHONDONTWRITEBYTECODE=1` 隔离
+pycache。两项 P1 均先写 RED 永久测试记录旧实现真实失败,确认失败后再
+实施修复。
+
+### 45.1 P1 一:非 box 类型量纲错配(真实数据复现)
+
+**缺陷**:`MatchupSection.tsx` 用 `own_xg_pg ?? own_shots_pg` 猜"该用
+哪个字段判定关键对位"——某类型 xG 不完整(`own_xg_complete=false`)但
+仍有射门次数时,会把次数当 xG 用,去跟 xG 口径的联赛基准比,几乎恒定
+判定为"超出基准"。
+
+**真实复现**(只读,`mode=ro`,比赛 5868022 / 球队 10205,
+`team_matchup_profile(conn, 10205, 87, "2026-08-23T15:00:00Z", is_home=False)`):
+
+```json
+{
+  "key": "regular_play",
+  "own_shots_pg": 6.1,
+  "own_xg_pg": null,
+  "own_xg_complete": false,
+  "own_baseline_avg": 0.696
+}
+```
+
+修复前的 `own_xg_pg ?? own_shots_pg` 取到 6.1,6.1 > 0.696 恒成立,
+运动战被错误标记为关键对位。
+
+**修复**:后端 `team_matchup_profile()` 每个 situation 新增显式、不含糊
+的比较字段,替换旧的 `own_baseline_avg`/`conceded_baseline_avg`/
+`baseline_available`:
+
+```text
+comparison_metric: "xg" | "shots"      # 运动战/反击/定位球恒 "xg",box_shots 恒 "shots"
+own_comparison_value / conceded_comparison_value  # xg 类型要求 xg_complete 才非空
+own_baseline_value / conceded_baseline_value      # 同 tier、同 metric 口径的联赛基准
+comparison_complete: bool               # 上面四个值是否都非空
+```
+
+前端 `MatchupSection.tsx::buildRows()` 只读这些显式字段,不再对
+`own_xg_pg`/`own_shots_pg` 做任何 `??` 猜测。真实数据复现的场景重跑:
+`own_comparison_value=null`、`comparison_complete=false`,该方向不再
+"合格"。
+
+- 后端新增/重写 6 条测试(`tests/backend/test_matchup.py::
+  TestLeagueSituationBaseline`),含用真实比赛数字构造的
+  `test_real_data_shape_incomplete_xg_never_falls_back_to_shots`。
+- 前端新增 `matchup-section.test.tsx` 反例(比赛 5868022/球队 10205 的
+  真实数字形状),box_shots 恒用射门次数的专项测试。
+
+### 45.2 P1 二:tier 可比性判定过宽(收紧)
+
+**缺陷**:`comparability.ts::tiersComparable()` 把 `venue_full` 和
+`venue_partial` 视为"同一口径"(可互相比较),把 `mixed` 和 `mixed` 也
+视为"同一口径"——这正是 §44.3 原文记录的实现,独立复核第二轮明确否决。
+
+**修复**:只有精确同一个 tier 才可比:
+
+```text
+comparable(a, b) := (a === b) AND a ∈ {venue_full, venue_partial}
+```
+
+即:`venue_full`-`venue_full` 可比,`venue_partial`-`venue_partial` 可比;
+`venue_full`-`venue_partial`、`mixed`-任何(含 `mixed`-`mixed`)、任何-
+`unavailable` 一律不可比。`frontend/tests/comparability.test.ts`(6 条
+新增测试)覆盖全部组合。
+
+`matchup.py::league_situation_baseline()` 同步收紧为 tier-conditioned:
+新增必填 `tier` 参数,只用 `venue_window().tier` **精确等于**该参数的
+参考队,不再是"只要不是 mixed/unavailable 就算兼容"。目标队自己是
+`mixed`/`unavailable` 时 `team_matchup_profile()` 完全跳过基准计算
+(不调用 `league_situation_baseline()`),四个字段恒为 `None`/`False`。
+
+真实反例(测试内合成 fixture,未改真实数据库):5 支 `venue_full` 参考
+队(每脚 xG=0.5)+ 5 支 `venue_partial` 参考队(每脚 xG=9.0,极端值)。
+修复前两组会被混进同一个分布;修复后 `venue_full` 目标基准=0.5(样本 5),
+`venue_partial` 目标基准=9.0(样本 5),互不污染。
+
+### 45.3 可见文案修复
+
+- `MatchupSection.tsx` 的 JSX 文本此前含
+  `` 「关键对位」只在进攻方产出、防守方让出**同时**高于... `` ——
+  `**同时**` 是 markdown 加粗源码字面量,浏览器会直接显示两个星号。
+  已删除多余的 `**`,浏览器只显示"同时"两个正常中文字。新增测试
+  `页面不出现 markdown 星号源码` 断言 `document.body.textContent` 不含
+  `**`。
+- `MatchupSection.tsx` 此前 tier 不兼容时退回笼统的"两队近期同主客场
+  比赛可比数据不足,暂无法给出关键对位",不说明真正原因(其余三张图
+  早已用 `INCOMPARABLE_NOTE` 明确说"样本口径不同",只有 Matchup 漏了)。
+  已改为 tier 不兼容时显式输出 `INCOMPARABLE_NOTE`
+  ("样本口径不同,暂不作高低判断。"),原始数字(射门次数/xG)照常展示,
+  被挡住的只是"谁更高"这句话。
+
+### 45.4 性能——本轮不优化,记录见 §44.4
+
+真实测量值(SELECT 计数、冷/热延迟、响应体大小)已写入 §44.4,本轮
+补测确认与之前一致(见该节"真实测量"小节),不重复记录。
+
+### 45.5 真实命令、退出码、最终实跑测试计数
+
+```bash
+cd /Users/wanglujun/projects/all-win && PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest tests/backend --ignore=tests/backend/test_backup_restore.py -q -p no:cacheprovider
+# exit=0, 1506 passed, 1 skipped(real read-only snapshot not present in
+# this environment,tests/backend/test_pit_dataset.py:355,与本轮改动无关的
+# 既有环境依赖跳过,跟 §44 记录的同一处跳过), 0 failed, 1507 collected
+```
+```bash
+cd /Users/wanglujun/projects/all-win/frontend && npx tsc --noEmit && npx eslint . && npx vitest run && npm run build
+# 全部干净;vitest 28 files / 181 tests passed;build 成功,18 个路由全部生成
+```
+```bash
+cd /Users/wanglujun/projects/all-win && .venv/bin/python -m backend.cli.export_openapi && cd frontend && npm run check:api-drift
+# api-types.ts 与 openapi.json 无漂移
+```
+```bash
+cd /Users/wanglujun/projects/all-win/frontend && CI=1 npx playwright test
+# 30 passed / 1 failed——失败项 e2e/anonymous.spec.ts:244"赛前市场卡:
+# 数据倾向"与本轮改动无关(本轮未触碰 MarketCardsSection/市场基线代码);
+# error-context 显示 e2e 种子当前动态选中的 featured 比赛"两队近期同联赛
+# 历史场次不足",是种子对应的真实数据在采集当下不满足"有倾向"的判定
+# 条件,单独重跑该用例结果一致(非随机 flake,是数据状态问题),与本轮
+# matchup/comparability 改动无因果关系。
+```
+```bash
+cd /Users/wanglujun/projects/all-win && git diff --check
+# exit=0,无空白符冲突
+```
+
+真实数据验证(只读,未修改真实数据库):
+- 比赛 5868022(马竞 vs 比利亚雷亚尔,球队 10205=比利亚雷亚尔客场)——
+  通过真实运行的后端 `/api/v1/matches/5868022/preview` 直接验证:
+  `matchup_profiles.away.situations[regular_play]` 的
+  `own_comparison_value=null`、`comparison_complete=false`,与 §45.1
+  的修复预期完全一致。
+- 人工构造的 tier 反例(测试内合成 fixture,非真实数据库):
+  `test_matchup.py::TestLeagueSituationBaseline::
+  test_baseline_requires_exact_tier_match_not_just_compatible_tiers`、
+  `comparability.test.ts` 全 6 条、`matchup-section.test.tsx` 的
+  venue_full/venue_partial 不可比 + mixed/mixed 不可比两条新增用例。
+
+### 45.6 逐项验收结论(取代 §44.6)
+
+| 项目 | 结论 |
+| --- | --- |
+| Real conversion semantics | **VALIDATED**(§44 结论维持,本轮未改动) |
+| Matchup normalization | **VALIDATED**(本轮修复:量纲错配已改为显式
+  `comparison_metric`/`own_comparison_value` 等字段,真实比赛 5868022
+  复现并验证通过) |
+| Fallback comparability | **VALIDATED**(本轮修复:`tiersComparable()`
+  收紧为精确同 tier,`league_situation_baseline()` 改为 tier-conditioned,
+  6+6 条新增测试覆盖全部不可比组合) |
+| Mobile readability | **VALIDATED**(§44 结论维持,本轮未改动) |
+| Recent-form removal | **VALIDATED**(§44 结论维持,本轮未改动) |
+| Documentation honesty | **CURRENT**(本文件与
+  `docs/audits/prematch-mobile-viz-v2-implementation-self-check.md` 均已
+  同步本轮修复,§44.3/§44.6 的过时结论已标注推翻并指向本节) |
+| Tests | collected=1507 / passed=1506 / failed=0 / skipped=1(既有环境
+  依赖,`test_pit_dataset.py:355`)/ xfailed=0 / 前端 vitest 28 files
+  181 tests passed / playwright 30 passed 1 failed(与本轮无关,见上)/
+  warnings 仅 1 条 `StarletteDeprecationWarning`(既有,非本轮新增,不影响
+  结果) |
+
+状态:**READY_FOR_INDEPENDENT_RE_REVIEW**。以上结论均来自开发方自己的
+同一次会话实施与自验,不构成"已通过独立复核"的声明;不得自行输出
+`PREMATCH_MOBILE_DATA_VISUALIZATION_V2_ACCEPTED`。
+
+## 47. P1_DATA_FRESHNESS_AND_ODDS_TRUTH_FIX(2026-08-16)
+
+> 编号更正(2026-08-16):本节原误编号为「44」,与既有 §44「§43 验收返工」撞号
+> (本节撰写时未发现文件在此之前已有 §44/§45 两节)。现更正为 §47,内容不变。
+
+用户复现的 8 个真实问题(见下)中,**问题 1/3(赛程/赔率来源采集失败)是本
+沙箱环境的真实网络中断**,不是代码缺陷——`data/odds.db.source_health` 里
+最近的检查记录全部 `ok=0`,`error_summary` 是真实的
+`ConnectError: [SSL: UNEXPECTED_EOF_WHILE_READING]` 一类连接失败;
+`fixture_sync_ledger` 最后一次成功 `written` 运行是 2026-08-10T23:53:18Z。
+已逐行读过 `backend/ingest/ingest_future_fixtures.py`(`upsert_fixture_row`
+只写赛程拥有的列,`status` 会随每次成功抓取被正确 upsert 覆盖为来源最新值,
+不存在"抓到了但不更新已有比赛状态"的代码缺陷)和 worker 注册
+(`backend/worker/runner.py` 已注册 `sync_fixtures_window --due`),确认
+一旦网络恢复,现有代码路径能正确追上这些"开球已过但仍 NotStarted"的比赛,
+**这次改动没有、也不应该为此新增任何"强制刷新状态"的代码**——真正要做的
+是让问题 4/5/6 的诚实展示机制,在来源持续失败时如实呈现"过期"而不是伪装
+成功,这部分已完成(见下)。
+
+其余 6 个问题(coverage/freshness/source health 三个概念被混用、
+`sync_state=UNAVAILABLE` 被前端静默吞掉、赔率过期仍显示"完整走势"、
+`corners_ou` 无中文名渲染成空卡、admin 任务健康 404)全部是真实代码缺陷,
+已修复并验证。核心原则:**"曾经有过快照"(coverage)、"最近一次观测有多新"
+(freshness)、"采集管线现在是否成功"(source health)是三个独立概念**,
+不得互相冒充。
+
+### 44.1 后端:每场比赛自己的赔率新鲜度,不用全库 MAX 掩盖旧比赛
+
+`backend/queries/odds.py` 新增:
+- `odds_last_observed_by_match(conn_odds) -> dict[int, str]`:按
+  `fotmob_match_id` 分组的 `GROUP BY` 查询,只覆盖 NowGoal 完整时间线
+  (`review_status IN ('auto_ok','confirmed')`)。旧资产两点摘要
+  (legacy)是一次性历史导入,`ingested_at` 不代表持续观测的新鲜度,
+  **故意不在这个函数的返回值里伪造一个新鲜度信号**——legacy/none 档位
+  的比赛下游据此判成 `UNAVAILABLE`,不是编个数字。
+- `classify_odds_freshness(last_observed_at, *, now=None) -> "FRESH"|
+  "STALE"|"UNAVAILABLE"`:阈值 `ODDS_FRESHNESS_STALE_HOURS = 6`,数值
+  复制自 `backend/cli/ops_check.py::SOURCE_STALE_HOURS`(§36.4 当时明确
+  说过"没有编造任意阈值",这次延用同一个已有出处的数字,不是新拍脑袋的
+  6 小时;两处保持同值但不做反向 import,避免 `backend/queries` 依赖
+  `backend/cli`)。
+
+`MatchSummary`(`backend/api/schemas.py`)新增
+`odds_last_observed_at: Optional[str]` 和
+`odds_freshness_state: Optional[Literal["FRESH","STALE","UNAVAILABLE"]]`,
+`list_matches`/`match_detail` 两个路由各调用一次批量函数(不逐场查询),
+和既有的 `odds_coverage_tier`(纯存在性判断,语义不变)并列。
+
+`backend/queries/freshness.py` 同样新增 `FRESHNESS_STALE_HOURS = 6` +
+`classify_freshness()`,给 `/api/v1/status/freshness` 的
+`schedule_updated_at`/`odds_updated_at`/`reco_updated_at` 三个既有全局
+时间戳各配一个 `schedule_state`/`odds_state`/`reco_state`
+(同一套 FRESH/STALE/UNAVAILABLE 词汇,三个信号统一用同一个阈值,理由见
+代码注释:没有其它已记录的理由给三个信号分别定不同数字)。
+
+### 44.2 前端:UNAVAILABLE 可见但克制、赔率过期不再冒充"完整走势"
+
+- `MatchRow.tsx`:原来只判断 `sync_state === "STALE"`,`UNAVAILABLE`
+  (实测未来 7 天 upcoming 比赛 95/95 都是这个状态)完全不渲染任何提示。
+  现在两种状态都可见,`UNAVAILABLE` 复用既有 `syncStateLabel()` 文案,
+  样式刻意比 `STALE` 的红色警示更克制(次要文字色 + 更小字号,不做成
+  醒目徽标)。`odds_coverage_tier="full_timeline"` 且
+  `odds_freshness_state="STALE"` 时不再无条件显示裸的"赔率:完整走势",
+  改为带过期提示的措辞(含最后观测时间)。
+- `HomeMatchExperienceLive.tsx` 的 `FreshnessBlock`:原来只用
+  `formatBeijingHM()` 显示 `HH:mm`,无法判断是今天还是好几天前。现在
+  "今天"(按 `beijingDateKey()` 比较北京日历日)显示"今天 HH:mm",否则
+  显示完整日期,并给每一行加 FRESH/STALE/UNAVAILABLE 状态指示(复用
+  `syncStateLabel()`,不新建第二套翻译)。
+- `zh.ts` 的 `MARKET_ZH`/`MARKET_FIELDS` 补上 `corners_ou`(此前完全
+  没有这个 market key 的中文名和字段定义,真实存在的 66 行
+  `corners_ou` 赔率数据此前渲染成空卡片)。
+- `OddsTimeline.tsx` 的 `OddsNumbers()` 补上每家公司自己的
+  `observedAt`(`CompanyOddsRow.observedAt` 此前已经被
+  `summarizeCompanyOdds()` 正确填充,只是从未渲染出来)。
+
+### 44.3 新增只读 admin API:任务健康 + 来源健康
+
+`GET /api/v1/admin/jobs`(此前 404)和 `GET /api/v1/admin/source-health`
+(此前不存在),都是 `backend/api/routes_admin.py` 新增端点:`require_admin`
+门禁、`Cache-Control: private, no-store`、分页(`limit`/`offset`,clamp
+到 200)、`error_summary` 复用 `backend/cli/ops_check.py::_sanitize_summary`
+脱敏(不重新实现一套正则)。`/admin/jobs` 的响应形状
+(`{jobs: JobRunRow[]}`)是照着 `frontend/app/admin/page.tsx` 里早就写好、
+一直在等这个端点的 `JobsTab` 组件反推的,字段逐一核对过。
+`/admin/source-health` 目前没有前端消费方,只有后端契约 + 测试;对应的
+"来源健康"管理页 tab 未做(不是硬性要求,留作后续)。
+
+### 44.4 验证
+
+- 后端:`.venv/bin/python -m pytest tests/backend/ -q` 全量通过(退出码
+  0),新增 `tests/backend/test_odds_freshness.py`(8 条)、
+  `tests/backend/test_admin_jobs_and_source_health.py`(10 条),
+  `tests/backend/test_freshness.py`/`tests/backend/
+  test_matches_season_and_odds_filter.py` 追加用例(纯追加,既有断言
+  未被弱化;`test_freshness.py` 唯一一处全字典 exact-equality 断言
+  `test_all_null_when_tables_empty` 按新增字段显式扩展,不是放宽)。
+- 前端:`npx tsc --noEmit`、`npx vitest run`(30 files / 196 tests
+  通过)、`npm run build` 均通过;`npm run check:api-drift` 确认
+  `api-types.ts` 与 `openapi.json` 无漂移。`git diff --check` 无空白
+  错误。以上均为本次交付前重新独立跑过一遍确认,不是只转述 5 个并行
+  实施 agent 各自的自报告。
+- 未做:真实网络恢复后 `sync_fixtures_window --due` 是否真的追上
+  kickoff 已过的 `NotStarted` 比赛,本沙箱无法验证(网络中断是环境限制,
+  不是代码问题,见 §44 开头),标 `UNVERIFIED`,需要在有真实网络访问的
+  环境里另行确认。360/390/430px 浏览器实测未在本节单独执行(赔率/
+  新鲜度改动主要是文案与字段层面,视觉结构未变;视口验证并入下一轮
+  `MOBILE_MATCH_DISCOVERY_MVP_FIX` 一并做)。
+
+## 46. 「每日精选」推荐单自动结算:赔率合约 + 结算数学 + Worker 接入 + 全量核对(2026-08-16)
+
+> 本节合并记录跨会话的四个阶段(P2.A 赔率合约与 migration、P2.B 分市场结算
+> 判定、P2.C `reco_auto_settle` 编排层、P2.D 本轮 Worker 接入与全量核对)。
+> 前三阶段完成时未写入本文件,属于补记;本节据实际代码与本轮真实运行结果
+> 撰写,不是转述各阶段自报告。
+
+### 46.1 代码实现(P2.A–P2.C,补记,本轮核对过真实存在且未改动)
+
+- **赔率合约**(`backend/commands/reco_odds_contract.py` +
+  `backend/migrations/platform/0014_reco_odds_contract.sql`):`reco_legs`
+  新增 `canonical_decimal_odds`(结算乘法唯一真源)、`source_odds`/
+  `odds_format`/`provider`/`company_id`/`company_name`/`snapshot_ref`/
+  `observed_at`/`line`/`side`/`payload_hash`(赔率溯源,全部 nullable)、
+  `entry_type`(`provenance_bound`/`legacy_manual`);`reco_slips` 新增
+  `settle_source`(`auto`/`manual`,NULL=从未结算)。既有行 backfill:
+  `canonical_decimal_odds` 原样照抄旧 `odds` 列(不做任何 HK→decimal
+  重新解释),`entry_type` 落默认值 `legacy_manual`,已结算的
+  `result`/`return_units` 不因这次 migration 发生任何变化——本轮读过
+  migration SQL 全文确认这一点成立,不是转述。`MARKET_ODDS_FORMAT` 显式
+  声明 `1x2=decimal`,`ou`/`ah`/`corners_ou=hk`(港盘,十进制=港盘+1.0),
+  依据是 `docs/data-sources.md` §2.5 记录的真实 payload 样本核对,不是按
+  数值大小猜测格式。
+- **单腿结算判定纯函数**(`backend/commands/reco_settlement_math.py::
+  resolve_leg_result`):覆盖 `1x2`(胜平负)、`ou`/`corners_ou`(大小球/
+  角球大小,line 与总量比较)、`ah`(让球盘,line 与主队净胜球比较,符号
+  约定 `line>0`=主队让球,真实数据交叉验证结论见 `docs/data-sources.md`
+  §2.5 与本模块顶部注释,两条独立证据链一致、零反例)。整数盘/半球盘单次
+  判定;四分之一盘(`line` 以 .25/.75 结尾)拆成相邻两个半仓分别判定后
+  合并为 `half_win`/`half_loss`,合并规则与 `reco.py::
+  _leg_return_multiplier` 的乘数定义(`half_win` 乘数是 win/push 乘数
+  的算术平均,`half_loss` 乘数是 lose/push 乘数的算术平均)完全自洽。
+  任何数据不足、市场不支持、或两个半仓"完全反向"的异常网格,一律抛
+  `SettlementUnresolvable`,不猜测——纯函数、不查库、无副作用,
+  `tests/backend/test_reco_settlement_math.py`(39 项,collect-only 核对
+  过)锁定行为。
+- **结算写入**(`backend/commands/reco.py::settle_slip`):腿级 result
+  取值域从三值(`win`/`lose`/`push`)扩展为五值(新增 `half_win`/
+  `half_loss`);整单判定规则不变(任一腿 `lose` → 整单 `lose`,`return=0`;
+  全部腿 `push` → 整单 `push`),新增分支覆盖"其余情况"用连乘积相对
+  1.0 的大小判定整单标签(`>1.0` → `win`,`<1.0` → `half_loss`,`==1.0`
+  → `push`)——**整单级别的 `result` 实际只会产出 `win`/`lose`/`push`/
+  `half_loss` 四种,`half_win` 只出现在腿级**(一张单净赚但含 `half_win`
+  腿时,整单仍按连乘积判 `win`);`reco_slips.result` 的 CHECK 约束同时
+  允许 `half_win`,是防御性覆盖完整取值域,不是当前业务流程会走到的
+  路径,本节 §46.2 的聚合/展示口径同样按此完整域防御式处理。
+- **自动结算编排**(`backend/commands/reco_auto_settle.py::
+  run_auto_settle`):只处理 `entry_type='provenance_bound'` 且
+  `match_id` 非空的腿;比赛"正式完赛"判据与 `postmatch_settle` 一致
+  (`dim_match.status='Finish'` 且 `home_score`/`away_score` 均非
+  NULL);一张单的全部腿必须一起判定——`settle_source='manual'` 的单永远
+  不覆盖,混有 `legacy_manual` 腿的单整单跳过留给人工,任一
+  `provenance_bound` 腿暂不可判定则整单本轮都不结算;判定与写入包在同一个
+  `tx(conn_platform)` 事务里原子生效;候选查询天然只挑
+  `reco_legs.result IS NULL` 的腿,重复触发不重复结算。
+  `tests/backend/test_reco_auto_settle.py`(7 项:全量正向路径、未完赛/
+  已取消比赛跳过、人工已结算不覆盖含真实分叉验证、`settle_source='manual'`
+  防御分支直接单测、混合单整单跳过、幂等重跑、三腿单因一腿角球统计缺失
+  整单不结算)覆盖上述全部不变量,本轮重新跑过全部通过。
+
+### 46.2 本轮(P2.D)新增:Worker 接入
+
+`backend/worker/runner.py` 新增独立 job:
+
+- `_job_reco_auto_settle()`:开 `connect_ro("core")` + `connect_rw("platform")`
+  两个连接,调用 `run_auto_settle(conn_platform, conn_core, actor="system")`,
+  返回 `{"output_count": settled_slips, "meta": <run_auto_settle 完整返回值,
+  含 skipped_legs/skip_reasons/errors>}`。**不修改、不复用**
+  `_job_postmatch_settle()`(模型预测评估)本身或它调用的
+  `evaluate()`——两者是完全独立的两个函数、两个 job_name,不共享连接
+  生命周期。
+- `REGISTRY["reco_auto_settle"]`:`kind="fn"`,`max_attempts=1`,
+  `timeout_seconds=300`,有 `description`。
+- `DEFAULT_CHAIN` 位置:紧跟在 `postmatch_settle` 之后、`metrics_rebuild`
+  之前——理由是推荐单自动结算依赖"比赛已经正式完赛"这个前提,与
+  `postmatch_settle` 依赖的前提相同(都需要比赛数据已经落库),不需要等
+  `metrics_rebuild`(那是模型正式预测 manifest,与推荐单无关)。
+  `tests/backend/test_job_order.py::TestChainOrder::
+  test_postmatch_settle_before_reco_auto_settle` 把这条顺序断言变成可执行
+  测试(而不是只写在注释里),同时断言两个 job_name 指向不同的注册函数。
+
+未改动:`_job_postmatch_settle` 函数体、它调用的
+`backend.cli.evaluate_predictions.evaluate`、`postmatch_settle` 在
+`REGISTRY`/`DEFAULT_CHAIN` 里的既有位置——本轮 diff 里这三处均无改动
+(可用 `git diff backend/worker/runner.py` 核对,`_job_postmatch_settle`
+函数体与其在 `REGISTRY`/`DEFAULT_CHAIN` 中的条目字面不变)。
+
+### 46.3 本轮(P2.D)发现并修复的 P0 数据完整性缺陷
+
+全量核对 `backend/queries/reco.py`、`backend/api/schemas.py`、
+`frontend/app/reco/page.tsx`、`frontend/app/page.tsx`、
+`frontend/app/admin/page.tsx`、`frontend/app/track-record/page.tsx`
+(方法:`grep -rn "'win'\|\"win\"\|reco_legs\|reco_slips"` 定位全部消费
+`result` 字段的位置,逐处核对,而不是只看猜测的几个文件),发现两处
+真实存在的三值(`win`/`lose`/`push`)硬编码假设,已修复:
+
+1. **`backend/queries/reco.py::track_record_summary`/`public_overview`
+   聚合口径漏计新枚举值(P0)**——修复前,两个函数的 SQL 只对
+   `result='win'/'lose'/'push'` 三个值做 `SUM(CASE …)`,`settled_count`
+   本身正确统计全部已结算单(不区分 result 值),但细分到 win/lose/push
+   三项时,`result='half_loss'` 的已结算单**既不计入 win,也不计入
+   lose,也不计入 push,凭空从任何一个分类桶里消失**——`settled_count`
+   与 `win_count+lose_count+push_count` 之和不再相等,且命中率分母
+   (`wins+loses`)也漏掉了这条已判定的记录。这与 CLAUDE.md 严禁的
+   "选择性丢失公开战绩记录"是同一类后果,尽管不是故意删除,而是新枚举值
+   没被聚合口径覆盖到。**RED 测试**:
+   `tests/backend/test_reco.py::TestSummaryAggregation::
+   test_half_loss_settled_slip_visible_in_breakdown_not_swallowed`(登录面
+   `/api/v1/reco/track-record`)与
+   `TestPublicOverview::test_half_loss_visible_in_anonymous_aggregate`
+   (匿名面 `/api/v1/reco/overview`)——修复前跑,均因响应体缺少
+   `half_win_count`/`half_loss_count` 字段 `KeyError` 失败;修复后两条
+   全部通过。**修复**:两个查询函数改用共享的 `_RESULT_BREAKDOWN_SQL` +
+   `_summarize_result_row()`(新函数,避免半赢/半输在两处各写一套、其中
+   一处漏写),新增 `half_win_count`/`half_loss_count` 独立计数,命中率
+   公式扩展为 `(win + 0.5*half_win) / (win+lose+half_win+half_loss)`
+   (push 仍不计分母;`half_win` 按半个命中计权,`half_loss` 计入分母但
+   不贡献命中权重——不把这类新结果误算成整赢或整输,也不让它们消失)。
+   `RecoTrackRecordSummaryDTO`/`RecoOverviewResponse`
+   (`backend/api/schemas.py`)同步新增两个字段。
+2. **`frontend/app/reco/page.tsx` 展示层三值硬编码(P0,面向登录/付费
+   用户可见)**——修复前 `RESULT_ZH` 只有 `win`/`lose`/`push` 三个键,
+   腿级结果标签 `RESULT_ZH[leg.result]` 遇到 `half_win`/`half_loss` 时
+   查不到文案,`{undefined}` 在 JSX 里渲染成空白,用户看到的是"这条腿
+   没有结果文字"而不是报错,容易被误读成"数据缺失"。更严重的是
+   `slipTone()`:`SlipTone` 类型只有 `win`/`lose`/`push`/`void`/
+   `pending` 五态,函数遇到 `slip.result==='half_loss'`(整单级别真实可
+   产出的值,见 §46.1)时落进兜底分支直接返回 `"push"`——**把一笔净亏
+   的结算(half_loss)误判成语义完全不同的"走水"(不赚不亏)色调和文案**,
+   属于财务展示正确性缺陷。**RED 测试**:
+   `frontend/tests/reco-slip-half-result.test.tsx`(4 项,修复前
+   `slipTone(...)` 返回 `"push"` 而非 `"half_loss"`、页面找不到"半输"
+   文案反而找到"走水"、腿级"半赢"标签渲染成空白——全部按预期失败;
+   修复后全部通过)。**修复**:`RESULT_ZH` 补 `half_win: "半赢"`/
+   `half_loss: "半输"`;`SlipTone` 扩展为七态,`slipTone()` 显式分支
+   处理 `half_win`/`half_loss`(不再落进兜底);`TONE_TEXT` 补对应文案;
+   `SummaryRow`/首页 `RecoSummarySection` 的汇总条追加半赢/半输计数
+   (只在实际 >0 时显示,避免恒为 0 的分类挤满绝大多数没有四分之一盘口
+   记录的场次);CSS(`reco.module.css`)给两个新 tone 补色块与腿标签
+   颜色(`color-mix` 混入 `--draw` 调淡整赢/整输色,视觉上区分"部分"与
+   "整仓",不与真正中性的 `push` 混同)。用词遵守 CLAUDE.md §1(不用
+   "红单""连红"等收益承诺式表述)。
+
+**已核对、确认不需要改动的位置**:
+
+- `frontend/app/admin/page.tsx`:`RECO_RESULT_ZH` 已经包含
+  `half_win: "半赢"`/`half_loss: "半输"`(腿级与整单级共用同一张表),
+  结算下拉框已有 `<option value="half_win">`/`<option value="half_loss">`
+  两个选项——admin 录入/结算面在这两阶段之前的会话里已经正确处理,本轮
+  未发现问题,未改动。
+- `frontend/app/track-record/page.tsx`:展示的是**模型预测**登记簿
+  (`prediction_snapshots`/`predicted_outcome`/`hit`),与「每日精选」
+  `reco_slips`/`reco_legs` 是完全独立的两张表、两套 DTO——grep 确认该
+  文件不含任何 `reco_slips`/`reco_legs`/`RecoSlipDTO` 引用,不在本次
+  half_win/half_loss 扩展的影响范围内,未改动。
+- `backend/queries/reco.py::daily_slips`/`track_record_slips`/
+  `admin_slips`:这几个函数只做 `SELECT *` 把整行(含 `result` 原始值)
+  透传给 `_slip_dto`/`_legs_by_slip`,不做任何按 `result` 值筛选或分类的
+  聚合,新枚举值原样透传、不会被过滤掉——已核对,不需要改动。
+
+### 46.4 验证(本轮真实命令与结果)
+
+后端(先 RED 后 GREEN,两次真实运行):
+
+```bash
+cd /Users/wanglujun/projects/all-win
+.venv/bin/python -m pytest tests/backend/test_reco.py -q -k half_loss
+# 改动前(RED):2 passed, 2 FAILED(KeyError: 'half_win_count' / 'half_loss_count')
+.venv/bin/python -m pytest tests/backend/test_job_order.py tests/backend/test_worker_reco_auto_settle.py -q
+# 改动前(RED):4 FAILED(ValueError 'reco_auto_settle' is not in list / KeyError 未注册的任务)
+# 改动后(GREEN,同一批命令重跑):全部通过,见下方全量结果
+```
+
+前端(先 RED 后 GREEN):
+
+```bash
+cd /Users/wanglujun/projects/all-win/frontend
+npx vitest run tests/reco-slip-half-result.test.tsx
+# 改动前(RED):4 failed(tone 误判 push、找不到"半输"、腿级"半赢"渲染空白)
+# 改动后(GREEN):4 passed
+```
+
+全量:
+
+```bash
+cd /Users/wanglujun/projects/all-win
+.venv/bin/python -m pytest tests/backend/ --ignore=tests/backend/test_e2e_seed.py -v
+# ============ 1626 passed, 1 skipped, 1 warning in 181.29s (0:03:01) ============
+# 跳过项与本轮改动无关(既有环境依赖):
+#   tests/backend/test_pit_dataset.py:355: real read-only snapshot not present
+```
+
+- `tests/backend/test_e2e_seed.py` 本轮**未计入**全量结果并单独说明:该文件
+  在本次会话开始前已是工作区未提交修改(`git status --short` 显示
+  `M tests/backend/test_e2e_seed.py`/`M tests/e2e/seed_e2e.py`,本轮未触碰、
+  未编辑这两个文件)。单独运行时,其
+  `TestE2eSeedProvenance::test_seed_succeeds_and_is_repeatable`(断言两次跑
+  `python -m tests.e2e.seed_e2e` 前后真实 `data/allwin.db`/`platform.db`/
+  `odds.db` 的 size/mtime 完全不变)出现真实失败:`platform.db`/`odds.db`
+  的 mtime 在两次快照之间发生变化。核查确认这**不是** `seed_e2e.py` 自身
+  写了真实库(该脚本第 273 行显式把 `ALLWIN_DATA_DIR` 切到 `data/e2e`,只写
+  隔离沙盒目录,已读过全文确认);本机在测试期间同时有一个独立启动的
+  `uvicorn backend.api.app:app --host 127.0.0.1 --port 8000` 开发服务器
+  (`ps aux` 确认存在,启动时间早于本次会话)指向同一份真实 `data/*.db`,
+  空闲态连续 5 秒快照 mtime 不变(已验证),但该 e2e 测试运行期间真实
+  `platform.db`/`odds.db` 出现变化,与本轮改动的代码路径(worker 任务注册、
+  `queries/reco.py` 查询、前端展示)均无引用关系——判定为**与本次改动无关
+  的环境级并发写入**(很可能是同机并行运行的开发服务器或其它会话的活动),
+  不在本次改动的回归范围内,如实标注而非隐藏或删除这条失败。
+
+```bash
+cd /Users/wanglujun/projects/all-win/frontend
+npx tsc --noEmit && npx vitest run
+```
+
+- `npx tsc --noEmit`:无输出,通过。
+- `npx vitest run`:31 files / 200 tests 全部通过(含新增
+  `reco-slip-half-result.test.tsx` 4 项)。
+- `npm run build`(`next build`):编译成功,TypeScript 检查通过,18 个
+  路由静态/动态生成均无报错。
+
+Pydantic response model 改动(`RecoTrackRecordSummaryDTO`/
+`RecoOverviewResponse` 新增字段)后依序执行:
+
+```bash
+cd /Users/wanglujun/projects/all-win && .venv/bin/python -m backend.cli.export_openapi
+# openapi schema → frontend/lib/openapi.json (71 paths)
+cd /Users/wanglujun/projects/all-win/frontend && npm run gen:api
+# lib/openapi.json → lib/api-types.ts,成功
+npm run check:api-drift
+# api-types.ts 与 openapi.json 无漂移
+```
+
+### 46.5 未验证 / 生产环境事项(如实标注,不笼统声称"已完成")
+
+- **真实 systemd 环境下的 `allwin-worker.timer` 实际调度**:本节只验证了
+  `backend.worker.runner.run_job("reco_auto_settle")` 在测试用临时数据库
+  (`data_dir` fixture)上正确执行、正确写 `job_runs`;真实生产
+  `allwin-worker.timer` 是否真的按 `DEFAULT_CHAIN` 新顺序把
+  `reco_auto_settle` 排在 `postmatch_settle` 之后触发,以及真实 `data/
+  platform.db`/`data/allwin.db` 上的端到端结算行为,**`UNVERIFIED`**——
+  本任务的硬性规则禁止对真实 `data/*.db` 做任何探针或迁移,所有验证都
+  走临时数据库,这是刻意的,不是遗漏。
+- **AH 让球盘符号约定的"自动结算"整体正确性**:符号约定本身(见
+  §46.1)已用真实只读数据交叉验证,但截至本节撰写时,生产 `reco_slips`
+  里没有任何真实的 `ah` 市场 `provenance_bound` 腿被 `reco_auto_settle`
+  真实结算过(无真实赛后样本可查),"公式在真实历史数据上算出的结果与
+  人工独立核对是否一致"这一步仍是 `UNVERIFIED`,需要等真实 `ah` 腿产生
+  并完赛后另行核对。
+- **半赢/半输在真实生产战绩页的视觉呈现**:本节的前端修复用合成
+  fixture(`baseSlip()`)驱动单元测试验证,未在真实浏览器里对着真实
+  half_win/half_loss 生产数据做视觉走查(生产暂无此类真实记录可查)。
+
+## 48. MOBILE_MATCH_DISCOVERY_MVP_FIX(2026-08-16)
+
+手机端比赛发现体验的一批真实缺陷修复,不改概率模型、不重做品牌视觉。
+
+### 48.1 首页重点位确定性选场
+
+`HomeMatchExperienceLive.tsx`/`app/page.tsx` 原来只请求 `?window=7d&limit=8`,
+`selectHomepageMatches`/`selectHeroPair`(`lib/homepage.ts`)只能在这 8 场里选,
+未来 7 天窗口里真正满足"免费 + 已发布概率"的比赛如果开球时间排在第 9 场以后
+就永远选不中,首页会显示"暂无重点比赛"而不是真实缺数据。
+
+修法:`backend/queries/matches.py::list_matches` 新增
+`top_priority_match_ids`(比既有 `priority_match_ids` 更高一档的排序优先级),
+`GET /api/v1/matches` 新增可选查询参数 `boost=free_predicted`——只在这个参数被
+显式传入时才生效,不改变任何既有调用方(全量比赛列表分页、`content=analysis|
+odds|shots` 筛选等)的 SQL 与排序。只有首页的两个 hero 请求(SSR
+`getHomePageData` + 客户端 `fetchHomeData`)传了这个参数。计算范围是"已经有
+真实 `win_probability` 的比赛集合"(本来就无条件计算,不是新增全表扫描),不
+下发完整 7 天 ~95 场 `MatchSummary` 到浏览器。真的没有免费已发布概率的比赛时
+诚实退化成空态,不编造。
+
+### 48.2 比赛列表页移动端信息架构
+
+`MatchListLive.tsx` 原来把状态/时间/内容/联赛/赛季/日期/球队搜索 7 个筛选控件
+顺序摊平渲染在比赛行之前,390px 视口下第一场比赛约在 y=492px(与用户报告的
+y≈495px 吻合,已用 Playwright 在真实生产构建上量出)。
+
+修法:时间(今天/明天/7天等)+ 内容(全部/已有分析/已有赔率)+ 联赛三组留在
+主筛选行;状态 + 赛季 + 日期 + 球队搜索收进原生 `<details>更多筛选</details>`
+(与 `MatchDetailBody.tsx`/`MarketCard.tsx` 同款折叠模式,不用 JS state,无 JS
+环境依旧可用),用户已带 `status=finished`/`season`/`date`/`q` 进入时自动展开
+不藏起已选筛选。比赛行按北京日历日(`zh.ts::beijingDateKey`)分组插入日期
+小标题,组内顺序与 API 返回顺序完全一致,不重排、不因分页边界合并跨页的同一天。
+修复后第一场比赛 y≈408px。
+
+### 48.3 字号/触控区 + 文案矛盾
+
+`MatchRow.module.css`:UNAVAILABLE 提示 11px→12px(达到 §11.2 最小可读下限,
+不靠降低对比度规避);主客队名与开球时间(核心信息)13/13.5px→14px(§11.2
+正文下限)。`matches.module.css`:筛选 chip/"更多筛选"折叠触发器/筛选提交按钮/
+"清除日期"链接原来 18.75–31.5px 高,全部用 `min-height`/`padding` 补到
+≥44×44px(不改字号,不靠视觉放大规避)。
+
+`login/page.tsx`、`WechatFollowCard.tsx` 的"只发数据,不发荐单"与
+`reco/page.tsx` 真实存在的付费"每日人工推荐"板块自相矛盾,统一改为"不代购、
+不承诺收益;推荐与修正记录公开"(措辞对齐 `SiteFooter.tsx` 既有合规文案)。
+
+### 48.4 ECharts 隐藏 Tab 0 宽高警告
+
+`MatchTabs.tsx`/`MatchDataTabs.tsx` 对非激活面板用 `hidden` 属性而非条件卸载
+(有意为之,为 SEO 保留可爬取 DOM,本次未改动这个设计),`EChart.tsx` 原来在
+挂载 `useEffect` 里同步调用 `echarts.init(ref.current)`,非默认 tab 的图表首次
+挂载时容器是 0×0,必现 ECharts 自身的宽高警告。
+
+修法:把 `echarts.init()` 推迟到 `ResizeObserver` 第一次报告非零尺寸时才调用
+(容器一开始就可见时这个回调几乎同一 tick 触发,无可感知延迟);推迟期间用
+`optionRef`/`modeRef` 记住最新 `option`/`mode`,真正 init 时用当前值而不是挂载
+时的旧值;从未真正 init 过就被卸载时 `dispose()` 是安全的 no-op。集中改在
+`EChart.tsx` 一处,防护全部现有和未来的图表消费方,未改 `MatchTabs.tsx` 的 tab
+结构本身。
+
+### 48.5 验证
+
+后端(HeroSelection 部分):`tests/backend/test_matches_season_and_odds_filter.py`
+`TestHomepageHeroBoostFreePredicted` 等新增用例 RED→GREEN,全量
+`.venv/bin/python -m pytest tests/backend/ -q` 通过。前端:`npx vitest run`
+34 files / 221 tests 通过(交付时曾观察到一次 218 的汇总计数偏差,复核为
+verbose 逐条列表与标准 reporter 汇总行之间的报告口径差异——两次运行的逐条
+测试名单排序后完全一致、零条标记失败,retries 后稳定复现,判定为 reporter
+计数展示问题,非真实回归);`npx tsc --noEmit`、`npm run build` 通过。真实浏览器
+(Playwright,生产构建 + 真实 FastAPI + `seed_e2e.py` 种子库):
+`matches-mobile-first-screen.spec.ts`、`matches-mobile-touch-targets.spec.ts`
+共 10/10 通过。本节交付前用独立浏览器会话(新开 tab,排除同一 tab 内跨页面
+残留的 console 记录干扰)分别验证首页与比赛详情页控制台均无 ECharts 宽高警告,
+`boost=free_predicted` 参数确认真实出现在首页发出的请求里。
+
+### 48.6 未验证
+
+`e2e/matches-list-entitlement.spec.ts` 存在与本次改动无关的既有间歇性 flake
+(与文件组合无关,独立跑仍偶发失败,代码注释里已记录是 Playwright 速度与真实
+用户速度不一致导致的 Next.js 路由缓存时序问题),本次未修复,不在这次任务范围。
+
+## 49. ADMIN_DAILY_PICKS_WORKFLOW_V1(2026-08-16)
+
+依赖 §46「每日精选」自动结算完成后实施。admin 后台「每日精选」从"只能新建 +
+结算 + 作废"补齐成完整手机可用工作流,不新建第二套写 API。
+
+### 49.1 后端能力(均只读或在既有写路径上收紧校验,无新迁移)
+
+- `GET /admin/reco/match-candidates` 新增 `window` 参数,默认 `"7d"`,取值域与
+  公开 `GET /api/v1/matches` 的 `window` 完全一致
+  (`today|tomorrow|3d|7d|all`),直接透传给既有
+  `backend.queries.matches.list_matches`,不发明新的窗口表示法。
+- `RecoOddsOptionDTO` 新增 `freshness: "FRESH"|"STALE"|"UNAVAILABLE"`,复用
+  §47 已建的 `classify_odds_freshness`/`ODDS_FRESHNESS_STALE_HOURS=6`,不新增
+  第二套阈值或布尔口径。
+- **发布时强制校验溯源**(硬性要求 #8):新增
+  `backend.commands.reco.require_provenance_bound_legs`,只在
+  admin HTTP 发布路由(`routes_reco.py::admin_publish_slip`)调用,且只在
+  slip 当前仍是 `draft` 时生效——不溯及已发布/已结算的老单。任一腿
+  `entry_type='legacy_manual'` 时返回 400,错误信息逐条列出腿序号 + 比赛描述 +
+  选项(而非笼统"发布失败")。**刻意没有把这条校验放进
+  `commands.reco.publish_slip()` 本体**:`tests/backend/test_reco_auto_settle.py`
+  的既有测试需要绕开 HTTP 直接用 `publish_slip()` 构造"已发布但含
+  legacy_manual 腿"的状态来验证自动结算任务正确跳过混合单,放进命令层会让
+  这条既有测试失去意义。
+- `GET /admin/reco/slips` 新增 `status`/`date_from`/`date_to` 筛选(与既有
+  `limit`/`offset` 配合),`total` 正确反映筛选后的计数。响应体每张单新增
+  `settle_source`(`auto`/`manual`/`null`,读既有 `reco_slips.settle_source`
+  列,无需迁移);每条已结算腿在页面渲染时现算(不新增存储)真实比分或角球数
+  (`corners_ou` 腿走 `fact_team_match_stats` 的既有查询方式),缺失时不展示
+  而不是显示空/0。
+- **"待确认"标记**(硬性要求 #10,不得自动判输):每条腿新增只读
+  `needs_review`(bool)+ `needs_review_reason`。语义:`published` 状态 +
+  比赛已正式完赛(`status='Finish'` 且比分非空)+ `result` 仍为 NULL 才为
+  真;`legacy_manual` 腿给出"缺乏溯源,自动结算任务会跳过"的原因,
+  `provenance_bound` 腿重跑既有的 `resolve_leg_result` 纯函数,能判定就给通用
+  提示("等待下一轮自动结算或人工结算",不透出算出的具体胜负),判不了就把
+  `SettlementUnresolvable` 的原文给出。**没有任何写路径**依据这个计算写
+  `result`,纯读时展示。
+- 会员预览:新增 `GET /admin/reco/slips/{slip_id}/preview`,复用会员端既有的
+  `_slip_dto`/`_legs_by_slip` 投影函数(不是重新写一套字段裁剪逻辑),draft
+  状态也能预览。
+- 审计记录:**复用**既有 `GET /admin/audit-logs`(未新建端点),加
+  `target_type`/`target_id` 可选筛选,读的是 `create_slip`/`edit_slip`/
+  `publish_slip`/`settle_slip`/`void_slip` 本来就在写的 `audit_logs` 行。
+
+### 49.2 前端(RecoTab,`frontend/app/admin/page.tsx`)
+
+- 筛选栏(状态 + 日期范围)+ 分页("第 X/Y 页,共 N 条")。
+- **编辑 UI 复用既有 `LegRowEditor` + 既有 `PATCH`**(硬性要求,未新建端点)。
+  关键设计:仅改标题/思路/日期时**不带 `legs` 字段**(PATCH 语义:省略即不动),
+  因为 admin 列表响应不下发原始溯源字段(`source_odds`/`snapshot_ref` 等,
+  只有 `entry_type`)——如果每次编辑都无条件重传 `legs`,没被重新从真实盘口
+  选过的腿会被静默降级成 `legacy_manual`,这正是宪法严禁的"悄悄改变已发布
+  内容真实性"。默认显示"腿列表:N 条(未修改)",admin 显式点"编辑腿列表"才
+  进入可编辑模式并给出提示。
+- 发布二次确认(`window.confirm()`,与本页面其它高风险操作同一套既有交互
+  习惯);后端返回的逐条溯源错误信息原样内联展示,不折叠成笼统提示。
+- 会员预览面板明确区分"会员会看到的部分"与"仅后台可见"(entry_type 等技术
+  字段翻译成中文展示,不暴露原始枚举拼写)。
+- 盘口选项下拉补 `odds_format`(港盘/十进制)与非 FRESH 时的
+  `syncStateLabel()` 提示(复用既有函数,不新写第二套翻译)。
+- 结算信息:仅 `settled` 状态且字段非空时展示结算来源(自动/人工)、结算
+  时间、依据的真实比分/角球。
+- "待确认"标记用克制的 teal 徽标(与 `--win`/`--loss` 视觉区分,绝不能读成
+  "未中")。
+
+### 49.3 验证
+
+后端:`tests/backend/ -k reco` 新增 14 条(RED→GREEN),全量
+`.venv/bin/python -m pytest tests/backend/ -q` 通过。前端:
+`frontend/tests/admin-reco-tab.test.tsx` 9 条通过,全量 `npx vitest run`
+35 files/230 tests 通过,`npx tsc --noEmit`、`npm run build`、
+`check:api-drift` 均通过。真实浏览器(Playwright,生产构建 + 真实 FastAPI +
+`seed_e2e.py` 隔离库):`frontend/e2e/admin-reco-mobile.spec.ts` 在
+360/390/430px 三个视口各 1 条,断言筛选/搜索/新建/编辑/预览/发布确认全程
+`document.documentElement.scrollWidth` 不超过视口宽度,3/3 通过(本节交付前
+本人独立重跑一遍确认,而非只转述实施 agent 的自报告)。
+
+### 49.4 未验证
+
+E2E 环境的 `data/e2e` 隔离库里 `odds.db` 按 `seed_e2e.py` 的既有设计是空的
+(没有 NowGoal 快照),因此"admin 从真实盘口选项里选一条真实报价并成功发布"
+这条黄金路径**没有**在真实浏览器里跑通过——E2E 只跑通了手动录入(必然落
+`legacy_manual`,应该被发布校验拒绝,也确实被拒绝)这条路径。真实盘口选项的
+挑选、格式/新鲜度展示、以及选中后成功发布的完整链路改为用 Vitest + 受控
+fixture 数据确定性验证,不是真实浏览器验证——如果要在真实浏览器里补上这条
+黄金路径,需要一份带真实/仿真 `bronze_ng_odds_snap` 快照的 E2E 种子库。
+
+## 50. REMOVE_SITEWIDE_FREE_PREMIUM_FIELDS_AND_FIX_DAILY_PICK_PER_MATCH_ACCESS(2026-08-17)
+
+产品权限口径修正:废止此前"匿名/登录/付费"三段可见性模型(CLAUDE.md 旧 §8,
+2026-08 批准),改为"除每日精选外全站比赛内容对任何人免费 + 每日精选按
+用户/单条精选授权"。CLAUDE.md §8 已同步重写(§8.1/8.2/8.3 全部替换,并
+修正 §12/§15 里过时的"免费概率/会员解锁"措辞);docs/design-reco-board.md
+顶部加了指向本节的过时声明,不逐句重写。
+
+### 50.1 审计(实施前,只读,未改任何文件)
+
+7 路并行审计 + 人工直读 `backend/auth/entitlements.py`(核心 49 行文件,
+grep 全仓库确认 `ctx.has(...)` 调用点共 13 处,逐条列出)。审计过程中
+backend-auth/frontend-components 两路两次因后台连接错误失败,改由本人
+直接读代码 + grep 补齐,未依赖未完成的审计结果就动手实施。
+
+关键结论:任务给出的永久测试用例本身("匿名访问普通比赛 API 可以获得完整
+主胜/平/客概率"、"登录普通用户返回内容与匿名一致")是解决审计发现的核心
+歧义("免费"是否等于"匿名可见")的唯一权威依据——按此执行,普通内容对
+匿名用户也完整开放,不是"登录后免费"。
+
+`锁定`/`visibility` 在这个代码库里两种完全不相关的业务含义(D 类模型
+发布完整性 vs A 类付费墙)已逐条核实调用链区分,D 类(`prediction_snapshots`
+相关、`backend/queries/track_record.py`、`backend/queries/predictions.py`)
+全程未被本次改动触碰。
+
+### 50.2 后端:普通内容全部无条件免费(含匿名)
+
+真实删除(不是隐藏)的 DTO/字段:`PredictionFreeDTO`/`PredictionFullDTO`
+(合并为单一 `PredictionDTO`,三项概率恒为必填,无 `tier` 字段)、
+`MatchSummary.requires_login`、`LeagueInfo.entitlement`/`accessible`/
+`requires_login`、`CooccurrenceFullDTO`/`CooccurrenceSummaryDTO`(合并为
+`CooccurrenceResponse`)、`LegacyWdlLiveLockedMatch`(legacy 三态简化为
+`LegacyWdlUpcomingMatch`/`LegacyWdlLiveMatch` 两态,无 `locked` 字段)、
+`backend/content_status.py::configured_free_outcome()`、
+`backend/queries/leagues.py::FREE_LEAGUE_ENTITLEMENTS`(9 个此前需要登录的
+`league:lottery` 联赛现在匿名可访问)、`backend/queries/odds.py` 的
+`delayed`/`full` 参数(赔率恒完整时间线,不延迟)、
+`backend/queries/league_stats.py::FREE_PLAYER_BOARDS` 白名单(从 5 个球员
+维度放开到全部有真实样本量的维度,新增角球/黄牌/红牌/零封/BTTS 等)。
+`_require_league_access()` 整体删除,替换为只做 404 校验的
+`_require_known_league()`。`backend/api_server.py::require_membership()`
+(legacy 端点门禁)整体删除。
+
+实测(重启 worktree 根目录的后端进程后用 curl 独立验证,不是只看测试报告):
+`GET /api/v1/matches/{id}/prediction` 匿名返回完整
+`home_probability`/`draw_probability`/`away_probability`;`GET
+/api/v1/leagues/67/standings`(此前需要登录的瑞典超)匿名 200;
+`GET /api/v1/reco/track-record` 匿名 200;真实
+`/api/v1/openapi.json` 确认 `PredictionFreeDTO`/`PredictionFullDTO`/
+`LegacyWdlLiveLockedMatch` 已从 schema 里消失,只剩合并后的
+`PredictionDTO`/`LegacyWdlLiveMatch`。
+
+`reco:track_record` 改为匿名可访问是本节一个需要如实标注的产品判断:
+任务原文没有把"战绩归档"列入允许继续要求登录的清单,而它是站点自身的
+公开运营记录(命中/未中/走水/作废全展示),与已经匿名公开的模型
+`/track-record` 端点是同一先例——按此判断放开,不是代码本身能自动
+推导出的结论。
+
+### 50.3 后端:每日精选按场授权
+
+新表 `reco_access_grants`(migration `0015_reco_access_grants.sql`,只在
+`/tmp` 副本验证过 `integrity_check`/`foreign_key_check`/partial unique
+index,从未写真实 `data/*.db`):`id/user_id/slip_id/status/granted_at/
+granted_by/revoked_at/revoked_by/note`,`(user_id, slip_id) WHERE
+status='active'` 唯一索引防重复授权。`backend/commands/reco_access.py`:
+`grant_access`/`revoke_access`/`has_access`/`list_user_grants`/
+`list_grants`,全部写操作复用既有 `write_audit`。
+
+端点:`GET /api/v1/reco/daily`(列表,未登录 401,已登录 200 按
+`access_required` 判别式二选一投影,未授权条目标题/腿/赔率/理由物理不
+下发);`GET /api/v1/reco/daily/{slip_id}`(正文,未登录 401/无授权
+403`{"code":"reco_access_required"}`/有授权 200);`GET
+/api/v1/reco/my-access`(个人权限查询,允许登录);admin 授权/撤销/列表
+三个端点(`POST /admin/reco/access-grants`、
+`POST /admin/reco/access-grants/{id}/revoke`、
+`GET /admin/reco/access-grants`)。
+
+旧的全局 `reco:daily` entitlement**已停止驱动任何内容访问判定**,专门写
+了 `TestLegacyGlobalSubscriptionGrantsNothing` 类测试:构造一个持有 active
+`daily_picks` 订阅、但 `reco_access_grants` 里零记录的用户,断言其访问
+任意已发布 slip 仍 403——本次改动前 platform.db 里真实存在 2 条这样的
+历史订阅,改动后这两个账号会失去每日精选访问权,需要管理员重新按场授权,
+这是任务要求的预期行为,不是遗漏。**没有写任何脚本把旧订阅自动转换成按场
+授权**(那等于变相保留旧的全局解锁效果)。
+
+兑换码(migration `0016_redeem_codes_slip_bound.sql`)同步改造为绑定具体
+`slip_id`,不再是"兑换一整个 daily_picks 订阅",否则后端权限判定已经不看
+`subscriptions` 表后,兑换码会变成"兑换成功但看不到任何内容"的死功能——
+这是实施过程中发现并修复的真实缺口,不在最初的审计清单里。
+
+### 50.4 前端
+
+删除文件:`frontend/components/matches/LeagueGateCard.tsx`(及其
+`.module.css`)——展示"登录后即可免费查看该联赛数据"引导卡片的组件,
+门禁条件消失后完全不可达。`MemberMatchDetail.tsx` 的"匿名请求 401 就带
+凭证重试,还是 401 就渲染门禁卡片"这套状态机简化为直接渲染(组件自身
+注释此前已经承认"登录仍被拦截"分支在生产是死代码)。`selectHeroPair`
+(免费卡/锁定卡对照选场)重新设计为 `selectFeaturedMatch`(不再有"免费/
+锁定"这个选场维度)。legacy `/(member)/league/[id]/wdl-predictions`
+页面删除"🔒 订阅解锁精确概率"付费墙 UI(此前与同页"免费登录查看"文案
+自相矛盾)。顶部账户区域(`SiteNav.tsx`)移除通用 Premium/会员徽标。
+
+`/pricing` 页面(标题已是"访问权限说明")重写为三档说明卡(游客/注册用户/
+精选授权用户),实测页面文本包含"登录不是付费,也不解锁任何足球数据"、
+"当前未接入线上支付"、"一个兑换码只对应一场每日精选"、"开通与撤销均有
+审计记录",不含"充值/购买/订阅/VIP/Premium"任一词。`/reco` 页面未授权
+状态实测显示任务指定的固定文案"本场每日精选需要单独授权。登录后可查看
+当前权限状态。"
+
+### 50.5 验证
+
+后端:`.venv/bin/python -m pytest tests/backend/ -q` 全量通过(主仓库与
+worktree 各自独立跑通,均 0 failed)。前端:`npx vitest run` 48 files/258
+tests 通过;`npx tsc --noEmit` 0 错误;`npm run build` 成功(18 路由);
+`npm run check:api-drift` 无漂移;`git diff --check` 两处仓库均 0 错误。
+
+真实浏览器(独立开新 tab 避免同 tab 残留 console 记录干扰,worktree 根目录
+重启的后端+前端进程):匿名首页/比赛详情页在 360/390/430/1280px 四个视口
+`document.documentElement.scrollWidth <= clientWidth` 均成立(无横向溢出);
+首页"重点比赛"与"近期比赛"列表对匿名用户完整显示三项概率(含此前需要登录
+的瑞典超联赛比赛);比赛详情页"数据"tab 完整展示阵容/风格(攻防对位/进攻
+转化链/控球对比)真实数字,无任何锁定提示;/pricing、/reco 页面文案如
+§50.4 所述。控制台除已知、与本次改动无关的沙箱环境限制(客户端
+`/api/v1/*` 请求在这个预览环境里不经过 Next.js 代理,team-crest 图片同理,
+本会话此前的 P1-P4 阶段已反复确认并记录同一根因)外无其它错误。
+
+未在真实浏览器里走通的部分(标注 UNVERIFIED,不是代码缺陷):管理员登录后
+实际操作授权面板(搜索用户/选择 slip/授予/撤销)、已登录用户查看
+`/reco/my-access`、已授权与未授权两个账号并排对比 A/B 两场访问结果——这
+几步都需要真实微信扫码登录或本环境目前没有配的开发态直连登录入口,本节
+依据的是 `tests/backend/test_reco_access.py`(21 项)+
+`tests/backend/test_redeem_reco_access.py`(9 项)+ 对应 Vitest/Playwright
+套件的真实执行结果,不是浏览器走查。
+
+### 50.6 AWS 部署状态
+
+**NOT PERFORMED**:本次任务全部改动只存在于本地工作区(主仓库 +
+worktree),未执行 git commit/push,未连接或修改 AWS 上的任何服务;
+本节及以上全部"实测"均为本地临时端口(8000/3000)上重启的开发态进程,
+不代表生产环境已经运行本节描述的任何代码。

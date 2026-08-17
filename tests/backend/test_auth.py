@@ -778,9 +778,14 @@ class TestProductionDisabledUvicornSmoke:
 
 class TestLegacyGateRemoval:
     def test_simulate_membership_param_is_dead(self, client):
-        """?simulate_membership=paid 不再有任何效果(匿名照样被拒)。"""
-        r = client.get("/api/league/47/betting?simulate_membership=paid")
-        assert r.status_code == 401
+        """?simulate_membership=paid 不再有任何效果——2026-08-16 起
+        /api/league/{id}/betting 本身也不再有 entitlement 门禁(除"每日精选"
+        外全站比赛内容全部免费),携带该参数与不携带响应完全一致,不会让
+        请求绕过或触发任何特殊行为。这条断言正是要推翻的旧规则(此前恒 401)。"""
+        with_param = client.get("/api/league/47/betting?simulate_membership=paid")
+        without_param = client.get("/api/league/47/betting")
+        assert with_param.status_code == without_param.status_code
+        assert with_param.json() == without_param.json()
 
     def test_source_contains_no_simulate_membership(self):
         import pathlib

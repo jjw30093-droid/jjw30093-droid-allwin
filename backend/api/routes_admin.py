@@ -1,12 +1,11 @@
-"""/api/v1/admin/*:用户/订阅/兑换码/审计日志(写操作全部过 CSRF + AuditLog)。
-
-预测发布/锁定、xref 审核、任务健康在各自阶段追加到本文件。
+"""/api/v1/admin/*:用户/订阅/审计日志/预测登记簿/任务与来源健康
+(写操作全部过 CSRF + AuditLog;任务与来源健康只读)。
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from backend.commands.redeem import create_redeem_codes
+from backend.cli.ops_check import _sanitize_summary
 from backend.commands.subscriptions import grant_subscription, revoke_subscription
 from backend.db.connections import tx
 from backend.db.util import utc_now_iso
@@ -14,15 +13,16 @@ from backend.db.util import utc_now_iso
 from .deps import (
     NO_STORE,
     AuthContext,
+    odds_ro,
     platform_ro,
     platform_rw,
     require_admin,
     require_csrf,
 )
 from .schemas import (
-    AdminCodesCreatedResponse,
-    AdminCodesListResponse,
+    AdminJobsResponse,
     AdminPredictionsResponse,
+    AdminSourceHealthResponse,
     AdminUsersResponse,
     AuditLogsResponse,
     EditPredictionResponse,
@@ -120,52 +120,6 @@ def revoke_user_subscription(
     if not ok:
         raise HTTPException(status_code=404, detail="订阅不存在或已撤销")
     return {"status": "ok"}
-
-
-class CreateCodesBody(BaseModel):
-    plan_id: str
-    duration_days: int = Field(gt=0, le=3650)
-    count: int = Field(gt=0, le=500)
-    expires_at: str | None = None
-
-
-@router.post("/redeem-codes", response_model=AdminCodesCreatedResponse)
-def create_codes(
-    body: CreateCodesBody,
-    response: Response,
-    ctx: AuthContext = Depends(require_admin_csrf),
-    conn=Depends(platform_rw),
-):
-    """明文兑换码只在本响应展示一次,之后只有 hash。"""
-    _no_store(response)
-    try:
-        with tx(conn):
-            codes = create_redeem_codes(
-                conn, body.plan_id, body.duration_days, body.count,
-                created_by=ctx.user_id, expires_at=body.expires_at,
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"codes": codes}
-
-
-@router.get("/redeem-codes", response_model=AdminCodesListResponse)
-def list_codes(
-    response: Response,
-    batch_id: str = "",
-    limit: int = 100,
-    ctx: AuthContext = Depends(require_admin),
-    conn=Depends(platform_ro),
-):
-    _no_store(response)
-    limit = max(1, min(limit, 500))
-    rows = conn.execute(
-        """SELECT id, plan_id, duration_days, batch_id, status, created_at, expires_at, used_by, used_at
-           FROM redeem_codes WHERE (?='' OR batch_id=?)
-           ORDER BY created_at DESC LIMIT ?""",
-        (batch_id, batch_id, limit),
-    ).fetchall()
-    return {"codes": [dict(r) for r in rows]}
 
 
 # ── 预测登记簿管理(P0.5) ─────────────────────────────────
@@ -328,12 +282,78 @@ def list_audit_logs(
     response: Response,
     limit: int = 100,
     offset: int = 0,
+    target_type: str = "",
+    target_id: str = "",
     ctx: AuthContext = Depends(require_admin),
     conn=Depends(platform_ro),
 ):
+    """target_type/target_id 可选(2026-08-16 新增):按具体对象查审计轨迹
+    (如某张 reco_slip 的全部操作记录),不传即不筛选,数据本来就在
+    audit_logs 里,这里只是补一个查询能力。"""
     _no_store(response)
     limit = max(1, min(limit, 500))
     rows = conn.execute(
-        "SELECT * FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
+        "SELECT * FROM audit_logs"
+        " WHERE (?='' OR target_type=?) AND (?='' OR target_id=?)"
+        " ORDER BY id DESC LIMIT ? OFFSET ?",
+        (target_type, target_type, target_id, target_id, limit, offset),
     ).fetchall()
     return {"logs": [dict(r) for r in rows]}
+
+
+# ── 任务健康 / 来源健康(只读,P1.5) ─────────────────────────────
+
+@router.get("/jobs", response_model=AdminJobsResponse)
+def list_jobs(
+    response: Response,
+    limit: int = 100,
+    offset: int = 0,
+    ctx: AuthContext = Depends(require_admin),
+    conn=Depends(platform_ro),
+):
+    """platform.db job_runs 原始行(扁平分页,不做 job_name 聚合)。
+
+    error_summary 复用 backend.cli.ops_check._sanitize_summary 脱敏
+    (SQL/traceback/凭证/路径),不重新实现脱敏逻辑。
+    """
+    _no_store(response)
+    limit = max(1, min(limit, 200))
+    rows = conn.execute(
+        """SELECT id, job_name, status, attempt, max_attempts, started_at, finished_at,
+                  input_count, output_count, error_summary, created_at
+           FROM job_runs ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?""",
+        (limit, offset),
+    ).fetchall()
+    jobs = []
+    for r in rows:
+        job = dict(r)
+        job["error_summary"] = _sanitize_summary(job["error_summary"])
+        jobs.append(job)
+    return {"jobs": jobs}
+
+
+@router.get("/source-health", response_model=AdminSourceHealthResponse)
+def list_source_health(
+    response: Response,
+    limit: int = 100,
+    offset: int = 0,
+    ctx: AuthContext = Depends(require_admin),
+    conn=Depends(odds_ro),
+):
+    """odds.db source_health 原始行(扁平分页)。
+
+    error_summary 同样复用 _sanitize_summary,不重新实现脱敏逻辑。
+    """
+    _no_store(response)
+    limit = max(1, min(limit, 200))
+    rows = conn.execute(
+        """SELECT id, source, checked_at, ok, latency_ms, error_summary
+           FROM source_health ORDER BY checked_at DESC, id DESC LIMIT ? OFFSET ?""",
+        (limit, offset),
+    ).fetchall()
+    entries = []
+    for r in rows:
+        entry = dict(r)
+        entry["error_summary"] = _sanitize_summary(entry["error_summary"])
+        entries.append(entry)
+    return {"source_health": entries}

@@ -356,6 +356,63 @@ xref。
 (`tests/backend/test_odds_pipeline.py` 的 `TestEntityResolutionSafety`、
 `TestProviderIdentityAndRevalidation`、`TestTeamXrefExistenceAndAliasGate`)。
 
+### 2.5 让球盘(ah)`line` 符号约定(2026-08-16,「每日精选」自动结算验证)
+
+`bronze_ng_odds_snap` 的 `market='ah'` 记录里,`line` 字段是 §2.1 `_FIELD_MAP`
+把原始 `g` 槽位直接透传得到的值(`{"u": "home", "g": "line", "d": "away"}`,
+无符号变换)。此前没有专门针对**这张实时表**的符号约定文档;为「每日精选」
+推荐单自动结算(`backend/commands/reco_settlement_math.py`)本轮新增以下验证:
+
+**结论:`line>0` = 主队让球(主队是热门,需要赢出 line 代表的净胜球才算
+赢盘);`line<0` = 客队让球(客队是热门,主队是受让方)。**
+
+**验证方法一(本轮新增,真实数据交叉核对)**:用同一场比赛的独立信号源
+`market='1x2'` 赔率(home 十进制赔率 < away 十进制赔率 ⇒ 主队是该场"热门")
+与该场 `market='ah'` 的 `line` 符号做交叉对照,只读查询 `data/odds.db` +
+`data/allwin.db`(`status='Finish'` 的真实完赛比赛):
+
+- 精确按 (比赛, 公司) 配对:48 组样本(23 场不同比赛),`line>0 ⟺ 主队是
+  1x2 热门` **100% 一致,零反例**;
+- 放宽到"每场任取一条 AH 记录 + 任意公司的 1x2 热门方向":24 场不同比赛,
+  同样 **100% 一致**;
+- 反例检查(热门未必赢盘,不代表符号错):如 Vålerenga(主) 1-2 Bodø/Glimt
+  (客),`line=-1.25`(客队热门,让 1.25 球),真实比分客队只赢 1 球——
+  热门"没让够"是正常的赛果波动,不是符号判定错误;
+- 市场效率交叉检验:定义 `margin=home_score-away_score`,比较
+  `margin-line` 与 `margin+line` 两种公式在全部样本上的离散程度,`margin-line`
+  标准差更小(1.55 vs 1.91),且在 `|line|≥1.0` 的大让球样本(n=15)里,
+  `margin-line>0`(主队方赢盘)与 `<0`(客队方赢盘)接近 50/50(7:8)——
+  符合"让球盘应让两边接近对等"的市场效率预期,支持
+  `adjusted_home_margin = margin - line` 是正确公式,不是反过来。
+
+**验证方法二(仓库里已存在、独立于本轮的三处历史文档,交叉印证)**:
+
+- `backend/cli/ingest_legacy_odds.py`(2026-08-06)明确写"统一后的 canonical
+  约定(与 `bronze_ng_odds_snap` 一致):ah line>0 = 主队让球(主队是热门)"——
+  这是**同一张表**的既有结论;
+- `backend/cli/ingest_jka_legacy_odds.py`(2026-08-07)用与本轮方法一相同的
+  "同场同期 1x2 热门方向交叉验证",样本量达 **2,834 组 agree / 1 组
+  borderline**,结论一致;
+- `backend/cli/ingest_nowgoal_historical_odds.py`(2026-08-06)列出 6 场真实
+  悬殊比分核对(曼联 9-0 南安普顿 g=+1.25、拜仁 8-0 沙尔克 04 g=+2.5、
+  都灵 0-7 米兰 g=-0.75、水晶宫 0-7 利物浦 g=-0.75、维罗纳 0-6 国际米兰
+  g=-1、布莱顿 6-0 狼队 g=+1),g 符号与真实大比分获胜方(热门)方向逐场
+  一致,零反例。
+
+两条独立证据链(本轮新增的 1x2 交叉验证 + 市场效率检验;仓库既有的三处历史
+文档,含 2,834 组更大样本的同类交叉验证)结论完全一致,`resolve_leg_result`
+（`backend/commands/reco_settlement_math.py`）据此实现 `ah` 市场的自动结算,
+`ah_sign_convention_verified=true`。
+
+结算公式(纯函数实现见 `backend/commands/reco_settlement_math.py`):
+
+```
+adjusted_home_margin = (home_score - away_score) - line
+side='home' 赢盘 ⟺ adjusted_home_margin > 0
+side='away' 赢盘 ⟺ adjusted_home_margin < 0
+整数盘 adjusted_home_margin == 0 ⟺ 走水(半线/四分之一线的拆分见该模块 docstring)
+```
+
 ## 3. 轮询策略(窗口到期调度,CLAUDE.md §6.3)
 
 - **触发**:`allwin-poll.timer` 每 5 分钟触发一次"到期判断"(`worker --job

@@ -198,7 +198,7 @@ export interface paths {
         };
         /**
          * League Team Stats
-         * @description 球队赛季统计(免费字段投影:射门/射正/控球/xG/xGOT,付费深度字段物理不在响应)。
+         * @description 球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。
          */
         get: operations["league_team_stats_api_v1_leagues__league_id__team_stats_get"];
         put?: never;
@@ -218,7 +218,7 @@ export interface paths {
         };
         /**
          * League Season Profile
-         * @description 联赛速览:进球时段 / 比分分布 / 大小球阈值 / 主客胜率(免费面)。
+         * @description 联赛速览:进球时段 / 比分分布 / 大小球阈值 / 主客胜率。
          *
          *     数据来自四张早已构建但前端零消费的银层表。legacy 的
          *     /api/league/{id}/betting 曾查过同一批数据,但 §10.1 禁止继续扩展 legacy,
@@ -242,7 +242,7 @@ export interface paths {
         };
         /**
          * League Players
-         * @description 球员榜(免费 5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。
+         * @description 球员榜(5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。
          */
         get: operations["league_players_api_v1_leagues__league_id__players_get"];
         put?: never;
@@ -262,12 +262,9 @@ export interface paths {
         };
         /**
          * List Matches
-         * @description 比赛列表:所有已收录联赛的比赛都出现在列表里(2026-08-13 用户拍板撤销
-         *     "未持有权限的联赛整场从列表隐藏"——五大联赛季前空窗期匿名列表会显得几乎
-         *     没有比赛,体验上不可接受)。未持有权限的联赛比赛仍然出现,但
-         *     `requires_login=True` 且不下发 win_probability;点击详情页仍走既有登录
-         *     门禁,免费/付费的实际边界不变,只是"能不能在列表里看到这场比赛"和"能不能
-         *     看到这场比赛的会员内容"两件事分开了。
+         * @description 比赛列表:所有已收录联赛的比赛都出现在列表里,内容对任何人(含匿名)
+         *     完全一致(2026-08-16 起除"每日精选"外全站比赛内容全部免费,登录与内容
+         *     分层彻底解耦)。
          */
         get: operations["list_matches_api_v1_matches_get"];
         put?: never;
@@ -304,9 +301,10 @@ export interface paths {
         };
         /**
          * Match Prediction
-         * @description 免费/匿名:只有最高一项概率(受限字段物理不存在);Pro/Premium:完整 WDL。
+         * @description 恒为完整胜平负三项概率(2026-08-16 起除"每日精选"外全站比赛内容全部
+         *     免费,包括匿名——不再有免费/付费两套投影)。
          *
-         *     响应随 entitlement 变化 → 永远 private, no-store,禁止共享缓存。
+         *     响应内容会随预测发布/编辑变化 → 永远 private, no-store,禁止共享缓存。
          */
         get: operations["match_prediction_api_v1_matches__match_id__prediction_get"];
         put?: never;
@@ -326,12 +324,10 @@ export interface paths {
         };
         /**
          * Match Analysis
-         * @description 公开版 analysis_bundle:同一 bundle 按 entitlement 投影(与 Studio 共用生成逻辑)。
+         * @description 公开版 analysis_bundle:恒完整返回(2026-08-16 起除"每日精选"外全站
+         *     比赛内容全部免费,不再按 entitlement 投影;与 Studio 共用生成逻辑)。
          *
-         *     - prediction_member / prob_bar 图表:仅 prediction:full_wdl;
-         *     - odds_timeline:仅 odds:history_full;
-         *     - cooccurring_events 明细:仅 report:deep(否则只给计数)。
-         *     随 entitlement 变化 → private, no-store。
+         *     响应内容会随预测发布/赔率刷新变化 → private, no-store。
          */
         get: operations["match_analysis_api_v1_matches__match_id__analysis_get"];
         put?: never;
@@ -351,8 +347,8 @@ export interface paths {
         };
         /**
          * Match Odds
-         * @description free/pro:延迟摘要(每公司每市场最新一条,观察时间 ≥1 小时前);
-         *     premium(odds:history_full):完整快照时间线。
+         * @description 恒返回完整快照时间线(2026-08-16 起除"每日精选"外全站比赛内容全部
+         *     免费,不再对匿名/无订阅用户施加 1 小时延迟摘要)。
          */
         get: operations["match_odds_api_v1_matches__match_id__odds_get"];
         put?: never;
@@ -372,7 +368,8 @@ export interface paths {
         };
         /**
          * Match Cooccurrence
-         * @description 同期事件(时间共现,不声称因果)。匿名给计数,report:deep 给明细。
+         * @description 同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
+         *     免费(计数)/付费(明细)。
          */
         get: operations["match_cooccurrence_api_v1_matches__match_id__cooccurrence_get"];
         put?: never;
@@ -394,13 +391,37 @@ export interface paths {
          * Match Report
          * @description 完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。
          *
-         *     门禁:只有联赛门禁,与 /matches/{id} 同级——本端点全部是已完赛的历史事实,
-         *     不含模型输出、不含赔率方法论,属 CLAUDE.md §8 的"足球数据"面(不收费、
-         *     匿名可见),与已匿名开放的积分榜/赛季球队统计/球员评分榜同档。
-         *     缓存:匿名联赛可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);
+         *     门禁:只有"联赛是否已登记"这一条(未知联赛 404),不分付费档位、不区分
+         *     登录状态——本端点全部是已完赛的历史事实,不含模型输出、不含赔率方法论。
+         *     缓存:任何联赛都可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);
          *     请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。
          */
         get: operations["match_report_api_v1_matches__match_id__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/matches/{match_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Match Preview
+         * @description 赛前预览:预计阵容+伤停快照、球队风格象限、进攻来源拆解、关键球员占比、
+         *     门将对位——数据 tab 阵容/风格/球员三个子 tab 的唯一数据源。
+         *
+         *     门禁与 /report、/markets 同级:只有"联赛是否已登记"这一条,不分付费
+         *     档位、不区分登录状态。全部由两队各自历史聚合与已采集快照构成,赛前与
+         *     赛后都能给,不含模型输出或赔率方法论。
+         */
+        get: operations["match_preview_api_v1_matches__match_id__preview_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -426,8 +447,8 @@ export interface paths {
          *     (line_source="market"),没有时退回统计参考线(line_source="statistical");
          *     yellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。
          *
-         *     门禁与 /report 同级:只有联赛门禁,不区分付费档位——数据倾向是本站
-         *     对访客建立信任的内容,不是需要登录才能看的深度报告。
+         *     门禁与 /report 同级:只有"联赛是否已登记"这一条,不区分付费档位、不区分
+         *     登录状态——数据倾向是本站对访客建立信任的内容。
          */
         get: operations["match_markets_api_v1_matches__match_id__markets_get"];
         put?: never;
@@ -447,7 +468,9 @@ export interface paths {
         };
         /**
          * Status Freshness
-         * @description 首页「今日更新状态」聚合:赛程/赔率/推荐三条最近成功时间戳。
+         * @description 首页「今日更新状态」聚合:赛程/赔率/推荐三条最近成功时间戳,各自附带
+         *     FRESH/STALE/UNAVAILABLE 三态(classify_freshness),供前端判断"这个数据源
+         *     现在是不是正常"而不只是看到一个孤立的钟点数字。
          *
          *     只读聚合,不承载任何比赛/推荐内容,匿名公开缓存安全(短 TTL,
          *     因为三个来源各自独立轮询,新鲜度本身随时在变)。
@@ -538,23 +561,6 @@ export interface paths {
         get: operations["team_crest_api_v1_media_team_crests__provider___provider_team_id__png_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/redeem": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Redeem */
-        post: operations["redeem_api_v1_redeem_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -663,9 +669,58 @@ export interface paths {
         };
         /**
          * Reco Daily
-         * @description 付费面(reco:daily):近 30 天推荐单,含未结算(受限内容,物理不下发给无权益者)。
+         * @description 列表面:近 30 天推荐单的存在性 + 状态对任何已登录用户可见;内容
+         *     (标题/摘要/腿/思路说明)只对当前用户持有 active 按场授权的 slip 下发
+         *     (access_required=false),否则只给中性投影(access_required=true)。
+         *     列表本身也是"每日精选权限查询"的一种,匿名 401,已登录即可查看。
          */
         get: operations["reco_daily_api_v1_reco_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reco/daily/{slip_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reco Daily Slip
+         * @description 正文访问(按场授权的硬性契约):未登录 401;slip 不存在或仍是 draft
+         *     404(draft 永不外泄给普通用户面);已登录但对该 slip 没有 active 授权
+         *     403(响应体只有中性 code/slip_id,不含任何正文字段);已登录且有 active
+         *     授权 200,完整正文。admin 角色本身不因为是 admin 而绕过——这里与
+         *     /admin/reco/slips/{slip_id}/preview 是两个彻底独立的端点。
+         */
+        get: operations["reco_daily_slip_api_v1_reco_daily__slip_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reco/my-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reco My Access
+         * @description 个人"每日精选权限查询"(CLAUDE.md §8.1 允许要求登录的账户类个人
+         *     功能之一):只列出当前用户自己的按场授权记录(含历史撤销),不含其他
+         *     用户的任何信息。
+         */
+        get: operations["reco_my_access_api_v1_reco_my_access_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -683,11 +738,13 @@ export interface paths {
         };
         /**
          * Reco Track Record
-         * @description 登录面(reco:track_record,member 基线):结算/作废归档全历史。
+         * @description 匿名可见(2026-08-16 起,不再要求登录):结算/作废归档全历史。
          *
          *     命中/未中/走水全展示,作废单列不消失(对齐"不挑选、不隐藏");
-         *     未结算 published 单不出现(赛前内容属付费面)。人工内容可修正,
-         *     edit_count/last_edited_at 公开可查,不使用"锁定不可改"表述。
+         *     未结算 published 单不出现(赛前内容属每日精选按场授权面)。这是站点
+         *     自身的历史运营记录,与 backend/queries/track_record.py 里模型预测的
+         *     公开战绩端点同一先例,不属于"每日精选"按场授权的约束范围。人工内容
+         *     可修正,edit_count/last_edited_at 公开可查,不使用"锁定不可改"表述。
          */
         get: operations["reco_track_record_api_v1_reco_track_record_get"];
         put?: never;
@@ -705,11 +762,38 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Admin List Slips */
+        /**
+         * Admin List Slips
+         * @description status/date_from/date_to(按 slip_date)均可选,不传即不筛选;total 是
+         *     筛选后的计数,不是全库总数。
+         */
         get: operations["admin_list_slips_api_v1_admin_reco_slips_get"];
         put?: never;
         /** Admin Create Slip */
         post: operations["admin_create_slip_api_v1_admin_reco_slips_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reco/slips/{slip_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Preview Slip
+         * @description 会员视角预览:这张单如果是 published 状态,一个真实会员在 /reco/daily
+         *     会看到的内容形状——直接复用 daily_slips() 同一套投影(q_reco.
+         *     slip_member_preview),不重新发明会员端字段投影逻辑。draft 也可预览
+         *     (admin 需要在发布前看)。
+         */
+        get: operations["admin_preview_slip_api_v1_admin_reco_slips__slip_id__preview_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -731,6 +815,10 @@ export interface paths {
          *     约束(§CLAUDE.md 8.1:Role 与 Plan 分离——建正式公开内容不能被自己的
          *     免费档位挡住看不到完整数据)。`q` 缺省时返回最近开球的一批,供不搜索
          *     直接浏览挑选。
+         *
+         *     `window` 默认 7 天,值域与语义完全复用 GET /api/v1/matches 已经在用的
+         *     window 参数(today/tomorrow/3d/7d/all),不发明新的窗口表示法;传
+         *     window=all 可以显式搜到 7 天窗口外(含没有精确 kickoff_at_utc)的比赛。
          */
         get: operations["admin_reco_match_candidates_api_v1_admin_reco_match_candidates_get"];
         put?: never;
@@ -832,6 +920,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/reco/access-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Reco Access
+         * @description user_id/slip_id/status 均可选,不传即不筛选;total 是筛选后的计数,
+         *     不是全库总数(与 admin_list_slips/list_codes 同一惯例)。
+         */
+        get: operations["admin_list_reco_access_api_v1_admin_reco_access_grants_get"];
+        put?: never;
+        /**
+         * Admin Grant Reco Access
+         * @description 按"用户 + 单条 slip"授权(幂等:同一 (user_id, slip_id) 已有 active
+         *     授权时直接返回既有记录,不重复插入)。
+         */
+        post: operations["admin_grant_reco_access_api_v1_admin_reco_access_grants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reco/access-grants/{grant_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Revoke Reco Access */
+        post: operations["admin_revoke_reco_access_api_v1_admin_reco_access_grants__grant_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -877,27 +1008,6 @@ export interface paths {
         put?: never;
         /** Revoke User Subscription */
         post: operations["revoke_user_subscription_api_v1_admin_subscriptions__subscription_id__revoke_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/redeem-codes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Codes */
-        get: operations["list_codes_api_v1_admin_redeem_codes_get"];
-        put?: never;
-        /**
-         * Create Codes
-         * @description 明文兑换码只在本响应展示一次,之后只有 hash。
-         */
-        post: operations["create_codes_api_v1_admin_redeem_codes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1026,8 +1136,58 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Audit Logs */
+        /**
+         * List Audit Logs
+         * @description target_type/target_id 可选(2026-08-16 新增):按具体对象查审计轨迹
+         *     (如某张 reco_slip 的全部操作记录),不传即不筛选,数据本来就在
+         *     audit_logs 里,这里只是补一个查询能力。
+         */
         get: operations["list_audit_logs_api_v1_admin_audit_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Jobs
+         * @description platform.db job_runs 原始行(扁平分页,不做 job_name 聚合)。
+         *
+         *     error_summary 复用 backend.cli.ops_check._sanitize_summary 脱敏
+         *     (SQL/traceback/凭证/路径),不重新实现脱敏逻辑。
+         */
+        get: operations["list_jobs_api_v1_admin_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/source-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Source Health
+         * @description odds.db source_health 原始行(扁平分页)。
+         *
+         *     error_summary 同样复用 _sanitize_summary,不重新实现脱敏逻辑。
+         */
+        get: operations["list_source_health_api_v1_admin_source_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1404,15 +1564,10 @@ export interface components {
             /** Created At */
             created_at: string;
         };
-        /** AdminCodesCreatedResponse */
-        AdminCodesCreatedResponse: {
-            /** Codes */
-            codes: components["schemas"]["RedeemCodeCreatedItem"][];
-        };
-        /** AdminCodesListResponse */
-        AdminCodesListResponse: {
-            /** Codes */
-            codes: components["schemas"]["AdminRedeemCodeItem"][];
+        /** AdminJobsResponse */
+        AdminJobsResponse: {
+            /** Jobs */
+            jobs: components["schemas"]["JobRunItem"][];
         };
         /** AdminPredictionItem */
         AdminPredictionItem: {
@@ -1461,33 +1616,99 @@ export interface components {
             /** Predictions */
             predictions: components["schemas"]["AdminPredictionItem"][];
         };
+        /** AdminRecoAccessGrantsResponse */
+        AdminRecoAccessGrantsResponse: {
+            /** Total */
+            total: number;
+            /** Grants */
+            grants: components["schemas"]["RecoAccessGrantDTO"][];
+        };
+        /**
+         * AdminRecoLegDTO
+         * @description admin 面在会员 RecoLegDTO 基础上补充的运营信息(2026-08-16):
+         *     entry_type 供前端提前识别"这条腿缺乏真实溯源、发布会被拒绝";
+         *     match_result/corners 是已结算腿的结算依据(现算,不新增存储,缺失时
+         *     保持 None);needs_review 是"待确认"标记——绝不通过任何写路径把它
+         *     自动变成确定结果,只读展示。
+         */
+        AdminRecoLegDTO: {
+            /** Id */
+            id: string;
+            /** Match Id */
+            match_id?: number | null;
+            /** Match Desc */
+            match_desc: string;
+            /** Market */
+            market: string;
+            /** Selection */
+            selection: string;
+            /** Odds */
+            odds: number;
+            /** Result */
+            result?: ("win" | "lose" | "push" | "half_win" | "half_loss") | null;
+            /**
+             * Entry Type
+             * @enum {string}
+             */
+            entry_type: "provenance_bound" | "legacy_manual";
+            match_result?: components["schemas"]["RecoLegMatchResultDTO"] | null;
+            corners?: components["schemas"]["RecoLegCornersDTO"] | null;
+            /**
+             * Needs Review
+             * @default false
+             */
+            needs_review: boolean;
+            /** Needs Review Reason */
+            needs_review_reason?: string | null;
+        };
+        /** AdminRecoSlipDTO */
+        AdminRecoSlipDTO: {
+            /** Id */
+            id: string;
+            /** Slip Date */
+            slip_date: string;
+            /** Title */
+            title: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Combo Type
+             * @enum {string}
+             */
+            combo_type: "single" | "parlay";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "published" | "settled" | "voided";
+            /** Result */
+            result?: ("win" | "lose" | "push" | "half_win" | "half_loss") | null;
+            /** Return Units */
+            return_units?: number | null;
+            /** Published At */
+            published_at?: string | null;
+            /** Settled At */
+            settled_at?: string | null;
+            /** Settle Source */
+            settle_source?: ("auto" | "manual") | null;
+            /** Edit Count */
+            edit_count: number;
+            /** Last Edited At */
+            last_edited_at: string;
+            /** Legs */
+            legs: components["schemas"]["AdminRecoLegDTO"][];
+        };
         /** AdminRecoSlipsResponse */
         AdminRecoSlipsResponse: {
             /** Total */
             total: number;
             /** Slips */
-            slips: components["schemas"]["RecoSlipDTO"][];
+            slips: components["schemas"]["AdminRecoSlipDTO"][];
         };
-        /** AdminRedeemCodeItem */
-        AdminRedeemCodeItem: {
-            /** Id */
-            id: string;
-            /** Plan Id */
-            plan_id: string;
-            /** Duration Days */
-            duration_days: number;
-            /** Batch Id */
-            batch_id?: string | null;
-            /** Status */
-            status: string;
-            /** Created At */
-            created_at: string;
-            /** Expires At */
-            expires_at?: string | null;
-            /** Used By */
-            used_by?: string | null;
-            /** Used At */
-            used_at?: string | null;
+        /** AdminSourceHealthResponse */
+        AdminSourceHealthResponse: {
+            /** Source Health */
+            source_health: components["schemas"]["SourceHealthItem"][];
         };
         /** AdminUserItem */
         AdminUserItem: {
@@ -1733,18 +1954,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /**
-         * CooccurrenceFullDTO
-         * @description report:deep:含明细。
-         */
-        CooccurrenceFullDTO: {
-            /** Match Id */
-            match_id: number;
-            /** Count */
-            count: number;
-            /** Items */
-            items: components["schemas"]["CooccurrenceItem"][];
-        };
         /** CooccurrenceItem */
         CooccurrenceItem: {
             /** Window Seconds */
@@ -1773,29 +1982,19 @@ export interface components {
             event_moved_at: string;
         };
         /**
-         * CooccurrenceSummaryDTO
-         * @description 匿名/free:只有计数,items 显式为 null。
+         * CooccurrenceResponse
+         * @description 同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
+         *     免费(仅计数)/付费(明细)两套 DTO。
          */
-        CooccurrenceSummaryDTO: {
+        CooccurrenceResponse: {
             /** Match Id */
             match_id: number;
             /** Count */
             count: number;
             /** Items */
-            items?: null;
+            items: components["schemas"]["CooccurrenceItem"][];
             /** Note */
-            note: string;
-        };
-        /** CreateCodesBody */
-        CreateCodesBody: {
-            /** Plan Id */
-            plan_id: string;
-            /** Duration Days */
-            duration_days: number;
-            /** Count */
-            count: number;
-            /** Expires At */
-            expires_at?: string | null;
+            note?: string | null;
         };
         /** CreateDraftBody */
         CreateDraftBody: {
@@ -1894,6 +2093,11 @@ export interface components {
          * @description 首页「今日更新状态」:三条独立的最近成功时间戳,互不代表彼此。
          *
          *     任一环节尚无成功记录时为 null(如实展示,不用当前时间顶替)。
+         *
+         *     每条时间戳配一个仓库统一的 FRESH/STALE/UNAVAILABLE 三态(与 MatchSummary.
+         *     sync_state/odds_freshness_state 同一套值,backend/queries/freshness.py::
+         *     classify_freshness 计算)——裸 HH:mm 时间戳看不出这是今天还是好几天前,
+         *     也看不出数据源当前是否已经失败,状态字段补上这两个判断。
          */
         FreshnessResponse: {
             /** Schedule Updated At */
@@ -1902,6 +2106,12 @@ export interface components {
             odds_updated_at?: string | null;
             /** Reco Updated At */
             reco_updated_at?: string | null;
+            /** Schedule State */
+            schedule_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
+            /** Odds State */
+            odds_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
+            /** Reco State */
+            reco_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
         };
         /** GoalMinuteBucket */
         GoalMinuteBucket: {
@@ -1939,6 +2149,31 @@ export interface components {
         HealthzDTO: {
             /** Ok */
             ok: boolean;
+        };
+        /** JobRunItem */
+        JobRunItem: {
+            /** Id */
+            id: string;
+            /** Job Name */
+            job_name: string;
+            /** Status */
+            status: string;
+            /** Attempt */
+            attempt: number;
+            /** Max Attempts */
+            max_attempts: number;
+            /** Started At */
+            started_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Input Count */
+            input_count?: number | null;
+            /** Output Count */
+            output_count?: number | null;
+            /** Error Summary */
+            error_summary?: string | null;
+            /** Created At */
+            created_at: string;
         };
         /** LeagueBettingResponse */
         LeagueBettingResponse: {
@@ -1982,7 +2217,12 @@ export interface components {
             /** Empty Reason */
             empty_reason?: string | null;
         };
-        /** LeagueInfo */
+        /**
+         * LeagueInfo
+         * @description 2026-08-16 起:除"每日精选"外全部联赛对任何人(含匿名)恒可访问——
+         *     entitlement/accessible/requires_login 三个只为登录门禁服务的字段已彻底
+         *     从响应模型删除(不是置为恒 true/false 留着)。
+         */
         LeagueInfo: {
             /** League Id */
             league_id: number;
@@ -1992,12 +2232,6 @@ export interface components {
             name_zh: string;
             /** Name En */
             name_en: string;
-            /** Entitlement */
-            entitlement: string;
-            /** Accessible */
-            accessible: boolean;
-            /** Requires Login */
-            requires_login: boolean;
             /** Current Season */
             current_season?: string | null;
             /**
@@ -2099,7 +2333,7 @@ export interface components {
             /** Season */
             season: string;
             /** Matches */
-            matches: (components["schemas"]["LegacyWdlUpcomingMatch"] | components["schemas"]["LegacyWdlLiveLockedMatch"] | components["schemas"]["LegacyWdlLiveFullMatch"])[];
+            matches: (components["schemas"]["LegacyWdlUpcomingMatch"] | components["schemas"]["LegacyWdlLiveMatch"])[];
         };
         /** LegacyGoalMinuteBucket */
         LegacyGoalMinuteBucket: {
@@ -2297,10 +2531,12 @@ export interface components {
             avg_expected_goals_on_target: number | null;
         };
         /**
-         * LegacyWdlLiveFullMatch
-         * @description distance-to-kickoff ≤7 天且已付费:locked=false,额外带完整三项概率。
+         * LegacyWdlLiveMatch
+         * @description distance-to-kickoff ≤7 天:恒下发完整 tendency/confidence/reason/
+         *     p_home/p_draw/p_away(2026-08-16 起除"每日精选"外全站比赛内容全部免费,
+         *     不再有 locked 字段区分付费/未付费)。
          */
-        LegacyWdlLiveFullMatch: {
+        LegacyWdlLiveMatch: {
             /** Match Id */
             match_id: number;
             /** Date */
@@ -2330,11 +2566,6 @@ export interface components {
             confidence: ("normal" | "low") | null;
             /** Reason */
             reason: string | null;
-            /**
-             * Locked
-             * @constant
-             */
-            locked: false;
             /** P Home */
             p_home: number | null;
             /** P Draw */
@@ -2343,50 +2574,10 @@ export interface components {
             p_away: number | null;
         };
         /**
-         * LegacyWdlLiveLockedMatch
-         * @description distance-to-kickoff ≤7 天且未付费:有 tendency/confidence/reason/locked=true,
-         *     物理上没有 p_home/p_draw/p_away(不是放了真值再指望前端隐藏)。
-         */
-        LegacyWdlLiveLockedMatch: {
-            /** Match Id */
-            match_id: number;
-            /** Date */
-            date: string | null;
-            /** Round */
-            round: string | null;
-            /** Status */
-            status: string | null;
-            /** Home Team Id */
-            home_team_id: number;
-            /** Away Team Id */
-            away_team_id: number;
-            /** Home Team Name Zh */
-            home_team_name_zh: string | null;
-            /** Away Team Name Zh */
-            away_team_name_zh: string | null;
-            /** Days Until Kickoff */
-            days_until_kickoff: number | null;
-            /**
-             * Availability
-             * @constant
-             */
-            availability: "live";
-            /** Tendency */
-            tendency: ("home" | "draw" | "away") | null;
-            /** Confidence */
-            confidence: ("normal" | "low") | null;
-            /** Reason */
-            reason: string | null;
-            /**
-             * Locked
-             * @constant
-             */
-            locked: true;
-        };
-        /**
          * LegacyWdlUpcomingMatch
-         * @description distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/locked/
-         *     p_home/p_draw/p_away——不是"这几个字段为 null",是这个 JSON 形状根本不含它们。
+         * @description distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/
+         *     p_home/p_draw/p_away——不是"这几个字段为 null",是这个 JSON 形状根本不含
+         *     它们(这是数据就绪状态,不是付费墙,2026-08-16 起未改变这条既有规则)。
          */
         LegacyWdlUpcomingMatch: {
             /** Match Id */
@@ -2535,9 +2726,9 @@ export interface components {
             available: true;
             /**
              * Tier
-             * @enum {string}
+             * @constant
              */
-            tier: "full" | "delayed_summary";
+            tier: "full";
             /**
              * Coverage Tier
              * @enum {string}
@@ -2570,6 +2761,347 @@ export interface components {
             available: false;
             /** Reason */
             reason: string;
+        };
+        /** MatchPreviewAttackChainDTO */
+        MatchPreviewAttackChainDTO: {
+            /** Tier */
+            tier: string;
+            /** Matches */
+            matches: number;
+            /** Label Zh */
+            label_zh: string;
+            /** Volume Keys */
+            volume_keys: string[];
+            /** Conversion Keys */
+            conversion_keys: string[];
+            opp_half_pass_share: components["schemas"]["MatchPreviewChainMetricDTO"];
+            touches_opp_box: components["schemas"]["MatchPreviewChainMetricDTO"];
+            shots: components["schemas"]["MatchPreviewChainMetricDTO"];
+            shots_on_target: components["schemas"]["MatchPreviewChainMetricDTO"];
+            xg: components["schemas"]["MatchPreviewChainMetricDTO"];
+            xgot: components["schemas"]["MatchPreviewChainMetricDTO"];
+            shots_per_100_box_touches: components["schemas"]["MatchPreviewChainMetricDTO"];
+            shot_on_target_rate: components["schemas"]["MatchPreviewChainMetricDTO"];
+            xg_per_shot: components["schemas"]["MatchPreviewChainMetricDTO"];
+            xgot_per_sot: components["schemas"]["MatchPreviewChainMetricDTO"];
+        };
+        /** MatchPreviewAttackChainsDTO */
+        MatchPreviewAttackChainsDTO: {
+            home: components["schemas"]["MatchPreviewAttackChainDTO"];
+            away: components["schemas"]["MatchPreviewAttackChainDTO"];
+        };
+        /** MatchPreviewAttackSourceDTO */
+        MatchPreviewAttackSourceDTO: {
+            /** Label */
+            label: string;
+            /** Shots */
+            shots: number;
+            /** Shot Pct */
+            shot_pct: number;
+            /** Xg */
+            xg?: number | null;
+        };
+        /** MatchPreviewAttackSourcesDTO */
+        MatchPreviewAttackSourcesDTO: {
+            /** Home */
+            home: components["schemas"]["MatchPreviewAttackSourceDTO"][];
+            /** Away */
+            away: components["schemas"]["MatchPreviewAttackSourceDTO"][];
+        };
+        /** MatchPreviewChainMetricDTO */
+        MatchPreviewChainMetricDTO: {
+            /** Value */
+            value?: number | null;
+            /**
+             * Complete
+             * @default false
+             */
+            complete: boolean;
+            /**
+             * Matches With Data
+             * @default 0
+             */
+            matches_with_data: number;
+        };
+        /** MatchPreviewDefensivePressureDTO */
+        MatchPreviewDefensivePressureDTO: {
+            /** Tier */
+            tier: string;
+            /** Matches */
+            matches: number;
+            /** Label Zh */
+            label_zh: string;
+            shots_faced: components["schemas"]["MatchPreviewChainMetricDTO"];
+            shots_on_target_faced: components["schemas"]["MatchPreviewChainMetricDTO"];
+            xga: components["schemas"]["MatchPreviewChainMetricDTO"];
+            box_shots_faced: components["schemas"]["MatchPreviewChainMetricDTO"];
+        };
+        /** MatchPreviewDefensivePressuresDTO */
+        MatchPreviewDefensivePressuresDTO: {
+            home: components["schemas"]["MatchPreviewDefensivePressureDTO"];
+            away: components["schemas"]["MatchPreviewDefensivePressureDTO"];
+        };
+        /** MatchPreviewKeeperDTO */
+        MatchPreviewKeeperDTO: {
+            /** Player Id */
+            player_id: string;
+            /** Name */
+            name: string;
+            /** Appearances */
+            appearances: number;
+            /** Saves */
+            saves: number;
+            /** Xgot Faced */
+            xgot_faced?: number | null;
+            /**
+             * Xgot Faced Complete
+             * @default false
+             */
+            xgot_faced_complete: boolean;
+            /** Goals Conceded */
+            goals_conceded: number;
+            /** Goals Prevented */
+            goals_prevented?: number | null;
+        };
+        /** MatchPreviewKeepersDTO */
+        MatchPreviewKeepersDTO: {
+            /** Home */
+            home: components["schemas"]["MatchPreviewKeeperDTO"][];
+            /** Away */
+            away: components["schemas"]["MatchPreviewKeeperDTO"][];
+        };
+        /** MatchPreviewKeyPlayersDTO */
+        MatchPreviewKeyPlayersDTO: {
+            /** Home */
+            home: components["schemas"]["MatchPreviewPlayerShareBlockDTO"][];
+            /** Away */
+            away: components["schemas"]["MatchPreviewPlayerShareBlockDTO"][];
+        };
+        /** MatchPreviewLineupSideDTO */
+        MatchPreviewLineupSideDTO: {
+            /** Team Id */
+            team_id?: number | null;
+            /** Formation */
+            formation?: string | null;
+            /** Starters */
+            starters: components["schemas"]["MatchPreviewPlayerDTO"][];
+            /** Subs */
+            subs: components["schemas"]["MatchPreviewPlayerDTO"][];
+        };
+        /**
+         * MatchPreviewLineupsDTO
+         * @description lineup_type 绝大多数真实值是 "lastStarting11"(上一场首发,不是本场
+         *     确认阵容)——必须原样透传,前端负责翻译成"预计首发·基于上一场"这类
+         *     措辞,后端不得转译成"首发"造成误读。两队都无快照时 home/away 为 None。
+         */
+        MatchPreviewLineupsDTO: {
+            /** Lineup Type */
+            lineup_type?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Observed At */
+            observed_at?: string | null;
+            home?: components["schemas"]["MatchPreviewLineupSideDTO"] | null;
+            away?: components["schemas"]["MatchPreviewLineupSideDTO"] | null;
+        };
+        /** MatchPreviewMatchupProfileDTO */
+        MatchPreviewMatchupProfileDTO: {
+            /** Tier */
+            tier: string;
+            /** Matches */
+            matches: number;
+            /** Label Zh */
+            label_zh: string;
+            /** Situations */
+            situations: components["schemas"]["MatchPreviewMatchupSituationDTO"][];
+        };
+        /** MatchPreviewMatchupProfilesDTO */
+        MatchPreviewMatchupProfilesDTO: {
+            home: components["schemas"]["MatchPreviewMatchupProfileDTO"];
+            away: components["schemas"]["MatchPreviewMatchupProfileDTO"];
+        };
+        /** MatchPreviewMatchupSituationDTO */
+        MatchPreviewMatchupSituationDTO: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Own Shots Pg */
+            own_shots_pg?: number | null;
+            /** Own Xg Pg */
+            own_xg_pg?: number | null;
+            /**
+             * Own Xg Complete
+             * @default false
+             */
+            own_xg_complete: boolean;
+            /** Conceded Shots Pg */
+            conceded_shots_pg?: number | null;
+            /** Conceded Xg Pg */
+            conceded_xg_pg?: number | null;
+            /**
+             * Conceded Xg Complete
+             * @default false
+             */
+            conceded_xg_complete: boolean;
+            /**
+             * Comparison Metric
+             * @default xg
+             */
+            comparison_metric: string;
+            /** Own Comparison Value */
+            own_comparison_value?: number | null;
+            /** Conceded Comparison Value */
+            conceded_comparison_value?: number | null;
+            /** Own Baseline Value */
+            own_baseline_value?: number | null;
+            /** Conceded Baseline Value */
+            conceded_baseline_value?: number | null;
+            /**
+             * Comparison Complete
+             * @default false
+             */
+            comparison_complete: boolean;
+        };
+        /** MatchPreviewPlayerDTO */
+        MatchPreviewPlayerDTO: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Shirt Number */
+            shirt_number?: string | null;
+        };
+        /** MatchPreviewPlayerShareBlockDTO */
+        MatchPreviewPlayerShareBlockDTO: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Metric */
+            metric: string;
+            /** Rows */
+            rows: components["schemas"]["MatchPreviewPlayerShareRowDTO"][];
+        };
+        /** MatchPreviewPlayerShareRowDTO */
+        MatchPreviewPlayerShareRowDTO: {
+            /** Player Id */
+            player_id: string;
+            /** Name */
+            name: string;
+            /** Pct */
+            pct: number;
+            /** Appearances */
+            appearances: number;
+            /** Minutes */
+            minutes: number;
+            /** Count */
+            count: number;
+        };
+        /** MatchPreviewPossessionControlDTO */
+        MatchPreviewPossessionControlDTO: {
+            /** Tier */
+            tier: string;
+            /** Matches */
+            matches: number;
+            /** Label Zh */
+            label_zh: string;
+            possession: components["schemas"]["MatchPreviewChainMetricDTO"];
+            pass_accuracy: components["schemas"]["MatchPreviewChainMetricDTO"];
+            opp_half_pass_share: components["schemas"]["MatchPreviewChainMetricDTO"];
+            touches_opp_box: components["schemas"]["MatchPreviewChainMetricDTO"];
+        };
+        /** MatchPreviewPossessionControlsDTO */
+        MatchPreviewPossessionControlsDTO: {
+            home: components["schemas"]["MatchPreviewPossessionControlDTO"];
+            away: components["schemas"]["MatchPreviewPossessionControlDTO"];
+        };
+        /** MatchPreviewResponse */
+        MatchPreviewResponse: {
+            /** Match Id */
+            match_id: number;
+            /** Observed At */
+            observed_at: string;
+            home_window?: components["schemas"]["MatchPreviewWindowDTO"] | null;
+            away_window?: components["schemas"]["MatchPreviewWindowDTO"] | null;
+            lineups: components["schemas"]["MatchPreviewLineupsDTO"];
+            sidelined: components["schemas"]["MatchPreviewSidelinedDTO"];
+            /** Style Views */
+            style_views: components["schemas"]["MatchPreviewStyleViewDTO"][];
+            attack_sources: components["schemas"]["MatchPreviewAttackSourcesDTO"];
+            attack_chains: components["schemas"]["MatchPreviewAttackChainsDTO"];
+            possession_controls: components["schemas"]["MatchPreviewPossessionControlsDTO"];
+            defensive_pressures: components["schemas"]["MatchPreviewDefensivePressuresDTO"];
+            matchup_profiles: components["schemas"]["MatchPreviewMatchupProfilesDTO"];
+            key_players: components["schemas"]["MatchPreviewKeyPlayersDTO"];
+            keepers: components["schemas"]["MatchPreviewKeepersDTO"];
+        };
+        /** MatchPreviewSidelinedDTO */
+        MatchPreviewSidelinedDTO: {
+            /** Home */
+            home: components["schemas"]["MatchPreviewSidelinedPlayerDTO"][];
+            /** Away */
+            away: components["schemas"]["MatchPreviewSidelinedPlayerDTO"][];
+        };
+        /** MatchPreviewSidelinedPlayerDTO */
+        MatchPreviewSidelinedPlayerDTO: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Reason */
+            reason?: string | null;
+            /** Expected Return */
+            expected_return?: string | null;
+        };
+        /** MatchPreviewStylePointDTO */
+        MatchPreviewStylePointDTO: {
+            /** Team Id */
+            team_id: number;
+            /** Name */
+            name: string;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
+        };
+        /** MatchPreviewStyleViewDTO */
+        MatchPreviewStyleViewDTO: {
+            /** Id */
+            id: string;
+            /** Tab */
+            tab: string;
+            /** Title */
+            title: string;
+            /** X Label */
+            x_label: string;
+            /** Y Label */
+            y_label: string;
+            /** Digits */
+            digits: number;
+            /** Quadrants */
+            quadrants: string[];
+            /** Points */
+            points: components["schemas"]["MatchPreviewStylePointDTO"][];
+            /**
+             * Y Lower Is Better
+             * @default false
+             */
+            y_lower_is_better: boolean;
+        };
+        /**
+         * MatchPreviewWindowDTO
+         * @description 单支球队"近 N 场"的真实场次数与日期区间(CLAUDE.md §11.2 措辞纪律:
+         *     不能只写"近 5 场"三个字了事)。主客队各自独立的窗口,不合并成一个——
+         *     历史场次不同(如升班马)时合并会掩盖其中一队样本更少的事实。
+         */
+        MatchPreviewWindowDTO: {
+            /** Matches */
+            matches: number;
+            /** From */
+            from: string;
+            /** To */
+            to: string;
         };
         /** MatchReportAvailableDTO */
         MatchReportAvailableDTO: {
@@ -2900,12 +3432,11 @@ export interface components {
             odds_observation_count?: number | null;
             /** Odds Coverage Tier */
             odds_coverage_tier?: ("full_timeline" | "open_close_only" | "none") | null;
+            /** Odds Last Observed At */
+            odds_last_observed_at?: string | null;
+            /** Odds Freshness State */
+            odds_freshness_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
             win_probability?: components["schemas"]["WinProbabilityDTO"] | null;
-            /**
-             * Requires Login
-             * @default false
-             */
-            requires_login: boolean;
         };
         /** MeDTO */
         MeDTO: {
@@ -3076,36 +3607,11 @@ export interface components {
             empty_reason?: string | null;
         };
         /**
-         * PredictionFreeDTO
-         * @description 匿名/Free:只有最高一项。禁止出现另外两项概率的任何形式。
+         * PredictionDTO
+         * @description 公开正式预测(2026-08-16 起恒为完整 WDL):除"每日精选"外普通比赛内容
+         *     全部免费,包括匿名——不再有 free/full 两套 DTO,也不再有 tier 字段。
          */
-        PredictionFreeDTO: {
-            /**
-             * Tier
-             * @default free
-             * @constant
-             */
-            tier: "free";
-            /**
-             * Top Outcome
-             * @enum {string}
-             */
-            top_outcome: "home" | "draw" | "away";
-            /** Top Probability */
-            top_probability: number;
-            meta: components["schemas"]["PredictionMeta"];
-        };
-        /**
-         * PredictionFullDTO
-         * @description Pro/Premium:完整 WDL。
-         */
-        PredictionFullDTO: {
-            /**
-             * Tier
-             * @default full
-             * @constant
-             */
-            tier: "full";
+        PredictionDTO: {
             /**
              * Top Outcome
              * @enum {string}
@@ -3165,8 +3671,7 @@ export interface components {
             available: boolean;
             /** Reason */
             reason?: string | null;
-            /** Prediction */
-            prediction?: components["schemas"]["PredictionFullDTO"] | components["schemas"]["PredictionFreeDTO"] | null;
+            prediction?: components["schemas"]["PredictionDTO"] | null;
         };
         /** ProductDTO */
         ProductDTO: {
@@ -3226,15 +3731,139 @@ export interface components {
             /** Problems */
             problems: string[];
         };
+        /** RecoAccessGrantBody */
+        RecoAccessGrantBody: {
+            /** User Id */
+            user_id: string;
+            /** Slip Id */
+            slip_id: string;
+            /** Note */
+            note?: string | null;
+        };
+        /** RecoAccessGrantDTO */
+        RecoAccessGrantDTO: {
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id: string;
+            /** Slip Id */
+            slip_id: string;
+            /** Slip Title */
+            slip_title: string;
+            /** Slip Date */
+            slip_date: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "revoked";
+            /** Granted At */
+            granted_at: string;
+            /** Granted By */
+            granted_by: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Revoked By */
+            revoked_by?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** RecoAccessRevokeBody */
+        RecoAccessRevokeBody: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * RecoDailyLockedSlipDTO
+         * @description 当前用户对该 slip 没有 active 按场授权时的中性投影(2026-08-16,
+         *     取代旧的全局 reco:daily 布尔权益门禁):只暴露"存在性 + 状态",标题/
+         *     摘要/腿的市场选择赔率/思路说明整体不出现——受限字段物理不下发,不是
+         *     置 null(与 CLAUDE.md §8.2 匿名概率边界同一纪律)。
+         */
+        RecoDailyLockedSlipDTO: {
+            /** Id */
+            id: string;
+            /** Slip Date */
+            slip_date: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "published" | "settled" | "voided";
+            /**
+             * Access Required
+             * @default true
+             * @constant
+             */
+            access_required: true;
+        };
         /**
          * RecoDailyResponse
-         * @description 付费面(reco:daily):近 30 天推荐单(含未结算)。
+         * @description 登录面(2026-08-16 起按"用户 + 单条 slip"授权,取代旧的 reco:daily
+         *     付费全局布尔权益):近 30 天推荐单存在性全部可见,内容按 slip 分别授权
+         *     (见 RecoDailySlipItem)。
          */
         RecoDailyResponse: {
             /** Window Days */
             window_days: number;
             /** Slips */
-            slips: components["schemas"]["RecoSlipDTO"][];
+            slips: (components["schemas"]["RecoDailyUnlockedSlipDTO"] | components["schemas"]["RecoDailyLockedSlipDTO"])[];
+        };
+        /**
+         * RecoDailyUnlockedSlipDTO
+         * @description 当前用户对该 slip 持有 active 按场授权时的完整投影(RecoSlipDTO 原样
+         *     +access_required=False,供前端统一判断是否需要引导授权)。
+         */
+        RecoDailyUnlockedSlipDTO: {
+            /** Id */
+            id: string;
+            /** Slip Date */
+            slip_date: string;
+            /** Title */
+            title: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Combo Type
+             * @enum {string}
+             */
+            combo_type: "single" | "parlay";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "published" | "settled" | "voided";
+            /** Result */
+            result?: ("win" | "lose" | "push" | "half_win" | "half_loss") | null;
+            /** Return Units */
+            return_units?: number | null;
+            /** Published At */
+            published_at?: string | null;
+            /** Settled At */
+            settled_at?: string | null;
+            /** Edit Count */
+            edit_count: number;
+            /** Last Edited At */
+            last_edited_at: string;
+            /** Legs */
+            legs: components["schemas"]["RecoLegDTO"][];
+            /**
+             * Access Required
+             * @default false
+             * @constant
+             */
+            access_required: false;
+        };
+        /** RecoLegCornersDTO */
+        RecoLegCornersDTO: {
+            /** Home */
+            home: number;
+            /** Away */
+            away: number;
         };
         /** RecoLegDTO */
         RecoLegDTO: {
@@ -3251,7 +3880,7 @@ export interface components {
             /** Odds */
             odds: number;
             /** Result */
-            result?: ("win" | "lose" | "push") | null;
+            result?: ("win" | "lose" | "push" | "half_win" | "half_loss") | null;
         };
         /** RecoLegInput */
         RecoLegInput: {
@@ -3265,6 +3894,33 @@ export interface components {
             odds: number;
             /** Match Id */
             match_id?: number | null;
+            /** Source Odds */
+            source_odds?: number | null;
+            /** Odds Format */
+            odds_format?: ("decimal" | "hk") | null;
+            /** Provider */
+            provider?: string | null;
+            /** Company Id */
+            company_id?: string | null;
+            /** Company Name */
+            company_name?: string | null;
+            /** Snapshot Ref */
+            snapshot_ref?: string | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Line */
+            line?: number | null;
+            /** Side */
+            side?: string | null;
+            /** Payload Hash */
+            payload_hash?: string | null;
+        };
+        /** RecoLegMatchResultDTO */
+        RecoLegMatchResultDTO: {
+            /** Home Score */
+            home_score: number;
+            /** Away Score */
+            away_score: number;
         };
         /**
          * RecoMatchCandidateDTO
@@ -3299,8 +3955,21 @@ export interface components {
             options: components["schemas"]["RecoOddsOptionDTO"][];
         };
         /**
+         * RecoMyAccessResponse
+         * @description 个人"每日精选权限查询"(CLAUDE.md §8.1 允许要求登录的账户类个人
+         *     功能之一):只含当前用户自己的授权记录。
+         */
+        RecoMyAccessResponse: {
+            /** Grants */
+            grants: components["schemas"]["RecoAccessGrantDTO"][];
+        };
+        /**
          * RecoOddsOptionDTO
          * @description 真实盘口选项(不去水的原始赔率),admin 从中选而不是手打数字。
+         *
+         *     odds 字段延续原有语义:来源原始数值(1x2 是十进制;ou/corners_ou 是港赔,
+         *     常 <1)。新增字段供 admin 提交腿时一并回传,后端据此判定 provenance_bound
+         *     并正确换算(见 RecoLegInput/backend/commands/reco_odds_contract.py)。
          */
         RecoOddsOptionDTO: {
             /** Market */
@@ -3315,6 +3984,24 @@ export interface components {
             company_name: string;
             /** Observed At */
             observed_at: string;
+            /** Snapshot Id */
+            snapshot_id: number;
+            /** Company Id */
+            company_id: string;
+            /** Line */
+            line?: number | null;
+            /** Side */
+            side: string;
+            /**
+             * Odds Format
+             * @enum {string}
+             */
+            odds_format: "decimal" | "hk";
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "FRESH" | "STALE" | "UNAVAILABLE";
         };
         /**
          * RecoOverviewResponse
@@ -3337,6 +4024,10 @@ export interface components {
             lose_count: number;
             /** Push Count */
             push_count: number;
+            /** Half Win Count */
+            half_win_count: number;
+            /** Half Loss Count */
+            half_loss_count: number;
             /** Voided Count */
             voided_count: number;
             /** Hit Rate */
@@ -3353,7 +4044,7 @@ export interface components {
         RecoSettleBody: {
             /** Leg Results */
             leg_results: {
-                [key: string]: "win" | "lose" | "push";
+                [key: string]: "win" | "lose" | "push" | "half_win" | "half_loss";
             };
         };
         /** RecoSettledDTO */
@@ -3362,7 +4053,7 @@ export interface components {
              * Result
              * @enum {string}
              */
-            result: "win" | "lose" | "push";
+            result: "win" | "lose" | "push" | "half_win" | "half_loss";
             /** Return Units */
             return_units: number;
         };
@@ -3403,7 +4094,7 @@ export interface components {
              */
             status: "draft" | "published" | "settled" | "voided";
             /** Result */
-            result?: ("win" | "lose" | "push") | null;
+            result?: ("win" | "lose" | "push" | "half_win" | "half_loss") | null;
             /** Return Units */
             return_units?: number | null;
             /** Published At */
@@ -3429,8 +4120,19 @@ export interface components {
             legs?: components["schemas"]["RecoLegInput"][] | null;
         };
         /**
+         * RecoSlipPreviewResponse
+         * @description admin 用:该单如果 published,一个真实会员在 /reco/daily 会看到的内容
+         *     形状——与 RecoDailyResponse 里的单据字段完全一致(同一个 RecoSlipDTO,
+         *     同一套投影函数 q_reco.slip_member_preview/_slip_dto),不重新发明一套
+         *     会员端 DTO。
+         */
+        RecoSlipPreviewResponse: {
+            slip: components["schemas"]["RecoSlipDTO"];
+        };
+        /**
          * RecoTrackRecordResponse
-         * @description 登录面(reco:track_record):结算/作废归档全历史,命中未中全展示。
+         * @description 匿名可见(2026-08-16 起不再要求登录):结算/作废归档全历史,命中未中
+         *     全展示——站点自身的历史运营记录,不属于"每日精选"按场授权的约束范围。
          */
         RecoTrackRecordResponse: {
             summary: components["schemas"]["RecoTrackRecordSummaryDTO"];
@@ -3449,6 +4151,10 @@ export interface components {
             lose_count: number;
             /** Push Count */
             push_count: number;
+            /** Half Win Count */
+            half_win_count: number;
+            /** Half Loss Count */
+            half_loss_count: number;
             /** Voided Count */
             voided_count: number;
             /** Hit Rate */
@@ -3460,34 +4166,6 @@ export interface components {
         RecoVoidBody: {
             /** Reason */
             reason: string;
-        };
-        /** RedeemBody */
-        RedeemBody: {
-            /** Code */
-            code: string;
-        };
-        /** RedeemCodeCreatedItem */
-        RedeemCodeCreatedItem: {
-            /** Id */
-            id: string;
-            /** Code */
-            code: string;
-        };
-        /** RedeemResponse */
-        RedeemResponse: {
-            /**
-             * Status
-             * @constant
-             */
-            status: "ok";
-            /** Subscription Id */
-            subscription_id: string;
-            /** Plan Id */
-            plan_id: string;
-            /** Starts At */
-            starts_at: string;
-            /** Ends At */
-            ends_at: string;
         };
         /** RetractBody */
         RetractBody: {
@@ -3509,6 +4187,21 @@ export interface components {
             match_count?: number | null;
             /** Pct */
             pct?: number | null;
+        };
+        /** SourceHealthItem */
+        SourceHealthItem: {
+            /** Id */
+            id: number;
+            /** Source */
+            source: string;
+            /** Checked At */
+            checked_at: string;
+            /** Ok */
+            ok: number;
+            /** Latency Ms */
+            latency_ms?: number | null;
+            /** Error Summary */
+            error_summary?: string | null;
         };
         /**
          * StandingRow
@@ -3766,8 +4459,9 @@ export interface components {
         };
         /**
          * TeamSeasonStatRow
-         * @description silver_team_season_stats 免费字段投影。角球/红黄牌/零封/BTTS 是付费深度
-         *     报告字段,物理上不在本 DTO(不是 null 占位,更不是取了再藏)。
+         * @description silver_team_season_stats 全字段投影(2026-08-16 起,除"每日精选"外
+         *     普通比赛内容全部免费——角球/红黄牌/零封/BTTS 与射门/xG 等字段同属免费
+         *     内容,不再是付费深度报告字段)。
          */
         TeamSeasonStatRow: {
             team: components["schemas"]["TeamRef"];
@@ -3791,6 +4485,20 @@ export interface components {
             avg_expected_goals_non_penalty?: number | null;
             /** Avg Expected Goals Conceded */
             avg_expected_goals_conceded?: number | null;
+            /** Avg Corners */
+            avg_corners?: number | null;
+            /** Avg Fouls */
+            avg_fouls?: number | null;
+            /** Avg Yellow Cards */
+            avg_yellow_cards?: number | null;
+            /** Avg Red Cards */
+            avg_red_cards?: number | null;
+            /** Clean Sheets */
+            clean_sheets?: number | null;
+            /** Btts Matches */
+            btts_matches?: number | null;
+            /** Btts Pct */
+            btts_pct?: number | null;
         };
         /** TeamStatsResponse */
         TeamStatsResponse: {
@@ -4730,24 +5438,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -4793,24 +5483,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4872,24 +5544,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -4934,24 +5588,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5010,24 +5646,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5079,24 +5697,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5126,6 +5726,7 @@ export interface operations {
                 status?: string | null;
                 window?: string | null;
                 content?: string | null;
+                boost?: string | null;
                 q?: string | null;
                 limit?: number;
                 offset?: number;
@@ -5147,24 +5748,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5221,24 +5804,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5281,24 +5846,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5355,24 +5902,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5422,24 +5951,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5477,29 +5988,11 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CooccurrenceFullDTO"] | components["schemas"]["CooccurrenceSummaryDTO"];
+                    "application/json": components["schemas"]["CooccurrenceResponse"];
                 };
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5556,8 +6049,8 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5565,8 +6058,39 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Forbidden */
-            403: {
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    match_preview_api_v1_matches__match_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                match_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchPreviewResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5623,24 +6147,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5681,24 +6187,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5756,24 +6244,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5814,24 +6284,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5886,24 +6338,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -5945,75 +6379,6 @@ export interface operations {
                 };
                 content: {
                     "image/png": unknown;
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-        };
-    };
-    redeem_api_v1_redeem_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RedeemBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RedeemResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
             /** @description Not Found */
@@ -6501,6 +6866,138 @@ export interface operations {
             };
         };
     };
+    reco_daily_slip_api_v1_reco_daily__slip_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoSlipDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    reco_my_access_api_v1_reco_my_access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoMyAccessResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     reco_track_record_api_v1_reco_track_record_get: {
         parameters: {
             query?: {
@@ -6574,6 +7071,9 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                status?: string;
+                date_from?: string;
+                date_to?: string;
             };
             header?: never;
             path?: never;
@@ -6706,11 +7206,79 @@ export interface operations {
             };
         };
     };
+    admin_preview_slip_api_v1_admin_reco_slips__slip_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoSlipPreviewResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     admin_reco_match_candidates_api_v1_admin_reco_match_candidates_get: {
         parameters: {
             query?: {
                 q?: string | null;
                 limit?: number;
+                window?: string | null;
             };
             header?: never;
             path?: never;
@@ -7121,6 +7689,217 @@ export interface operations {
             };
         };
     };
+    admin_list_reco_access_api_v1_admin_reco_access_grants_get: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                slip_id?: string;
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecoAccessGrantsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_grant_reco_access_api_v1_admin_reco_access_grants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoAccessGrantBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoAccessGrantDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_revoke_reco_access_api_v1_admin_reco_access_grants__grant_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoAccessRevokeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     list_users_api_v1_admin_users_get: {
         parameters: {
             query?: {
@@ -7297,161 +8076,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OkDTO"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-        };
-    };
-    list_codes_api_v1_admin_redeem_codes_get: {
-        parameters: {
-            query?: {
-                batch_id?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminCodesListResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-        };
-    };
-    create_codes_api_v1_admin_redeem_codes_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateCodesBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminCodesCreatedResponse"];
                 };
             };
             /** @description Bad Request */
@@ -7983,6 +8607,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                target_type?: string;
+                target_id?: string;
             };
             header?: never;
             path?: never;
@@ -7997,6 +8623,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditLogsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    list_jobs_api_v1_admin_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJobsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    list_source_health_api_v1_admin_source_health_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSourceHealthResponse"];
                 };
             };
             /** @description Bad Request */
@@ -8957,24 +9737,6 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };

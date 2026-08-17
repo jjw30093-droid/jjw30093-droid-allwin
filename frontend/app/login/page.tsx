@@ -207,7 +207,7 @@ function LoginBody() {
           <li>模型完整概率(主胜 / 平局 / 客胜)</li>
           <li>完整赔率时间线与历史战绩</li>
         </ul>
-        <p className={styles.perksFoot}>免费 · 不填手机号 · 只发数据,不发荐单</p>
+        <p className={styles.perksFoot}>免费 · 不填手机号 · 不代购、不承诺收益;推荐与修正记录公开</p>
       </section>
 
       <PasswordLoginSection nextPath={nextPath} />

@@ -5,7 +5,6 @@
 """
 
 from backend.queries.leagues import (
-    FREE_LEAGUE_ENTITLEMENTS,
     LEAGUE_META,
     accessible_league_ids,
     anonymous_cacheable_league_ids,
@@ -52,25 +51,27 @@ def test_new_leagues_declare_season_kind():
         assert LEAGUE_META[lid]["season_kind"] == "cross_year"
 
 
-def test_anonymous_cacheable_is_free_tier_only():
+def test_anonymous_cacheable_is_universal():
+    """2026-08-16 产品权限口径修正:除"每日精选"外全站比赛内容全部免费,
+    包括匿名——联赛级 entitlement 分类(epl/top5/lottery/european_cup)现在
+    只是描述性元数据,不再影响匿名可缓存集合。这条断言正是要推翻
+    "league:lottery 联赛不进匿名可缓存集"的旧规则。"""
     anon = anonymous_cacheable_league_ids()
-    # 匿名可缓存 = free 档(epl + top5 + european_cup),不含需登录的 lottery
-    assert 47 in anon
+    assert set(LEAGUE_META) == set(anon)
+    # league:lottery 联赛现在同样在匿名可缓存集合内
     for lid, meta in LEAGUE_META.items():
         if meta["entitlement"] == "league:lottery":
-            assert lid not in anon
-        elif meta["entitlement"] in FREE_LEAGUE_ENTITLEMENTS:
-            assert lid in anon
-    # 五大联赛与欧战三项都进匿名可缓存集
-    assert {87, 55, 54, 53} <= anon
-    assert NEW_EUROPEAN_CUP_IDS <= anon
+            assert lid in anon, f"{lid} 应在匿名可缓存集合内(登录与内容分层已解耦)"
 
 
-def test_accessible_league_ids_respects_entitlements():
-    # 匿名(free)看得到 epl + top5 + 欧战三项;看不到需登录的 lottery 联赛
-    free = accessible_league_ids(FREE_LEAGUE_ENTITLEMENTS)
-    assert 47 in free and 87 in free and 42 in free
-    assert 48 not in free  # 英冠现在需登录(league:lottery)
+def test_accessible_league_ids_is_universal_regardless_of_entitlements():
+    """任何 entitlements 输入(即使是空集)都应恒返回全部联赛 id——访问权
+    不再由 entitlement 判定,参数只为兼容既有调用签名保留。"""
+    empty = accessible_league_ids(frozenset())
+    assert empty == set(LEAGUE_META)
+    full = accessible_league_ids(frozenset({"league:epl", "league:top5", "league:european_cup"}))
+    assert full == set(LEAGUE_META)
+    assert 48 in empty  # 原 league:lottery(英冠)现同样恒可访问
 
 
 def test_content_pipeline_registry_does_not_drift():
