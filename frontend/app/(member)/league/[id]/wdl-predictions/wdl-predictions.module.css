@@ -178,8 +178,8 @@
   display: inline-block;
 }
 
-/* ── 未付费:钩子 + 锁 ── */
-.lockedRow {
+/* ── 模型倾向已算出、完整三项概率还未生成:钩子 + 中性提示 ── */
+.pendingRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -199,7 +199,7 @@
   font-weight: 700;
 }
 
-.lockCta {
+.pendingNote {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -291,7 +291,7 @@
   height: 7px;
 }
 
-.compact.lockedRow {
+.compact.pendingRow {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;

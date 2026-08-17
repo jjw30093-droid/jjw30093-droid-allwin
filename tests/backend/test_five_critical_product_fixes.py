@@ -255,6 +255,80 @@ def test_match_query_uses_exact_kickoff_stable_order_windows_and_search() -> Non
         conn.close()
 
 
+def test_top_priority_match_ids_outranks_plain_priority_and_stays_backward_compatible() -> None:
+    """首页重点位确定性选场(2026-08-16):单层 priority_match_ids 只能表达
+    "这批比赛都排最前"——当这批比赛数量超过 limit 时,里面真正更值得优先的
+    一小撮(比如"免费且已发布概率"的比赛)仍可能被同一大类里开球更早的其它
+    比赛挤出分页截断线之外。新增 top_priority_match_ids 是比 priority_match_ids
+    更强的第二档,专门解决这个问题。
+
+    未传 top_priority_match_ids 时必须与改动前逐字节同一行为(向后兼容,
+    不影响任何既有调用方——见上面 test_match_query_uses_exact_kickoff_...
+    里那个只传 priority_match_ids 的既有断言)。"""
+    conn = _core()
+    try:
+        _match(conn, 6200001, "2026-07-31T01:00:00Z", 1, 2, "A", "B")
+        _match(conn, 6200002, "2026-07-31T01:00:00Z", 3, 4, "C", "D")
+        _match(conn, 6200003, "2026-07-31T03:00:00Z", 5, 6, "E", "F")
+        _match(conn, 6200004, "2026-08-04T01:00:00Z", 7, 8, "G", "H")
+
+        # top_priority_match_ids 缺省:与改动前的单层 priority_match_ids 语义
+        # 完全一致(6200002/6200003 排最前,组内按开球时间;其余按开球时间
+        # 跟在后面——6200004 虽未被优先,但仍在 7 天窗口内,不会从结果里消失)。
+        legacy = list_matches(
+            conn,
+            {59},
+            status="upcoming",
+            window="7d",
+            now=NOW,
+            priority_match_ids={6200002, 6200003},
+            limit=20,
+        )
+        assert [row["match_id"] for row in legacy["matches"]] == [
+            6200002,
+            6200003,
+            6200001,
+            6200004,
+        ]
+
+        # top_priority_match_ids={6200004}:即使 6200004 开球最晚、且不在
+        # priority_match_ids 里,也必须排在 priority_match_ids 那一档之前——
+        # 这正是首页"免费且已发布概率"的比赛必须挤进 limit 截断线以内所需要的
+        # 更强优先级。
+        boosted = list_matches(
+            conn,
+            {59},
+            status="upcoming",
+            window="7d",
+            now=NOW,
+            priority_match_ids={6200002, 6200003},
+            top_priority_match_ids={6200004},
+            limit=20,
+        )
+        assert [row["match_id"] for row in boosted["matches"]] == [
+            6200004,
+            6200002,
+            6200003,
+            6200001,
+        ]
+
+        # limit 截断场景:即便 top tier 只有一个名额,也必须挤进第一页——
+        # 这正是首页 limit=8 请求依赖的真实行为。
+        truncated = list_matches(
+            conn,
+            {59},
+            status="upcoming",
+            window="7d",
+            now=NOW,
+            priority_match_ids={6200002, 6200003},
+            top_priority_match_ids={6200004},
+            limit=1,
+        )
+        assert [row["match_id"] for row in truncated["matches"]] == [6200004]
+    finally:
+        conn.close()
+
+
 def test_team_projection_prefers_reviewed_name_then_provider_then_safe_fallback() -> None:
     conn = _core()
     try:
@@ -428,10 +502,11 @@ def test_league_catalog_and_match_content_filters_are_data_driven(
     assert eliteserien["name_zh"] == "挪威超"
     assert eliteserien["current_season"] == "2026"
     assert eliteserien["data_status"] == "AVAILABLE"
-    # 2026-08-11 权限矩阵互换(platform 0012):挪超是 league:lottery,匿名不可访问,
-    # 登录后才可访问——本用例聚焦"目录/内容过滤是否数据驱动",登录后再验证。
-    assert eliteserien["accessible"] is False
-    wechat_scan_login(client, ip="203.0.113.201")
+    # 2026-08-16 产品权限口径修正:除"每日精选"外全站比赛内容全部免费,
+    # 包括匿名——挪超(原 league:lottery)不再需要登录,LeagueInfo 也不再
+    # 暴露 accessible 字段(该字段已从响应模型整体删除)。这条断言正是要
+    # 推翻的旧规则(此前匿名不可访问,accessible 恒为 False)。
+    assert "accessible" not in eliteserien
 
     analysis = client.get(
         "/api/v1/matches?league_id=59&status=upcoming&content=analysis"
@@ -447,7 +522,8 @@ def test_list_detail_and_standings_share_truthful_public_projection(
     app, product_seeded
 ) -> None:
     client = TestClient(app)
-    # 挪超(59)是 league:lottery,权限矩阵互换后需登录(见上一测试同样的改动)。
+    # 挪超(59)2026-08-16 起匿名即可访问(登录与内容分层已解耦);这里登录
+    # 只是为了同时覆盖"登录用户看到与匿名一致内容"这条路径,不是访问前提。
     wechat_scan_login(client, ip="203.0.113.202")
     listed = client.get(
         "/api/v1/matches?league_id=59&status=upcoming"

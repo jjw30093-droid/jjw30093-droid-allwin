@@ -1,22 +1,23 @@
 "use client";
 
 /**
- * 首页"今晚/明天/未来7天"计数条 + 重点位(免费/锁定对照卡) + 近期比赛。
+ * 首页"今晚/明天/未来7天"计数条 + 重点比赛 + 近期比赛。
  *
- * 2026-08-13 Claude Design 定稿重排(design_handoff_home_hero/README.md):
- * 单张 featured 卡拆成并排两张——一张免费卡(优先选真的有概率的免费比赛)+
- * 一张锁定对照卡(同一批比赛里开球最近的一场需登录比赛),让"免费能看到
- * 什么、登录后多看到什么"一眼对比,而不是靠猜。数据更新条(赛程/赔率/
- * 推荐三条时间戳)从页面顶部独立一行收编进计数条卡内部。
+ * 2026-08-16 权限口径修正:后端对任何人(含匿名)恒返回完整比赛内容,
+ * MatchSummary 不再有 `requires_login` 字段——此前"一张免费卡 + 一张锁定
+ * 对照卡"并排展示的产品概念随之消失(不存在需要诚实展示"这场看不到概率"
+ * 的锁定比赛了),改为单张重点比赛卡 + 近期比赛列表(见
+ * lib/homepage.ts::selectFeaturedMatch)。数据更新条(赛程/赔率/推荐三条
+ * 时间戳)仍收编在计数条卡内部。
  *
  * 和 MatchListLive(见 components/matches/MatchListLive.tsx)同一个根因、
  * 同一套修法:会话 cookie Path=/api/v1,Next RSC 读不到,所以首页服务端渲染
- * 永远按匿名口径拉 /api/v1/matches——登录后可见联赛集合是匿名集合的超集,
- * 挂载后浏览器带 cookie 重新拉一次同一组请求,用 selectHeroPair
- * (lib/homepage.ts)重新算一遍两张重点卡该显示谁——这是纯函数,服务端 SSR
- * 和这里用的是同一份判据,不会出现"登录前后选场逻辑不一致"。
+ * 永远按匿名口径拉 /api/v1/matches;挂载后浏览器带 cookie 重新拉一次同一组
+ * 请求,用 selectFeaturedMatch(lib/homepage.ts)重新选一次重点比赛——这是
+ * 纯函数,服务端 SSR 和这里用的是同一份判据。由于比赛内容不再区分身份,
+ * 这次客户端刷新实际只会在数据本身发生变化时才改变展示结果。
  *
- * 静默降级:刷新失败时保留 SSR 渲染的匿名内容,不整块报错。
+ * 静默降级:刷新失败时保留 SSR 渲染的内容,不整块报错。
  *
  * 数据更新条(freshness)不参与这次客户端刷新:它是公开只读聚合,不随
  * 请求者身份变化,SSR 一次即可,没必要跟着登录状态重新拉。
@@ -25,35 +26,48 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clientFetch, type GetJson, type MatchListResponse } from "@/lib/api-v1";
-import { selectHeroPair, type HomeMatchCard } from "@/lib/homepage";
+import { selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
 import { KickoffCountdown } from "@/components/matches/KickoffCountdown";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { LeagueBadge } from "@/components/matches/LeagueBadge";
 import { WinProbabilityBar } from "@/components/matches/WinProbabilityBar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { LEAGUE_ZH, STATUS_ZH, formatBeijingHM, formatBeijingZh } from "@/components/matches/zh";
+import {
+  LEAGUE_ZH,
+  STATUS_ZH,
+  beijingDateKey,
+  formatBeijingDateTime,
+  formatBeijingHM,
+  formatBeijingZh,
+} from "@/components/matches/zh";
+import { syncStateLabel } from "@/lib/product-status";
 import styles from "@/app/page.module.css";
 
 type Counts = { today: number; tomorrow: number; week: number } | null;
 type Freshness = GetJson<"/api/v1/status/freshness">;
 
 interface Props {
-  initialFreeCard: HomeMatchCard | null;
-  initialLockedCard: HomeMatchCard | null;
+  initialFeatured: HomeMatchCard | null;
   initialSecondary: HomeMatchCard[];
   initialCounts: Counts;
   initialFreshness: Freshness | null;
   initialErrored: boolean;
 }
 
-async function fetchHomeData(): Promise<{
-  freeCard: HomeMatchCard | null;
-  lockedCard: HomeMatchCard | null;
+export async function fetchHomeData(): Promise<{
+  featured: HomeMatchCard | null;
   secondary: HomeMatchCard[];
   counts: Counts;
 }> {
   const [upcoming, todayList, tomorrowList, shotsList] = await Promise.all([
-    clientFetch<MatchListResponse>("/api/v1/matches?status=upcoming&window=7d&limit=8"),
+    // boost=free_predicted:与 app/page.tsx 的 SSR 请求同一个参数、同一个
+    // 目的——把"已发布概率"的比赛在服务端顶进 limit=8 截断线以内,不能只看
+    // API 原始顺序的前 8 条(见 lib/homepage.ts 顶部注释:这里和 SSR 必须用
+    // 同一套判据)。参数名沿用后端既有 query 定义(backend/api/routes_public.py),
+    // 与登录态无关,只是"这场比赛是否已算出概率"的服务端筛选提示。
+    clientFetch<MatchListResponse>(
+      "/api/v1/matches?status=upcoming&window=7d&limit=8&boost=free_predicted",
+    ),
     clientFetch<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=today&limit=1",
     ).catch(() => null),
@@ -67,14 +81,14 @@ async function fetchHomeData(): Promise<{
 
   const cards: HomeMatchCard[] = upcoming.matches.map((match) => ({ match, tip: null }));
   const withShots = new Set<number>((shotsList?.matches ?? []).map((m) => m.match_id));
-  const { freeCard, lockedCard, secondary } = selectHeroPair(cards, new Date(), { withShots });
+  const { featured, secondary } = selectFeaturedMatch(cards, new Date(), { withShots });
 
   const counts: Counts =
     todayList && tomorrowList
       ? { today: todayList.total, tomorrow: tomorrowList.total, week: upcoming.total }
       : null;
 
-  return { freeCard, lockedCard, secondary, counts };
+  return { featured, secondary, counts };
 }
 
 /* ── 今晚/明天/未来7天计数条(时间轴式:数字 + 进度段 + 数据更新条) ── */
@@ -113,28 +127,85 @@ function CountItem({
   );
 }
 
-function FreshnessBlock({ freshness }: { freshness: Freshness | null }) {
+/** 把一个 UTC 时间戳格式成"今天 HH:mm"(与"现在"同一个北京自然日时)或完整
+ * 北京日期时间(跨天时)。formatBeijingHM() 那个只输出 HH:mm 的函数文档
+ * 注释里写着"日期永远是今天"——那个假设在这里已经不成立(网络中断可能让
+ * 数据好几天没更新),所以这里不能再单独用它,必须先用 beijingDateKey()
+ * 比较日期。timestamp 为空或 todayKey 还未算出(挂载前)时回退到完整日期
+ * 格式,不冒险显示一个可能错误的"今天"。 */
+function smartBeijingTime(iso: string | null | undefined, todayKey: string | null): string {
+  if (!iso) return "尚无记录";
+  const key = beijingDateKey(iso);
+  if (todayKey !== null && key !== null && key === todayKey) {
+    const hm = formatBeijingHM(iso);
+    if (hm) return `今天 ${hm}`;
+  }
+  return formatBeijingDateTime(iso) ?? "尚无记录";
+}
+
+function FreshnessRow({
+  label,
+  iso,
+  state,
+  todayKey,
+}: {
+  label: string;
+  iso: string | null | undefined;
+  state: Freshness["schedule_state"];
+  todayKey: string | null;
+}) {
+  return (
+    <span className={styles.freshnessItem} data-state={state ?? undefined}>
+      <span>
+        {label} <time dateTime={iso ?? undefined}>{smartBeijingTime(iso, todayKey)}</time>
+      </span>
+      <span className={styles.freshnessState}>{syncStateLabel(state)}</span>
+    </span>
+  );
+}
+
+export function FreshnessBlock({ freshness }: { freshness: Freshness | null }) {
+  // "今天"的判定依赖客户端此刻的北京日期,挂载前(含 SSR)先按 null 处理——
+  // smartBeijingTime 在 todayKey===null 时回退到完整日期,SSR 与首次客户端
+  // 渲染的输出因此恒等,不产生水合警告;挂载后这个 effect 把日期填上,
+  // 才会把"今天"范围内的行升级成"今天 HH:mm"简写。
+  const [todayKey, setTodayKey] = useState<string | null>(null);
+  useEffect(() => {
+    // setTimeout(0) 而不是挂载时同步调用 setState——避免 effect 内联发起的
+    // 级联渲染(react-hooks/set-state-in-effect),与 KickoffCountdown.tsx
+    // 同一套写法;0ms 延迟对"今天"这个粒度的判断无感知。
+    const id = setTimeout(() => {
+      setTodayKey(beijingDateKey(new Date().toISOString()));
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
   if (!freshness) return null;
-  const hm = (iso: string | null | undefined) => {
-    if (!iso) return "尚无记录";
-    return formatBeijingHM(iso) ?? "尚无记录";
-  };
   return (
     <p className={styles.freshnessLine} data-testid="freshness-line">
-      <span>
-        赛程更新 <time dateTime={freshness.schedule_updated_at ?? undefined}>{hm(freshness.schedule_updated_at)}</time>
-      </span>
-      <span>
-        赔率更新 <time dateTime={freshness.odds_updated_at ?? undefined}>{hm(freshness.odds_updated_at)}</time>
-      </span>
-      <span>
-        推荐更新 <time dateTime={freshness.reco_updated_at ?? undefined}>{hm(freshness.reco_updated_at)}</time>
-      </span>
+      <FreshnessRow
+        label="赛程更新"
+        iso={freshness.schedule_updated_at}
+        state={freshness.schedule_state}
+        todayKey={todayKey}
+      />
+      <FreshnessRow
+        label="赔率更新"
+        iso={freshness.odds_updated_at}
+        state={freshness.odds_state}
+        todayKey={todayKey}
+      />
+      <FreshnessRow
+        label="推荐更新"
+        iso={freshness.reco_updated_at}
+        state={freshness.reco_state}
+        todayKey={todayKey}
+      />
     </p>
   );
 }
 
-/* ── 开球行(免费卡/锁定卡共用):日期时间 + 真实倒计时 ─────────── */
+/* ── 开球行:日期时间 + 真实倒计时 ─────────────────────────── */
 
 function KickoffRow({ match }: { match: HomeMatchCard["match"] }) {
   return (
@@ -153,13 +224,7 @@ function KickoffRow({ match }: { match: HomeMatchCard["match"] }) {
   );
 }
 
-function CardHeader({
-  match,
-  tierBadge,
-}: {
-  match: HomeMatchCard["match"];
-  tierBadge: { text: string; free: boolean };
-}) {
+function CardHeader({ match }: { match: HomeMatchCard["match"] }) {
   return (
     <header className={styles.pairHeader}>
       <span className={styles.pairLeague}>
@@ -169,23 +234,20 @@ function CardHeader({
       </span>
       <span className={styles.pairBadges}>
         <span className={styles.pairStatusBadge}>{STATUS_ZH[match.status] ?? match.status}</span>
-        <span className={tierBadge.free ? styles.pairFreeBadge : styles.pairLockedBadge}>
-          {tierBadge.text}
-        </span>
       </span>
     </header>
   );
 }
 
-/* ── 重点位:免费卡 ──────────────────────────────────────── */
+/* ── 重点比赛卡(2026-08-16 权限口径修正:不再区分免费/锁定,单张卡) ── */
 
-function FeaturedFreeCard({ card }: { card: HomeMatchCard }) {
+function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
   const { match } = card;
   const oddsObservedAt = match.win_probability?.observed_at ?? null;
 
   return (
-    <article className={styles.freeCard} data-testid="featured-match-card">
-      <CardHeader match={match} tierBadge={{ text: "免费", free: true }} />
+    <article className={styles.featuredCard} data-testid="featured-match-card">
+      <CardHeader match={match} />
 
       <div className={styles.pairBody}>
         <div className={styles.pairMatchup}>
@@ -229,49 +291,11 @@ function FeaturedFreeCard({ card }: { card: HomeMatchCard }) {
 
       <Link
         href={`/matches/${match.match_id}`}
-        className={styles.pairFreeCta}
+        className={styles.pairCta}
         aria-label={`查看${match.home.name}对${match.away.name}完整分析`}
       >
         查看完整分析
         <span aria-hidden>→</span>
-      </Link>
-    </article>
-  );
-}
-
-/* ── 重点位:锁定对照卡 ──────────────────────────────────── */
-
-function FeaturedLockedCard({ card }: { card: HomeMatchCard }) {
-  const { match } = card;
-
-  return (
-    <article className={styles.lockedCard}>
-      <CardHeader match={match} tierBadge={{ text: "需登录", free: false }} />
-
-      <div className={styles.pairBody}>
-        <div className={styles.pairMatchup}>
-          <KickoffRow match={match} />
-          <div className={styles.pairTeamsInline}>
-            <span className={styles.pairTeamInline}>
-              <TeamBadge teamName={match.home.name} crestUrl={match.home.crest_url} size={36} />
-              <span className={styles.pairTeamNameInline}>{match.home.name}</span>
-            </span>
-            <span className={styles.pairVs} aria-hidden>
-              vs
-            </span>
-            <span className={styles.pairTeamInline}>
-              <TeamBadge teamName={match.away.name} crestUrl={match.away.crest_url} size={36} />
-              <span className={styles.pairTeamNameInline}>{match.away.name}</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <Link
-        href={`/login?next=${encodeURIComponent(`/matches/${match.match_id}`)}`}
-        className={styles.pairLockedCta}
-      >
-        登录后查看这场概率 <span aria-hidden>→</span>
       </Link>
     </article>
   );
@@ -318,9 +342,7 @@ function SecondaryMatchCard({ card }: { card: HomeMatchCard }) {
           <WinProbabilityBar probability={match.win_probability} compact />
         </div>
       ) : (
-        <p className={styles.secondaryPending} data-tone={match.requires_login ? "link" : "muted"}>
-          {match.requires_login ? "登录后查看概率 →" : "暂无赔率数据"}
-        </p>
+        <p className={styles.secondaryPending}>暂无赔率数据</p>
       )}
     </Link>
   );
@@ -369,15 +391,13 @@ function ThisWeekSection({ cards, total }: { cards: HomeMatchCard[]; total: numb
 /* ── 组装 ───────────────────────────────────────────────── */
 
 export function HomeMatchExperienceLive({
-  initialFreeCard,
-  initialLockedCard,
+  initialFeatured,
   initialSecondary,
   initialCounts,
   initialFreshness,
   initialErrored,
 }: Props) {
-  const [freeCard, setFreeCard] = useState(initialFreeCard);
-  const [lockedCard, setLockedCard] = useState(initialLockedCard);
+  const [featured, setFeatured] = useState(initialFeatured);
   const [secondary, setSecondary] = useState(initialSecondary);
   const [counts, setCounts] = useState(initialCounts);
   const [errored, setErrored] = useState(initialErrored);
@@ -387,14 +407,13 @@ export function HomeMatchExperienceLive({
     fetchHomeData()
       .then((fresh) => {
         if (cancelled) return;
-        setFreeCard(fresh.freeCard);
-        setLockedCard(fresh.lockedCard);
+        setFeatured(fresh.featured);
         setSecondary(fresh.secondary);
         setCounts(fresh.counts);
         setErrored(false);
       })
       .catch(() => {
-        // 保留 SSR 的匿名口径渲染,不覆盖成错误态。
+        // 保留 SSR 的渲染结果,不覆盖成错误态。
       });
     return () => {
       cancelled = true;
@@ -406,12 +425,9 @@ export function HomeMatchExperienceLive({
   if (errored) {
     return <div className={styles.errorBox}>今日比赛暂时无法加载，请稍后再试。</div>;
   }
-  if (!freeCard && !lockedCard) {
+  if (!featured) {
     return <div className={styles.errorBox}>暂无已排期的未来比赛。</div>;
   }
-
-  const earliest = freeCard ?? lockedCard;
-  const bothPresent = Boolean(freeCard && lockedCard);
 
   return (
     <>
@@ -432,13 +448,13 @@ export function HomeMatchExperienceLive({
             <span className={counts.tomorrow > 0 ? styles.progressOn : styles.progressOff} />
             <span className={counts.week > 0 ? styles.progressOn : styles.progressOff} />
           </div>
-          {counts.today === 0 && counts.tomorrow === 0 && earliest && (
+          {counts.today === 0 && counts.tomorrow === 0 && (
             <p className={styles.countsFallback}>
               今晚和明天没有已排期的比赛。最近一场在{" "}
-              {earliest.match.kickoff_at_utc ? (
-                <LocalTime iso={earliest.match.kickoff_at_utc} fallback={earliest.match.date_utc} />
+              {featured.match.kickoff_at_utc ? (
+                <LocalTime iso={featured.match.kickoff_at_utc} fallback={featured.match.date_utc} />
               ) : (
-                earliest.match.date_utc
+                featured.match.date_utc
               )}
               。
             </p>
@@ -450,21 +466,8 @@ export function HomeMatchExperienceLive({
       <section className={styles.pairSection} aria-labelledby="hero-pair-title">
         <header className={styles.pairSectionHead}>
           <h2 id="hero-pair-title">重点比赛</h2>
-          {bothPresent ? (
-            <>
-              <span className={styles.pairHintMobile}>1 场免费 · 1 场需登录</span>
-              <span className={styles.pairHintDesktop}>左边这场免费 · 右边这场需登录</span>
-            </>
-          ) : freeCard ? (
-            <span className={styles.pairHint}>本场免费查看</span>
-          ) : (
-            <span className={styles.pairHint}>本场需登录查看</span>
-          )}
         </header>
-        <div className={bothPresent ? styles.pairGrid : styles.pairGridSolo}>
-          {freeCard && <FeaturedFreeCard card={freeCard} />}
-          {lockedCard && <FeaturedLockedCard card={lockedCard} />}
-        </div>
+        <FeaturedMatchCard card={featured} />
       </section>
 
       <ThisWeekSection cards={secondary} total={counts?.week ?? secondary.length} />

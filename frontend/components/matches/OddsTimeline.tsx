@@ -3,21 +3,20 @@
 /**
  * 赔率时间轴(比赛详情页赔率 tab)。
  *
- * 会话 cookie Path=/api/v1,只有浏览器端请求能携带 → 本组件用 clientFetch:
- * - 匿名/Free/Pro:后端返回延迟摘要(每公司每市场最新一条,观察时间 ≥1 小时前);
- * - Premium(odds:history_full):完整快照时间线,1x2 市场补一张折线图。
+ * 会话 cookie Path=/api/v1,只有浏览器端请求能携带 → 本组件用 clientFetch。
+ * 2026-08-16 权限口径修正:后端对任何人(含匿名)恒返回完整快照时间线
+ * (MatchOddsAvailableDTO.tier 已收窄成常量 "full"),不再有身份分层。
  *
- * 2026-08-14 重设计(Claude Design 定稿):当样本不足以画走势时
- * (`tier !== "full"` 或 `display_mode === "current_odds"`,含免费档几乎
- * 全部场次)不再出表格,改成"大数字快照 + 一行说明",不假装有走势可看;
- * 真有走势(`tier === "full"` 且 `display_mode === "odds_changes"`)时,
- * 大数字块之上加折线图,之下保留原有"每公司一行+完整历史折叠"表格。
+ * 2026-08-14 重设计(Claude Design 定稿)留下的展示形态判据仍然有效——当样本
+ * 不足以画走势时(`display_mode === "current_odds"`)不出表格,改成"大数字
+ * 快照 + 一行说明",不假装有走势可看;真有走势(`display_mode ===
+ * "odds_changes"`)时,大数字块之上加折线图,之下保留原有"每公司一行+完整
+ * 历史折叠"表格——这条判据现在只取决于样本量,不再叠加 tier 身份判断。
  *
  * 文案纪律:只写"系统于 X 检测到",不写因果;时间按北京时间展示(CLAUDE.md §11.2)。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { EChartsOption } from "echarts";
 import { clientFetch } from "@/lib/api-v1";
 import { EChart } from "@/components/EChart";
@@ -120,7 +119,7 @@ function build1x2Chart(
   for (const s of snapshots) {
     // flatOddsGroup:兼容扁平(历史回填,73.5 万行)与嵌套(实时轮询)两种
     // payload 形状——旧代码只认 payload.latest,扁平数据全部被跳过,
-    // Premium 的 1x2 走势图因此从不渲染(审计 B2)。
+    // 1x2 走势图因此从不渲染(审计 B2)。
     if (s.market !== "1x2" || !flatOddsGroup(s.payload)) continue;
     const list = byCompany.get(s.company_id) ?? [];
     list.push(s);
@@ -192,6 +191,13 @@ function OddsNumbers({ market, row }: { market: string; row: CompanyOddsRow }) {
         <span>{MARKET_ZH[market] ?? market}</span>
         <span aria-hidden> · </span>
         <span>{PHASE_ZH[row.marketPhase] ?? row.marketPhase}</span>
+        <span aria-hidden> · </span>
+        {/* 这一行赔率具体是哪个时刻观测到的——每家公司各自的 observed_at,
+            不是页面级共享一个新鲜度时间(不同公司同一市场的最后观测时间
+            可能不一样)。 */}
+        <span>
+          <LocalTime iso={row.observedAt} />
+        </span>
       </p>
     </div>
   );
@@ -285,9 +291,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
         <p className={styles.tierNote}>
           {resp.note ?? "本场为历史存档赔率,仅有初盘与临场两点,无完整走势时间线。"}
           {" "}
-          {resp.tier === "full"
-            ? "已登录:展示初盘与临场两点。"
-            : "未登录:仅展示临场一点;登录后免费查看初盘对比。"}
+          展示初盘与临场两点。
         </p>
         {legacyMarkets.map((market) => {
           const rows = pts.filter((p) => p.market === market);
@@ -379,7 +383,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   const freshestRow = marketRows[0]?.companyRows[0] ?? null;
 
   if (!isFullTimeline) {
-    // 简化态(免费档,或样本不足以画走势):只给数字块 + 说明,不出表格。
+    // 简化态(样本不足以画走势):只给数字块 + 说明,不出表格。
     return (
       <div>
         {marketRows.map(({ market, companyRows }) => (
@@ -394,17 +398,6 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
             这是 <LocalTime iso={freshestRow.observedAt} /> 采集到的快照,
             <b>不是实时赔率</b>。本场只采集到 <span className="num">{observationCount}</span>{" "}
             个观测点,不足以画走势,所以这里不画曲线。
-          </p>
-        )}
-        {resp.tier !== "full" && (
-          <p className={styles.permissionLine}>
-            未登录只展示这一条。
-            <Link
-              href={`/login?next=${encodeURIComponent(`/matches/${matchId}`)}`}
-              className={styles.permissionLink}
-            >
-              免费登录查看完整时间线 →
-            </Link>
           </p>
         )}
       </div>

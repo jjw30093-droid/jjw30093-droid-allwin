@@ -22,6 +22,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from backend.commands.reco_odds_contract import MARKET_ODDS_FORMAT
 from backend.models.research.market_baseline import (
     MIN_ODDS,
     OVERROUND_BOUNDS,
@@ -32,12 +33,6 @@ from backend.models.research.market_baseline import (
 # 实时轮询(唯一覆盖未来比赛的),'281' 是 2026-04-06 就停更的历史回填
 # (对未来比赛贡献 0 场,但作为兜底不删)。同场两者都有时优先取 '8'。
 _WIN_PROB_COMPANY_PRIORITY = ("8", "281")
-
-# /odds 端点对无 odds:history_full 权益的请求方施加的同一条 1 小时延迟——
-# 列表层的赔率概率字段必须遵守同一条纪律,否则会从列表页漏掉一个付费层的
-# 新鲜度保证(见 routes_public.py 的 /matches/{id}/odds 实现)。
-_DELAYED_LAG = timedelta(hours=1)
-
 
 def normalize_odds_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """把两种真实 payload 形状归一为扁平字段组。
@@ -60,34 +55,24 @@ def normalize_odds_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def legacy_summary_points(
-    conn_odds: sqlite3.Connection, fotmob_match_id: int, full: bool
+    conn_odds: sqlite3.Connection, fotmob_match_id: int
 ) -> list[dict[str, Any]]:
-    """旧项目两点摘要(bronze_legacy_odds_summary)的读取 + 权益投影。
+    """旧项目两点摘要(bronze_legacy_odds_summary)的读取。
 
     数据已在入库时归一为 canonical 方向(方向修正见
     backend/cli/ingest_legacy_odds.py),无逐条观测时间戳(§6.2:不伪装)。
-    权益投影是服务端谓词而非下发后遮挡:
-    - full(odds:history_full)→ initial+latest 两点(可看开临变化);
-    - 否则只给 latest,initial 从不下发。
+    恒返回 initial+latest 两点(2026-08-16 起除"每日精选"外全站比赛内容
+    与登录/付费彻底解耦,不再按 odds:history_full 投影裁剪成只给 latest)。
 
     routes_public 的 /odds 端点与 studio/bundle 共用本函数,保证两处
     对同一场比赛看到完全相同的点集。表不存在(旧测试库)时返回空列表。
     """
-    if full:
-        sql = (
-            "SELECT market, period, source, provider, line,"
-            " home_or_over, draw, away_or_under"
-            " FROM bronze_legacy_odds_summary WHERE fotmob_match_id=?"
-            " ORDER BY market, source, period"
-        )
-    else:
-        sql = (
-            "SELECT market, period, source, provider, line,"
-            " home_or_over, draw, away_or_under"
-            " FROM bronze_legacy_odds_summary"
-            " WHERE fotmob_match_id=? AND period='latest'"
-            " ORDER BY market, source"
-        )
+    sql = (
+        "SELECT market, period, source, provider, line,"
+        " home_or_over, draw, away_or_under"
+        " FROM bronze_legacy_odds_summary WHERE fotmob_match_id=?"
+        " ORDER BY market, source, period"
+    )
     try:
         rows = conn_odds.execute(sql, (fotmob_match_id,)).fetchall()
     except sqlite3.OperationalError:
@@ -127,8 +112,67 @@ def odds_coverage_sets(conn_odds: sqlite3.Connection) -> tuple[set[int], set[int
     return full, legacy
 
 
+def odds_last_observed_by_match(conn_odds: sqlite3.Connection) -> dict[int, str]:
+    """{fotmob_match_id: 该场 NowGoal 完整时间线赔率最后一次真实 observed_at}。
+
+    只覆盖 full_timeline(auto_ok/confirmed 的 NowGoal 快照,与 odds_coverage_sets
+    同一 JOIN 条件、同一 review_status 门槛);legacy(旧资产两点摘要)是一次性
+    历史导入,ingested_at 不代表"持续观测的新鲜度",不在这里伪造一个假的新鲜度
+    信号——legacy/none 档位的比赛这个函数里没有 key,调用方据此把它们的新鲜度
+    状态判成 UNAVAILABLE,而不是编造一个数字。
+
+    一次 GROUP BY 查询拿到所有比赛的 MAX(observed_at),每请求调一次,不逐场
+    比赛单独查(N+1)。
+    """
+    try:
+        rows = conn_odds.execute(
+            """SELECT x.fotmob_match_id, MAX(b.observed_at)
+                 FROM dim_match_xref x
+                 JOIN bronze_ng_odds_snap b
+                   ON b.provider_match_id=x.provider_match_id
+                WHERE x.provider='nowgoal'
+                  AND x.review_status IN ('auto_ok','confirmed')
+                GROUP BY x.fotmob_match_id"""
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {int(row[0]): str(row[1]) for row in rows}
+
+
+# 数值来源:backend/cli/ops_check.py 的 SOURCE_STALE_HOURS=6(数据源多久没更新
+# 算异常的既有阈值,docs/current-state.md §36.4 明确记录过"没有编造任意阈值"——
+# 这里复用同一个已有出处的数字,不另外发明一个。backend/queries 是查询层,不
+# 反向依赖 backend/cli(CLI 层),因此复制常量值而不 import,避免引入不必要的
+# 层间耦合。
+ODDS_FRESHNESS_STALE_HOURS = 6
+
+
+def classify_odds_freshness(last_observed_at: str | None, *, now: datetime | None = None) -> str:
+    """把"最后观测时间 + 当前时间"分类为仓库统一的 FRESH/STALE/UNAVAILABLE 三态
+    (与 backend/content_status.py::project_freshness、routes_public.py 的
+    sync_state 同一套值)。
+
+    None(从未有过 full_timeline 观测)-> "UNAVAILABLE";否则按
+    (now - last_observed_at) 是否超过 ODDS_FRESHNESS_STALE_HOURS 分 FRESH/STALE。
+    """
+    if not last_observed_at:
+        return "UNAVAILABLE"
+    try:
+        observed = datetime.fromisoformat(str(last_observed_at).replace("Z", "+00:00"))
+    except ValueError:
+        return "UNAVAILABLE"
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    else:
+        observed = observed.astimezone(timezone.utc)
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if current - observed > timedelta(hours=ODDS_FRESHNESS_STALE_HOURS):
+        return "STALE"
+    return "FRESH"
+
+
 def latest_1x2_by_match(
-    conn_odds: sqlite3.Connection, *, now_iso: str, delayed: bool
+    conn_odds: sqlite3.Connection,
 ) -> dict[int, dict[str, Any]]:
     """所有比赛的最新 Bet365 1x2 去水概率——一次查询,不逐场请求。
 
@@ -144,9 +188,9 @@ def latest_1x2_by_match(
     - 每场每公司取 observed_at 最新一条(并列取 id 最大);
     - 公司优先级 8 > 281(见模块顶部注释);
     - 比例去水 p_i = (1/odds_i) / Σ_j(1/odds_j);
-    - 任一赔率缺失/≤1.01,或 overround 不在 [1.01, 1.35] → 该场剔除,不补 0、不猜;
-    - delayed=True(无 odds:history_full 权益)时只认 observed_at 早于
-      now-1h 的快照,与 /matches/{id}/odds 端点的匿名延迟策略一致。
+    - 任一赔率缺失/≤1.01,或 overround 不在 [1.01, 1.35] → 该场剔除,不补 0、不猜。
+    2026-08-16 起恒返回最新快照,不再对匿名/无 odds:history_full 权益的请求
+    施加 1 小时延迟(除"每日精选"外全站比赛内容与登录/付费彻底解耦)。
 
     返回的每场只有一个 observed_at——三段概率条底部必须显示这个时间,
     不得把它当成"实时"文案(数据可能是几小时甚至更久前的快照,§6.2 不伪装)。
@@ -166,20 +210,9 @@ def latest_1x2_by_match(
     except sqlite3.OperationalError:
         return {}
 
-    cutoff = None
-    if delayed:
-        cutoff = (
-            datetime.fromisoformat(now_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
-            - _DELAYED_LAG
-        )
-
     best: dict[tuple[int, str], tuple[str, int, dict]] = {}
     for r in rows:
         obs = str(r["observed_at"])
-        if cutoff is not None:
-            obs_dt = datetime.fromisoformat(obs.replace("Z", "+00:00")).astimezone(timezone.utc)
-            if obs_dt > cutoff:
-                continue
         fid = int(r["fotmob_match_id"])
         cid = str(r["company_id"])
         key = (fid, cid)
@@ -280,19 +313,34 @@ _OPTION_MARKETS = ("1x2", "ou", "corners_ou")
 _OPTION_MARKET_LABEL_ZH = {"1x2": "胜平负", "ou": "大小球", "corners_ou": "角球大小"}
 
 
-def _market_option_selections(market: str, flat: dict[str, Any]) -> list[tuple[str, float]]:
-    """单个市场的扁平赔率 → (选项文案, 赔率) 列表;任一必需字段缺失/非数值则整市场跳过。"""
+def _market_option_selections(
+    market: str, flat: dict[str, Any]
+) -> list[tuple[str, float, str, float | None]]:
+    """单个市场的扁平赔率 → (选项文案, 赔率, 程序可读 side, line) 列表;
+    任一必需字段缺失/非数值则整市场跳过。
+
+    side 是给 reco_legs.side 用的机器可读选边(home/draw/away/over/under)——
+    admin 录入每日精选选中某个选项后,结算判定要用这个,不能反过来解析
+    "主胜"/"大2.5" 这类中文展示文案。
+    """
     if market == "1x2":
         h, d, a = flat.get("home"), flat.get("draw"), flat.get("away")
         if not all(isinstance(v, (int, float)) for v in (h, d, a)):
             return []
-        return [("主胜", float(h)), ("平局", float(d)), ("客胜", float(a))]
+        return [
+            ("主胜", float(h), "home", None),
+            ("平局", float(d), "draw", None),
+            ("客胜", float(a), "away", None),
+        ]
     if market in ("ou", "corners_ou"):
         line, over, under = flat.get("line"), flat.get("over"), flat.get("under")
         if not all(isinstance(v, (int, float)) for v in (line, over, under)):
             return []
         unit = "角球" if market == "corners_ou" else ""
-        return [(f"大{unit}{line}", float(over)), (f"小{unit}{line}", float(under))]
+        return [
+            (f"大{unit}{line}", float(over), "over", float(line)),
+            (f"小{unit}{line}", float(under), "under", float(line)),
+        ]
     return []
 
 
@@ -343,9 +391,18 @@ def raw_market_options(
                 break
         if chosen is None:
             continue
-        obs, _id, payload, company_name = chosen
+        obs, snap_id, payload, company_name = chosen
+        # cid 是上面 break 时命中的公司 id(_WIN_PROB_COMPANY_PRIORITY 遍历顺序),
+        # 循环变量在 break 后仍保留该值,直接复用,不用再反查一次。
         flat = normalize_odds_payload(payload)
-        for selection, odds in _market_option_selections(market, flat):
+        # 新鲜度(2026-08-16):复用既有 classify_odds_freshness/
+        # ODDS_FRESHNESS_STALE_HOURS(不新发明阈值),与其它新鲜度展示位
+        # (MatchRow.tsx 等)统一使用同一套 FRESH/STALE/UNAVAILABLE 三态词汇,
+        # 而不是另造一个 is_stale 布尔——这里的 observed_at 恒非空(真实
+        # 报价快照才会进 options),UNAVAILABLE 分支理论上不会命中,但沿用
+        # 三态而非砍成二态,是为了让前端只需认识一套新鲜度词汇。
+        freshness = classify_odds_freshness(obs)
+        for selection, odds, side, line in _market_option_selections(market, flat):
             options.append({
                 "market": market,
                 "market_label": _OPTION_MARKET_LABEL_ZH[market],
@@ -353,5 +410,11 @@ def raw_market_options(
                 "odds": round(odds, 2),
                 "company_name": company_name,
                 "observed_at": obs,
+                "snapshot_id": snap_id,
+                "company_id": cid,
+                "line": line,
+                "side": side,
+                "odds_format": MARKET_ODDS_FORMAT[market],
+                "freshness": freshness,
             })
     return options

@@ -26,6 +26,7 @@ from backend.db.util import new_uuid, utc_now_iso
 from backend.fotmob_client import FotMobClient
 from backend.ingest.odds_snapshots import ingest_odds_records
 from backend.providers.nowgoal import parse_odds
+from backend.queries import matches as q_matches
 from backend.studio.bundle import build_analysis_bundle, render_srt
 from backend.studio.team_style import (
     DOUYIN_SAFE_PROFILE,
@@ -570,11 +571,11 @@ def apply_saved_artifacts(
     if bundle is None:
         raise ActiveLeagueMVPError("analysis bundle was not built")
 
-    form_spec = next(
-        (spec for spec in bundle["chart_specs"] if spec.get("id") == "form_compare"),
-        None,
-    )
-    form_data = form_spec.get("data", {}) if isinstance(form_spec, dict) else {}
+    # 直接查"近期战绩"聚合,不再从 bundle["chart_specs"] 里按 id 回捞
+    # form_compare(该 chart_spec 已从 backend/studio/bundle.py 删除)。
+    with connect_rw("core") as conn:
+        home_form_result = q_matches.recent_form(conn, context.home_id, bundle["match"]["date_utc"])
+        away_form_result = q_matches.recent_form(conn, context.away_id, bundle["match"]["date_utc"])
     style_profile = build_team_style_profile(
         home_payload=home,
         away_payload=away,
@@ -584,8 +585,8 @@ def apply_saved_artifacts(
         league_name_zh=context.league_name_zh,
         data_cutoff_at=style_cutoff_at or observed_at,
         recent_form={
-            "home": list(form_data.get("home") or [])[:5],
-            "away": list(form_data.get("away") or [])[:5],
+            "home": [f["result"] for f in home_form_result][:5],
+            "away": [f["result"] for f in away_form_result][:5],
         },
     )
     with connect_rw("platform") as conn:

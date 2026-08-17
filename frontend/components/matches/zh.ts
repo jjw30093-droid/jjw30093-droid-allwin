@@ -16,6 +16,8 @@ export const MARKET_ZH: Record<string, string> = {
   "1x2": "胜平负(欧赔)",
   ah: "亚洲让球",
   ou: "大小球",
+  // 与 backend/queries/odds.py 的 _OPTION_MARKET_LABEL_ZH["corners_ou"] 措辞一致。
+  corners_ou: "角球大小",
 };
 
 /** bronze_legacy_odds_summary.source——历史存档赔率的批次来源(与
@@ -44,6 +46,12 @@ export const MARKET_FIELDS: Record<string, { key: string; label: string }[]> = {
     { key: "away", label: "客队" },
   ],
   ou: [
+    { key: "over", label: "大球" },
+    { key: "line", label: "盘口线" },
+    { key: "under", label: "小球" },
+  ],
+  // payload 形状与 "ou" 完全一样({line, over, under}),字段标签照抄。
+  corners_ou: [
     { key: "over", label: "大球" },
     { key: "line", label: "盘口线" },
     { key: "under", label: "小球" },
@@ -250,4 +258,19 @@ export function beijingDateKey(iso: string): string | null {
   const p = toBeijingParts(iso);
   if (!p) return null;
   return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
+}
+
+const WEEKDAY_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+/** "2026-08-16" → "8月16日 周日"——/matches 列表按天分组的小标题。
+ * 输入是纯自然日字符串(可能来自 beijingDateKey() 换算后的北京日,也可能是
+ * 没有精确 kickoff 时退回的 date_utc 原始自然日),按日历字面值求星期即可,
+ * 不需要再做时区换算,也不依赖 Intl/ICU。非法输入原样返回,不抛异常
+ * (是否显示由调用方决定,这里只负责格式化)。 */
+export function formatDateHeadingZh(dateKey: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!m) return dateKey;
+  const [, y, mo, d] = m;
+  const weekday = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d))).getUTCDay();
+  return `${parseInt(mo, 10)}月${parseInt(d, 10)}日 ${WEEKDAY_ZH[weekday]}`;
 }

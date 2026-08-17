@@ -1,0 +1,401 @@
+/* 模块一:预计阵容 + 伤停。所有颜色走 globals.css 的 navy/teal token,深浅色自动跟随。 */
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+  background: var(--surface-soft);
+}
+
+/* 已确认:实线边 + 实心徽标,与「预计」态一眼分开 */
+.notice[data-confirmed="true"] {
+  border: 1px solid var(--brand-teal);
+  background: var(--surface);
+}
+
+.noticeHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.noticeTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px dashed var(--brand-teal);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--brand-teal);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.noticeTag[data-confirmed="true"] {
+  border: 1px solid var(--brand-teal);
+  background: var(--brand-teal);
+  color: #fff;
+}
+
+.observed {
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.noticeText {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+
+/* ── 主/客切换 ─────────────────────────────────── */
+
+.sideTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+
+.sideTab,
+.sideTabOn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sideTabOn {
+  border-color: var(--brand-teal);
+  background: var(--brand-teal);
+  color: #fff;
+  font-weight: 700;
+}
+
+.sideTab:disabled {
+  border-style: dashed;
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.formation {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* ── 球场(竖版,按阵型分行)───────────────────── */
+
+.pitch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--surface-soft) 0 34px,
+    var(--surface-2) 34px 68px
+  );
+}
+
+.pitchLine,
+.pitchHalf,
+.pitchCircle,
+.pitchBox {
+  position: absolute;
+  border: 1px solid var(--border-strong);
+  opacity: 0.55;
+}
+
+.pitchLine {
+  inset: 8px;
+  border-radius: 3px;
+}
+
+.pitchHalf {
+  right: 8px;
+  left: 8px;
+  top: 50%;
+  border-width: 1px 0 0;
+}
+
+.pitchCircle {
+  left: 50%;
+  top: 50%;
+  width: 34%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.pitchBox {
+  right: 22%;
+  bottom: 8px;
+  left: 22%;
+  height: 13%;
+  border-bottom: none;
+}
+
+.pitchRows {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: space-between;
+  padding: 8px 4px;
+}
+
+.pitchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+.dotWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  max-width: 74px;
+}
+
+.dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--brand-teal);
+  border-radius: 50%;
+  background: var(--brand-teal);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pitch[data-side="away"] .dot {
+  border-color: var(--ink-3);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* 名字压在球场纹理上会糊,垫一层高不透明度的面色 */
+.dotName {
+  max-width: 74px;
+  overflow: hidden;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pitchNote {
+  margin: var(--sp-2) 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+/* formation 缺失时的降级:纯名单,不猜站位 */
+.plainList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plainRow {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  font-size: 13.5px;
+}
+
+/* ── 替补席 ─────────────────────────────────────── */
+
+.bench {
+  margin-top: var(--sp-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.benchSummary {
+  min-height: 24px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.benchList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.benchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  font-size: 13.5px;
+}
+
+.benchNo {
+  flex: 0 0 26px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.benchName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 伤停 ───────────────────────────────────────── */
+
+.sidelinedGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+@media (max-width: 720px) {
+  .sidelinedGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--loss);
+}
+
+.count[data-empty="true"] {
+  color: var(--win);
+}
+
+.emptyInline {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-control);
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.sidelinedList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidelinedRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.sidelinedName {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.reason {
+  justify-self: end;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reason[data-reason="suspension"] {
+  border-color: var(--loss);
+  color: var(--loss);
+}
+
+.etaLabel {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.eta {
+  justify-self: end;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.footNote {
+  margin: var(--sp-3) 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}

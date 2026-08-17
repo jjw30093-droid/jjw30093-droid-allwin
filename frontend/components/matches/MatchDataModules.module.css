@@ -1,0 +1,378 @@
+/* 模块二~五共用样式(TeamStyleQuadrant.tsx / MatchDataModules.tsx)。
+   颜色一律走 globals.css 的 navy/teal token,深浅色靠变量切换,禁止双分支。 */
+
+.windowNote {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 10px;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cardMeta {
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.summary {
+  margin: var(--sp-2) 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.footNote {
+  margin: var(--sp-3) 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+
+.emptyInline {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-control);
+  background: var(--bg-2);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+/* ── 模块二:象限图 ─────────────────────────────── */
+
+.viewTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+
+.viewTab,
+.viewTabOn {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.viewTabOn {
+  border-color: var(--brand-teal);
+  background: var(--brand-teal);
+  color: #fff;
+  font-weight: 700;
+}
+
+.viewTab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chartCard {
+  padding: 12px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.chartHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 2px;
+}
+
+.chartTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.chartSample {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.legendRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--surface-soft);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.swatchDot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+/* ── 模块三:双轨成分条 ─────────────────────────── */
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.barLabel {
+  flex: 0 0 42px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.bar {
+  display: flex;
+  flex: 1;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-soft);
+}
+
+.barSeg {
+  height: 100%;
+}
+
+.barUnavailable {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 16px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceRow {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 7px 0;
+  border-top: 1px solid var(--surface-soft);
+  font-size: 13px;
+}
+
+/* 浅色段在白底上对比不足,统一加发丝描边 */
+.swatch {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+
+.sourceLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceShots {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.sourceXg {
+  min-width: 62px;
+  text-align: right;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ── 模块四:关键球员占比条 ─────────────────────── */
+
+.shareList {
+  display: flex;
+  flex-direction: column;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shareRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px var(--sp-2);
+  padding: 9px 0;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.shareName {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sharePct {
+  justify-self: end;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.shareBar {
+  grid-column: 1 / span 2;
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface-soft);
+}
+
+.shareFill {
+  height: 100%;
+}
+
+.shareMeta {
+  grid-column: 1 / span 2;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* ── 模块五:门将对位卡 ─────────────────────────── */
+
+.rotationTag {
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rotationTag[data-rotated="true"] {
+  border-color: var(--loss);
+  color: var(--loss);
+}
+
+.keeperList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keeperRow {
+  padding: 10px 0;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.keeperHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.keeperName {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.keeperPrevented {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.keeperPrevented b {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--win);
+}
+
+.keeperPrevented b[data-neg="true"] {
+  color: var(--loss);
+}
+
+.keeperPreventedTag {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.keeperCells {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: var(--sp-2);
+}
+
+.keeperCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 3px;
+  background: var(--surface-soft);
+}
+
+.keeperCell b {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.keeperCell span {
+  font-size: 10.5px;
+  color: var(--ink-2);
+}

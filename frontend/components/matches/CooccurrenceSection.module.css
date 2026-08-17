@@ -1,16 +1,3 @@
-.lockNote {
-  margin: 10px 0 0;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-
-.lockLink {
-  margin-left: 8px;
-  color: var(--brand-teal);
-  font-weight: 700;
-  text-decoration: none;
-}
-
 .countLine {
   margin: 0 0 10px;
   font-size: 12.5px;

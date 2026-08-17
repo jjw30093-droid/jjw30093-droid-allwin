@@ -1,0 +1,40 @@
+{
+  "cutoff": "2025-01-01",
+  "noise_tolerance": 0.005,
+  "per_league": [
+    {
+      "league_id": 47,
+      "league_name": "英超",
+      "validated_matches": 1123,
+      "corr_window_5": 0.2493,
+      "corr_window_10": 0.2982,
+      "insufficient_sample": false
+    },
+    {
+      "league_id": 87,
+      "league_name": "西甲",
+      "validated_matches": 1136,
+      "corr_window_5": 0.3984,
+      "corr_window_10": 0.4133,
+      "insufficient_sample": false
+    },
+    {
+      "league_id": 54,
+      "league_name": "德甲",
+      "validated_matches": 924,
+      "corr_window_5": 0.3747,
+      "corr_window_10": 0.4047,
+      "insufficient_sample": false
+    },
+    {
+      "league_id": 55,
+      "league_name": "意甲",
+      "validated_matches": 1142,
+      "corr_window_5": 0.2752,
+      "corr_window_10": 0.3221,
+      "insufficient_sample": false
+    }
+  ],
+  "adopt_window_10": true,
+  "verdict_note": "N=10 在全部四个联赛的样本外验证中都不弱于 N=5,采用 10 场作为球队级窗口默认值"
+}

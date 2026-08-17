@@ -2,11 +2,11 @@
  * 比赛详情页主体——纯展示,无取数。
  *
  * 被两个环境共用(刻意不写 "use client",随导入方环境走):
- * - app/matches/[matchId]/page.tsx(RSC,匿名投影,免费联赛路径);
- * - components/matches/MemberMatchDetail.tsx(client,带会话 cookie 重取,
- *   付费联赛路径——修复审计 B1:此前详情页对 Pro/Premium 一律 404)。
- * 两条路径渲染完全相同的 JSX,免费/付费差异只体现在传入的数据投影上
- * (受限字段物理不存在,不是 CSS 遮挡)。
+ * - app/matches/[matchId]/page.tsx(RSC,服务端匿名取数成功时走这条路径);
+ * - components/matches/MemberMatchDetail.tsx(client,服务端取数失败/比赛
+ *   不存在时接手,浏览器重新请求)。
+ * 两条路径渲染完全相同的 JSX、消费完全相同的数据形状——2026-08-16 权限
+ * 口径修正后,比赛内容对任何人(含匿名)恒完整,不再有身份分层投影。
  *
  * 2026-08-14 重设计(Claude Design 定稿,design_handoff_match_detail):
  * 两种形态按 GET /matches/{id}/report 的 available 判定,不按 status 硬编码:
@@ -21,6 +21,7 @@ import Link from "next/link";
 import type {
   GetJson,
   MatchDetailResponse,
+  MatchPreviewResponse,
   MatchReportResponse,
   MatchSummary,
 } from "@/lib/api-v1";
@@ -29,7 +30,6 @@ import { OddsTimeline } from "@/components/matches/OddsTimeline";
 import { CooccurrenceSection } from "@/components/matches/CooccurrenceSection";
 import { MarketCardsSection } from "@/components/matches/MarketCardsSection";
 import { LocalTime } from "@/components/matches/LocalTime";
-import { ChartWithSummary } from "@/components/matches/ChartWithSummary";
 import { MatchHeaderPre } from "@/components/matches/MatchHeaderPre";
 import { MatchHeaderFinished } from "@/components/matches/MatchHeaderFinished";
 import { MatchTabs } from "@/components/matches/MatchTabs";
@@ -38,11 +38,25 @@ import { MatchLineupSection } from "@/components/matches/MatchLineupSection";
 import { MatchStatsSection } from "@/components/matches/MatchStatsSection";
 import { MatchShotsSection } from "@/components/matches/MatchShotsSection";
 import { MatchEventsSection } from "@/components/matches/MatchEventsSection";
+import { MatchDataTabs } from "@/components/matches/MatchDataTabs";
+import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSection";
+import { TeamStyleQuadrant } from "@/components/matches/TeamStyleQuadrant";
+import { AttackChainSection } from "@/components/matches/AttackChainSection";
+import { PossessionControlSection } from "@/components/matches/PossessionControlSection";
+import { DefensivePressureSection } from "@/components/matches/DefensivePressureSection";
+import { MatchupSection } from "@/components/matches/MatchupSection";
+import {
+  AttackSourceCard,
+  AttackSourceSection,
+  GoalkeeperSection,
+  KeyPlayersSection,
+} from "@/components/matches/MatchDataModules";
 import { formatDateZh } from "@/components/matches/zh";
 import styles from "@/app/matches/[matchId]/match-detail.module.css";
 
 export type AnalysisBundle = GetJson<"/api/v1/matches/{match_id}/analysis">;
-type FormEntry = MatchDetailResponse["home_form"][number];
+type PreviewWindow = NonNullable<MatchPreviewResponse["home_window"]>;
+type AttackSourceRow = MatchPreviewResponse["attack_sources"]["home"][number];
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -53,69 +67,13 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FormList({ title, entries }: { title: string; entries: FormEntry[] }) {
-  return (
-    <div className={styles.formCol}>
-      <h3 className={styles.formTitle}>{title}</h3>
-      {entries.length === 0 ? (
-        <p className={styles.emptyText}>暂无近期完赛记录</p>
-      ) : (
-        <ul className={styles.formList}>
-          {entries.map((f) => (
-            <li key={f.match_id} className={styles.formItem}>
-              <span
-                className={`${styles.formBadge} ${
-                  f.result === "W"
-                    ? styles.badgeW
-                    : f.result === "D"
-                      ? styles.badgeD
-                      : styles.badgeL
-                }`}
-              >
-                {f.result === "W" ? "胜" : f.result === "D" ? "平" : "负"}
-              </span>
-              <span className={styles.formScore}>
-                <b className="num">
-                  {f.goals_for}–{f.goals_against}
-                </b>
-              </span>
-              <span className={styles.formOpp}>
-                {f.venue === "home" ? "主" : "客"} vs {f.opponent.name}
-              </span>
-              <span className={styles.formDate}>{formatDateZh(f.date_utc)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/** 一方近 5 场的战绩汇总:胜平负数量 + 场均入球。 */
-function formSummary(entries: FormEntry[]): { w: number; d: number; l: number; avgGoals: number } | null {
-  if (entries.length === 0) return null;
-  let w = 0, d = 0, l = 0, goals = 0;
-  for (const f of entries) {
-    if (f.result === "W") w += 1;
-    else if (f.result === "D") d += 1;
-    else l += 1;
-    goals += f.goals_for;
-  }
-  return { w, d, l, avgGoals: goals / entries.length };
-}
-
 /**
- * 本场看点(赛前第一屏,替代旧"30秒速览"的概率结论)。模型未经真实数据
- * 训练前不可用,详情页不渲染任何概率——结论改为基于近期战绩现算的一句
- * 真实数据对比,双方均无数据时如实收窄,不铺"暂无正式预测"这类模型语言。
- * 2026-08-14 起分 tab 展示,原footer的"查看详细数据↓"锚点已删除
- * (分 tab 后没有"往下滚"这件事了)。
+ * 本场看点(赛前第一屏)。验收返工五:不再展示"近 N 场胜平负/场均入球"
+ * ——用户已明确表示不要这个模块(同类网站已大量提供,不是本站差异化),
+ * 不用另一套近期战绩换皮替代。只保留推荐发布状态提示;模型未经真实数据
+ * 训练前不渲染任何概率。
  */
 function QuickView({ detail }: { detail: MatchDetailResponse }) {
-  const m = detail.match;
-  const home = formSummary(detail.home_form);
-  const away = formSummary(detail.away_form);
-
   return (
     <section className={styles.quickView} aria-label="本场看点" data-testid="quick-view">
       <div className={styles.quickRecoRow}>
@@ -127,31 +85,6 @@ function QuickView({ detail }: { detail: MatchDetailResponse }) {
           <span className={styles.quickRecoOff}>推荐待发布</span>
         )}
       </div>
-
-      {home && away ? (
-        <p className={styles.quickFormLine}>
-          {m.home.name} 近{detail.home_form.length}场{" "}
-          <b className="num">{home.w}胜{home.d}平{home.l}负</b>,场均入球{" "}
-          <b className="num">{home.avgGoals.toFixed(1)}</b>;{m.away.name} 近
-          {detail.away_form.length}场{" "}
-          <b className="num">{away.w}胜{away.d}平{away.l}负</b>,场均入球{" "}
-          <b className="num">{away.avgGoals.toFixed(1)}</b>
-        </p>
-      ) : home ? (
-        <p className={styles.quickFormLine}>
-          {m.home.name} 近{detail.home_form.length}场{" "}
-          <b className="num">{home.w}胜{home.d}平{home.l}负</b>,场均入球{" "}
-          <b className="num">{home.avgGoals.toFixed(1)}</b>;{m.away.name} 暂无近期完赛记录
-        </p>
-      ) : away ? (
-        <p className={styles.quickFormLine}>
-          {m.away.name} 近{detail.away_form.length}场{" "}
-          <b className="num">{away.w}胜{away.d}平{away.l}负</b>,场均入球{" "}
-          <b className="num">{away.avgGoals.toFixed(1)}</b>;{m.home.name} 暂无近期完赛记录
-        </p>
-      ) : (
-        <p className={styles.quickNoTip}>本场暂无历史交锋与近期数据,仅有赛程信息。</p>
-      )}
     </section>
   );
 }
@@ -177,36 +110,131 @@ function HighlightsGroup({
   );
 }
 
-/** 数据 tab:近期表现(两队各一张卡)→ chart_specs 图表。 */
+/** 「近 N 场」真实日期区间文案——两队各自独立的窗口,不合并成一句话
+ * (历史场次不同时合并会掩盖样本更少的那一队,见 MatchPreviewWindowDTO 注释)。 */
+function windowNote(
+  homeName: string,
+  awayName: string,
+  homeWindow: PreviewWindow | null | undefined,
+  awayWindow: PreviewWindow | null | undefined,
+): string {
+  const part = (name: string, w: PreviewWindow | null | undefined) =>
+    w ? `${name}近${w.matches}场(${w.from} 至 ${w.to})` : `${name}暂无可比较的历史比赛`;
+  return `${part(homeName, homeWindow)};${part(awayName, awayWindow)}。`;
+}
+
+/** 进攻来源卡片的摘要句——机械地从真实数据里挑"每脚效率最高的来源",
+ * 不编造解读;没有任何来源同时有射门与 xG 时给通用提示。 */
+function attackSourceNote(rows: AttackSourceRow[]): string {
+  if (rows.length === 0) return "该队近 5 场没有射门数据。";
+  const withXg = rows.filter((r) => r.xg != null && r.shots > 0);
+  if (withXg.length === 0) return "暂无各来源的 xG 拆分。";
+  const top = [...withXg].sort(
+    (a, b) => (b.xg as number) / b.shots - (a.xg as number) / a.shots,
+  )[0];
+  return `${top.label}每脚效率最高,平均 xG ${((top.xg as number) / top.shots).toFixed(3)}/脚。`;
+}
+
+/** 数据 tab:近期表现(两队各一张卡)→ 阵容/风格/球员三个子 tab。 */
 function DataGroup({
   detail,
-  analysis,
+  preview,
 }: {
   detail: MatchDetailResponse;
-  analysis: AnalysisBundle | null;
+  preview: MatchPreviewResponse | null;
 }) {
   const m = detail.match;
+  const homeName = m.home.name;
+  const awayName = m.away.name;
+  const homeTeamId = m.home.team_id;
+  const awayTeamId = m.away.team_id;
+
   return (
     <section className={styles.section}>
       <SectionTitle>数据可视化</SectionTitle>
-      <div className={styles.formGrid}>
-        <FormList title={`${m.home.name} 近期表现`} entries={detail.home_form} />
-        <FormList title={`${m.away.name} 近期表现`} entries={detail.away_form} />
-      </div>
-      {analysis && analysis.chart_specs.length > 0 ? (
-        <div className={styles.chartGrid}>
-          {analysis.chart_specs.map((spec) => (
-            <figure key={spec.id} className={styles.chartCard}>
-              <ChartWithSummary
-                spec={spec}
-                titleClassName={styles.chartTitle}
-                summaryClassName={styles.chartSummary}
-              />
-            </figure>
-          ))}
-        </div>
+      {!preview ? (
+        <p className={styles.emptyText}>数据暂时无法加载。</p>
       ) : (
-        <p className={styles.emptyText}>该场比赛暂无可视化图表数据。</p>
+        <MatchDataTabs
+          lineup={
+            <ProjectedLineupSection
+              homeName={homeName}
+              awayName={awayName}
+              lineupType={preview.lineups.lineup_type ?? null}
+              observedAt={preview.lineups.observed_at ?? null}
+              home={preview.lineups.home ?? null}
+              away={preview.lineups.away ?? null}
+              homeSidelined={preview.sidelined.home}
+              awaySidelined={preview.sidelined.away}
+            />
+          }
+          style={
+            <>
+              <MatchupSection
+                homeName={homeName}
+                awayName={awayName}
+                home={preview.matchup_profiles.home}
+                away={preview.matchup_profiles.away}
+              />
+              <AttackChainSection
+                homeName={homeName}
+                awayName={awayName}
+                home={preview.attack_chains.home}
+                away={preview.attack_chains.away}
+              />
+              <PossessionControlSection
+                homeName={homeName}
+                awayName={awayName}
+                home={preview.possession_controls.home}
+                away={preview.possession_controls.away}
+              />
+              <DefensivePressureSection
+                homeName={homeName}
+                awayName={awayName}
+                home={preview.defensive_pressures.home}
+                away={preview.defensive_pressures.away}
+              />
+              {homeTeamId != null && awayTeamId != null ? (
+                <TeamStyleQuadrant
+                  views={preview.style_views}
+                  homeTeamId={homeTeamId}
+                  awayTeamId={awayTeamId}
+                  homeName={homeName}
+                  awayName={awayName}
+                  windowNote={windowNote(homeName, awayName, preview.home_window, preview.away_window)}
+                />
+              ) : null}
+              <AttackSourceSection>
+                <AttackSourceCard
+                  teamName={homeName}
+                  rows={preview.attack_sources.home}
+                  note={attackSourceNote(preview.attack_sources.home)}
+                />
+                <AttackSourceCard
+                  teamName={awayName}
+                  rows={preview.attack_sources.away}
+                  note={attackSourceNote(preview.attack_sources.away)}
+                />
+              </AttackSourceSection>
+            </>
+          }
+          players={
+            <>
+              <KeyPlayersSection
+                homeName={homeName}
+                awayName={awayName}
+                homeBlocks={preview.key_players.home}
+                awayBlocks={preview.key_players.away}
+              />
+              <GoalkeeperSection
+                teams={[
+                  { teamName: homeName, keepers: preview.keepers.home },
+                  { teamName: awayName, keepers: preview.keepers.away },
+                ]}
+              />
+            </>
+          }
+        />
       )}
     </section>
   );
@@ -289,17 +317,19 @@ function OverviewPanel({
   idNum,
   detail,
   analysis,
+  preview,
   finished,
 }: {
   idNum: number;
   detail: MatchDetailResponse;
   analysis: AnalysisBundle | null;
+  preview: MatchPreviewResponse | null;
   finished: boolean;
 }) {
   return (
     <>
       <HighlightsGroup idNum={idNum} detail={detail} finished={finished} />
-      <DataGroup detail={detail} analysis={analysis} />
+      <DataGroup detail={detail} preview={preview} />
       <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
     </>
   );
@@ -310,6 +340,7 @@ export function MatchDetailBody({
   detail,
   analysis,
   report = null,
+  preview = null,
   returnTo,
   returnLabel,
   previousMatch,
@@ -320,6 +351,8 @@ export function MatchDetailBody({
   analysis: AnalysisBundle | null;
   /** /matches/{id}/report(完赛事实):available 时渲染 总览/射门/统计/阵容/事件 五 tab */
   report?: MatchReportResponse | null;
+  /** /matches/{id}/preview(阵容/伤停快照 + 风格 + 球员):数据 tab 阵容/风格/球员三个子 tab 的数据源 */
+  preview?: MatchPreviewResponse | null;
   returnTo: string;
   returnLabel: string;
   previousMatch: MatchSummary | null;
@@ -363,7 +396,13 @@ export function MatchDetailBody({
       {factReport ? (
         <MatchTabs
           overview={
-            <OverviewPanel idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
+            <OverviewPanel
+              idNum={idNum}
+              detail={detail}
+              analysis={analysis}
+              preview={preview}
+              finished={finished}
+            />
           }
           shots={
             <MatchShotsSection
@@ -401,7 +440,7 @@ export function MatchDetailBody({
       ) : (
         <MatchPreTabs
           highlights={<HighlightsGroup idNum={idNum} detail={detail} finished={finished} />}
-          data={<DataGroup detail={detail} analysis={analysis} />}
+          data={<DataGroup detail={detail} preview={preview} />}
           odds={<OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />}
         />
       )}

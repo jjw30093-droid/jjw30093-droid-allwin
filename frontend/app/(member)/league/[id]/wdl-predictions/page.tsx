@@ -1,15 +1,24 @@
 import Link from "next/link";
-import { fetchLeagueNameZh, fetchWdlPredictions, type WdlMatch } from "@/lib/api";
+import { fetchLeagueNameZh, fetchWdlPredictions, type WdlLiveMatch, type WdlMatch } from "@/lib/api";
 import { buildMatchHref } from "@/lib/match-links";
 import { ApiError } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import styles from "./wdl-predictions.module.css";
 
-// 三种 JSON 形状物理上互斥(见 lib/api.ts 顶部说明),ProbDistribution/LockedHook
-// 各自只接受narrow 后的那一支——TypeScript 据此在编译期就禁止越界读取字段,
-// 不依赖调用方自觉只在正确分支下调用。
-type WdlLiveFull = Extract<WdlMatch, { availability: "live"; locked: false }>;
-type WdlLiveLocked = Extract<WdlMatch, { availability: "live"; locked: true }>;
+// 两种 JSON 形状物理上互斥(见 lib/api.ts 顶部说明;2026-08-16 起后端已把
+// 三态 upcoming/live+locked/live+unlocked 简化为两态 upcoming/live,不再有
+// locked 字段)。live 态下 p_home/p_draw/p_away 仍可能为 null——这是"模型
+// 还没算出这场"的数据就绪状态,不是权限门禁,因此用运行时判空而不是类型
+// 判别联合来决定是否渲染概率分布。
+type WdlLiveWithProbs = WdlLiveMatch & {
+  p_home: number;
+  p_draw: number;
+  p_away: number;
+};
+
+function hasFullProbability(m: WdlLiveMatch): m is WdlLiveWithProbs {
+  return m.p_home != null && m.p_draw != null && m.p_away != null;
+}
 
 const TENDENCY_ZH: Record<string, string> = {
   home: "主队",
@@ -29,14 +38,13 @@ function formatDateZh(dateStr: string | null): string {
   return `${parseInt(m, 10)}月${parseInt(d, 10)}日`;
 }
 
-// 已付费 + 在 7 天有效期内(availability='live'):呈现"概率分布"
-// (主胜 44% / 平局 26% / 客胜 30%),不是"预测胜负"。p_home/p_draw/p_away
-// 只在这个分支里被读取——未付费、或距开赛 >7 天的 JSON 形状物理上根本不带
-// 这几个字段(LegacyWdlLiveFullMatch 专属),prop 类型已收窄,不接受其他两支。
-function ProbDistribution({ m, compact }: { m: WdlLiveFull; compact?: boolean }) {
-  const pHome = m.p_home!;
-  const pDraw = m.p_draw!;
-  const pAway = m.p_away!;
+// 在 7 天有效期内(availability='live')且已算出完整概率:呈现"概率分布"
+// (主胜 44% / 平局 26% / 客胜 30%),不是"预测胜负"。2026-08-16 起对任何人
+// 恒展示(不再有付费/登录门禁)。
+function ProbDistribution({ m, compact }: { m: WdlLiveWithProbs; compact?: boolean }) {
+  const pHome = m.p_home;
+  const pDraw = m.p_draw;
+  const pAway = m.p_away;
   return (
     <div className={compact ? styles.compact : undefined}>
       <div className={styles.probBar}>
@@ -59,17 +67,16 @@ function ProbDistribution({ m, compact }: { m: WdlLiveFull; compact?: boolean })
   );
 }
 
-// 已在 7 天有效期内(availability='live')但未付费:只有 tendency(倾向词)
-// 这一个钩子 + 锁定文案。这个分支的 prop 类型(LegacyWdlLiveLockedMatch 专属)
-// 物理上不含 p_home/p_draw/p_away——数据来源是 API 响应本身没下发,不是拿到
-// 之后用 CSS/JS 遮起来。
-function LockedHook({ m, compact }: { m: WdlLiveLocked; compact?: boolean }) {
+// 已在 7 天有效期内(availability='live')但模型还没算出完整三项概率:只有
+// tendency(倾向词)这一个钩子 + 中性的"生成中"提示——这是数据就绪状态,
+// 不是付费墙,不使用锁图标或订阅措辞。
+function TendencyHint({ m, compact }: { m: WdlLiveMatch; compact?: boolean }) {
   return (
-    <div className={`${styles.lockedRow} ${compact ? styles.compact : ""}`}>
+    <div className={`${styles.pendingRow} ${compact ? styles.compact : ""}`}>
       <span className={styles.tendencyHook}>
         模型看好: <span className={styles.num}>{TENDENCY_ZH[m.tendency ?? ""] ?? "暂无"}</span>
       </span>
-      <span className={styles.lockCta}>🔒 订阅解锁精确概率</span>
+      <span className={styles.pendingNote}>完整概率生成中</span>
     </div>
   );
 }
@@ -104,10 +111,10 @@ function MatchCard({ m }: { m: WdlMatch }) {
         <div className={styles.upcomingRow}>
           <UpcomingNote />
         </div>
-      ) : m.locked ? (
-        <LockedHook m={m} />
-      ) : (
+      ) : hasFullProbability(m) ? (
         <ProbDistribution m={m} />
+      ) : (
+        <TendencyHint m={m} />
       )}
     </div>
   );
@@ -126,10 +133,10 @@ function TopBarMatchCard({ m }: { m: WdlMatch }) {
       </div>
       {m.availability === "upcoming" ? (
         <UpcomingNote />
-      ) : m.locked ? (
-        <LockedHook m={m} compact />
-      ) : (
+      ) : hasFullProbability(m) ? (
         <ProbDistribution m={m} compact />
+      ) : (
+        <TendencyHint m={m} compact />
       )}
     </div>
   );
@@ -250,11 +257,7 @@ export default async function WdlPredictionsPage({
         <span className={styles.seasonChip}>{data.season}</span>
       </div>
       <p className={styles.membershipNote}>
-        此页为匿名公开视图。
-        <Link href={`/login?next=/league/${id}/wdl-predictions`}>
-          登录后免费查看完整三项概率
-        </Link>
-        ;本页展示不构成投注建议。
+        本页对所有访问者展示相同内容,不因登录状态变化;展示不构成投注建议。
       </p>
 
       <TopBar season={data.season} nextRoundMatches={nextRoundMatches} />

@@ -119,9 +119,3 @@ def public_status_for_match(
         now=now,
     )
     return projected
-
-
-def configured_free_outcome(match_id: int) -> str | None:
-    status = load_content_status()
-    value = status.get("free_outcome") if status.get("match_id") == match_id else None
-    return value if value in {"home", "draw", "away"} else None

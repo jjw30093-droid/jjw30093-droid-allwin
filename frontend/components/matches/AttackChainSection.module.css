@@ -1,0 +1,158 @@
+/* 图1~3(进攻转化链/控球与场面控制/防守承压)共用样式。颜色沿用全站
+   主队 teal / 客队 blue 约定(见 TeamStyleQuadrant.tsx 顶部注释,这是开发
+   内部的变量命名,页面文案不得出现"teal"字样),深浅模式靠 globals.css
+   token 切换。
+   验收返工四:移动端字号——正文/标签/摘要 ≥14px,关键数值 ≥18px,
+   次要来源/覆盖说明 ≥12px(只调整本轮四张新图,不动其余既有组件)。 */
+
+.windowNote {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.groupTitle {
+  margin: 14px 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.groupTitle:first-of-type {
+  margin-top: 4px;
+}
+
+.card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.legendRow {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.swatchHome,
+.swatchAway {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.swatchHome {
+  background: var(--brand-teal);
+}
+
+.swatchAway {
+  background: var(--brand-blue);
+}
+
+.stages {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stageRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.stageRow:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.stageLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.stageEmpty {
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.stageBars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stageBarLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 26px;
+}
+
+.stageTrack {
+  flex: 1;
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-soft);
+}
+
+.stageFillHome,
+.stageFillAway {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.stageFillHome {
+  background: var(--brand-teal);
+}
+
+.stageFillAway {
+  background: var(--brand-blue);
+}
+
+.stageValue {
+  flex: 0 0 auto;
+  min-width: 96px;
+  text-align: right;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.partial {
+  margin-left: 1px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.summary {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.footNote {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}

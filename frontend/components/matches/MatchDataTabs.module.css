@@ -1,0 +1,48 @@
+/* 子 tab(阵容/风格/球员)。父级 MatchPreTabs 是下划线 tab,子级用 pill 区分层级。 */
+
+.tablist {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+
+.pill,
+.pillOn {
+  flex: 1;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pill:hover {
+  color: var(--ink);
+  border-color: var(--brand-teal);
+}
+
+.pill:focus-visible,
+.pillOn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-teal) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.pillOn {
+  border-color: var(--brand-teal);
+  background: var(--brand-teal);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* 手机端点按区不小于 44px（DESIGN.md 移动端规则） */
+@media (max-width: 640px) {
+  .pill,
+  .pillOn {
+    min-height: 44px;
+  }
+}

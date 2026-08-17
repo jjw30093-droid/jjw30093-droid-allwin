@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { MatchSummary, TrackRecordResponse } from "@/lib/api-v1";
+import type { MatchSummary, TrackRecordResponse, WinProbability } from "@/lib/api-v1";
 import type { HomeMatchCard } from "@/lib/homepage";
 import {
   publicRecordView,
+  selectFeaturedMatch,
   selectHomepageEvidence,
   selectHomepageMatches,
 } from "@/lib/homepage";
@@ -23,7 +24,6 @@ function match(
       status: "NotStarted",
       home: { id: matchId * 10, name: `主队${matchId}` },
       away: { id: matchId * 10 + 1, name: `客队${matchId}` },
-      requires_login: false,
     } as MatchSummary,
     tip:
       probability == null
@@ -121,6 +121,83 @@ describe("selectHomepageMatches(2026-08-12 改版:按开球时间就近排序)",
 
     expect(result.featured?.match.match_id).toBe(8); // 更接近 now
     expect(result.featured?.tip).toBeNull(); // tip 字段照常透传,不参与排序
+  });
+});
+
+/** selectFeaturedMatch 专用 fixture:MatchSummary 不再有 requires_login 字段
+ * (2026-08-16 权限口径修正,后端对任何人恒返回完整内容),这里只保留
+ * win_probability 这一个真正影响选场的信号。 */
+function heroCard(
+  matchId: number,
+  kickoff: string,
+  opts: { hasProbability: boolean; leagueId?: number },
+): HomeMatchCard {
+  const winProbability: WinProbability | undefined = opts.hasProbability
+    ? { p_home: 0.4, p_draw: 0.3, p_away: 0.3, observed_at: kickoff }
+    : undefined;
+  return {
+    match: {
+      match_id: matchId,
+      league_id: opts.leagueId ?? 47,
+      season: "2026",
+      date_utc: kickoff.slice(0, 10),
+      kickoff_at_utc: kickoff,
+      status: "NotStarted",
+      home: { id: matchId * 10, name: `主队${matchId}` },
+      away: { id: matchId * 10 + 1, name: `客队${matchId}` },
+      win_probability: winProbability,
+    } as MatchSummary,
+    tip: null,
+  };
+}
+
+describe("selectFeaturedMatch:候选池不再有任何比赛处于锁定状态时仍能确定性选场", () => {
+  /**
+   * 取代旧的 selectHeroPair(freeCard/lockedCard 双卡对照)测试。2026-08-16
+   * 权限口径修正后,MatchSummary 不再有 requires_login 字段——不存在"这场
+   * 比赛被锁定,看不到概率"这个产品状态了,选场逻辑必须在没有任何比赛处于
+   * 锁定状态的输入下,仍然确定性地选出一张真正有数据的重点比赛。
+   */
+  it("12 场候选里只有 1 场已发布概率(排在第 11 位)时,仍能定位到这一场", () => {
+    const now = new Date("2026-08-16T00:00:00Z");
+    const cards: HomeMatchCard[] = [
+      ...Array.from({ length: 8 }, (_, i) =>
+        heroCard(9100 + i + 1, `2026-08-16T0${i + 1}:00:00Z`, { hasProbability: false }),
+      ),
+      heroCard(9109, "2026-08-16T09:00:00Z", { hasProbability: false }),
+      heroCard(9110, "2026-08-16T10:00:00Z", { hasProbability: false }),
+      heroCard(9111, "2026-08-16T11:00:00Z", { hasProbability: true }), // 目标
+      heroCard(9112, "2026-08-16T12:00:00Z", { hasProbability: false }),
+    ];
+
+    const { featured, secondary } = selectFeaturedMatch(cards, now);
+
+    expect(featured?.match.match_id).toBe(9111);
+    expect(featured?.match.win_probability).toBeTruthy();
+    // secondary 已排除 featured,按开球时间排列,且不重复出现。
+    const secondaryIds = secondary.map((c) => c.match.match_id);
+    expect(secondaryIds).not.toContain(9111);
+    expect(secondaryIds.length).toBe(cards.length - 1);
+    expect(new Set(secondaryIds).size).toBe(secondaryIds.length);
+  });
+
+  it("没有任何比赛已发布概率时,仍确定性退化为开球时间最近的一场(不返回 null、不报错)", () => {
+    const now = new Date("2026-08-16T00:00:00Z");
+    const cards: HomeMatchCard[] = Array.from({ length: 3 }, (_, i) =>
+      heroCard(9200 + i, `2026-08-16T0${i + 1}:00:00Z`, { hasProbability: false }),
+    );
+
+    const { featured, secondary } = selectFeaturedMatch(cards, now);
+
+    expect(featured?.match.match_id).toBe(9200);
+    expect(secondary.map((c) => c.match.match_id)).toEqual([9201, 9202]);
+  });
+
+  it("候选池为空时诚实返回 null,不臆造数据", () => {
+    const { featured, secondary } = selectFeaturedMatch([], new Date("2026-08-16T00:00:00Z"));
+
+    expect(featured).toBeNull();
+    expect(secondary).toEqual([]);
   });
 });
 

@@ -10,9 +10,8 @@
  * margin-top 叠加,首屏往下滚到底会看到一大块死白(宪法审计 D1 的让位诉求
  * 由 SiteFooter 一处满足,不需要 <main> 再单独留一次)。 */
 
-/* ── 重点位:一张免费卡 + 一张锁定对照卡并排(2026-08-13 Claude Design 定稿)
- * design_handoff_home_hero/README.md §3。移动端(<900px)上下堆叠,
- * ≥900px 并排,只换 CSS 变量与网格,单份 JSX(§2.9 深浅色/断点铁律同理)。 */
+/* ── 重点比赛卡(2026-08-16 权限口径修正:不再区分免费/锁定,单张卡)
+ * design_handoff_home_hero/README.md §3 的双卡对照布局已下架。 */
 
 .pairSection {
   margin-top: 14px;
@@ -35,41 +34,15 @@
   letter-spacing: -0.03em;
 }
 
-.pairHintMobile,
-.pairHintDesktop,
-.pairHint {
-  color: var(--ink-3);
-  font-size: 12px;
-}
-
-.pairHintDesktop {
-  display: none;
-}
-
-.pairGrid,
-.pairGridSolo {
-  display: grid;
-  gap: 8px;
-}
-
-.freeCard,
-.lockedCard {
+.featuredCard {
   display: flex;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--r-card);
-}
-
-.freeCard {
   border: 1px solid var(--border-strong);
   border-top: 3px solid var(--brand-teal);
   background: var(--surface);
-}
-
-.lockedCard {
-  border: 1px solid var(--border);
-  background: var(--lock-band);
 }
 
 .pairHeader {
@@ -101,29 +74,14 @@
   gap: 7px;
 }
 
-.pairStatusBadge,
-.pairFreeBadge,
-.pairLockedBadge {
+.pairStatusBadge {
   padding: 2px 8px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-pill);
+  color: var(--ink-3);
   font-size: 10.5px;
   font-weight: 700;
   white-space: nowrap;
-}
-
-.pairStatusBadge {
-  border: 1px solid var(--border-strong);
-  color: var(--ink-3);
-}
-
-.pairFreeBadge {
-  background: var(--brand-lime);
-  color: var(--brand-navy);
-}
-
-.pairLockedBadge {
-  border: 1px solid var(--border-strong);
-  color: var(--ink-3);
 }
 
 .pairBody {
@@ -235,7 +193,7 @@
   font-weight: 600;
 }
 
-.pairFreeCta {
+.pairCta {
   display: flex;
   min-height: 48px;
   align-items: center;
@@ -248,52 +206,23 @@
   text-decoration: none;
 }
 
-.pairFreeCta span {
+.pairCta span {
   color: var(--brand-lime);
   font-family: var(--font-latin), system-ui, sans-serif;
   font-size: 18px;
 }
 
-.pairLockedCta {
-  display: flex;
-  min-height: 46px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-top: 1px solid var(--border);
-  color: var(--brand-teal);
-  font-size: 15px;
-  font-weight: 800;
-  text-decoration: none;
-}
-
 @media (hover: hover) {
-  .freeCard:hover,
-  .lockedCard:hover {
+  .featuredCard:hover {
     border-color: var(--brand-teal);
   }
 
-  .pairFreeCta:hover,
-  .pairLockedCta:hover {
+  .pairCta:hover {
     filter: brightness(0.94);
   }
 }
 
 @media (min-width: 900px) {
-  .pairHintMobile {
-    display: none;
-  }
-
-  .pairHintDesktop {
-    display: inline;
-  }
-
-  .pairGrid {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-    align-items: stretch;
-    gap: 12px;
-  }
-
   .pairHeader {
     padding: 9px 14px;
   }
@@ -472,16 +401,9 @@
 .secondaryPending {
   padding-top: 8px;
   border-top: 1px solid var(--border);
+  color: var(--ink-3);
   font-size: 11.5px;
   font-weight: 700;
-}
-
-.secondaryPending[data-tone="link"] {
-  color: var(--brand-teal);
-}
-
-.secondaryPending[data-tone="muted"] {
-  color: var(--ink-3);
 }
 
 .secondaryAll {
@@ -813,6 +735,26 @@
   color: var(--ink-2);
   font-family: var(--font-latin), system-ui, sans-serif;
   font-weight: 600;
+}
+
+.freshnessItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+/* FRESH/STALE/UNAVAILABLE 三态指示,颜色语义与 MatchRow.module.css
+ * 的 .syncLine[data-state] 保持一致(同一套 sync_state 词汇,同一套配色)。 */
+.freshnessState {
+  color: var(--win);
+}
+
+.freshnessItem[data-state="STALE"] .freshnessState {
+  color: var(--loss);
+}
+
+.freshnessItem[data-state="UNAVAILABLE"] .freshnessState {
+  color: var(--ink-3);
 }
 
 @media (min-width: 900px) {

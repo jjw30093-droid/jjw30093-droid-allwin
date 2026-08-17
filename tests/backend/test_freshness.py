@@ -4,7 +4,15 @@
 匿名公开缓存(在 PUBLIC_ALLOWLIST 内)、带凭证强制 private、
 三字段各自独立取 MAX、任一表为空时如实返回 null(不用当前时间顶替)、
 fetch_failed/refused_* 不计入"赛程更新"(没有真正拿到新数据)。
+
+首页粗糙度修复(2026-08-16):三个时间戳各自额外配一个 FRESH/STALE/UNAVAILABLE
+三态字段(schedule_state/odds_state/reco_state),复用仓库统一词汇
+(backend/queries/odds.py::classify_odds_freshness、backend/content_status.py::
+project_freshness 同一套值)。阈值复用 backend/cli/ops_check.py 的
+SOURCE_STALE_HOURS=6,不发明新数字。
 """
+
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -86,10 +94,16 @@ class TestFreshnessValues:
         r = TestClient(app).get("/api/v1/status/freshness")
         assert r.status_code == 200
         body = r.json()
+        # 2026-08-16 扩展:时间戳为 None 时对应状态字段必须是明确的
+        # "UNAVAILABLE"(不是再一个 null 占位),用户界面才能区分"从未成功过"
+        # 和"曾经成功但现在过期"。
         assert body == {
             "schedule_updated_at": None,
             "odds_updated_at": None,
             "reco_updated_at": None,
+            "schedule_state": "UNAVAILABLE",
+            "odds_state": "UNAVAILABLE",
+            "reco_state": "UNAVAILABLE",
         }
 
     def test_reports_max_of_each_independent_source(self, app, data_dir):
@@ -134,3 +148,56 @@ class TestFreshnessValues:
 
         body = TestClient(app).get("/api/v1/status/freshness").json()
         assert body["reco_updated_at"] is None
+        # draft 不计入"发布",没有可用时间戳 -> 状态如实为 UNAVAILABLE
+        # (不是伪装成从未发生过任何事的 STALE,也不是留白)。
+        assert body["reco_state"] == "UNAVAILABLE"
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class TestFreshnessState:
+    """三个信号各自的 FRESH/STALE/UNAVAILABLE 判定(2026-08-16 首页粗糙度修复)。
+
+    时间戳为 None 的 UNAVAILABLE 情形已经由 TestFreshnessValues 的
+    test_all_null_when_tables_empty / test_draft_reco_slip_does_not_count 覆盖,
+    这里补 FRESH(距今很近)与 STALE(超过 6 小时阈值)两种情形,三个信号各
+    至少覆盖一种,不做 3x3 全覆盖。
+    """
+
+    def test_schedule_state_fresh_when_synced_minutes_ago(self, app, data_dir):
+        recent = _iso(datetime.now(timezone.utc) - timedelta(minutes=5))
+        conn_odds = connect_rw("odds")
+        try:
+            _insert_ledger(conn_odds, recent, "written")
+        finally:
+            conn_odds.close()
+
+        body = TestClient(app).get("/api/v1/status/freshness").json()
+        assert body["schedule_updated_at"] == recent
+        assert body["schedule_state"] == "FRESH"
+
+    def test_odds_state_stale_when_older_than_six_hours(self, app, data_dir):
+        old = _iso(datetime.now(timezone.utc) - timedelta(hours=10))
+        conn_odds = connect_rw("odds")
+        try:
+            _insert_odds_snap(conn_odds, old)
+        finally:
+            conn_odds.close()
+
+        body = TestClient(app).get("/api/v1/status/freshness").json()
+        assert body["odds_updated_at"] == old
+        assert body["odds_state"] == "STALE"
+
+    def test_reco_state_fresh_when_published_minutes_ago(self, app, data_dir):
+        recent = _iso(datetime.now(timezone.utc) - timedelta(minutes=1))
+        conn_platform = connect_rw("platform")
+        try:
+            _insert_reco_slip(conn_platform, recent)
+        finally:
+            conn_platform.close()
+
+        body = TestClient(app).get("/api/v1/status/freshness").json()
+        assert body["reco_updated_at"] == recent
+        assert body["reco_state"] == "FRESH"

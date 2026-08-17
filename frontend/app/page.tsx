@@ -6,7 +6,7 @@ import {
   type GetJson,
   type MatchListResponse,
 } from "@/lib/api-v1";
-import { selectHeroPair, type HomeMatchCard } from "@/lib/homepage";
+import { selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { FollowedMatches } from "@/components/matches/FollowedMatches";
 import { RecentlyViewed } from "@/components/matches/RecentlyViewed";
@@ -27,8 +27,7 @@ function SectionSkeleton({ lines = 3 }: { lines?: number }) {
 }
 
 type HomePageData = {
-  freeCard: HomeMatchCard | null;
-  lockedCard: HomeMatchCard | null;
+  featured: HomeMatchCard | null;
   secondary: HomeMatchCard[];
   counts: { today: number; tomorrow: number; week: number } | null;
   freshness: Freshness | null;
@@ -48,10 +47,15 @@ type HomePageData = {
  * 不受身份影响,SSR 一次即可,不需要跟着 HomeMatchExperienceLive 的
  * 客户端 cookie 刷新重新拉。
  */
-const getHomePageData = cache(async (): Promise<HomePageData> => {
+export const getHomePageData = cache(async (): Promise<HomePageData> => {
   const [upcoming, todayList, tomorrowList, shotsList, freshness] = await Promise.all([
+    // boost=free_predicted(2026-08-16):limit=8 只是原始 API 顺序的前 8 条,
+    // 完整 7 天窗口里更靠后的比赛没机会进这一页——哪怕它才是唯一一场
+    // "免费且已发布概率"的比赛(见 backend/api/routes_public.py::list_matches
+    // 同名参数文档)。opt-in 参数把这场比赛在服务端顶进 limit 截断线以内,
+    // 不需要把整窗口 ~95 场完整 MatchSummary 都下发到这里再筛。
     serverGet<MatchListResponse>(
-      "/api/v1/matches?status=upcoming&window=7d&limit=8",
+      "/api/v1/matches?status=upcoming&window=7d&limit=8&boost=free_predicted",
       { revalidate: 60 },
     ),
     serverGetOptional<MatchListResponse>(
@@ -76,7 +80,7 @@ const getHomePageData = cache(async (): Promise<HomePageData> => {
   const withShots = new Set<number>(
     (shotsList?.matches ?? []).map((m) => m.match_id),
   );
-  const { freeCard, lockedCard, secondary } = selectHeroPair(cards, new Date(), {
+  const { featured, secondary } = selectFeaturedMatch(cards, new Date(), {
     withShots,
   });
 
@@ -89,7 +93,7 @@ const getHomePageData = cache(async (): Promise<HomePageData> => {
         }
       : null;
 
-  return { freeCard, lockedCard, secondary, counts, freshness };
+  return { featured, secondary, counts, freshness };
 });
 
 const getRecoOverview = cache(async (): Promise<RecoOverview | null> => {
@@ -104,14 +108,15 @@ const getFreshness = cache(async (): Promise<Freshness | null> => {
   }).catch(() => null);
 });
 
-/* ── 今晚/明天/未来7天计数条 + 重点比赛(免费/锁定对照卡) + 近期比赛 ──
- * 服务端只算一次匿名口径的初始数据(SSR/无 JS 兜底),真正的"这次访问者
- * 实际能看到什么"交给 HomeMatchExperienceLive 挂载后用 cookie 刷新——
- * 会话 cookie Path=/api/v1,这里(Next RSC)读不到,见该组件顶部注释。
- * 三块以前分开 Suspense(CountsBar / HomeMatchExperience),现在合并成
- * 一次请求 + 一个客户端边界:三块共享同一个选场结果,分开刷新会出现
- * "计数条已经是新数据、重点卡还是旧的"这种不一致。数据更新条(freshness)
- * 不跟着这次客户端刷新——公开只读聚合,不随登录状态变化。 */
+/* ── 今晚/明天/未来7天计数条 + 重点比赛 + 近期比赛 ──
+ * 服务端算一次初始数据(SSR/无 JS 兜底),HomeMatchExperienceLive 挂载后
+ * 用浏览器 cookie 刷新一次同一组请求(会话 cookie Path=/api/v1,这里
+ * (Next RSC)读不到,见该组件顶部注释)——由于比赛内容不再区分身份,这次
+ * 客户端刷新只会在数据本身发生变化时才改变展示结果。三块以前分开
+ * Suspense(CountsBar / HomeMatchExperience),现在合并成一次请求 + 一个
+ * 客户端边界:三块共享同一个选场结果,分开刷新会出现"计数条已经是新
+ * 数据、重点卡还是旧的"这种不一致。数据更新条(freshness)不跟着这次
+ * 客户端刷新——公开只读聚合,不随登录状态变化。 */
 
 async function HomeMatchExperienceSection() {
   let data: HomePageData;
@@ -120,8 +125,7 @@ async function HomeMatchExperienceSection() {
   } catch {
     return (
       <HomeMatchExperienceLive
-        initialFreeCard={null}
-        initialLockedCard={null}
+        initialFeatured={null}
         initialSecondary={[]}
         initialCounts={null}
         initialFreshness={null}
@@ -132,8 +136,7 @@ async function HomeMatchExperienceSection() {
 
   return (
     <HomeMatchExperienceLive
-      initialFreeCard={data.freeCard}
-      initialLockedCard={data.lockedCard}
+      initialFeatured={data.featured}
       initialSecondary={data.secondary}
       initialCounts={data.counts}
       initialFreshness={data.freshness}
@@ -184,6 +187,18 @@ async function DailyPicksSection() {
   );
 }
 
+/** "1胜 2半赢 3负 1半输 2走"——四分之一盘口半赢/半输(2026-08-16)只在实际
+ * 出现时才加进这行,避免绝大多数场次(没有 half_win/half_loss)时把恒为 0
+ * 的分类也挤进公开首页摘要;出现时必须可见,不能被吞掉(CLAUDE.md 战绩纪律)。 */
+function recoResultBreakdownText(overview: RecoOverview): string {
+  const parts = [`${overview.win_count}胜`];
+  if (overview.half_win_count > 0) parts.push(`${overview.half_win_count}半赢`);
+  parts.push(`${overview.lose_count}负`);
+  if (overview.half_loss_count > 0) parts.push(`${overview.half_loss_count}半输`);
+  parts.push(`${overview.push_count}走`);
+  return parts.join(" ");
+}
+
 async function RecoSummarySection() {
   const overview = await getRecoOverview();
   if (!overview) return null;
@@ -207,9 +222,7 @@ async function RecoSummarySection() {
             <span>已结算</span>
           </div>
           <div className={styles.recoSummaryItem}>
-            <b className="num">
-              {overview.win_count}胜 {overview.lose_count}负 {overview.push_count}走
-            </b>
+            <b className="num">{recoResultBreakdownText(overview)}</b>
             <span>命中/未中/走水</span>
           </div>
           <div className={styles.recoSummaryItem}>

@@ -87,7 +87,8 @@ def seed_core_schema(conn):
             dribbles_succeeded REAL, "matchstats.headers.tackles" REAL,
             clearances REAL, interceptions REAL, duel_won REAL, aerials_won REAL,
             fouls REAL, corners REAL, Offsides REAL, saves REAL,
-            goals_conceded REAL, goals_prevented REAL)"""
+            goals_conceded REAL, goals_prevented REAL,
+            expected_goals_on_target_faced REAL)"""
     )
 
 

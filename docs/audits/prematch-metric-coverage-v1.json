@@ -1,0 +1,108 @@
+{
+  "since": "2025-08-01",
+  "leagues": {
+    "47": "英超",
+    "87": "西甲",
+    "54": "德甲",
+    "55": "意甲"
+  },
+  "team_extra_json_fields": {
+    "denominator_team_matches": 2892,
+    "fields": {
+      "BallPossesion": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "passes": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "accurate_passes": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "opposition_half_passes": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "touches_opp_box": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "total_shots": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "ShotsOnTarget": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "expected_goals": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "expected_goals_on_target": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "big_chance": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "shots_inside_box": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "matchstats.headers.tackles": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "interceptions": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "clearances": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "shot_blocks": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "accurate_crosses": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "duel_won": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "ground_duels_won": {
+        "non_null": 2892,
+        "pct": 100.0
+      },
+      "aerials_won": {
+        "non_null": 2892,
+        "pct": 100.0
+      }
+    }
+  },
+  "shotmap": {
+    "matches_total": 1446,
+    "matches_with_shots": 1446,
+    "matches_with_shots_pct": 100.0,
+    "shots": 36564,
+    "situation_non_null_pct": 100.0,
+    "xg_non_null_pct": 99.8
+  },
+  "goalkeeper": {
+    "denominator_gk_rows": 26402,
+    "leagues": 10,
+    "date_from": "2020-08-21",
+    "date_to": "2026-08-10",
+    "expected_goals_on_target_faced_pct": 97.2,
+    "goals_prevented_pct": 39.0,
+    "keeper_sweeper_pct": 100.0,
+    "keeper_high_claim_pct": 100.0
+  }
+}

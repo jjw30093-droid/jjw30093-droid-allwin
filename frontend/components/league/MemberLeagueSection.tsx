@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * 会员联赛数据客户端加载器。
+ * 联赛数据客户端加载器。
  *
- * 会话 cookie Path=/api/v1,只有浏览器请求能携带(宪法 §10.2:公共 HTML 不因
- * 登录态变化;会员数据由浏览器带 credentials 调私有 API)。服务端匿名取数被
- * 联赛门禁挡下(401/403)时,页面渲染本组件:
- * - 浏览器重试同一端点:已开通会员 → 直接渲染与 SSR 完全相同的展示组件;
- * - 401(未登录)→ 登录 + 会员方案引导;
- * - 403(已登录无权益)→ 会员方案引导;
+ * 会话 cookie Path=/api/v1,只有浏览器请求能携带,服务端(RSC)读不到——本
+ * 组件在服务端匿名取数返回空结果时接手,浏览器重新拉一次同一端点。
+ * 2026-08-16 权限口径修正:standings/fixtures/team-stats/players/
+ * season-profile 现在对任何人(含匿名)恒 200,不会再返回 401/403——此前
+ * "未登录/无权益"引导卡片这条分支已是死代码,一并移除:
+ * - 拿到数据 → 直接渲染与 SSR 完全相同的展示组件;
  * - 404 → 联赛不存在/未同步的诚实说明;
- * - 其他错误 → 可重试的错误态。
+ * - 其他错误(含理论上不应再出现的 401/403)→ 统一归入可重试的错误态。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -42,7 +42,6 @@ type SectionData =
 type State =
   | { phase: "loading" }
   | { phase: "data"; data: SectionData }
-  | { phase: "gate"; status: 401 | 403 }
   | { phase: "notfound" }
   | { phase: "error" };
 
@@ -67,9 +66,7 @@ export function MemberLeagueSection({
       })
       .catch((e) => {
         if (cancelled) return;
-        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-          setState({ phase: "gate", status: e.status });
-        } else if (e instanceof ApiError && e.status === 404) {
+        if (e instanceof ApiError && e.status === 404) {
           setState({ phase: "notfound" });
         } else {
           setState({ phase: "error" });
@@ -91,33 +88,6 @@ export function MemberLeagueSection({
         <span className={styles.skelLine} />
         <span className={styles.skelLine} />
         <span className={styles.skelLine} />
-      </div>
-    );
-  }
-
-  if (state.phase === "gate") {
-    // 登录后回到当前联赛页,而不是首页(路由段与 API kind 刻意不同:
-    // fixtures 的路由是 "matches",见 lib/league-links.ts 头注释)。
-    const routeSection = kind === "fixtures" ? "matches" : kind;
-    const nextPath = `/league/${leagueId}/${routeSection}${
-      season ? `?season=${encodeURIComponent(season)}` : ""
-    }`;
-    return (
-      <div className={styles.gateBox}>
-        <h2 className={styles.gateTitle}>登录后即可免费查看该联赛数据</h2>
-        <p className={styles.gateText}>
-          {state.status === 401
-            ? "免费登录后,即可查看该联赛的排名、赛程与数据榜;登录完成后会返回本页。"
-            : "当前账号暂无该联赛权限,请重新登录后重试;若仍受限请联系站长。"}
-        </p>
-        <div className={styles.gateActions}>
-          <a
-            className={styles.btnPrimary}
-            href={`/login?next=${encodeURIComponent(nextPath)}`}
-          >
-            登录
-          </a>
-        </div>
       </div>
     );
   }

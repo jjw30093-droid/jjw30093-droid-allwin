@@ -12,10 +12,10 @@ import {
 } from "@/components/league/TableTypeSwitcher";
 import styles from "./standings.module.css";
 
-// 已迁移到 /api/v1/leagues/{id}/standings(联赛门禁 + TeamRef 中文名解析在服务端):
-// - 免费联赛(英超等):服务端匿名取数直接 SSR,公共 HTML 不因登录态变化;
-// - 需登录联赛:匿名取数被 401/403 挡下 → 渲染客户端会员加载器,浏览器带会话
-//   cookie 重取;无权益时显示会员引导,不再渲染空表格。
+// 已迁移到 /api/v1/leagues/{id}/standings(TeamRef 中文名解析在服务端)。
+// 2026-08-16 权限口径修正:全部联赛对任何人(含匿名)恒 200,服务端匿名
+// 取数直接 SSR,公共 HTML 不因登录态变化;取数失败/未同步时渲染客户端
+// 加载器重新请求一次,不再渲染空表格。
 //
 // 2026-08-12:打开 table_type 五档。此前硬编码 'all',home/away/form/xg 共
 // 2,892 行完全不可见;其中 xg 档带 x_points/x_position 与预算好的 xPointsDiff,

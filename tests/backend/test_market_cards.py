@@ -231,15 +231,11 @@ class TestMatchMarketsRoute:
             assert card["signal_grade"] is None
 
     def test_no_history_league_degrades_honestly(self, app, market_fixture):
-        """英冠(48)需要登录门禁——先验证匿名 401,再登录后验证
-        no_history 降级路径(不是 500)。"""
+        """英冠(48,原 league:lottery)2026-08-16 起匿名即可访问(除"每日精选"
+        外全站比赛内容全部免费)——直接验证匿名 no_history 降级路径(不是
+        500,也不是 401)。这条断言正是要推翻的旧规则(此前匿名恒 401)。"""
         anon = TestClient(app)
-        assert anon.get("/api/v1/matches/9502/markets").status_code == 401
-
-        from .authflow import wechat_scan_login
-        client = TestClient(app)
-        wechat_scan_login(client, ip="10.9.9.9")
-        r = client.get("/api/v1/matches/9502/markets")
+        r = anon.get("/api/v1/matches/9502/markets")
         assert r.status_code == 200
         for card in r.json()["cards"]:
             assert card["data_quality"] == "no_history"

@@ -25,7 +25,9 @@
   gap: 8px;
   text-align: right;
   color: var(--ink);
-  font-size: 13.5px;
+  /* 队名是核心识别信息(和比分、开球时间同级),按 CLAUDE.md §11.2
+   * "正文 14px 起" 的下限,不能停在 13.5px。 */
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -38,7 +40,7 @@
   gap: 8px;
   text-align: left;
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -66,7 +68,8 @@
 }
 
 .date {
-  font-size: 13px;
+  /* 开球时间是核心信息(不能缩),同样对齐 §11.2 的"正文 14px 起"。 */
+  font-size: 14px;
   color: var(--ink-2);
 }
 
@@ -98,6 +101,15 @@
 
 .syncLine[data-state="STALE"] b {
   color: var(--loss);
+}
+
+/* UNAVAILABLE 必须可见,但克制:不做成和 STALE 一样醒目的红色警告——
+ * 只用行内次要文字色(--ink-3)与正常字重区分,不再靠字号更小来降低存在感
+ * (11px 曾经低于 CLAUDE.md §11.2 的 12px 可读下限,已改为与 .syncLine
+ * 基准字号一致的 12px;低对比度灰字本身已经足够克制,不需要再叠加更小字号)。 */
+.syncLine[data-state="UNAVAILABLE"] b {
+  color: var(--ink-3);
+  font-weight: 500;
 }
 
 @media (max-width: 520px) {
@@ -135,12 +147,5 @@
 }
 
 .oddsTier[data-tier="full_timeline"] {
-  color: var(--gold-300);
-}
-
-/* 联赛权限不足时的概率条占位提示,与 .oddsTier/.probRow 同格律 */
-.loginHint {
-  grid-column: 1 / -1;
-  font-size: 12px;
   color: var(--gold-300);
 }

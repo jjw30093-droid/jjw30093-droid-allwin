@@ -4,6 +4,7 @@ import {
   serverGetOptional,
   type MatchDetailResponse,
   type MatchListResponse,
+  type MatchPreviewResponse,
   type MatchReportResponse,
 } from "@/lib/api-v1";
 import {
@@ -19,11 +20,11 @@ import styles from "./match-detail.module.css";
  * 比赛详情页(宪法 §11.1 固定顺序,主体见 components/matches/MatchDetailBody):
  * 1 头部 → 2 概率卡 → 3 证据/反向证据 → 4 可视化 → 5 赔率时间轴 → 6 同期事件 → 7 模型与登记信息。
  *
- * 免费/付费边界:本 server component 只请求匿名投影(受限字段物理不存在)。
- * 匿名取数被联赛门禁挡下(401/403 → null)时**不再 notFound()**——那会让
- * Pro/Premium 用户对整个付费联赛拿到 404(审计 B1)。改为渲染
- * MemberMatchDetail:浏览器带会话 cookie 重试,已开通会员直接看到与 SSR
- * 完全相同的页面主体,未开通看到升级引导。公共 HTML 外壳对所有身份一致(§10.2)。
+ * 2026-08-16 权限口径修正:本站比赛内容对任何人(含匿名)恒完整,不再有
+ * entitlement 分层投影。本 server component 请求 serverGetOptional,拿不到
+ * 数据(比赛真的不存在,或服务端取数失败)时**不 notFound()**,改为渲染
+ * MemberMatchDetail:浏览器重新请求一次,三分"拿到数据/比赛不存在/网络
+ * 错误"。公共 HTML 外壳对所有身份一致(§10.2)。
  */
 
 export async function generateMetadata({
@@ -94,10 +95,13 @@ export default async function MatchDetailPage({
   }
 
   const m = detail.match;
-  const [analysis, report, related] = await Promise.all([
+  const [analysis, report, preview, related] = await Promise.all([
     serverGetOptional<AnalysisBundle>(`/api/v1/matches/${idNum}/analysis`).catch(() => null),
     serverGetOptional<MatchReportResponse>(`/api/v1/matches/${idNum}/report`, {
       revalidate: 300, // 完赛事实不再变化,可安心 ISR;未完赛响应为 available=false
+    }).catch(() => null),
+    serverGetOptional<MatchPreviewResponse>(`/api/v1/matches/${idNum}/preview`, {
+      revalidate: 120, // 两队历史聚合随赛程推进变化,与 detail 同档刷新
     }).catch(() => null),
     serverGetOptional<MatchListResponse>(
       `/api/v1/matches?league_id=${m.league_id}&status=upcoming&window=7d&limit=200`,
@@ -119,6 +123,7 @@ export default async function MatchDetailPage({
       detail={detail}
       analysis={analysis}
       report={report}
+      preview={preview}
       returnTo={returnTo}
       returnLabel={returnLabel}
       previousMatch={previousMatch}

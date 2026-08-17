@@ -13,6 +13,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OddsTimeline } from "@/components/matches/OddsTimeline";
 import { flatOddsGroup } from "@/components/matches/types";
+import { formatBeijingDateTime } from "@/components/matches/zh";
 
 afterEach(() => {
   cleanup();
@@ -144,6 +145,50 @@ describe("OddsTimeline tier=full 但 display_mode=current_odds(样本不足以�
     expect(screen.queryByText("1.02 → 0.97")).toBeNull();
     expect(screen.queryByText("有变动")).toBeNull();
     expect(screen.getByText(/不是实时赔率/)).not.toBeNull();
+    // 2026-08-16 权限口径修正:tier 恒为 "full"(MatchOddsAvailableDTO.tier
+    // 已收窄成常量),不再存在"未登录只展示一条,登录查看完整时间线"这一档。
+    expect(screen.queryByText(/未登录/)).toBeNull();
+    expect(screen.queryByText(/免费登录查看完整时间线/)).toBeNull();
+  });
+});
+
+describe("OddsTimeline 每家公司卡片展示各自的 observed_at(2026-08 审计:CompanyOddsRow.observedAt\n  已经从每条快照的真实 observed_at 正确填充,但 OddsNumbers() 渲染函数从未把它显示出来——\n  这里断言的是「每家公司自己的」时间,不是页面级共享一个新鲜度时间)", () => {
+  it("两家公司(同一市场)observedAt 不同时,各自的北京时间文本都出现在渲染结果里", async () => {
+    const companyA = {
+      ...FLAT_SNAP,
+      company_id: "8",
+      company_name: "Bet365",
+      observed_at: "2021-02-02T20:11:45Z",
+    };
+    const companyB = {
+      ...FLAT_SNAP,
+      company_id: "281",
+      company_name: "Crown",
+      observed_at: "2021-03-15T09:30:00Z",
+    };
+    mockOddsResponse(fullTimelineBody([companyA, companyB]));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    expect(screen.getByText("Crown", { selector: "span" })).not.toBeNull();
+
+    const timeA = formatBeijingDateTime(companyA.observed_at);
+    const timeB = formatBeijingDateTime(companyB.observed_at);
+    expect(timeA).not.toBeNull();
+    expect(timeB).not.toBeNull();
+    expect(timeA).not.toBe(timeB); // 两家公司的观测时间本就不同,不是同一个共享时间戳
+
+    // 精确定位到各自公司的数字块(而不是页面上任意位置的时间文本——顶部
+    // "这是 X 采集到的快照" 说明段用的是 freshestRow 单一时间戳,不能被
+    // 误判成"每家公司都展示了"),断言 Bet365 那一块只含自己的时间、
+    // Crown 那一块只含自己的时间。
+    const companyABlock = screen.getByText("Bet365", { selector: "span" }).closest("div");
+    const companyBBlock = screen.getByText("Crown", { selector: "span" }).closest("div");
+    expect(companyABlock?.textContent).toContain(timeA);
+    expect(companyBBlock?.textContent).toContain(timeB);
+    expect(companyABlock?.textContent).not.toContain(timeB);
+    expect(companyBBlock?.textContent).not.toContain(timeA);
   });
 });
 

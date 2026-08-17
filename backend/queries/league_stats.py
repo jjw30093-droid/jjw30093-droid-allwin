@@ -1,9 +1,9 @@
 """联赛级球队/球员赛季统计只读查询(/api/v1/leagues/{id}/team-stats、/players)。
 
-字段纪律(CLAUDE.md §3):
-- 球队统计只 SELECT 免费字段(射门/射正/控球/xG/xGOT)。角球/红黄牌/零封/BTTS
-  是付费深度报告字段,物理上不进本查询的 SQL,更不进响应——不是取了再藏。
-- 球员榜只暴露 5 个免费维度(进球/助攻/xG/xGOT/评分),各取 top 10。
+字段纪律(2026-08-16 产品权限口径修正,经用户批准):除"每日精选"外全站
+比赛内容全部免费,包括匿名——球队赛季统计与球员榜恒全字段投影,不再区分
+免费/付费深度字段。角球/红黄牌/零封/BTTS 此前被排除在 SQL 之外只是历史
+付费墙的残留,现在与射门/射正/控球/xG/xGOT 同属免费内容。
 
 赛季解析与 queries/matches.standings 同规则:available_seasons 来自数据源表
 本身;请求的 season 不在列表时回退最新赛季(响应如实返回实际使用的赛季)。
@@ -14,13 +14,46 @@ import sqlite3
 from backend.queries.matches import _team_ref
 from backend.queries.teams import team_display_map
 
-# 免费球员榜维度(与 legacy /api/league/{id}/overview 的 FREE_PLAYER_STATS 同集合)
+# 球员榜维度(2026-08-16 起全字段免费投影)。原来只暴露 5 个"免费"维度
+# (进球/助攻/xG/xGOT/评分),其余 fact_season_player_stats 里真实存在、
+# 有真实样本量的 stat_name(黄牌/红牌/犯规/扑救/零封/拦截/抢断等)此前被
+# 整体排除在 FREE_PLAYER_BOARDS 之外,属于本次要拆除的付费墙残留。
+#
+# 未纳入的 stat_name(有意排除,不是遗漏):
+# - 4 个下划线前缀的复合/派生指标(_expected_goals_and_expected_assists_per_90 /
+#   _goals_and_goal_assist / _goals_prevented / _save_percentage)——这是来源
+#   数据里的内部派生字段命名惯例,语义未经核实,不作为独立榜单直接展示;
+# - mins_played(出场分钟数)——不是"越高越好"的竞技排名指标,是上下文/
+#   筛选字段,不适合作为榜单维度。
 FREE_PLAYER_BOARDS: list[tuple[str, str]] = [
     ("goals", "进球"),
     ("goal_assist", "助攻"),
     ("expected_goals", "xG"),
     ("expected_goalsontarget", "xGOT"),
     ("rating", "评分"),
+    ("expected_assists", "xA"),
+    ("yellow_card", "黄牌"),
+    ("red_card", "红牌"),
+    ("fouls", "犯规"),
+    ("total_tackle", "抢断"),
+    ("interception", "拦截"),
+    ("ball_recovery", "反抢回收"),
+    ("effective_clearance", "解围"),
+    ("outfielder_block", "封堵"),
+    ("total_scoring_att", "射门"),
+    ("ontarget_scoring_att", "射正"),
+    ("big_chance_created", "创造绝佳机会"),
+    ("big_chance_missed", "错失绝佳机会"),
+    ("accurate_pass", "传球成功"),
+    ("accurate_long_balls", "长传成功"),
+    ("won_contest", "成功过人"),
+    ("poss_won_att_3rd", "前场反抢"),
+    ("defensive_contributions", "防守贡献"),
+    ("penalty_won", "赢得点球"),
+    ("penalty_conceded", "送点"),
+    ("saves", "扑救"),
+    ("clean_sheet", "零封"),
+    ("goals_conceded", "失球"),
 ]
 
 _BOARD_TOP_N = 10
@@ -99,19 +132,23 @@ def team_season_stats(
         ),
     )
     display = team_display_map(conn)
-    # xG 拆解(运动战/定位球/非点球)与总 xG 同源同口径,是 xG 这个免费字段的
-    # 细分,不属于上面注释里列举的付费深度字段(角球/红黄牌/零封/BTTS)。
+    # xG 拆解(运动战/定位球/非点球)与总 xG 同源同口径。
     #
     # 被创造 xG 走 fact_league_table 的 xg 档:该表已随 standings 的 table_type=xg
     # 公开(xG 运气榜),这里只是换算成场均以便与 silver 的场均值同轴比较。
     # 实测确认两源同口径:曼城 2025/2026 silver 1.877 == 65.5.../38(逐队吻合)。
     # LEFT JOIN —— 并非每个联赛赛季都有 xg 档(如 J1 2026、瑞超 2024),
     # 缺失时 avg_expected_goals_conceded 为 None,前端据此降级,不补 0。
+    #
+    # 2026-08-16 起(除"每日精选"外全站比赛内容全部免费):角球/黄牌/红牌/
+    # 零封/BTTS 与射门/xG 等字段同属免费投影,一并 SELECT。
     rows = conn.execute(
         """SELECT s.Team_ID, s.matches_played, s.avg_total_shots,
                   s.avg_shots_on_target, s.avg_possession, s.avg_expected_goals,
                   s.avg_expected_goals_on_target, s.avg_expected_goals_open_play,
                   s.avg_expected_goals_set_play, s.avg_expected_goals_non_penalty,
+                  s.avg_corners, s.avg_fouls, s.avg_yellow_cards, s.avg_red_cards,
+                  s.clean_sheets, s.btts_matches, s.btts_pct,
                   CASE WHEN COALESCE(x.played, 0) > 0
                        THEN x.xg_conceded * 1.0 / x.played END
                     AS avg_expected_goals_conceded
@@ -139,6 +176,13 @@ def team_season_stats(
                 "avg_expected_goals_set_play": r["avg_expected_goals_set_play"],
                 "avg_expected_goals_non_penalty": r["avg_expected_goals_non_penalty"],
                 "avg_expected_goals_conceded": r["avg_expected_goals_conceded"],
+                "avg_corners": r["avg_corners"],
+                "avg_fouls": r["avg_fouls"],
+                "avg_yellow_cards": r["avg_yellow_cards"],
+                "avg_red_cards": r["avg_red_cards"],
+                "clean_sheets": r["clean_sheets"],
+                "btts_matches": r["btts_matches"],
+                "btts_pct": r["btts_pct"],
             }
             for r in rows
         ],

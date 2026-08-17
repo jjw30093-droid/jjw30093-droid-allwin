@@ -64,48 +64,6 @@ function probabilityBarOption(d: Record<string, unknown>, mode: ChartMode): ECha
   };
 }
 
-function formCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
-  const t = tokensFor(mode);
-  const score = (r: string) => (r === "W" ? 3 : r === "D" ? 1 : 0);
-  const home = (d.home as string[]) ?? [];
-  const away = (d.away as string[]) ?? [];
-  const n = Math.max(home.length, away.length);
-  return {
-    grid: scaleGrid({ left: 40, right: 16, top: 30, bottom: 24 }, mode),
-    legend: {
-      data: [String(d.home_name), String(d.away_name)],
-      textStyle: { color: INK2, fontSize: t.legendFont },
-      top: 0,
-      itemHeight: Math.round(t.legendFont * 0.8),
-      itemWidth: Math.round(t.legendFont * 1.6),
-    },
-    xAxis: {
-      type: "category",
-      data: Array.from({ length: n }, (_, i) => `近${n - i}场`),
-      axisLabel: { color: INK2, fontSize: t.axisFont },
-    },
-    yAxis: { type: "value", max: 3, axisLabel: { show: false }, splitLine: { show: false } },
-    series: [
-      {
-        name: String(d.home_name),
-        type: "line",
-        data: [...home].reverse().map(score),
-        color: GOLD,
-        symbolSize: t.symbolSize,
-        lineStyle: { width: t.lineWidth },
-      },
-      {
-        name: String(d.away_name),
-        type: "line",
-        data: [...away].reverse().map(score),
-        color: INK2,
-        symbolSize: t.symbolSize,
-        lineStyle: { width: t.lineWidth },
-      },
-    ],
-  };
-}
-
 function xgCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
   const t = tokensFor(mode);
   const valueLabel = {
@@ -158,8 +116,6 @@ export function summarize(spec: ChartSpec): string {
       d.probability_source === "MARKET_BASELINE" ? "赔率折算概率" : "模型概率";
     return `${label}:主胜 ${Math.round(Number(d.home) * 100)}%,平局 ${Math.round(Number(d.draw) * 100)}%,客胜 ${Math.round(Number(d.away) * 100)}%`;
   }
-  if (spec.type === "form_compare")
-    return `近期战绩:${d.home_name} ${(d.home as string[]).join("")} / ${d.away_name} ${(d.away as string[]).join("")}`;
   if (spec.type === "xg_compare")
     return `近10场滚动 xG:${d.home_name} 进攻 ${d.home_xg_for} 防守 ${d.home_xg_against};${d.away_name} 进攻 ${d.away_xg_for} 防守 ${d.away_xg_against}`;
   if (spec.type === "shot_map_explorer") {
@@ -198,7 +154,6 @@ export function SpecChart({
   }
   let option: EChartsOption | null = null;
   if (spec.type === "probability_bar") option = probabilityBarOption(spec.data, mode);
-  else if (spec.type === "form_compare") option = formCompareOption(spec.data, mode);
   else if (spec.type === "xg_compare") option = xgCompareOption(spec.data, mode);
   if (!option) return null;
   return <EChart option={option} height={height} ariaSummary={summarize(spec)} mode={mode} />;

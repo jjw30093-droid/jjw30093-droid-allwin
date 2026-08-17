@@ -86,6 +86,7 @@ def list_matches(
     query_team_ids: set[int] | None = None,
     match_ids: set[int] | None = None,
     priority_match_ids: set[int] | None = None,
+    top_priority_match_ids: set[int] | None = None,
     now: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
@@ -177,14 +178,29 @@ def list_matches(
     if status == "finished":
         order = "julianday(COALESCE(kickoff_at_utc, Date)) DESC, Match_ID DESC"
     else:
-        priority_order = ""
+        # 两层优先级(2026-08-16 首页重点位确定性选场修复):
+        # top_priority_match_ids 排在 priority_match_ids 之前——原先单一
+        # CASE WHEN 只能表达"有 X 特征的比赛都排最前",当这批比赛数量超过
+        # limit 时,里面更值得优先的一小撮(比如"免费且已发布概率")仍然可能
+        # 被同一大类里开球更早的其它比赛挤出分页截断线之外。新增这一档让
+        # 调用方可以标出"这几场无论如何都必须留在第一页"的更强子集,
+        # 不影响只传 priority_match_ids 时的既有单层语义(向后兼容:
+        # 不传 top_priority_match_ids 时生成的 SQL 与改动前逐字节相同)。
+        tiers: list[tuple[str, list[int]]] = []
+        if top_priority_match_ids:
+            ids = sorted(top_priority_match_ids)
+            placeholders = ",".join("?" for _ in ids)
+            tiers.append((f"Match_ID IN ({placeholders})", ids))
         if priority_match_ids:
-            ordered_priority_ids = sorted(priority_match_ids)
-            priority_placeholders = ",".join("?" for _ in ordered_priority_ids)
-            priority_order = (
-                f"CASE WHEN Match_ID IN ({priority_placeholders}) THEN 0 ELSE 1 END, "
-            )
-            order_params = ordered_priority_ids
+            ids = sorted(priority_match_ids)
+            placeholders = ",".join("?" for _ in ids)
+            tiers.append((f"Match_ID IN ({placeholders})", ids))
+        priority_order = ""
+        if tiers:
+            when_clauses = [f"WHEN {cond} THEN {rank}" for rank, (cond, _) in enumerate(tiers)]
+            priority_order = f"CASE {' '.join(when_clauses)} ELSE {len(tiers)} END, "
+            for _, ids in tiers:
+                order_params.extend(ids)
         order = (
             priority_order
             + "julianday(COALESCE(kickoff_at_utc, Date)) ASC, Match_ID ASC"

@@ -46,6 +46,10 @@ export type MatchDataSignals = {
  *
  * 射门图权重高于赔率,因为它是**视觉型**证据(一屏 200-300 个真实落点),
  * 而赔率目前每场只有 2-4 个观测点、只能显示两点变化条。
+ *
+ * `win_probability` 单独计分(而不是只依赖 `odds_coverage_tier`):重点位的
+ * 核心卖点就是这条概率条(见 selectFeaturedMatch),一场已经算出概率的比赛
+ * 即便赔率观测点还不足以定 tier,也应该比完全没有概率的比赛优先。
  */
 export function dataRichness(card: HomeMatchCard, signals: MatchDataSignals): number {
   let score = 0;
@@ -53,6 +57,7 @@ export function dataRichness(card: HomeMatchCard, signals: MatchDataSignals): nu
   const tier = card.match.odds_coverage_tier;
   if (tier === "full_timeline") score += 1;
   else if (tier === "open_close_only") score += 1;
+  if (card.match.win_probability) score += 1;
   return score;
 }
 
@@ -104,89 +109,36 @@ export function selectHomepageMatches(
 }
 
 /**
- * 首页重点位选场(2026-08-13 Claude Design 定稿:并排一免费一锁定对照卡,
- * 取代单张 featured 卡)。
+ * 首页重点位选场(2026-08-16 权限口径修正:后端对任何人恒返回完整比赛内容,
+ * `requires_login` 字段已从 MatchSummary 彻底删除——"一免费一锁定对照卡"
+ * 这个产品概念随之消失,不存在需要"诚实展示这场看不到概率"的锁定比赛了)。
  *
- * - `freeCard`:优先选有真实概率的免费比赛(`requires_login===false` 且
- *   `win_probability` 非空)——重点位的核心卖点就是这条概率条,选一场
- *   概率还没算出来的免费比赛没有意义。真找不到"免费+有概率"的组合时
- *   退化为"任意一场免费比赛",保证赛季间歇期这类数据稀薄场景也有得选。
- * - `lockedCard`:同一批比赛里开球最近的一场锁定比赛,与 `freeCard` 去重。
- *   用"开球时间"排序而不是 `selectHomepageMatches` 的数据富集度排序——
- *   对照卡本来就是"诚实展示这场看不到概率",不需要挑数据最厚的那场。
- * - 两者都找不到时都是 `null`,调用方回退到"暂无已排期的未来比赛"空态,
- *   不臆造数据凑对照。
- * - `secondary`:按开球时间顺序的剩余比赛,已排除 `freeCard`/`lockedCard`,
- *   避免同一场比赛在重点位和"近期比赛"横滑区里重复出现。
+ * 取代此前的 `selectHeroPair`(freeCard/lockedCard 双卡对照)。新设计:
+ * - `featured`:复用 `selectHomepageMatches` 的数据富集度排序(优先选真的
+ *   有射门史/赔率、因而算得出 `win_probability` 的比赛;同富集度按开球
+ *   时间就近、再按联赛档位打平)——重点位的核心卖点是这条概率条,不看
+ *   身份,只看这场比赛本身是否有数据。
+ * - `secondary`:按开球时间顺序的剩余比赛,已排除 `featured`,避免同一场
+ *   比赛在重点位和"近期比赛"横滑区里重复出现。
+ * - 候选池为空时 `featured` 为 `null`,调用方回退到"暂无已排期的未来比赛"
+ *   空态,不臆造数据。
  */
-export function selectHeroPair(
+export function selectFeaturedMatch(
   cards: HomeMatchCard[],
   now: Date = new Date(),
   signals: MatchDataSignals = { withShots: new Set<number>() },
 ): {
-  freeCard: HomeMatchCard | null;
-  lockedCard: HomeMatchCard | null;
+  featured: HomeMatchCard | null;
   secondary: HomeMatchCard[];
 } {
-  const { ordered } = selectHomepageMatches(cards, now, signals);
-  const freeCard =
-    ordered.find((c) => !c.match.requires_login && c.match.win_probability) ??
-    ordered.find((c) => !c.match.requires_login) ??
-    null;
+  const { featured } = selectHomepageMatches(cards, now, signals);
   const byKickoff = [...cards].sort((a, b) =>
     kickoffOf(a).localeCompare(kickoffOf(b)),
   );
-  const lockedCard =
-    byKickoff.find(
-      (c) => c.match.requires_login && c.match.match_id !== freeCard?.match.match_id,
-    ) ?? null;
-  const usedIds = new Set(
-    [freeCard, lockedCard]
-      .filter((c): c is HomeMatchCard => c != null)
-      .map((c) => c.match.match_id),
+  const secondary = byKickoff.filter(
+    (c) => c.match.match_id !== featured?.match.match_id,
   );
-  const secondary = byKickoff.filter((c) => !usedIds.has(c.match.match_id));
-  return { freeCard, lockedCard, secondary };
-}
-
-export type HeroForm = {
-  name: string;
-  results: string[];
-  w: number;
-  d: number;
-  l: number;
-};
-
-/**
- * 首页重点卡的近期战绩对比 —— 取自 analysis bundle 的 form_compare chart spec。
- *
- * 为什么用它替代原来的 evidence 列表:evidence 是 backend/studio/bundle.py 里
- * 一串硬编码 if/else 模板,实测 200 场未来比赛中 **84 场(42%)为空**,而最高频
- * 的一类 `rest`(休息天数)因为 `_rest_days` 只查上一场完赛、不区分休赛期,
- * 中位数 24 天、最大 1917.8 天 —— 那是错误信息,不是弱信息。
- * form_compare 则是 200/200 场都有,且直接来自真实比分。
- */
-export function heroForms(
-  analysis: AnalysisBundle | null,
-): { home: HeroForm; away: HeroForm } | null {
-  const spec = analysis?.chart_specs?.find((s) => s.type === "form_compare");
-  if (!spec) return null;
-  const d = spec.data as Record<string, unknown>;
-  const build = (results: unknown, name: unknown): HeroForm | null => {
-    if (!Array.isArray(results) || results.length === 0) return null;
-    const list = results.map(String);
-    return {
-      name: String(name ?? ""),
-      results: list,
-      w: list.filter((r) => r === "W").length,
-      d: list.filter((r) => r === "D").length,
-      l: list.filter((r) => r === "L").length,
-    };
-  };
-  const home = build(d.home, d.home_name);
-  const away = build(d.away, d.away_name);
-  if (!home || !away) return null;
-  return { home, away };
+  return { featured, secondary };
 }
 
 /**

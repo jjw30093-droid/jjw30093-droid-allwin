@@ -4,12 +4,12 @@
  * 关键变化(比赛详情页第 6 区块;时间共现,不声称因果)。
  * 区块标题与 <section> 由本组件自带:加载中/加载失败/无内容时整个区块
  * 不渲染("暂无同期事件"对用户没有价值,空标题也不占屏)。
- * 匿名(无 report:deep):后端只给计数;深度报告权益给明细。
+ * 2026-08-16 权限口径修正:后端恒返回完整明细(items 不再是判别联合里
+ * "匿名/free 只给计数"的那一支),不再有身份分层,直接渲染。
  * 文案只允许"同期/同时段检测到",禁止任何因果表述(宪法 §6.4)。
  */
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { clientFetch } from "@/lib/api-v1";
 import { LocalTime } from "./LocalTime";
 import { EVENT_TYPE_ZH, MARKET_ZH } from "./zh";
@@ -71,27 +71,6 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
       <b>同一时间窗内观察到两类变化,不代表二者存在因果关系。</b>
     </p>
   );
-
-  if (resp.items == null) {
-    return (
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>
-          <span className={styles.sectionBar} aria-hidden />
-          关键变化
-        </h2>
-        {countLine}
-        <p className={styles.lockNote}>
-          明细登录后免费查看。
-          <Link
-            href={`/login?next=${encodeURIComponent(`/matches/${matchId}`)}`}
-            className={styles.lockLink}
-          >
-            免费登录 →
-          </Link>
-        </p>
-      </section>
-    );
-  }
 
   return (
     <section className={styles.section}>

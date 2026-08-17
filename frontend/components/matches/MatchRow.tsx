@@ -73,39 +73,57 @@ export function MatchRow({
         <span>{match.away.name}</span>
       </span>
       {/* 内部字段名(MARKET_BASELINE)、观测点数、统一模糊标签不再逐行输出;
-          只保留可行动的 STALE 提示与最近更新时间(详情页仍可完整溯源)。 */}
-      {match.sync_state === "STALE" && (
+          STALE 保留可行动的醒目提示;UNAVAILABLE 曾被这个条件静默吞掉——
+          95/95 场 upcoming 比赛全部 UNAVAILABLE 却在列表上完全看不到提示,
+          现在两者都可见,但 UNAVAILABLE 走更克制的次要文字样式(见 CSS),
+          不做成和 STALE 一样醒目的警告。 */}
+      {(match.sync_state === "STALE" || match.sync_state === "UNAVAILABLE") && (
         <span className={styles.syncLine} data-state={match.sync_state}>
           <b>{syncStateLabel(match.sync_state)}</b>
-          {match.data_updated_at && (
+          {match.sync_state === "STALE" && (
             <>
-              {" · 更新于 "}
-              <LocalTime iso={match.data_updated_at} />
+              {match.data_updated_at && (
+                <>
+                  {" · 更新于 "}
+                  <LocalTime iso={match.data_updated_at} />
+                </>
+              )}
+              {` · ${match.next_planned_sync_at ? "等待计划采集" : "正在等待采集恢复"}`}
             </>
           )}
-          {` · ${match.next_planned_sync_at ? "等待计划采集" : "正在等待采集恢复"}`}
         </span>
       )}
       {/* 赔率覆盖徽标(D8):区分完整走势与两点摘要,不再把两档混为一谈;
-          tier 未计算(联赛 fixtures 端点)或 none 时不渲染,保持行的干净 */}
+          tier 未计算(联赛 fixtures 端点)或 none 时不渲染,保持行的干净。
+          full_timeline 且 odds_freshness_state=STALE 时不能无条件宣称
+          "完整走势"——那是旧数据,必须带过期限定语和最后观测时间;
+          UNAVAILABLE 或字段缺失(旧后端未下发)维持原文案,不在本次范围内。 */}
       {(match.odds_coverage_tier === "full_timeline" ||
         match.odds_coverage_tier === "open_close_only") && (
         <span className={styles.oddsTier} data-tier={match.odds_coverage_tier}>
-          {match.odds_coverage_tier === "full_timeline"
-            ? "赔率:完整走势"
-            : "赔率:初盘与临场"}
+          {match.odds_coverage_tier === "full_timeline" &&
+          match.odds_freshness_state === "STALE" ? (
+            <>
+              赔率:完整走势(已过期
+              {match.odds_last_observed_at && (
+                <>
+                  {" · 最后观测 "}
+                  <LocalTime iso={match.odds_last_observed_at} />
+                </>
+              )}
+              )
+            </>
+          ) : match.odds_coverage_tier === "full_timeline" ? (
+            "赔率:完整走势"
+          ) : (
+            "赔率:初盘与临场"
+          )}
         </span>
       )}
       {match.win_probability && (
         <span className={styles.probRow}>
           <WinProbabilityBar probability={match.win_probability} compact />
         </span>
-      )}
-      {/* 2026-08-13:本场所属联赛不在当前身份权限内——比赛本身仍在列表里,
-          只是概率条不下发(见 MatchSummary.requires_login),用一行提示
-          说明原因,点进详情页会走既有登录门禁。 */}
-      {match.requires_login && (
-        <span className={styles.loginHint}>登录后查看胜平负概率</span>
       )}
     </Link>
   );

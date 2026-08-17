@@ -1,0 +1,130 @@
+/* 图4·本场攻防对位。
+   验收返工四:移动端字号——正文/标签/摘要 ≥14px,关键数值 ≥18px,
+   次要来源/覆盖说明 ≥12px。 */
+
+.windowNote {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.block + .block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.blockHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.attacker {
+  color: var(--brand-teal);
+}
+
+.defender {
+  color: var(--brand-blue);
+}
+
+.vs {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.rowList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row,
+.rowHighlighted {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px var(--sp-2);
+  padding: 8px 0;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.rowHighlighted {
+  padding: 8px;
+  margin: 2px 0;
+  border: 1px solid var(--brand-teal);
+  border-radius: var(--r-control);
+  background: var(--surface-soft);
+}
+
+.rowLabel {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rowStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.rowSide {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 92px;
+}
+
+.rowSide b {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.rowSideSub {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.rowArrow {
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.rowTag {
+  flex: 0 0 100%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-teal);
+}
+
+.summary {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.footNote {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}

@@ -27,7 +27,6 @@ import styles from "./SceneCards.module.css";
 const CARD_CHART_PRIORITY = [
   "shot_map_explorer",
   "xg_compare",
-  "form_compare",
   "probability_bar",
 ];
 
@@ -88,8 +87,8 @@ export function SceneCard({
 
   // 卡片选图按"视觉冲击力"排序,不按 bundle 的构造顺序截断。
   // 旧实现 chart_specs.slice(0, maxCharts) 配上 bundle.py 的固定顺序
-  // (prob_bar → form_compare → xg_compare → recent_shot_map)导致
-  // 射门图永远排第 4、永远进不了卡片 —— 而它恰恰是最有说服力的一张。
+  // (prob_bar → xg_compare → recent_shot_map)导致
+  // 射门图永远排最后、永远进不了卡片 —— 而它恰恰是最有说服力的一张。
   const chartSpecs = [...bundle.chart_specs]
     .sort(
       (a, b) =>

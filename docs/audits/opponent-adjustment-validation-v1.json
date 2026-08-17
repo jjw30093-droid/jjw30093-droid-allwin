@@ -1,0 +1,98 @@
+{
+  "cutoff": "2025-01-01",
+  "window": 10,
+  "shrinkage_k": 8,
+  "noise_tolerance": 0.005,
+  "categories": {
+    "attack_xg": {
+      "per_league": {
+        "英超": {
+          "validated_matches": 1123,
+          "corr_raw": 0.2982,
+          "corr_adjusted": 0.3151,
+          "insufficient_sample": false
+        },
+        "西甲": {
+          "validated_matches": 1136,
+          "corr_raw": 0.4133,
+          "corr_adjusted": 0.4191,
+          "insufficient_sample": false
+        },
+        "德甲": {
+          "validated_matches": 924,
+          "corr_raw": 0.4047,
+          "corr_adjusted": 0.4052,
+          "insufficient_sample": false
+        },
+        "意甲": {
+          "validated_matches": 1142,
+          "corr_raw": 0.3221,
+          "corr_adjusted": 0.3298,
+          "insufficient_sample": false
+        }
+      },
+      "adopt_adjustment": true,
+      "verdict_note": "attack_xg:对手强度校正在全部四个联赛样本外验证中不劣于未校正,首版采用"
+    },
+    "defense_xga": {
+      "per_league": {
+        "英超": {
+          "validated_matches": 1123,
+          "corr_raw": 0.257,
+          "corr_adjusted": 0.2632,
+          "insufficient_sample": false
+        },
+        "西甲": {
+          "validated_matches": 1136,
+          "corr_raw": 0.1913,
+          "corr_adjusted": 0.1922,
+          "insufficient_sample": false
+        },
+        "德甲": {
+          "validated_matches": 924,
+          "corr_raw": 0.2019,
+          "corr_adjusted": 0.2164,
+          "insufficient_sample": false
+        },
+        "意甲": {
+          "validated_matches": 1142,
+          "corr_raw": 0.1545,
+          "corr_adjusted": 0.1573,
+          "insufficient_sample": false
+        }
+      },
+      "adopt_adjustment": true,
+      "verdict_note": "defense_xga:对手强度校正在全部四个联赛样本外验证中不劣于未校正,首版采用"
+    },
+    "style_possession": {
+      "per_league": {
+        "英超": {
+          "validated_matches": 1123,
+          "corr_raw": 0.4347,
+          "corr_adjusted": 0.3939,
+          "insufficient_sample": false
+        },
+        "西甲": {
+          "validated_matches": 1136,
+          "corr_raw": 0.4841,
+          "corr_adjusted": 0.4566,
+          "insufficient_sample": false
+        },
+        "德甲": {
+          "validated_matches": 924,
+          "corr_raw": 0.4893,
+          "corr_adjusted": 0.4652,
+          "insufficient_sample": false
+        },
+        "意甲": {
+          "validated_matches": 1142,
+          "corr_raw": 0.4796,
+          "corr_adjusted": 0.4445,
+          "insufficient_sample": false
+        }
+      },
+      "adopt_adjustment": false,
+      "verdict_note": "style_possession:对手强度校正未能在全部四个联赛样本外验证中稳定超过未校正,首版不上校正"
+    }
+  }
+}

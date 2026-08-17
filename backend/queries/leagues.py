@@ -1,8 +1,12 @@
-"""联赛元数据与访问门禁。
+"""联赛元数据(与访问门禁历史 —— 2026-08-16 起已彻底解耦)。
 
-2026-08-11 起(见 platform 0012 迁移):league:epl / league:top5(五大联赛)/
-league:european_cup(欧冠系)free 起即可访问;league:lottery(中国竞彩常见
-非五大联赛——如瑞典超/挪超——)改为登录门槛(member 及以上计划持有)。
+2026-08-16 产品权限口径修正(经用户批准):除"每日精选"外,网站所有比赛
+内容全部免费,包括匿名用户;登录与内容分层彻底解耦,不再有任何联赛级
+访问门禁。每个联赛条目上的 `entitlement` 字段(league:epl/top5/lottery/
+european_cup)现在只是**描述性分类元数据**(竞彩语境归类、报表/CLI 统计用,
+如 backend/cli/odds_coverage_report.py),不再驱动任何 403/401 门禁或
+"是否需要登录"的判断——`accessible_league_ids()`/`anonymous_cacheable_league_ids()`
+恒返回全部联赛 id。
 
 单一真源:新增联赛只改这一处字典,不得把 league id 散落写进其它业务分支
 (路由/前端/采集脚本一律从这里或真实数据库读取)。"""
@@ -48,31 +52,25 @@ LEAGUE_META = {
     10216: {"code": "uecl", "name_zh": "欧协联", "name_en": "Conference League", "entitlement": "league:european_cup", "season_kind": "cross_year"},
 }
 
-# free plan(匿名基线)持有的联赛 entitlement(见 migrations/platform/0002+0012)。
-# 单一真源:匿名可完整浏览的联赛 = entitlement 落在此集合内的联赛。
-#
-# 2026-08-11 互换(用户拍板):五大联赛(top5)+ 欧战三项(european_cup)进入免费面,
-# 9 个原 league:lottery 小联赛(英冠/荷甲/葡超/巴甲/挪超/瑞超/日职/韩K/澳超)
-# 转为登录门槛。原因:五大联赛内容最厚、更新最频繁,与免费面定位更匹配;
-# 该互换会在五大联赛季前期(~10 天)显著减少匿名可见比赛数,用户已知悉并接受
-# 这个短期权衡(五大联赛陆续开季后恢复)。
-FREE_LEAGUE_ENTITLEMENTS = frozenset({"league:epl", "league:top5", "league:european_cup"})
+def accessible_league_ids(entitlements: frozenset | None = None) -> set[int]:
+    """全部已收录联赛的 id 集合。
 
-
-def accessible_league_ids(entitlements: frozenset) -> set[int]:
-    return {
-        lid for lid, meta in LEAGUE_META.items() if meta["entitlement"] in entitlements
-    }
+    2026-08-16 起(除"每日精选"外全站比赛内容全部免费,包括匿名):访问权
+    不再由 entitlement 判定,恒返回全部联赛。`entitlements` 参数保留只为
+    兼容既有调用签名(路由层、seed_e2e.py 等仍以位置参数传入调用方当前
+    entitlement 集合),不再参与任何过滤计算。
+    """
+    return set(LEAGUE_META.keys())
 
 
 def anonymous_cacheable_league_ids() -> frozenset[int]:
     """匿名即可完整浏览的联赛 id 集合。
 
-    这些联赛的公开数据端点对匿名请求返回一致内容、不随身份变化 → 可进公共缓存
-    (CLAUDE.md §10.2:公共缓存不与用户身份混用)。需登录联赛(top5)匿名返回 403,
-    由缓存中间件强制 no-store。取代散落各处的 `league_id == 47` 硬编码判断。
+    2026-08-16 起恒为全部联赛:所有联赛的公开数据端点对匿名与登录请求返回
+    一致内容、不随身份变化 → 全部可进公共缓存(CLAUDE.md §10.2:公共缓存
+    不与用户身份混用)。取代散落各处的 `league_id == 47` 硬编码判断。
     """
-    return frozenset(accessible_league_ids(FREE_LEAGUE_ENTITLEMENTS))
+    return frozenset(LEAGUE_META.keys())
 
 
 def league_data_profiles(conn: sqlite3.Connection) -> dict[int, dict]:

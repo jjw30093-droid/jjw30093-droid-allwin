@@ -6,9 +6,9 @@ import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./players.module.css";
 
-// 已迁移到 /api/v1/leagues/{id}/players(5 个免费维度:进球/助攻/xG/xGOT/评分,
+// 已迁移到 /api/v1/leagues/{id}/players(2026-08-16 起对任何人恒含全部维度,
 // 服务端完成中文名解析与 top10 截取)。
-// Pro 联赛的匿名请求被门禁挡下时走客户端会员加载器(见 standings 页同款说明)。
+// 服务端取数失败/未同步时走客户端加载器重新请求一次(见 standings 页同款说明)。
 export default async function PlayersPage({
   params,
   searchParams,

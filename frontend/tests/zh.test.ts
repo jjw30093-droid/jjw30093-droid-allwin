@@ -3,6 +3,9 @@ import {
   beijingDateKey,
   formatBeijingDateTime,
   formatBeijingZh,
+  formatDateHeadingZh,
+  MARKET_FIELDS,
+  MARKET_ZH,
 } from "@/components/matches/zh";
 
 describe("北京时间格式化", () => {
@@ -38,5 +41,35 @@ describe("北京时间格式化", () => {
 
   it("无时区后缀的裸时间戳按 UTC 处理(与后端 normalize_utc_iso 约定一致)", () => {
     expect(formatBeijingDateTime("2026-08-07T17:00:00")).toBe("2026-08-08 01:00");
+  });
+});
+
+// 2026-08 审计:bronze_ng_odds_snap 真实存在 66 行 market='corners_ou' 的数据,
+// payload 形状与 'ou' 完全一样({line, over, under}),但 MARKET_ZH/MARKET_FIELDS
+// 此前没有 "corners_ou" 这个 key,前端拿到真实数据后卡片渲染成空。
+describe("corners_ou(角球大小球)市场中文映射", () => {
+  it("MARKET_ZH 包含 corners_ou,措辞与后端 backend/queries/odds.py 的 _OPTION_MARKET_LABEL_ZH['corners_ou'] 一致", () => {
+    expect(MARKET_ZH.corners_ou).toBe("角球大小");
+  });
+
+  it("MARKET_FIELDS.corners_ou 与 MARKET_FIELDS.ou 字段集合一致(payload 形状相同:{line, over, under})", () => {
+    expect(MARKET_FIELDS.corners_ou).toEqual(MARKET_FIELDS.ou);
+  });
+});
+
+// /matches 列表页按开球日期分组(P3.B):分组小标题格式,供 MatchListLive 复用,
+// 不在组件里再写第二套日期/星期换算。
+describe("formatDateHeadingZh(比赛列表分组小标题)", () => {
+  it('"YYYY-MM-DD" → "M月D日 周X"(2026-08-16 是周日,与本次任务描述的示例一致)', () => {
+    expect(formatDateHeadingZh("2026-08-16")).toBe("8月16日 周日");
+  });
+
+  it("跨月日期同样正确(不做零填充展示)", () => {
+    // 2026-08-07 是周五
+    expect(formatDateHeadingZh("2026-08-07")).toBe("8月7日 周五");
+  });
+
+  it("非法输入原样返回,不抛异常(调用方已经处理过 null,这里只处理格式)", () => {
+    expect(formatDateHeadingZh("not-a-date")).toBe("not-a-date");
   });
 });

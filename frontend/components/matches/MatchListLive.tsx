@@ -3,29 +3,45 @@
 /**
  * 比赛列表页的整个交互主体(筛选栏 + 比赛行 + 翻页)。
  *
- * 会话 cookie Path=/api/v1,Next RSC 读不到 —— /matches 的服务端渲染永远是
- * 匿名口径(联赛筛选栏的"登录"角标、比赛行是否出现,都按匿名 entitlement 算)。
- * 本组件挂载后用浏览器带 cookie 重新拉一次 /api/v1/leagues + /api/v1/matches;
- * 已登录且持有 league:lottery 等权益的用户,真实结果会替换掉 SSR 渲染的匿名
- * 内容——否则任何身份登录后打开 /matches 看到的筛选栏和比赛行都和匿名访客
- * 完全一样(2026-08-13 用户报告的真实回归:即便持有全部联赛权益的账号,
- * 列表也只剩五大联赛;这是 B1/B4 已经修过的"服务端匿名取数被当成最终结果"
- * 同一根因,只是发生在比赛列表页而不是详情页/联赛子页,当时没有覆盖到)。
+ * 会话 cookie Path=/api/v1,Next RSC 读不到 —— /matches 的服务端渲染始终按
+ * 匿名身份请求。2026-08-16 权限口径修正后,后端对任何人(含匿名)恒返回
+ * 完整联赛集合与完整比赛内容,不再有 entitlement/accessible/requires_login
+ * 这类登录门禁字段——筛选栏与比赛行不因登录状态而不同。本组件挂载后仍会
+ * 用浏览器带 cookie 重新拉一次 /api/v1/leagues + /api/v1/matches,但这只是
+ * 为了拿到比服务端渲染时更新的数据,不再是"匿名口径 → 换成会员口径"这个
+ * 语义。
  *
- * 静默降级:浏览器端刷新失败(网络问题等)时保留 SSR 渲染的匿名内容,不整页
- * 报错——匿名可见的那部分本来就是正确、可用的。
+ * 静默降级:浏览器端刷新失败(网络问题等)时保留 SSR 渲染的内容,不整页
+ * 报错。
  *
  * 无 JS 环境:整块仍然是纯 GET 链接 + `<form method="get">`,服务端渲染出的
- * 初始 HTML(匿名口径)本身完整可用;只是拿不到"挂载后用 cookie 刷新"这一步
- * 的增强,与 MemberLeagueSection 同款降级方式。
+ * 初始 HTML 本身完整可用;只是拿不到"挂载后用 cookie 刷新"这一步的增强,
+ * 与 MemberLeagueSection 同款降级方式。
  *
  * 联赛筛选行必须和状态/时间/内容/赛季/日期/搜索几行放在同一个组件里渲染
  * (而不是分拆成两个客户端组件插在服务端 JSX 中间),否则筛选行的可见顺序会
  * 因为哪部分是"客户端"哪部分是"服务端"而被打散——这几行在数据来源上互相
  * 独立,但在页面视觉结构上必须保持一个整体。
+ *
+ * 移动端首屏(P3.B,2026-08-16):390px 视口下所有筛选控件曾经全部摊平展开,
+ * 第一场比赛要滑到 y≈495px 才出现。现在只有"时间/内容/联赛"三组高频筛选
+ * 留在主筛选行(始终可见);"状态"(全部/未开赛/已完赛,与"时间"轴语义
+ * 重叠,只在回看已完赛比赛时才用得到)、"赛季""日期""球队搜索"四个低频
+ * 控件收进一个默认折叠的原生 `<details>`"更多筛选"(与
+ * MatchDetailBody.tsx::metaDetails、MarketCard.tsx 同款折叠模式,不用 JS
+ * state 模拟——折叠本身也不需要脚本才能展开,无 JS 环境同样可用)。若用户
+ * 已经通过 URL 带着这四个控件里的任意筛选值进来,`<details>` 默认展开,
+ * 不能把用户已经选中的筛选悄悄藏起来。
+ *
+ * 比赛行按开球日期分组同样是纯前端视觉分组:分组 key 直接复用
+ * zh.ts::beijingDateKey(精确 kickoff 缺失时退回 date_utc,与 MatchRow 展示
+ * 该字段时的既有 fallback 约定一致),按 matches 数组已有顺序逐条判断
+ * "是否换了一天"插入标题,不重新排序、不合并非相邻的同一天比赛、不因为
+ * 分页边界切在某天中间就发额外请求"补全"——同一天标题在下一页重复出现是
+ * 分页的正常代价。
  */
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   clientFetch,
@@ -39,6 +55,7 @@ import {
   type MatchFilters as Filters,
 } from "@/lib/match-filters";
 import { MatchRow } from "./MatchRow";
+import { beijingDateKey, formatDateHeadingZh } from "./zh";
 import styles from "@/app/matches/matches.module.css";
 
 interface Props {
@@ -65,6 +82,17 @@ const WINDOW_TABS = [
   ["7d", "未来七天"],
   ["all", "全部未来"],
 ] as const;
+
+/** 分组 key:精确 kickoff 缺失时退回 date_utc,与 MatchRow 渲染该字段时的
+ * fallback 约定一致(见 MatchRow.tsx:`match.kickoff_at_utc ? <LocalTime .../> :
+ * match.date_utc`)——不为了凑一个"北京日"就给没有精确时刻的比赛编造一个。 */
+function matchDateKey(m: MatchSummary): string {
+  if (m.kickoff_at_utc) {
+    const key = beijingDateKey(m.kickoff_at_utc);
+    if (key) return key;
+  }
+  return m.date_utc;
+}
 
 export function MatchListLive({
   filters,
@@ -120,8 +148,6 @@ export function MatchListLive({
   }, []);
 
   const { date, league, season, status, window, content, q, page } = filters;
-  const selectedLeague = leagues.find((l) => l.league_id === league);
-  const lockedLeagueSelected = selectedLeague != null && !selectedLeague.accessible;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -133,24 +159,10 @@ export function MatchListLive({
         <p className={styles.widenNote}>未来 7 天暂无比赛,已自动展示全部未来赛程。</p>
       )}
 
-      {/* 筛选:纯 GET 表单 + 链接,无 JS 也可用 */}
+      {/* 筛选:纯 GET 表单 + 链接,无 JS 也可用。只有"时间/内容/联赛"三组
+          高频筛选留在这里始终可见;"状态/赛季/日期/球队搜索"收进下面默认
+          折叠的"更多筛选"(见文件头注释)。 */}
       <div className={styles.filters}>
-        <div className={styles.chipRow}>
-          <span className={styles.chipLabel}>状态</span>
-          {STATUS_TABS.map(([value, label]) => (
-            <Link
-              key={label}
-              href={buildMatchesHref(filters, {
-                status: value ?? "all",
-                window: value === "finished" || value == null ? "all" : filters.window,
-                page: 1,
-              })}
-              className={status === (value ?? "all") ? styles.chipActive : styles.chip}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
         <div className={styles.chipRow}>
           <span className={styles.chipLabel}>时间</span>
           {WINDOW_TABS.map(([value, label]) => (
@@ -204,121 +216,158 @@ export function MatchListLive({
               className={league === l.league_id ? styles.chipActive : styles.chip}
             >
               {l.name_zh}
-              {!l.accessible && <span className={styles.proBadge}>登录</span>}
               {l.data_status !== "AVAILABLE" && (
                 <span className={styles.proBadge}>暂未收录</span>
               )}
             </Link>
           ))}
         </div>
-        {seasonOptions.length > 0 && (
-          <div className={styles.chipRow}>
-            <span className={styles.chipLabel}>赛季</span>
-            <Link
-              href={buildMatchesHref(filters, { season: undefined, page: 1 })}
-              className={season == null ? styles.chipActive : styles.chip}
-            >
-              全部
-            </Link>
-            {seasonOptions.map((s) => (
-              <Link
-                key={s}
-                href={buildMatchesHref(filters, {
-                  season: s,
-                  status: "all",
-                  window: "all",
-                  date: undefined,
-                  page: 1,
-                })}
-                className={season === s ? styles.chipActive : styles.chip}
-              >
-                {s}
-              </Link>
-            ))}
+
+        {/* 更多筛选:状态 + 赛季 + 日期 + 球队搜索,默认折叠。用户已经带着
+            这四项里任意一项的筛选值进来时自动展开,不藏起用户已选的条件。
+            原生 <details>,不需要脚本即可展开——保持"无 JS 也可用"。 */}
+        <details
+          className={styles.moreFilters}
+          open={status !== "upcoming" || Boolean(season) || Boolean(date) || Boolean(q)}
+        >
+          <summary className={styles.moreFiltersSummary}>更多筛选</summary>
+          <div className={styles.moreFiltersBody}>
+            <div className={styles.chipRow}>
+              <span className={styles.chipLabel}>状态</span>
+              {STATUS_TABS.map(([value, label]) => (
+                <Link
+                  key={label}
+                  href={buildMatchesHref(filters, {
+                    status: value ?? "all",
+                    window: value === "finished" || value == null ? "all" : filters.window,
+                    page: 1,
+                  })}
+                  className={status === (value ?? "all") ? styles.chipActive : styles.chip}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+            {seasonOptions.length > 0 && (
+              <div className={styles.chipRow}>
+                <span className={styles.chipLabel}>赛季</span>
+                <Link
+                  href={buildMatchesHref(filters, { season: undefined, page: 1 })}
+                  className={season == null ? styles.chipActive : styles.chip}
+                >
+                  全部
+                </Link>
+                {seasonOptions.map((s) => (
+                  <Link
+                    key={s}
+                    href={buildMatchesHref(filters, {
+                      season: s,
+                      status: "all",
+                      window: "all",
+                      date: undefined,
+                      page: 1,
+                    })}
+                    className={season === s ? styles.chipActive : styles.chip}
+                  >
+                    {s}
+                  </Link>
+                ))}
+              </div>
+            )}
+            <form method="get" action="/matches" className={styles.dateForm}>
+              <label className={styles.chipLabel} htmlFor="matches-date">
+                日期
+              </label>
+              <input
+                id="matches-date"
+                type="date"
+                name="date"
+                defaultValue={date}
+                className={styles.dateInput}
+              />
+              {league != null && (
+                <input type="hidden" name="league" value={String(league)} />
+              )}
+              {season && <input type="hidden" name="season" value={season} />}
+              {status && <input type="hidden" name="status" value={status} />}
+              <input type="hidden" name="window" value={window} />
+              {content && <input type="hidden" name="content" value={content} />}
+              {q && <input type="hidden" name="q" value={q} />}
+              <button type="submit" className={styles.filterBtn}>
+                筛选
+              </button>
+              {date && (
+                <Link
+                  href={buildMatchesHref(filters, { date: undefined, page: 1 })}
+                  className={styles.clearLink}
+                >
+                  清除日期
+                </Link>
+              )}
+            </form>
+            <form method="get" action="/matches" className={styles.dateForm}>
+              <label className={styles.chipLabel} htmlFor="matches-team-search">
+                球队
+              </label>
+              <input
+                id="matches-team-search"
+                type="search"
+                name="q"
+                defaultValue={q}
+                placeholder="中文名或英文名"
+                className={styles.searchInput}
+              />
+              {date && <input type="hidden" name="date" value={date} />}
+              {league != null && (
+                <input type="hidden" name="league" value={String(league)} />
+              )}
+              {season && <input type="hidden" name="season" value={season} />}
+              <input type="hidden" name="status" value={status} />
+              <input type="hidden" name="window" value={window} />
+              {content && <input type="hidden" name="content" value={content} />}
+              <button type="submit" className={styles.filterBtn}>
+                搜索
+              </button>
+              {q && (
+                <Link
+                  href={buildMatchesHref(filters, { q: undefined, page: 1 })}
+                  className={styles.clearLink}
+                >
+                  清除搜索
+                </Link>
+              )}
+            </form>
           </div>
-        )}
-        <form method="get" action="/matches" className={styles.dateForm}>
-          <label className={styles.chipLabel} htmlFor="matches-date">
-            日期
-          </label>
-          <input
-            id="matches-date"
-            type="date"
-            name="date"
-            defaultValue={date}
-            className={styles.dateInput}
-          />
-          {league != null && <input type="hidden" name="league" value={String(league)} />}
-          {season && <input type="hidden" name="season" value={season} />}
-          {status && <input type="hidden" name="status" value={status} />}
-          <input type="hidden" name="window" value={window} />
-          {content && <input type="hidden" name="content" value={content} />}
-          {q && <input type="hidden" name="q" value={q} />}
-          <button type="submit" className={styles.filterBtn}>
-            筛选
-          </button>
-          {date && (
-            <Link
-              href={buildMatchesHref(filters, { date: undefined, page: 1 })}
-              className={styles.clearLink}
-            >
-              清除日期
-            </Link>
-          )}
-        </form>
-        <form method="get" action="/matches" className={styles.dateForm}>
-          <label className={styles.chipLabel} htmlFor="matches-team-search">
-            球队
-          </label>
-          <input
-            id="matches-team-search"
-            type="search"
-            name="q"
-            defaultValue={q}
-            placeholder="中文名或英文名"
-            className={styles.searchInput}
-          />
-          {date && <input type="hidden" name="date" value={date} />}
-          {league != null && <input type="hidden" name="league" value={String(league)} />}
-          {season && <input type="hidden" name="season" value={season} />}
-          <input type="hidden" name="status" value={status} />
-          <input type="hidden" name="window" value={window} />
-          {content && <input type="hidden" name="content" value={content} />}
-          <button type="submit" className={styles.filterBtn}>
-            搜索
-          </button>
-          {q && (
-            <Link
-              href={buildMatchesHref(filters, { q: undefined, page: 1 })}
-              className={styles.clearLink}
-            >
-              清除搜索
-            </Link>
-          )}
-        </form>
+        </details>
       </div>
 
       {matches.length === 0 ? (
         <div className={styles.emptyBox}>
           <p>没有符合当前筛选条件的比赛。</p>
-          {/* 2026-08-13:锁定联赛现在会真的出现在列表里,这里不再是"该联赛
-              整体隐藏"的解释,只是当前筛选恰好 0 场时的登录引导。 */}
-          {lockedLeagueSelected && (
-            <p className={styles.emptySub}>
-              <Link
-                href={`/login?next=${encodeURIComponent(buildMatchesHref(filters, {}))}`}
-                className={styles.emptyLink}
-              >
-                登录后查看「{selectedLeague.name_zh}」完整赔率与概率 →
-              </Link>
-            </p>
-          )}
         </div>
       ) : (
         <div className={styles.card}>
-          {matches.map((m) => (
-            <MatchRow key={m.match_id} match={m} returnTo={buildMatchesHref(filters, {})} />
-          ))}
+          {matches.map((m, i) => {
+            // 按开球日期(北京时间,缺失精确 kickoff 时退回 date_utc)插入组间
+            // 小标题。纯前端视觉分组:只看"这条和上一条是否同一天",不重新
+            // 排序、不合并数组里非相邻的同一天比赛——分页边界切在某天中间时
+            // 标题会在下一页重复出现,这是分页的正常代价,不为此发额外请求。
+            // 标题和比赛行必须是 .card 的直接子级(不能再套一层 wrapper div),
+            // 否则 MatchRow.module.css 的 `.row:last-child` 去边框选择器会
+            // 按"每个 wrapper 只有一个 .row 子节点"误判成每一行都是 last-child。
+            const dateKey = matchDateKey(m);
+            const showHeading = i === 0 || matchDateKey(matches[i - 1]) !== dateKey;
+            return (
+              <Fragment key={m.match_id}>
+                {showHeading && (
+                  <div className={styles.dateHeading} data-testid="date-heading">
+                    {formatDateHeadingZh(dateKey)}
+                  </div>
+                )}
+                <MatchRow match={m} returnTo={buildMatchesHref(filters, {})} />
+              </Fragment>
+            );
+          })}
         </div>
       )}
 
