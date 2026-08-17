@@ -1,0 +1,12 @@
+# 每 30 分钟触发一次赛程同步(allwin-fixtures.service)。
+# 真实同步节奏由 schedule_sync_multi 内部 6h/联赛节流,进程重启不重复抓取。
+[Unit]
+Description=Run allwin fixture schedule sync every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

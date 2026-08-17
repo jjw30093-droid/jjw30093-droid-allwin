@@ -1,0 +1,40 @@
+# 赛后补全 + 预测链(oneshot,由 allwin-postmatch.timer 每 30 分钟触发)。
+# 顺序执行 fotmob_incremental_multi → core_silver_build → model_predict →
+# prediction_register → postmatch_settle → reco_auto_settle,用
+# backend.worker.group_runner 而不是六条独立 ExecStart=——systemd 的多条
+# ExecStart= 顺序执行,一条非零退出且未加 `-` 前缀会阻止后续 ExecStart=
+# 执行,这六步彼此是独立任务(不是靠位置模拟依赖的 run_chain() 链),某一步
+# 失败不应该让同一轮其余几步完全不被尝试。group_runner 顺序尝试全部六步、
+# 汇总一个退出码给 systemd。
+#
+# P3 阶段尚未做事件驱动(赛后即时触发是 P4 的工作),这里只是固定 30 分钟
+# 轮询;每一步各自的内部节流/幂等(core_silver_build 按联赛+赛季
+# DELETE+INSERT、prediction_register 按 gold_wdl_predictions 幂等导入、
+# postmatch_settle/reco_auto_settle 只处理真正已完赛且未结算的部分)保证
+# 重复运行代价低。fotmob_incremental_multi 需要 THORDATA_PROXY 住宅代理。
+#
+# 安装:cp allwin-postmatch.service allwin-postmatch.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-postmatch.timer
+# 手动跑一次:systemctl start allwin-postmatch.service
+[Unit]
+Description=allwin postmatch pipeline (fotmob_incremental_multi -> ... -> reco_auto_settle, every 30 minutes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.group_runner --group postmatch
+# 六步之和的兜底时长(各任务另有自己的 timeout_seconds)
+TimeoutStartSec=10800
+TimeoutStopSec=60
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

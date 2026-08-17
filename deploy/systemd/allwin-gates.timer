@@ -1,0 +1,12 @@
+# 每 30 分钟触发一次质量门检查(allwin-gates.service)。
+# 独立定时器,不依赖任何其它 unit 的排队顺序或运行结果。
+[Unit]
+Description=Run allwin pipeline quality gates every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

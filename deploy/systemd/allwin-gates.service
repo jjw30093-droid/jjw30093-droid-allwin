@@ -1,0 +1,38 @@
+# 质量门检查(oneshot,由 allwin-gates.timer 每 30 分钟触发)。
+# PIPELINE_REDESIGN_V2 P3 全案里最重要的一条:pipeline_gates 是只读告警,
+# 必须是完全独立的失败域——它不再是旧 DEFAULT_CHAIN 链尾、不再经过
+# run_chain() 的 cascade-skip(某步 failed/locked 会让后续步骤全部记
+# skipped),而是自己独立的定时器,直接 `runner --job pipeline_gates`。
+# 这个 unit 文件不 After=/Wants=/Requires= 任何其它管道单元——其它任何一个
+# 定时器这一轮无论成败,都不影响这里下一次 tick 是否真的执行。正是出问题
+# 时最需要它跑,如果它能被上游失败连带跳过,质量门本身就失去了意义。
+#
+# 门"发现问题"通过 backend.notify 告警表达,不通过任务失败表达(见
+# backend/worker/runner.py::_job_pipeline_gates 的文档),所以这里不需要
+# 像 allwin-opscheck.service 那样声明 SuccessExitStatus——pipeline_gates
+# 违反检查时任务本身仍然 succeeded,只有检查代码自己崩溃才会 failed。
+#
+# 安装:cp allwin-gates.service allwin-gates.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-gates.timer
+# 手动跑一次:systemctl start allwin-gates.service
+[Unit]
+Description=allwin pipeline quality gates (pipeline_gates, independent failure domain, every 30 minutes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.runner --job pipeline_gates
+TimeoutStartSec=600
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

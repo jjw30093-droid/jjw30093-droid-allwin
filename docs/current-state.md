@@ -6025,3 +6025,60 @@ tsc 0 error、eslint 0 warning、48 个测试文件 265 项全部通过(含新�
 `bronze_fm_lineup_snap`,也不影响本次改动)——是否存在另一个真正携带
 "本场已确认阵容"的 payload 容器,需要真实网络抓取才能证实,标
 `UNVERIFIED`,本阶段未做任何探测或早停实现。
+
+## 53. PIPELINE_REDESIGN_V2 P3:拆 7 个独立 systemd 定时器,删除 PERIODIC_CHAIN_EXCLUDE(2026-08-17)
+
+`allwin-worker.timer`(15 分钟大链)+ `allwin-poll.timer`(5 分钟双采集)
+拆成 7 个各自单一职责、独立失败域的定时器,均为**代码/测试改动,未
+ssh 或触碰任何真实服务器**——实际把这些 unit 安装到生产服务器是单独一步
+(仍待用户明确批准)。
+
+- 新建 `allwin-odds`(5min,`nowgoal_snapshot`)、`allwin-lineup`(5min,
+  `fotmob_snapshot`)、`allwin-fixtures`(30min,`schedule_sync_multi`)、
+  `allwin-gates`(30min,`pipeline_gates`,`runner --job` 直调)、
+  `allwin-postmatch`(30min,`fotmob_incremental_multi→core_silver_build→
+  model_predict→prediction_register→postmatch_settle→reco_auto_settle`)、
+  `allwin-derive`(30min,`odds_silver_build→analysis_bundle_build`)、
+  `allwin-maintenance`(每天 04:00 Asia/Shanghai,`entity_resolution→
+  metrics_rebuild`)共 14 个新文件;删除 `allwin-worker.{service,timer}`、
+  `allwin-poll.{service,timer}`。其余 6 个 unit(api/web/backup/opscheck/
+  digest/content-health)`git diff` 确认字节级未变。
+- `backend/worker/poll_wrapper.py`(仅服务旧 `allwin-poll.service` 的两任务
+  包装)删除,行为参数化保留进新建的 `backend/worker/group_runner.py`
+  (`run_group()`,给 postmatch/derive/maintenance 三个多任务定时器
+  复用"组内任务互相独立、一个失败不阻止其余被尝试"这条已被测试验证过的
+  契约,不重新发明)。单任务定时器不经过这个模块,直接
+  `runner --job <name>`。
+- `backend/worker/runner.py` 删除 `PERIODIC_CHAIN_EXCLUDE` 常量与
+  `--periodic` CLI 参数(不是清空,是整个删除);`DEFAULT_CHAIN`/
+  `run_chain()`/裸 `--chain` 保留作为人工全量重跑的手动逃生舱,生产不再
+  有任何定时器周期性调用它。
+- **核心正确性属性**(全案最重要的一条,已用真实故障场景验证,非
+  tautological):`allwin-gates` 现在与其它任何定时器这一轮成败完全无关
+  ——验证覆盖两种真实故障路径,(1) `postmatch` 组内 `model_predict` 真实
+  抛异常后,独立 `runner.run_job("pipeline_gates")` 仍然真正执行成功;
+  (2) `core_silver_build` 的真实文件锁被占用、`run_job` 返回 `locked`
+  期间,`pipeline_gates` 仍然真正执行成功——旧 `run_chain()` 把 `locked`
+  和 `failed` 同等处理级联跳过下游的问题不会再影响 `allwin-gates`,因为
+  它不再经过 `run_chain()`。
+- `tests/backend/test_job_order.py::TestPeriodicExcludeInvariant` 替换为
+  `TestSevenTimerTopologyInvariant`:更强的不变量——7 个新定时器合起来的
+  任务集合必须恰好等于 `DEFAULT_CHAIN`(不多不少,无重复调度),取代旧的
+  "两个定时器互相排除"式补丁。
+- 本地 macOS 开发用 `deploy/scripts/poll_local.sh` 同步改为两条独立
+  `runner --job` 调用(不再依赖 `poll_wrapper`)。
+
+**测试**(RED→GREEN,全部离线,未连接任何真实服务器):新
+`tests/backend/test_poll_scheduling.py`(`TestGroupRunner` 参数化验证三个
+任务组"组内互相独立"契约;`TestGatesIndependentOfOtherTimers` 两项真实
+故障场景;`TestSystemdUnitTopology` 覆盖 7 个新 unit 的 ExecStart/加固
+指令/超时/环境文件与旧 unit 已被移除);更新
+`tests/backend/test_job_order.py`。全量:1762 passed,2 skipped(预先
+存在,与本次无关),0 failed,exit code 0(独立复核一次同样结果)。
+
+**明确未做(按计划推迟到 P6)**:`CLAUDE.md` §6.3/§13、
+`docs/architecture.md`、`docs/deployment-aws-cloudflare.md`、
+`README.md`、`PLANS.md` 里仍描述旧的 `allwin-worker`/`allwin-poll`/
+`--periodic` 拓扑,本阶段未同步,留给 P6 统一处理。生产服务器上实际安装/
+启用这 7 个新 timer(替换正在运行的旧两个)是单独、需要明确批准的一步,
+本阶段完全没有触碰生产。

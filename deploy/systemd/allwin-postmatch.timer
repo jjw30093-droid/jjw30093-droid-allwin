@@ -1,0 +1,13 @@
+# 每 30 分钟触发一次赛后补全 + 预测链(allwin-postmatch.service)。
+# P4 会把这一步改成赛后事件驱动;P3 阶段先固定节奏,靠各任务自身的
+# 内部节流/幂等让重复运行代价低。
+[Unit]
+Description=Run allwin postmatch pipeline every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

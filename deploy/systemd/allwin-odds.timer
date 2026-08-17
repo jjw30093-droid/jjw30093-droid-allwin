@@ -1,0 +1,12 @@
+# 每 5 分钟触发一次 NowGoal 赔率到期判断(allwin-odds.service)。
+# 真实请求节奏由 poll_state 节流(CLAUDE.md §6.3),进程重启不重复采集。
+[Unit]
+Description=Run allwin NowGoal odds snapshot every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

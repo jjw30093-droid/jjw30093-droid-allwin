@@ -1,0 +1,32 @@
+# 派生数据构建(oneshot,由 allwin-derive.timer 每 30 分钟触发)。
+# 顺序执行 odds_silver_build → analysis_bundle_build,用
+# backend.worker.group_runner(而不是两条独立 ExecStart=)——这两步是消费
+# Bronze 快照的独立派生任务,一步失败不应该让另一步完全不被尝试。
+#
+# 两步都只读 Bronze/已有派生表再重算,P3 阶段还没有真正的水位守卫(P4 才加),
+# 所以本轮如果没有新快照,重跑基本是 no-op,代价可以接受。
+#
+# 安装:cp allwin-derive.service allwin-derive.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-derive.timer
+# 手动跑一次:systemctl start allwin-derive.service
+[Unit]
+Description=allwin derived data build (odds_silver_build -> analysis_bundle_build, every 30 minutes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.group_runner --group derive
+TimeoutStartSec=3600
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

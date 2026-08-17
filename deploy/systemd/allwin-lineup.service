@@ -1,0 +1,34 @@
+# FotMob 阵容/伤停快照(oneshot,由 allwin-lineup.timer 每 5 分钟触发)。
+# PIPELINE_REDESIGN_V2 P3:单任务独立定时器,取代旧 allwin-poll.service 里
+# 和 nowgoal_snapshot 共享的那一半——两者拆开后各自只有一个定时器负责。
+#
+# 5 分钟粒度是正式首发观察窗(五大联赛 T-1.5h、其余联赛 T-1.25h 起,直到
+# 开球)所需要的最小粒度;观察窗之外的候选按更稀疏的节奏(T-24h 进窗口
+# 采 1 次、之后每 12h 约 1 次),真实节奏仍由 poll_decision() 按
+# CADENCE_FOTMOB_LINEUP 决定,这里的 5 分钟只是"到期判断" tick,不代表
+# 每场比赛每 5 分钟都真的请求 FotMob。需要 THORDATA_PROXY 住宅代理。
+#
+# 安装:cp allwin-lineup.service allwin-lineup.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-lineup.timer
+# 手动跑一次:systemctl start allwin-lineup.service
+[Unit]
+Description=allwin FotMob lineup/sideline snapshot (fotmob_snapshot, due-check every 5 minutes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.runner --job fotmob_snapshot
+TimeoutStartSec=1200
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

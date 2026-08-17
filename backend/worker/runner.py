@@ -13,7 +13,11 @@
   * error_summary 截断存摘要(ERROR_SUMMARY_MAX);
   * input_count / output_count 由任务返回 dict 提供({"input_count": .., "output_count": .., "meta": {..}})。
 - run_chain():按 DEFAULT_CHAIN 顺序执行;某步 failed 则后续全部记 skipped(依赖检查);
-  --from <step> 支持从中间步骤重跑。
+  --from <step> 支持从中间步骤重跑。PIPELINE_REDESIGN_V2 P3 起,生产没有任何
+  定时器再周期性调用 --chain——7 个独立 systemd 定时器各自单任务
+  `--job <name>` 或用 group_runner 顺序执行互不依赖的任务组(见
+  backend/worker/group_runner.py),--chain 现在只是人工全量重跑用的手动
+  逃生舱。
 - 核心链任务(采集/实体解析/两类 Silver/analysis bundle)全部为真实注册任务
   (CLAUDE.md §13):外部凭证缺失时诚实记 failed + 原因,不以"模块不存在"跳过;
   "optional" kind 仅保留给测试注入使用。
@@ -467,17 +471,9 @@ DEFAULT_CHAIN = [
 # 杜绝"注册了却永远不被调度"的孤儿任务):
 # - silver_build:core_silver_build 的兼容别名(见下方);
 # - daily_digest:由 allwin-digest.timer 每天 23:30(Asia/Shanghai)独立调度,
-#   --key <北京日期> 幂等,天然每天恰好一次,不挂 15 分钟链。
+#   --key <北京日期> 幂等,天然每天恰好一次,不挂在任何 DEFAULT_CHAIN 的
+#   周期性定时器上(和 7 个新定时器一样,是自己独立的 timer)。
 NON_CHAIN_JOBS = frozenset({"silver_build", "daily_digest"})
-
-# allwin-poll.timer 每 5 分钟独立调度这两步(CLAUDE.md §6.3 的到期判断);
-# allwin-worker.timer 每 15 分钟的周期性任务链不应再重复调度同一对任务名——
-# 否则两个 systemd 定时器都会尝试获取同一个 data/locks/<job>.lock,而
-# run_chain() 把"被锁"和"失败"同等对待(见下方 run_chain 文档),会导致
-# 纯粹的锁竞争(不是真失败)级联跳过链上其余全部步骤。
-# --chain(不带 --periodic)仍然是完整手动链,用于端到端/人工重跑,不受影响;
-# 只有 allwin-worker.service 的周期性调用改用 --periodic 跳过这两步。
-PERIODIC_CHAIN_EXCLUDE = frozenset({"nowgoal_snapshot", "fotmob_snapshot"})
 
 # 兼容别名:旧名 silver_build 指向 core_silver_build(不在默认链中)
 REGISTRY["silver_build"] = REGISTRY["core_silver_build"]
@@ -776,10 +772,13 @@ def run_job(job_name: str, idempotency_key: str | None = None, force: bool = Fal
 def run_chain(names: list[str] | None = None, start_from: str | None = None) -> list[dict]:
     """按顺序执行任务链;某步 failed/locked 后,后续步骤记 skipped(依赖检查)。
 
-    注意:`locked`(被同名任务的文件锁挡住,通常是 allwin-poll.timer 的独立
-    5 分钟调度撞上本链)与 `failed` 被同等处理——都会让后续步骤级联 skip。
-    这正是 CLI 层要提供 `--periodic`(排除 PERIODIC_CHAIN_EXCLUDE)的原因:
-    避免周期性调用把这类良性锁竞争当成链路真的失败。
+    PIPELINE_REDESIGN_V2 P3 起,生产不再有任何定时器周期性调用 `--chain`——
+    7 个新定时器各自单任务直接 `--job`,或用 group_runner 顺序执行互相独立
+    的任务组,都不经过这里的级联跳过逻辑。裸 `--chain`(不带 --from)现在
+    只是人工端到端/全量重跑用的手动逃生舱,`locked`(被同名任务的文件锁
+    挡住)仍与 `failed` 同等处理——手动全链重跑期间若某个任务名恰好被某个
+    独立定时器同时占用,后续步骤仍会记 skipped(依赖检查),这是有意的
+    保守行为,不是缺陷。
     """
     chain = list(names) if names else list(DEFAULT_CHAIN)
     if start_from is not None:
@@ -830,13 +829,8 @@ def main(argv=None) -> int:
     ap.add_argument("--job", help="执行单个任务")
     ap.add_argument("--key", default=None, help="幂等键(同键已成功 → skipped)")
     ap.add_argument("--force", action="store_true", help="忽略幂等键强制重跑")
-    ap.add_argument("--chain", action="store_true", help="按默认顺序执行任务链")
+    ap.add_argument("--chain", action="store_true", help="按默认顺序执行任务链(人工全量重跑用,生产定时器不再调用)")
     ap.add_argument("--from", dest="from_step", default=None, help="链从指定步骤开始(配合 --chain)")
-    ap.add_argument(
-        "--periodic", action="store_true",
-        help="配合 --chain:跳过 nowgoal_snapshot/fotmob_snapshot(由 allwin-poll.timer "
-             "独立、更高频调度,周期性 worker 链不应重复触发,避免良性锁竞争被当成失败级联跳过)",
-    )
     ap.add_argument("--list", action="store_true", dest="list_jobs", help="列出注册任务")
     args = ap.parse_args(argv)
 
@@ -859,10 +853,7 @@ def main(argv=None) -> int:
         return 0 if res["status"] in ("succeeded", "skipped") else 1
 
     if args.chain:
-        names = None
-        if args.periodic:
-            names = [n for n in DEFAULT_CHAIN if n not in PERIODIC_CHAIN_EXCLUDE]
-        results = run_chain(names=names, start_from=args.from_step)
+        results = run_chain(names=None, start_from=args.from_step)
         rc = 0
         for res in results:
             _print_result(f"[{res['job']}] ", res)
