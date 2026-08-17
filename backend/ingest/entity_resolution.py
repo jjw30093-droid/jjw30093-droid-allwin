@@ -180,6 +180,37 @@ def _alias_team_ids(conn_odds: sqlite3.Connection, name: str) -> set[int]:
     }
 
 
+_TOKEN_SPLIT_RE = re.compile(r"[()\[\],./\-]")
+
+
+def _tokenize(name: str) -> frozenset[str]:
+    """名称转 token 集合(去括号/标点,按空白切分,过滤极短噪声词)。"""
+    cleaned = _TOKEN_SPLIT_RE.sub(" ", _norm(name))
+    return frozenset(t for t in cleaned.split() if len(t) >= 2)
+
+
+def _fuzzy_team_ids(conn_odds: sqlite3.Connection, name: str) -> set[int]:
+    """精确别名未命中时的候选**召回**兜底:候选别名的 token 集合必须是查询名 token
+    集合的非空子集——即该队已知别名里的每个词都出现在这次的名字里('internacional'
+    ⊆ 'internacional rs' 的 token 集合)。2026-08-17 真实发现:NowGoal 给巴西等
+    地区球队名加地域后缀,精确匹配召回不到任何候选,不进 needs_review 就直接
+    静默丢弃——人工永远看不到这场比赛。
+
+    只用于候选召回,分数低于精确匹配(见 resolve_match 内 _SIDE_SCORE_FUZZY),
+    最终 auto_ok 身份证明仍然只走 _name_resolves_to 的精确别名匹配,所以即便
+    召回到候选,最多落 needs_review,绝不会被静默判定为已验证。
+    """
+    query_tokens = _tokenize(name)
+    if not query_tokens:
+        return set()
+    ids: set[int] = set()
+    for row in conn_odds.execute("SELECT DISTINCT canonical_team_id, alias FROM dim_team_alias"):
+        alias_tokens = _tokenize(row["alias"])
+        if alias_tokens and alias_tokens.issubset(query_tokens):
+            ids.add(int(row["canonical_team_id"]))
+    return ids
+
+
 def _team_xref_ids(conn_odds: sqlite3.Connection, provider_team_id) -> set[int]:
     """dim_team_xref 直查:此前 auto_ok 解析确认过的 NowGoal 球队 id → canonical。"""
     if not provider_team_id:
@@ -554,22 +585,39 @@ def resolve_match(
             return _revalidate_existing_auto_ok(conn_odds, conn_core, schedule_row, existing)
         return _existing_result(existing)
 
-    # 别名解析 ∪ dim_team_xref 直查(已确认过的 provider 球队 id 优先复用)
-    home_ids = _alias_team_ids(conn_odds, schedule_row["home_name"]) | _team_xref_ids(
+    # 别名精确匹配 ∪ dim_team_xref 直查(已确认过的 provider 球队 id 优先复用)。
+    # 精确匹配为空时才用 token 子集模糊匹配兜底召回(见 _fuzzy_team_ids 文档),
+    # 分数比精确匹配低(_SIDE_SCORE_FUZZY < _SIDE_SCORE_EXACT),纯模糊命中双边
+    # 上限 2*_SIDE_SCORE_FUZZY 必须低于 AUTO_OK_THRESHOLD,不可能单靠模糊匹配
+    # auto_ok——最终身份证明仍然只走 _name_resolves_to 的精确别名匹配。
+    _SIDE_SCORE_EXACT = 0.5
+    _SIDE_SCORE_FUZZY = 0.35
+    assert 2 * _SIDE_SCORE_FUZZY < AUTO_OK_THRESHOLD
+
+    home_exact = _alias_team_ids(conn_odds, schedule_row["home_name"]) | _team_xref_ids(
         conn_odds, schedule_row.get("provider_home_id")
     )
-    away_ids = _alias_team_ids(conn_odds, schedule_row["away_name"]) | _team_xref_ids(
+    away_exact = _alias_team_ids(conn_odds, schedule_row["away_name"]) | _team_xref_ids(
         conn_odds, schedule_row.get("provider_away_id")
     )
+    home_fuzzy = _fuzzy_team_ids(conn_odds, schedule_row["home_name"]) if not home_exact else set()
+    away_fuzzy = _fuzzy_team_ids(conn_odds, schedule_row["away_name"]) if not away_exact else set()
 
-    # (score, match_id, inverted) 全部得分组合;每边命中记 0.5
+    def _side_score(team_id: int, exact_ids: set[int], fuzzy_ids: set[int]) -> float:
+        if team_id in exact_ids:
+            return _SIDE_SCORE_EXACT
+        if team_id in fuzzy_ids:
+            return _SIDE_SCORE_FUZZY
+        return 0.0
+
+    # (score, match_id, inverted) 全部得分组合
     scored: list[tuple[float, int, int]] = []
     cand_by_id: dict[int, sqlite3.Row] = {}
     for cand in _candidate_matches(conn_odds, conn_core, schedule_row["date"]):
         h, a = int(cand["Home_Team_ID"]), int(cand["Away_Team_ID"])
         cand_by_id[int(cand["Match_ID"])] = cand
-        fwd = 0.5 * (h in home_ids) + 0.5 * (a in away_ids)
-        inv = 0.5 * (h in away_ids) + 0.5 * (a in home_ids)
+        fwd = _side_score(h, home_exact, home_fuzzy) + _side_score(a, away_exact, away_fuzzy)
+        inv = _side_score(h, away_exact, away_fuzzy) + _side_score(a, home_exact, home_fuzzy)
         if fwd > 0:
             scored.append((fwd, int(cand["Match_ID"]), 0))
         if inv > 0:

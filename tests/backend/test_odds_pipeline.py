@@ -48,6 +48,9 @@ CORE_MATCHES = [
     # 同队重复对阵(±1 天内两场)→ 制造映射歧义
     (9004, QUERY_DATE, 10261, "Newcastle United", 9879, "Fulham"),
     (9005, NEXT_DATE, 10261, "Newcastle United", 9879, "Fulham"),
+    # 2026-08-17 真实发现:巴西等地区球队 NowGoal 名带地域后缀("Internacional RS"/
+    # "Remo Belem (PA)"),core 侧别名只有不带后缀的原名——用于模糊 token 子集匹配测试
+    (9006, QUERY_DATE, 8887, "Internacional", 8888, "Remo"),
 ]
 
 CORE_I18N = [
@@ -233,6 +236,44 @@ class TestEntityResolution:
             "SELECT COUNT(*) FROM dim_match_xref WHERE provider_match_id='700005'"
         ).fetchone()[0]
         assert n == 0
+
+    def test_fuzzy_token_subset_recall_routes_to_needs_review_not_auto_ok(self, odds_conn, core_db):
+        """2026-08-17 真实发现:NowGoal 给巴西等地区球队名加地域后缀
+        ('Internacional RS'/'Remo Belem (PA)'),与 core 侧精确别名('internacional'/
+        'remo')不完全相同,精确匹配召回不到任何候选,此前直接 resolved=False 且不
+        写任何行——不进 needs_review,人工永远看不到这场比赛,赔率也永远抓不到
+        (真实复现:2026-08-17 生产上巴甲近一周的比赛有一半没有任何 xref 映射)。
+        修复后:token 子集模糊匹配应该召回到候选,但绝不能单靠模糊匹配就 auto_ok
+        (confidence 上限 0.7 < AUTO_OK_THRESHOLD=0.9),必须落 needs_review 交人工
+        确认,且不得静默创建 team xref。"""
+        seed_team_aliases(odds_conn, core_db)
+        result = resolve_match(odds_conn, core_db, {
+            "titan_id": "700010", "home_name": "Internacional RS",
+            "away_name": "Remo Belem (PA)",
+            "date": QUERY_DATE, "kickoff": _ng_kickoff(QUERY_DATE),
+            "provider_home_id": "5020", "provider_away_id": "5021",
+        })
+        assert result["resolved"] is True, "token 子集模糊匹配应该能召回候选,不再静默丢弃"
+        assert result["fotmob_match_id"] == 9006
+        assert result["review_status"] == "needs_review"
+        assert result["confidence"] < 0.9, "纯模糊匹配绝不能达到 auto_ok 阈值"
+        n = odds_conn.execute(
+            "SELECT COUNT(*) FROM dim_team_xref WHERE provider_team_id IN ('5020','5021')"
+        ).fetchone()[0]
+        assert n == 0, "模糊召回不得静默创建 team xref(只有 auto_ok 才允许)"
+
+    def test_fuzzy_recall_only_kicks_in_when_exact_match_empty(self, odds_conn, core_db):
+        """模糊匹配只是精确匹配为空时的兜底召回,不改变既有精确匹配路径的行为——
+        同一批既有 exact_match_auto_ok 等测试必须继续通过;这里额外确认新增的
+        巴西场次不会误伤原本就能精确匹配的英超场次。"""
+        seed_team_aliases(odds_conn, core_db)
+        result = resolve_match(odds_conn, core_db, {
+            "titan_id": "700011", "home_name": "Arsenal", "away_name": "Chelsea",
+            "date": QUERY_DATE, "kickoff": _ng_kickoff(QUERY_DATE),
+            "provider_home_id": "5030", "provider_away_id": "5031",
+        })
+        assert result["review_status"] == "auto_ok"
+        assert result["confidence"] == 1.0
 
     def test_existing_xref_returned_not_duplicated(self, odds_conn, core_db):
         seed_team_aliases(odds_conn, core_db)
