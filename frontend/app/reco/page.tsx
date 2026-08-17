@@ -3,13 +3,20 @@
 /**
  * /reco — 每日精选(人工推荐板块),「今日精选|历史战绩」双标签页。
  *
- * 三段可见性(CLAUDE.md §8;后端是权限真源,本页只做体验):
- * - 匿名:引导登录(无任何数字与内容);
- * - 已登录(member 基线,reco:track_record):默认打开「历史战绩」;
- *   「今日精选」标签展示锁定说明(权限由站长开通,生效后自动显示);
- * - 精选授权(reco:daily):默认打开「今日精选」,顶部展示授权有效期;
- *   近 30 天推荐(含未结算)只出现在「今日精选」,归档只出现在「历史战绩」,
- *   两个标签不重复展示同一批已结算单。
+ * 权限判定(2026-08-16 产品权限口径修正,经用户批准;后端是权限真源,本页
+ * 只做体验——CLAUDE.md §8):
+ * - 历史战绩:全站公开,匿名可见(不再要求登录)。
+ * - 今日精选(近 30 天推荐):要求登录,但登录本身不解锁内容——每日精选是
+ *   全站唯一需要 admin 按"用户 + 单条 slip"显式授权的内容。已登录用户请求
+ *   GET /api/v1/reco/daily 得到的是"按 slip 分别授权"的投影:每一条要么是
+ *   完整内容(access_required=false),要么是只有存在性 + 状态的中性投影
+ *   (access_required=true,标题/腿/赔率/理由物理不下发,不是置 null)。
+ *   没有任何"全局已解锁"的布尔状态,一场的权限不代表另一场也能看到。
+ *
+ * 本页是纯客户端组件("use client"),全部数据经浏览器端 clientFetch 在挂载后
+ * 拉取——服务端渲染的初始 HTML/RSC payload 不包含任何 slip 数据(无论是否
+ * 已授权),满足"未授权内容不能先发送再隐藏"的硬性要求:数据本身在服务端
+ * 渲染阶段完全不存在,不是发送后被样式或条件渲染盖住。
  *
  * 人工内容可修正:修正次数与最近编辑时间公开展示,不使用"锁定不可改"表述
  * (那是模型登记簿的资格,见 /track-record)。
@@ -31,24 +38,32 @@ import {
 import styles from "./reco.module.css";
 
 type DailyResp = GetJson<"/api/v1/reco/daily">;
+type DailyItem = DailyResp["slips"][number];
 type TrackResp = GetJson<"/api/v1/reco/track-record">;
-type AccountResp = GetJson<"/api/v1/account">;
-type Slip = TrackResp["slips"][number];
+export type Slip = TrackResp["slips"][number];
 
-const RESULT_ZH: Record<string, string> = { win: "命中", lose: "未中", push: "走水" };
+// half_win/half_loss(2026-08-16 四分之一盘口扩展):半仓赢半仓走水 / 半仓
+// 本金退回半仓告负。措辞遵守 CLAUDE.md §1(不用"红单""连红"等收益承诺式表述)。
+const RESULT_ZH: Record<string, string> = {
+  win: "命中", lose: "未中", push: "走水", half_win: "半赢", half_loss: "半输",
+};
+
+// 每日精选未授权状态固定文案(CLAUDE.md §5):未登录时按字面使用;已登录时
+// "登录后可查看当前权限状态"这半句不适用(用户此刻正在查看当前权限状态),
+// 调整为不出现"登录后查看"这类不通顺表述,但保留"需要单独授权"的核心意思。
+const LOCKED_NOTICE_ANON = "本场每日精选需要单独授权。登录后可查看当前权限状态。";
+const LOCKED_NOTICE_AUTHED = "本场每日精选需要单独授权,当前账号暂无查看权限。";
+
+const SLIP_STATUS_ZH: Record<string, string> = {
+  published: "已发布(赛前)",
+  settled: "已结算",
+  voided: "已作废",
+};
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("zh-CN", { hour12: false });
-}
-
-function fmtDay(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
 }
 
 /**
@@ -66,21 +81,30 @@ function fmtDay(iso: string | null | undefined): string {
  * (不做整卡链接,避免 <a> 嵌套 <a>)。缺 match_id 的站外赛事不可点。
  */
 
-type SlipTone = "win" | "lose" | "push" | "void" | "pending";
+// half_win/half_loss(2026-08-16):settle_slip() 的整单判定目前只会产生
+// win/lose/push/half_loss 四种 slip 级结果(half_win 只出现在腿级——一张单
+// 净赚但含 half_win 腿时,整单仍按连乘积判 win),但 reco_slips.result 的
+// CHECK 约束同时允许 half_win,聚合与展示都按完整取值域防御式处理,不因
+// "目前走不到"就当作不存在。
+type SlipTone = "win" | "half_win" | "lose" | "half_loss" | "push" | "void" | "pending";
 
 const TONE_TEXT: Record<SlipTone, string> = {
   win: "命中",
+  half_win: "半赢",
   lose: "未中",
+  half_loss: "半输",
   push: "走水",
   void: "已作废",
   pending: "未结算",
 };
 
-function slipTone(slip: Slip): SlipTone {
+export function slipTone(slip: Slip): SlipTone {
   if (slip.status === "voided") return "void";
   if (slip.status !== "settled") return "pending";
   if (slip.result === "win") return "win";
+  if (slip.result === "half_win") return "half_win";
   if (slip.result === "lose") return "lose";
+  if (slip.result === "half_loss") return "half_loss";
   return "push";
 }
 
@@ -146,7 +170,7 @@ function LegRow({ leg }: { leg: Slip["legs"][number] }) {
   );
 }
 
-function SlipCard({ slip }: { slip: Slip }) {
+export function SlipCard({ slip }: { slip: Slip }) {
   const [editOpen, setEditOpen] = useState(false);
   const tone = slipTone(slip);
   const { kicker, value } = blockMetrics(slip, tone);
@@ -198,6 +222,35 @@ function SlipCard({ slip }: { slip: Slip }) {
   );
 }
 
+/** 未授权 slip 的中性卡片:只展示后端下发的存在性 + 状态(slip_date/status),
+ * 标题/腿/赔率/理由这些字段在网络响应里physically 不存在,这里自然也就
+ * 没有任何东西可渲染——不是"拿到了再隐藏"。 */
+function LockedSlipCard({ slip }: { slip: Extract<DailyItem, { access_required: true }> }) {
+  return (
+    <article className={styles.lockedCard} data-testid="reco-locked-slip">
+      <div className={styles.lockedMeta}>
+        <span className="num">{slip.slip_date}</span>
+        <span className={styles.lockedStatus}>{SLIP_STATUS_ZH[slip.status] ?? slip.status}</span>
+      </div>
+      <p className={styles.note}>{LOCKED_NOTICE_AUTHED}</p>
+      <Link className={styles.inlineLink} href="/pricing">
+        申请查看本场每日精选 →
+      </Link>
+    </article>
+  );
+}
+
+/** "1胜 2半赢 3负 1半输 2走"——四分之一盘口半赢/半输只在实际出现时才显示,
+ * 避免绝大多数场次(没有 half_win/half_loss)时汇总条挤满恒为 0 的分类。 */
+function resultBreakdownText(summary: NonNullable<TrackResp["summary"]>): string {
+  const parts = [`${summary.win_count}胜`];
+  if (summary.half_win_count > 0) parts.push(`${summary.half_win_count}半赢`);
+  parts.push(`${summary.lose_count}负`);
+  if (summary.half_loss_count > 0) parts.push(`${summary.half_loss_count}半输`);
+  parts.push(`${summary.push_count}走`);
+  return parts.join(" ");
+}
+
 function SummaryRow({ summary }: { summary: NonNullable<TrackResp["summary"]> }) {
   return (
     <section className={styles.summaryRow} aria-label="战绩汇总">
@@ -206,16 +259,14 @@ function SummaryRow({ summary }: { summary: NonNullable<TrackResp["summary"]> })
         <span className={styles.summaryLabel}>已结算</span>
       </div>
       <div className={styles.summaryItem}>
-        <span className={`${styles.summaryNum} num`}>
-          {summary.win_count}胜 {summary.lose_count}负 {summary.push_count}走
-        </span>
-        <span className={styles.summaryLabel}>命中/未中/走水</span>
+        <span className={`${styles.summaryNum} num`}>{resultBreakdownText(summary)}</span>
+        <span className={styles.summaryLabel}>命中/未中/走水{(summary.half_win_count > 0 || summary.half_loss_count > 0) ? "(含四分之一盘半赢半输)" : ""}</span>
       </div>
       <div className={styles.summaryItem}>
         <span className={`${styles.summaryNum} num`}>
           {summary.hit_rate == null ? "—" : `${(summary.hit_rate * 100).toFixed(1)}%`}
         </span>
-        <span className={styles.summaryLabel}>命中率(走水不计)</span>
+        <span className={styles.summaryLabel}>命中率(走水不计,半赢半输按半计)</span>
       </div>
       <div className={styles.summaryItem}>
         <span className={`${styles.summaryNum} num`}>
@@ -240,72 +291,67 @@ function RecoBody() {
   const searchParams = useSearchParams();
   const [me, setMe] = useState<MeResponse | null | "loading">("loading");
   const [daily, setDaily] = useState<DailyResp | null>(null);
+  const [dailyErr, setDailyErr] = useState<string | null>(null);
   const [track, setTrack] = useState<TrackResp | null>(null);
-  const [grantEndsAt, setGrantEndsAt] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [trackErr, setTrackErr] = useState<string | null>(null);
 
+  // 历史战绩(2026-08-16 起匿名可见):不依赖登录态,挂载后直接拉取。
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      let meResp: MeResponse | null = null;
-      try {
-        meResp = await getMe();
-      } catch {
-        // 后端不可用:按匿名渲染
-      }
-      if (cancelled) return;
-      setMe(meResp);
-      if (!meResp?.authenticated) return;
-      try {
-        setTrack(await clientFetch<TrackResp>("/api/v1/reco/track-record"));
-      } catch (e) {
-        if (!cancelled) setErr(apiErrorMessage(e, "战绩加载失败"));
-      }
-      if (meResp.entitlements.includes("reco:daily")) {
-        try {
-          const d = await clientFetch<DailyResp>("/api/v1/reco/daily");
-          if (!cancelled) setDaily(d);
-        } catch (e) {
-          if (!cancelled && !(e instanceof ApiError && e.status === 403)) {
-            setErr(apiErrorMessage(e, "推荐单加载失败"));
-          }
-        }
-        // 授权有效期(自己的账户数据,私有请求;拿不到只是不显示日期,不报错)
-        try {
-          const account = await clientFetch<AccountResp>("/api/v1/account");
-          if (cancelled) return;
-          const nowIso = new Date().toISOString();
-          const active = account.subscriptions
-            .filter(
-              (s) =>
-                s.status === "active" &&
-                s.ends_at > nowIso &&
-                s.plan_id === "daily_picks",
-            )
-            .sort((a, b) => b.ends_at.localeCompare(a.ends_at));
-          setGrantEndsAt(active[0]?.ends_at ?? null);
-        } catch {
-          // 静默:横幅退化为不带日期
-        }
-      }
-    })();
+    clientFetch<TrackResp>("/api/v1/reco/track-record")
+      .then((t) => {
+        if (!cancelled) setTrack(t);
+      })
+      .catch((e) => {
+        if (!cancelled) setTrackErr(apiErrorMessage(e, "战绩加载失败"));
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const authed = me !== "loading" && me?.authenticated;
-  const hasDaily = authed && me!.entitlements.includes("reco:daily");
+  // 登录态水合(浏览器端私有请求,不进匿名 HTML/RSC payload)。
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((meResp) => {
+        if (!cancelled) setMe(meResp);
+      })
+      .catch(() => {
+        if (!cancelled) setMe(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 今日精选列表:仅登录后才请求(未登录该端点 401)。每一条按 slip 分别
+  // 授权投影,不存在任何"全局已解锁"判断。
+  useEffect(() => {
+    if (me === "loading" || !me?.authenticated) return;
+    let cancelled = false;
+    clientFetch<DailyResp>("/api/v1/reco/daily")
+      .then((d) => {
+        if (!cancelled) setDaily(d);
+      })
+      .catch((e) => {
+        if (!cancelled && !(e instanceof ApiError && e.status === 401)) {
+          setDailyErr(apiErrorMessage(e, "推荐单加载失败"));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me]);
+
+  const authed = me !== "loading" && Boolean(me?.authenticated);
   const summary = track?.summary;
 
-  // 显式 ?tab= 优先;否则授权用户默认「今日精选」,普通登录默认「历史战绩」
+  // 显式 ?tab= 优先;否则默认落在人人可看的「历史战绩」——每日精选没有
+  // 任何"整体已解锁"的全局状态可以据此决定默认标签,具体到某一场是否可看
+  // 只在列表渲染时逐条判断。
   const explicit = searchParams.get("tab");
-  const tab: Tab =
-    explicit === "daily" || explicit === "record"
-      ? explicit
-      : hasDaily
-        ? "daily"
-        : "record";
+  const tab: Tab = explicit === "daily" || explicit === "record" ? explicit : "record";
 
   return (
     <main className={styles.page}>
@@ -315,115 +361,86 @@ function RecoBody() {
         推荐为个人分析观点,存在不确定性,不构成任何收益承诺。
       </p>
 
-      {me === "loading" ? (
-        <section className={styles.card} aria-busy="true">
-          <div className={styles.skeleton} />
-          <div className={styles.skeletonShort} />
-        </section>
-      ) : !authed ? (
-        <section className={styles.card}>
-          <h2 className={styles.cardTitle}>登录后可免费查看全部历史战绩</h2>
-          <p className={styles.note}>
-            赛前精选仅向已获得权限的账号开放。首次微信扫码会自动创建账户,
-            无需填写手机号;登录完成后会返回本页。
-          </p>
-          <div className={styles.btnRow}>
-            <Link className={styles.btnPrimary} href="/login?next=/reco">
-              免费登录查看战绩
-            </Link>
-            <Link className={styles.btnGhost} href="/matches">
-              先看公开比赛资料
-            </Link>
-          </div>
-        </section>
-      ) : (
-        <>
-          {hasDaily && (
-            <div className={styles.grantBanner} data-testid="reco-grant-banner">
-              <span className={styles.grantBannerTitle}>精选权限已开通</span>
-              <span>当前账号可以查看赛前推荐和完整历史战绩。</span>
-              {grantEndsAt && (
-                <span className={styles.grantBannerDim}>
-                  有效期至 {fmtDay(grantEndsAt)}
-                </span>
-              )}
+      <nav className={styles.tabs} aria-label="精选内容切换">
+        <Link
+          href="/reco?tab=daily"
+          className={tab === "daily" ? styles.tabActive : styles.tab}
+          aria-current={tab === "daily" ? "page" : undefined}
+        >
+          今日精选
+        </Link>
+        <Link
+          href="/reco?tab=record"
+          className={tab === "record" ? styles.tabActive : styles.tab}
+          aria-current={tab === "record" ? "page" : undefined}
+        >
+          历史战绩
+        </Link>
+      </nav>
+
+      {tab === "daily" ? (
+        me === "loading" ? (
+          <section className={styles.card} aria-busy="true">
+            <div className={styles.skeleton} />
+            <div className={styles.skeletonShort} />
+          </section>
+        ) : !authed ? (
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}>今日精选</h2>
+            <p className={styles.note}>{LOCKED_NOTICE_ANON}</p>
+            <div className={styles.btnRow}>
+              <Link className={styles.btnPrimary} href="/login?next=/reco?tab=daily">
+                前往登录
+              </Link>
+              <Link className={styles.btnGhost} href="/reco?tab=record">
+                先看历史战绩
+              </Link>
             </div>
-          )}
-
-          <nav className={styles.tabs} aria-label="精选内容切换">
-            <Link
-              href="/reco?tab=daily"
-              className={tab === "daily" ? styles.tabActive : styles.tab}
-              aria-current={tab === "daily" ? "page" : undefined}
-            >
-              今日精选
-            </Link>
-            <Link
-              href="/reco?tab=record"
-              className={tab === "record" ? styles.tabActive : styles.tab}
-              aria-current={tab === "record" ? "page" : undefined}
-            >
-              历史战绩
-            </Link>
-          </nav>
-
-          {err && <p className={styles.errText}>{err}</p>}
-
-          {tab === "daily" ? (
-            hasDaily ? (
-              <section>
-                <h2 className={styles.sectionTitle}>
-                  近 {daily?.window_days ?? 30} 天推荐
-                </h2>
-                {!daily ? (
-                  <div className={styles.card} aria-busy="true">
-                    <div className={styles.skeleton} />
-                  </div>
-                ) : daily.slips.length === 0 ? (
-                  <p className={styles.empty}>近 30 天暂无推荐</p>
-                ) : (
-                  daily.slips.map((s) => <SlipCard key={s.id} slip={s} />)
-                )}
-              </section>
+          </section>
+        ) : (
+          <section>
+            <h2 className={styles.sectionTitle}>近 {daily?.window_days ?? 30} 天推荐</h2>
+            {dailyErr && <p className={styles.errText}>{dailyErr}</p>}
+            {!daily && !dailyErr ? (
+              <div className={styles.card} aria-busy="true">
+                <div className={styles.skeleton} />
+              </div>
+            ) : daily && daily.slips.length === 0 ? (
+              <p className={styles.empty}>近 30 天暂无推荐</p>
             ) : (
-              <section className={styles.card}>
-                <h2 className={styles.cardTitle}>今日精选</h2>
-                <p className={styles.note}>
-                  当前账号尚未获得查看权限。如需开通,请通过公众号联系站长;
-                  权限生效后本页会自动显示,无需重新注册。
-                  历史战绩已对你开放,可切换上方「历史战绩」查看。
-                </p>
-                <Link className={styles.inlineLink} href="/pricing">
-                  查看访问权限说明 →
-                </Link>
-              </section>
-            )
+              daily?.slips.map((s) =>
+                s.access_required ? (
+                  <LockedSlipCard key={s.id} slip={s} />
+                ) : (
+                  <SlipCard key={s.id} slip={s} />
+                ),
+              )
+            )}
+          </section>
+        )
+      ) : (
+        <section>
+          {trackErr && <p className={styles.errText}>{trackErr}</p>}
+          {summary && <SummaryRow summary={summary} />}
+          <h2 className={styles.sectionTitle}>战绩归档({track?.total ?? 0})</h2>
+          <p className={styles.archiveNote}>
+            全部已结算推荐公开可查,包括命中、未中、走水和作废记录。
+            结算后归档,人工内容允许修正,修正历史逐单标注;与
+            <Link href="/track-record" className={styles.inlineLink}>
+              模型公开记录
+            </Link>
+            相互独立,口径不混用。
+          </p>
+          {!track && !trackErr ? (
+            <div className={styles.card} aria-busy="true">
+              <div className={styles.skeleton} />
+            </div>
+          ) : track && track.slips.length === 0 ? (
+            <p className={styles.empty}>还没有已结算的推荐</p>
           ) : (
-            <section>
-              {summary && <SummaryRow summary={summary} />}
-              <h2 className={styles.sectionTitle}>
-                战绩归档({track?.total ?? 0})
-              </h2>
-              <p className={styles.archiveNote}>
-                你可以查看全部已结算推荐,包括命中、未中、走水和作废记录。
-                结算后归档,人工内容允许修正,修正历史逐单标注;与
-                <Link href="/track-record" className={styles.inlineLink}>
-                  模型公开记录
-                </Link>
-                相互独立,口径不混用。
-              </p>
-              {!track ? (
-                <div className={styles.card} aria-busy="true">
-                  <div className={styles.skeleton} />
-                </div>
-              ) : track.slips.length === 0 ? (
-                <p className={styles.empty}>还没有已结算的推荐</p>
-              ) : (
-                track.slips.map((s) => <SlipCard key={s.id} slip={s} />)
-              )}
-            </section>
+            track?.slips.map((s) => <SlipCard key={s.id} slip={s} />)
           )}
-        </>
+        </section>
       )}
     </main>
   );

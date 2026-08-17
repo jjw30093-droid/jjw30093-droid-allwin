@@ -287,9 +287,9 @@ def build_analysis_bundle(
             # 返回空 odds_timeline,而同一场 /odds 端点能给出真实点位)。
             # 两点摘要无观测时间戳,进独立的 odds_summary_points,
             # 绝不混入 odds_timeline(§6.2:不伪造 observed_at)。
-            # bundle 本身不做权益投影(与 prediction_member 同款约定),
-            # 公开路由按 odds:history_full 投影后再下发。
-            odds_summary_points = legacy_summary_points(conn_odds, match_id, full=True)
+            # 2026-08-16 起公开路由不再做任何权益投影,bundle 生成的内容
+            # 直接下发(除"每日精选"外全站比赛内容全部免费)。
+            odds_summary_points = legacy_summary_points(conn_odds, match_id)
 
     odds_coverage_tier = (
         "full_timeline"
@@ -343,11 +343,6 @@ def build_analysis_bundle(
                      "probability_source": probability_source,
                      "home_name": home["name"], "away_name": away["name"]},
         })
-    chart_specs.append({
-        "id": "form_compare", "type": "form_compare", "title": "近期战绩对比",
-        "data": {"home_name": home["name"], "away_name": away["name"],
-                 "home": [f["result"] for f in home_form], "away": [f["result"] for f in away_form]},
-    })
     if feat is not None:
         chart_specs.append({
             "id": "xg_compare", "type": "xg_compare", "title": "滚动 xG 对比(近10场)",

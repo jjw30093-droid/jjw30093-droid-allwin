@@ -49,7 +49,7 @@ export function WechatFollowCard({
         </p>
         <ul className={styles.perks}>
           <li>不收费,不填手机号</li>
-          <li>只发数据,不发荐单</li>
+          <li>不代购、不承诺收益;推荐与修正记录公开</li>
         </ul>
       </div>
       {hasQr ? (

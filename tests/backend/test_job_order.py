@@ -19,6 +19,14 @@ class TestChainOrder:
     def test_schedule_before_nowgoal_snapshot(self):
         assert _idx("schedule_sync_multi") < _idx("nowgoal_snapshot")
 
+    def test_postmatch_settle_before_reco_auto_settle(self):
+        """「每日精选」推荐单自动结算依赖"比赛已经正式完赛"这个前提,和
+        postmatch_settle(模型预测评估)依赖的前提相同,顺序上紧跟其后
+        (不需要等 metrics_rebuild);两者是彼此独立的两个任务/两个 job_name,
+        不共享同一个注册函数。"""
+        assert _idx("postmatch_settle") < _idx("reco_auto_settle")
+        assert runner.REGISTRY["reco_auto_settle"]["fn"] is not runner.REGISTRY["postmatch_settle"]["fn"]
+
     def test_pipeline_gates_is_last(self):
         """质量门必须排最后:否则门 CRITICAL 会 cascade-skip 掉真活。"""
         assert runner.DEFAULT_CHAIN[-1] == "pipeline_gates"

@@ -1,5 +1,14 @@
 # 付费独家推荐板块「每日精选」(已实现,2026-08-10)
 
+> **本文件描述的"plan=daily_picks 整体解锁"授权模型已被 2026-08-17
+> REMOVE_SITEWIDE_FREE_PREMIUM_FIELDS_AND_FIX_DAILY_PICK_PER_MATCH_ACCESS
+> 取代,见 CLAUDE.md §8.2 与 docs/current-state.md §50**——每日精选现在按
+> "用户 + 单条精选(reco_slip)"通过 `reco_access_grants` 表授权,不再是
+> 持有 daily_picks entitlement 即可看到近 30 天全部推荐单;兑换码同样改为
+> 只对应一条具体精选。本文件下方关于 plan/entitlement/`reco:daily`
+> 门禁机制的描述仅作历史记录,不代表当前实现;`reco_slips`/`reco_legs`
+> 表结构本身与内容编辑/结算/审计留痕相关的部分仍然准确。
+>
 > 状态:**已实现**。用户确认的 5 个决策:①plan=daily_picks「每日精选」,定价不写
 > (products 无行,购买走公众号联系/兑换码);②战绩对齐 miaomiaodi.vip 归档口径,
 > 命中/未中/走水全展示、作废单列不消失;③战绩登录即可见(reco:track_record 属

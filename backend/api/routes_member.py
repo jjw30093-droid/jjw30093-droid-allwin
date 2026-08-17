@@ -1,9 +1,8 @@
-"""登录用户端点:兑换码、收藏、账户。全部 private, no-store。"""
+"""登录用户端点:收藏、账户。全部 private, no-store。"""
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from backend.commands.redeem import RedeemError, redeem_code
 from backend.db.connections import tx
 from backend.db.util import utc_now_iso
 
@@ -12,7 +11,6 @@ from .schemas import (
     AccountResponse,
     FavoritesResponse,
     OkDTO,
-    RedeemResponse,
     error_responses,
 )
 
@@ -25,27 +23,6 @@ router = APIRouter(
 
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = NO_STORE
-
-
-class RedeemBody(BaseModel):
-    code: str = Field(min_length=6, max_length=32)
-
-
-@router.post("/redeem", response_model=RedeemResponse)
-def redeem(
-    body: RedeemBody,
-    response: Response,
-    ctx: AuthContext = Depends(require_csrf),
-    conn=Depends(platform_rw),
-):
-    _no_store(response)
-    try:
-        with tx(conn):
-            grant = redeem_code(conn, body.code, ctx.user_id)
-    except RedeemError as e:
-        msg = {"invalid": "兑换码无效", "expired": "兑换码已过期", "used": "兑换码已被使用"}[e.reason]
-        raise HTTPException(status_code=400, detail={"code": e.reason, "message": msg})
-    return {"status": "ok", **grant}
 
 
 class FavoriteBody(BaseModel):

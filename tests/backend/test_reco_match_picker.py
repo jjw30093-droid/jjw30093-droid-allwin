@@ -79,11 +79,18 @@ class TestMatchCandidatesAuth:
 
 
 class TestMatchCandidatesContent:
+    """本类下面几个测试的关注点是搜索/展示逻辑本身,不是 window 参数(window
+    参数的默认值/放宽行为见 test_reco.py::TestMatchCandidatesWindowDefault)。
+    seed_basic_core() 造的比赛没有精确 kickoff_at_utc(只有自然日 Date),
+    2026-08-16 起 window 默认 7 天会把"无精确开球时间"的比赛排除在默认搜索外
+    (§6.2.1:不得把缺失的精确时间伪装成"在窗口内"),因此这里显式传
+    window=all 保持这些测试原本要验证的内容不受 window 默认值变化影响。"""
+
     def test_only_upcoming_matches_across_leagues(self, app, data_dir, fresh_ip):
         """9001(英超,NotStarted)入选;9002(英超,Finish)/9101(西甲,Finish)不入选。"""
         seed_basic_core(data_dir)
         admin = _admin_client(app, fresh_ip)
-        body = admin.get("/api/v1/admin/reco/match-candidates").json()
+        body = admin.get("/api/v1/admin/reco/match-candidates?window=all").json()
         ids = {m["match_id"] for m in body["matches"]}
         assert 9001 in ids
         assert 9002 not in ids and 9101 not in ids
@@ -91,7 +98,7 @@ class TestMatchCandidatesContent:
     def test_uses_chinese_display_names_and_league_name(self, app, data_dir, fresh_ip):
         seed_basic_core(data_dir)
         admin = _admin_client(app, fresh_ip)
-        body = admin.get("/api/v1/admin/reco/match-candidates").json()
+        body = admin.get("/api/v1/admin/reco/match-candidates?window=all").json()
         m = next(x for x in body["matches"] if x["match_id"] == 9001)
         assert m["home_name"] == "阿森纳"
         assert m["away_name"] == "切尔西"
@@ -102,9 +109,9 @@ class TestMatchCandidatesContent:
     def test_query_filters_by_team_name_case_insensitive(self, app, data_dir, fresh_ip):
         seed_basic_core(data_dir)
         admin = _admin_client(app, fresh_ip)
-        hit = admin.get("/api/v1/admin/reco/match-candidates?q=chelsea").json()
+        hit = admin.get("/api/v1/admin/reco/match-candidates?q=chelsea&window=all").json()
         assert {m["match_id"] for m in hit["matches"]} == {9001}
-        miss = admin.get("/api/v1/admin/reco/match-candidates?q=liverpool").json()
+        miss = admin.get("/api/v1/admin/reco/match-candidates?q=liverpool&window=all").json()
         assert miss["matches"] == []
 
     def test_candidates_cover_all_leagues_not_just_anonymous_free_set(self, app, data_dir, fresh_ip):
@@ -125,7 +132,7 @@ class TestMatchCandidatesContent:
         conn.close()
 
         admin = _admin_client(app, fresh_ip)
-        body = admin.get("/api/v1/admin/reco/match-candidates").json()
+        body = admin.get("/api/v1/admin/reco/match-candidates?window=all").json()
         assert 9502 in {m["match_id"] for m in body["matches"]}
 
 

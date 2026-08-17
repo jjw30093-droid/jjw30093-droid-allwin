@@ -7,8 +7,8 @@
 不变量:
 - 两点摘要无观测时间戳,只进 odds_summary_points,绝不混入 odds_timeline
   (BundleOddsPoint.observed_at 必填,§6.2 不伪装);
-- 公开 /analysis 按 odds:history_full 投影:非 Premium 的 odds_summary_points
-  为 None(受限数据物理不下发,不是空数组占位)。
+- 公开 /analysis 恒完整下发 odds_summary_points(2026-08-16 起除"每日精选"外
+  全站比赛内容与登录/付费彻底解耦,不再有 odds:history_full 投影裁剪)。
 """
 
 from __future__ import annotations
@@ -62,16 +62,11 @@ def _login(client, ip):
 
 
 class TestBundleLegacyOdds:
-    def test_legacy_only_match_anonymous_projection(self, app, bundle_matches):
+    def test_legacy_only_match_anonymous_gets_both_periods(self, app, bundle_matches):
+        """2026-08-16 产品权限口径修正:除"每日精选"外普通比赛内容全部免费,
+        包括匿名——两点摘要不再要求 odds:history_full。这条断言正是要推翻
+        的旧规则(此前匿名 odds_summary_points 恒为 None)。"""
         c = TestClient(app)
-        d = c.get("/api/v1/matches/8101/analysis").json()
-        assert d["odds_coverage_tier"] == "open_close_only"
-        assert d["odds_summary_points"] is None      # 非 Premium:物理不下发
-        assert d["odds_timeline"] == []              # 两点摘要绝不混入时间线
-
-    def test_legacy_only_match_premium_gets_both_periods(self, app, bundle_matches, fresh_ip):
-        c = TestClient(app)
-        _login(c, fresh_ip)   # 三段可见性:登录即 member 基线(odds:history_full)
         d = c.get("/api/v1/matches/8101/analysis").json()
         assert d["odds_coverage_tier"] == "open_close_only"
         pts = d["odds_summary_points"]
@@ -79,7 +74,16 @@ class TestBundleLegacyOdds:
         assert {p["period"] for p in pts} == {"initial", "latest"}
         # 每个点都没有任何时间字段(§6.2:无观测时间戳,不伪装)
         assert all("observed_at" not in p and "ingested_at" not in p for p in pts)
-        assert d["odds_timeline"] == []              # 时间线仍为空,不造假点
+        assert d["odds_timeline"] == []              # 两点摘要绝不混入时间线
+
+    def test_legacy_only_match_member_gets_identical_content(self, app, bundle_matches, fresh_ip):
+        """登录与内容分层彻底解耦:登录后的内容必须与匿名逐字段一致。"""
+        anon = TestClient(app).get("/api/v1/matches/8101/analysis").json()
+        c = TestClient(app)
+        _login(c, fresh_ip)
+        member = c.get("/api/v1/matches/8101/analysis").json()
+        assert member["odds_summary_points"] == anon["odds_summary_points"]
+        assert member["odds_timeline"] == anon["odds_timeline"]
 
     def test_no_odds_match_tier_none(self, app, bundle_matches):
         c = TestClient(app)

@@ -9,6 +9,19 @@
 > 选择性删除或隐藏;物理删除始终禁止。内容(概率等)可以直接修正,但每次真正产生
 > 变化的修正都强制留痕(操作者、原因、修正前后值、时间),不允许静默覆盖——见 §3。
 
+> **本文件的适用范围只到 `prediction_snapshots` 一套模型预测登记簿**(2026-08-16,
+> CLAUDE.md §9.1 修订确认)。付费板块「每日精选」(`reco_slips`/`reco_legs`,
+> `backend/commands/reco.py`/`reco_auto_settle.py`/`reco_settlement_math.py`/
+> `reco_odds_contract.py`)是独立建表的人工推荐板块,不是本文件描述的锁定/哈希/
+> 永久公开资格登记簿:内容(方向、赔率、结果)允许管理员直接修改(`edit_slip`),
+> 结算允许人工重录(`settle_slip` 对 `settled` 单重录 = 结算修正,同样留痕但不生成
+> 新版本,不是本文件 §3 描述的"编辑留痕但记录本身不可变"或"supersede 生成新版本"
+> 两种机制)。`reco_auto_settle`(`backend/worker/runner.py::_job_reco_auto_settle`,
+> job_name `reco_auto_settle`)只结算「每日精选」推荐单,**不触碰、不复用**本文件描述
+> 的 `prediction_snapshots`/`evaluate_predictions`/`build_manifest` 任何一段逻辑
+> ——两套结算/评估口径物理隔离,不共享判定函数、不共享连接生命周期,详见
+> `docs/current-state.md` §46。
+
 ## 1. 登记簿表结构(platform.db)
 
 | 表 | 职责 |

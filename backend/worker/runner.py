@@ -100,6 +100,32 @@ def _job_postmatch_settle() -> dict:
     }
 
 
+def _job_reco_auto_settle() -> dict:
+    """自动结算「每日精选」推荐单(独立于模型预测评估之外,CLAUDE.md §9.1)。
+
+    只处理 published 单里已正式完赛(status='Finish' 且比分非空)、全部由真实
+    溯源腿(entry_type='provenance_bound')组成的单,整单原子结算;人工已结算
+    (settle_source='manual')、混有 legacy_manual 腿、或暂不可判定(比赛未
+    完赛/角球等统计缺失)的单本轮跳过,不猜测——原因写进 meta.skip_reasons,
+    可追溯到具体 slip_id/leg_id/match_id(见 backend/commands/reco_auto_settle.py)。
+
+    与 _job_postmatch_settle(模型预测赛后评估)彻底独立:不同 job_name、不同
+    注册函数、不共享连接生命周期、不复用彼此的判定逻辑——本函数只做"串起来"
+    这一件事,不重新实现结算算术。
+    """
+    from backend.commands.reco_auto_settle import run_auto_settle
+    from backend.db.connections import connect_ro
+
+    conn_core = connect_ro("core")
+    conn_platform = connect_rw("platform")
+    try:
+        result = run_auto_settle(conn_platform, conn_core, actor="system")
+    finally:
+        conn_core.close()
+        conn_platform.close()
+    return {"output_count": result["settled_slips"], "meta": result}
+
+
 def _job_analysis_bundle_build() -> dict:
     """为未开赛比赛构建 analysis_bundle(详情页与 Studio 共用的同一 builder)。
 
@@ -384,6 +410,14 @@ REGISTRY: dict[str, dict] = {
         "backoff_seconds": 0,
         "description": "赛后结算 + 正式口径评估(无正式样本时如实报 0)",
     },
+    "reco_auto_settle": {
+        "kind": "fn",
+        "fn": _job_reco_auto_settle,
+        "max_attempts": 1,
+        "timeout_seconds": 300,
+        "backoff_seconds": 0,
+        "description": "自动结算「每日精选」推荐单(已完赛+真实溯源腿;人工已结算/混合单/不可判定单本轮跳过,与模型评估彻底独立)",
+    },
     "metrics_rebuild": {
         "kind": "fn",
         "fn": _job_metrics_rebuild,
@@ -422,6 +456,7 @@ DEFAULT_CHAIN = [
     "prediction_register",
     "analysis_bundle_build",
     "postmatch_settle",
+    "reco_auto_settle",
     "metrics_rebuild",
     # 必须排最后:质量门"发现问题"通过告警表达,不通过任务失败表达——
     # 即便它 failed(检查本身崩溃),也没有下游可被 cascade-skip。
