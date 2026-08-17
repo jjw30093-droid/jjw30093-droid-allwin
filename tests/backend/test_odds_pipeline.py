@@ -161,6 +161,39 @@ class TestHashDiff:
         assert ingest_sideline_snapshot(odds_conn, 9001, 2, side | {"team_id": 2},
                                         "2026-07-19T10:05:00Z", "r2")["inserted"] == 1
 
+    def test_lineup_snapshot_write_populates_lineup_type_column(self, odds_conn):
+        """PIPELINE_REDESIGN_V2 P2:新写入的行必须在落库时直接写 lineup_type 列
+        (不是只靠一次性 backfill),用与 extract_lineup_snapshot 相同的
+        snapshot["lineup_type"] 取值。"""
+        predicted = {
+            "lineup_type": "predicted", "source": "enetpulse",
+            "home": {"team_id": 1, "formation": "4-3-3", "starters": [], "subs": []},
+            "away": {"team_id": 2, "formation": "4-4-2", "starters": [], "subs": []},
+        }
+        ingest_lineup_snapshot(odds_conn, 9101, predicted, "2026-08-15T06:00:00Z", "r1")
+        row = odds_conn.execute(
+            "SELECT lineup_type FROM bronze_fm_lineup_snap WHERE fotmob_match_id=9101"
+        ).fetchone()
+        assert row["lineup_type"] == "predicted"
+
+        last_starting = dict(predicted, lineup_type="lastStarting11", source="lastStartingLineups")
+        ingest_lineup_snapshot(odds_conn, 9102, last_starting, "2026-08-15T06:00:00Z", "r1")
+        row = odds_conn.execute(
+            "SELECT lineup_type FROM bronze_fm_lineup_snap WHERE fotmob_match_id=9102"
+        ).fetchone()
+        assert row["lineup_type"] == "lastStarting11"
+
+    def test_lineup_snapshot_write_lineup_type_null_when_absent(self, odds_conn):
+        """snapshot 没有 lineup_type 键时(旧 payload 形状/该字段本身缺失的观测),
+        列必须如实为 NULL,不得编造默认值(如硬编成 'lastStarting11')。"""
+        snap = {"home": {"team_id": 1, "formation": "4-3-3", "starters": [], "subs": []},
+                "away": {"team_id": 2, "formation": "4-4-2", "starters": [], "subs": []}}
+        ingest_lineup_snapshot(odds_conn, 9103, snap, "2026-07-19T10:00:00Z", "r1")
+        row = odds_conn.execute(
+            "SELECT lineup_type FROM bronze_fm_lineup_snap WHERE fotmob_match_id=9103"
+        ).fetchone()
+        assert row["lineup_type"] is None
+
 
 # ── 实体解析 ─────────────────────────────────────────────────────────────
 

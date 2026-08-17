@@ -1,10 +1,14 @@
 /**
  * 模块一:预计阵容 + 伤停(数据 tab → 阵容子页)。
  *
- * 诚实红线(CLAUDE.md §6.2/docs/design-brief-match-detail-viz.md,最关键的一条):
- * bronze_fm_lineup_snap 的 lineup_type 绝大多数是 `lastStarting11` ——「上一场的首发」,
- * 不是本场确认阵容。文案一律「预计首发(基于上一场)」+ 虚线卡型;
- * 只有 lineup_type 明确表示已确认时才切成实线卡 + 实心徽标。
+ * 诚实红线(CLAUDE.md §2.2/§6.2,PIPELINE_REDESIGN_V2 P2 修正):
+ * bronze_fm_lineup_snap.lineup_type 真实观测到四种值(2026-08-17 全量 228 行
+ * 实测):payload 缺键(旧快照,类型未知)154 行、`lastStarting11`(上一场首发)
+ * 57 行、`predicted`(source=`enetpulse`,第三方对本场的预测阵容)16 行、
+ * `standard`(0 首发的近空快照)1 行——`"confirmed"` 从未出现过,这个分支
+ * 保留只是为了 FotMob 未来真的开始下发该值时能正确渲染,不能靠它给用户许下
+ * "稍后会自动变成已确认首发"这种产品目前兑现不了的承诺;`predicted` 是第三方
+ * 对本场的预测,不是"两队上一场的首发",这两类数据不能共用同一句文案。
  *
  * lineup_type/source/observed_at 是整场共享的一条快照属性(bronze_fm_lineup_snap
  * 一行同时含两队),不是逐队各自的字段——这里按 API 契约(MatchPreviewLineupsDTO)
@@ -41,6 +45,55 @@ function pitchLabel(name: string): string {
     return parts[parts.length - 1];
   }
   return name;
+}
+
+type LineupPresentation = {
+  confirmed: boolean;
+  tag: string;
+  notice: string;
+  pitchCaption: string;
+};
+
+/**
+ * lineup_type → 展示文案。三个互斥分支,不能合并成一个"确认/未确认"布尔值——
+ * `predicted`(第三方对本场的预测)和 `lastStarting11`(上一场真实首发)是两种
+ * 完全不同的数据来源,共用一句"数据源给的是两队上一场的首发"会把预测说成事实。
+ * `confirmed` 分支从未在真实数据里出现过,文案不承诺"稍后会自动变成这个状态"。
+ */
+function describeLineup(lineupType: string | null): LineupPresentation {
+  if (lineupType === "confirmed") {
+    return {
+      confirmed: true,
+      tag: "已确认首发",
+      notice: "数据源已更新为本场官方名单。",
+      pitchCaption: "已确认首发",
+    };
+  }
+  if (lineupType === "predicted") {
+    return {
+      confirmed: false,
+      tag: "预测阵容 · 第三方预测",
+      notice:
+        "这不是本场官方名单,也不是两队上一场的首发。数据源标注为第三方(Enetpulse)对本场比赛的预测阵容,可能与实际出场不同,请以官方公布为准。",
+      pitchCaption: "预测阵容(第三方预测,非上一场首发)",
+    };
+  }
+  if (lineupType === "lastStarting11") {
+    return {
+      confirmed: false,
+      tag: "预计首发 · 基于上一场",
+      notice:
+        "这不是本场官方名单。数据源给的是两队上一场的首发,不代表本场实际出场,请以官方公布为准。",
+      pitchCaption: "预计首发(基于上一场)",
+    };
+  }
+  return {
+    confirmed: false,
+    tag: "预计首发 · 来源类型未知",
+    notice:
+      "这不是本场官方名单。数据源未标注这份名单的类型,无法确认它是上一场首发还是预测阵容,请以官方公布为准。",
+    pitchCaption: "预计首发(来源类型未知)",
+  };
 }
 
 /** 按 formation 分行:[门将] + 各线。formation 缺失或首发不足 11 人时退化为不画球场。 */
@@ -164,7 +217,7 @@ export function ProjectedLineupSection({
 }) {
   const [side, setSide] = useState<"home" | "away">(home ? "home" : "away");
   const active = side === "home" ? home : away;
-  const confirmed = lineupType === "confirmed";
+  const { confirmed, tag, notice, pitchCaption } = describeLineup(lineupType);
   const observedLabel = observedAt ?? "—";
   // 阵容/伤停快照耦合写入(见 backend/queries/lineup_preview.py)——两队都没
   // 阵容快照时,伤停的"0 人"也不是"确认无伤停",而是这场从未被采集过。
@@ -187,15 +240,11 @@ export function ProjectedLineupSection({
             <div className={styles.notice} data-confirmed={confirmed}>
               <div className={styles.noticeHead}>
                 <span className={styles.noticeTag} data-confirmed={confirmed}>
-                  {confirmed ? "已确认首发" : "预计首发 · 基于上一场"}
+                  {tag}
                 </span>
                 <span className={`${styles.observed} num`}>观测于 {observedLabel}</span>
               </div>
-              <p className={styles.noticeText}>
-                {confirmed
-                  ? "数据源已更新为本场官方名单。"
-                  : "这不是本场官方名单。数据源给的是两队上一场的首发,确认阵容通常在开赛前 1 小时才更新;更新后本区会换成「已确认首发」。"}
-              </p>
+              <p className={styles.noticeText}>{notice}</p>
             </div>
 
             <div className={styles.sideTabs}>
@@ -223,7 +272,7 @@ export function ProjectedLineupSection({
               <>
                 <Pitch side={active} isHome={side === "home"} />
                 <p className={styles.pitchNote}>
-                  {confirmed ? "已确认首发" : "预计首发(基于上一场)"}:
+                  {pitchCaption}:
                   {side === "home" ? homeName : awayName} {active.formation ?? "阵型未知"},门将{" "}
                   {active.starters[0]?.name}。位置为按阵型示意 —— 数据源只给阵型与首发名单,不含站位坐标。
                 </p>

@@ -98,9 +98,12 @@ def ingest_lineup_snapshot(
         conn_odds.execute(
             """INSERT INTO bronze_fm_lineup_snap
                (fotmob_match_id, payload_json, payload_hash, source_updated_at,
-                observed_at, ingested_at, poll_run_id)
-               VALUES (?, ?, ?, NULL, ?, ?, ?)""",
-            (fotmob_match_id, payload_json, payload_hash, observed_at, utc_now_iso(), poll_run_id),
+                observed_at, ingested_at, poll_run_id, lineup_type)
+               VALUES (?, ?, ?, NULL, ?, ?, ?, ?)""",
+            (
+                fotmob_match_id, payload_json, payload_hash, observed_at, utc_now_iso(),
+                poll_run_id, snapshot.get("lineup_type"),
+            ),
         )
     return {"inserted": 1, "skipped": 0}
 

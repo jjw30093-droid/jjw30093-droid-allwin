@@ -5947,3 +5947,81 @@ watch-window-start,`TestPollWindows` 死代码测试类删除)。
 单独重跑该文件 4/4 通过,确认与本次改动无关。未执行 `git commit`/`push`,
 未连接生产环境或任何真实 FotMob/NowGoal 网络请求(全部离线 fixture/
 offline-payload)。
+
+## 52. PIPELINE_REDESIGN_V2 P2:bronze_fm_lineup_snap.lineup_type 落列 + 前端诚实文案修复(2026-08-17)
+
+`bronze_fm_lineup_snap.lineup_type` 此前只活在 `payload_json` 里的同名 JSON
+字段,无法查询/过滤,也不能给 P5 的早停逻辑当停止条件用。新增迁移
+`backend/migrations/odds/0009_lineup_snap_type.sql`:`ALTER TABLE ADD COLUMN
+lineup_type TEXT` + `UPDATE ... SET lineup_type = json_extract(payload_json,
+'$.lineup_type') WHERE lineup_type IS NULL`(与 core/0002、platform/0003 的
+kickoff provenance 回填同一模式)+ `CREATE INDEX idx_fm_lineup_type ON
+bronze_fm_lineup_snap(fotmob_match_id, lineup_type)`。
+
+- **真实分布复核(228 行全量,data/odds.db)**:payload 缺 lineup_type
+  键=154、`lastStarting11`=57、`predicted`(source=`enetpulse`)=16、
+  `standard`(source=null,0 首发)=1。与计划文档的假设有出入:
+  `predicted` 计划称 13 行,真实是 16 行(3 行漂移,采集持续进行中导致);
+  `"confirmed"` 从未出现过一次。
+- **迁移安全验证(未碰生产库)**:用 `sqlite3.Connection.backup()`
+  (SQLite Backup API,非 WAL 期间裸拷主文件)把生产 `data/odds.db`
+  备份到临时目录,对副本跑 `python -m backend.db.migrate --db odds
+  --db-file <副本>`——回填后分布与副本迁移前用 payload_json 直接统计的
+  分布完全一致(None=154/lastStarting11=57/predicted=16/standard=1),
+  `PRAGMA integrity_check` = ok,重复执行同一条 `--db-file` 命令
+  `applied 0` 幂等确认,随后删除临时副本。生产 `data/odds.db` 本身
+  自始至终仍停在 0008(`--status` 复核:`8 applied, pending=
+  ['0009_lineup_snap_type.sql']`)——本任务未对生产 odds.db 执行任何写
+  操作,migration 是否真正 apply 到生产库由部署流程决定。
+- 写路径 `backend/ingest/odds_snapshots.py::ingest_lineup_snapshot` 同步改为
+  INSERT 时直接带上 `snapshot.get("lineup_type")`,不再只靠一次性回填——新
+  行落库即有该列,不依赖后续再跑一次 backfill。
+- 前端 `frontend/components/matches/ProjectedLineupSection.tsx`:原来的
+  `confirmed = lineupType === "confirmed"` 判断从未在真实数据里为
+  true(见上面分布),但非 confirmed 分支的文案无条件承诺"确认阵容通常在
+  开赛前 1 小时才更新;更新后本区会换成「已确认首发」"——一个当前实现
+  兑现不了的产品承诺(CLAUDE.md §2.2)。同时,`lineup_type=predicted`
+  (Enetpulse 对本场的第三方预测阵容)被和 `lastStarting11`(上一场真实
+  首发)共用同一句"数据源给的是两队上一场的首发",把预测说成了既成事实
+  ——一处独立的事实性错误。新增 `describeLineup(lineupType)` 按
+  `confirmed`/`predicted`/`lastStarting11`/其他(含 `standard`、键缺失)
+  四路分支给出各自的 tag/notice/球场图注记,不再共用一句话;`confirmed`
+  分支结构保留(万一 FotMob 未来真的下发该值仍可正确渲染),但文案不再
+  承诺"稍后会自动变成这个状态"。
+
+**测试**(RED→GREEN,均离线):新增
+`tests/backend/test_migrations.py::test_odds_fresh_init_includes_lineup_type_column`
+`test_lineup_snap_type_column_and_backfill`(staged 0001-0008 升级场景,
+插入四种真实 payload 形状,验证回填值 + 重跑幂等 + 索引存在);新增
+`tests/backend/test_odds_pipeline.py::TestHashDiff::
+test_lineup_snapshot_write_populates_lineup_type_column`
+`test_lineup_snapshot_write_lineup_type_null_when_absent`(写路径直接落
+lineup_type 列,缺键时如实 NULL 不编造);新增
+`frontend/tests/projected-lineup-section.test.tsx`(9 项:五种 lineup_type
+下都不出现"更新后本区会换成"这句承诺;`predicted` 不得出现
+"数据源给的是两队上一场的首发"、必须提到"预测";`lastStarting11` 仍标注
+"基于上一场";`standard` 等未知类型同样不得冒充"上一场首发")。全部先确认
+RED(改动前跑必现失败,原因分别是"列不存在"/"承诺文案仍在"),再实现到
+GREEN。
+
+**验证**:`cd` 到 worktree 根目录,
+`.venv/bin/python -m pytest tests/backend -q -rA`(该仓库的 `-q` 不打印
+聚合计数行,`-rA` 强制输出逐条短摘要复核)——1720 PASSED + 2 SKIPPED
+(`test_pit_dataset.py::...`/`test_sync_fixtures.py::...`,均为环境缺失
+真实只读快照/Phase 0 UCL 探测产物导致的预先存在 skip,与本次改动无关)、
+0 FAILED,exit code 0;4 项新测试均在完整套件里逐条确认 PASSED
+(`test_odds_fresh_init_includes_lineup_type_column`、
+`test_lineup_snap_type_column_and_backfill`、
+`test_lineup_snapshot_write_populates_lineup_type_column`、
+`test_lineup_snapshot_write_lineup_type_null_when_absent`)。
+`cd frontend && npm run typecheck && npm run lint && npm run test`——
+tsc 0 error、eslint 0 warning、48 个测试文件 265 项全部通过(含新增的 9
+项)。未执行 `git commit`/`push`,未对生产 `data/odds.db`/`data/allwin.db`/
+`data/platform.db` 做任何写入。
+
+**明确未做(P5,按计划不在本阶段范围)**:`backend/fotmob_client.py:899`
+的 `confirmedLineup` key 复核确认与 `bronze_fm_lineup_snap`/`lineup_type`
+无关(那是 `fact_player_match_stats` 的球员名单兜底提取分支,不写
+`bronze_fm_lineup_snap`,也不影响本次改动)——是否存在另一个真正携带
+"本场已确认阵容"的 payload 容器,需要真实网络抓取才能证实,标
+`UNVERIFIED`,本阶段未做任何探测或早停实现。
