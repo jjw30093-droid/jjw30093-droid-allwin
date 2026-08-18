@@ -17,9 +17,20 @@ EC2(ap-northeast-1 东京,单机)
         ├─ /api/*、/healthz、/readyz → 127.0.0.1:8000  uvicorn(allwin-api.service)
         └─ 其余                      → 127.0.0.1:3000  next start(allwin-web.service)
    └─ /opt/allwin/shared/data/  SQLite 三库(core=allwin.db / platform.db / odds.db,WAL)
-   └─ allwin-worker.timer(15min)→ python -m backend.worker.runner --chain
+   └─ 7 个单一职责 systemd timer(deploy/systemd/allwin-{odds,lineup,fixtures,
+      gates,postmatch,derive,maintenance}.timer,见 §2)→ backend.worker.runner
+      --job <name> 或 group_runner --group <name>(**代码已就绪,生产尚未安装**;
+      线上当前仍运行旧的 allwin-worker.timer/allwin-poll.timer,见下方说明)
    └─ allwin-backup.timer(每日)→ deploy/scripts/backup_sqlite.sh → 本地 + S3
 ```
+
+> **部署状态(2026-08-18 更新)**:上面 7 个新 timer 对应的 `.service`/`.timer`
+> 文件已经在仓库 `deploy/systemd/` 里就绪(PIPELINE_REDESIGN_V2 P3,commit
+> 92f3b2c),但**尚未安装到生产服务器**——生产服务器目前实际运行的仍是旧的
+> `allwin-worker.timer`(15 分钟触发 `--chain`)与 `allwin-poll.timer`(5 分钟
+> 触发 NowGoal+FotMob 采集到期判断)。把新 unit 换上去是单独、需要明确批准的
+> 部署步骤(见 §2"从旧两定时器切换到新 7 定时器"),本文档描述的是代码已定义
+> 的目标状态,不是当前线上状态。
 
 单机原则:uvicorn/next 只监听 127.0.0.1,公网只有 Cloudflare → Nginx 一条通路;
 安全组只放行 80/443(Cloudflare IP 段)+ 22(管理 IP)。
@@ -38,53 +49,89 @@ EC2(ap-northeast-1 东京,单机)
 
 ## 2. systemd 单元职责(deploy/systemd/)
 
+> 下表是 `deploy/systemd/` 里当前**代码定义**的全部单元(PIPELINE_REDESIGN_V2
+> P3,commit 92f3b2c 起)。生产服务器实际安装的情况见上方"部署状态"提示——
+> 截至本文档更新,服务器上还没有 `allwin-odds`/`allwin-lineup`/`allwin-fixtures`/
+> `allwin-gates`/`allwin-postmatch`/`allwin-derive`/`allwin-maintenance` 这 7 个
+> 单元,取而代之运行的是已从仓库删除的旧 `allwin-worker.service`/
+> `allwin-worker.timer`/`allwin-poll.service`/`allwin-poll.timer`。
+
 | 单元 | 职责 |
 |---|---|
 | `allwin-api.service` | uvicorn `backend.api.app:app`,仅 127.0.0.1:8000,常驻 |
 | `allwin-web.service` | `next start`,仅 127.0.0.1:3000,常驻 |
-| `allwin-worker.service` + `allwin-worker.timer` | oneshot 任务链,每 15 分钟触发,`--chain --periodic`(见下"调度拓扑"小节);链内文件锁防叠跑,job_runs(platform.db)留全生命周期记录 |
-| `allwin-poll.service` + `allwin-poll.timer` | oneshot,每 5 分钟触发赛前采集"到期判断"(NowGoal 赔率 + FotMob 阵容/伤停);真正是否请求数据源由 poll_state 节流(2–72h 每 15 分钟,0–2h 每 5 分钟) |
-| `allwin-backup.service` + `allwin-backup.timer` | 每日 UTC 19:00 备份三库(.backup + integrity_check + checksum + 可选 S3) |
+| `allwin-odds.service` + `.timer` | oneshot,每 5 分钟触发 NowGoal 赔率到期判断(`nowgoal_snapshot`);真实请求节奏由 `poll_state` 按来源分级节流(CLAUDE.md §6.3) |
+| `allwin-lineup.service` + `.timer` | oneshot,每 5 分钟触发 FotMob 阵容/伤停到期判断(`fotmob_snapshot`);同样由 `poll_state` 按联赛观察窗节流(CLAUDE.md §6.3);需要 `THORDATA_PROXY` |
+| `allwin-fixtures.service` + `.timer` | oneshot,每 30 分钟触发赛程同步(`schedule_sync_multi`);内部按联赛 6 小时节流,是管道依赖图的根节点;需要 `THORDATA_PROXY` |
+| `allwin-gates.service` + `.timer` | oneshot,每 30 分钟触发质量门检查(`pipeline_gates`);不 `After=`/`Wants=` 任何其它管道单元,独立于其它任何定时器的成败,问题只通过告警表达 |
+| `allwin-postmatch.service` + `.timer` | oneshot,每 30 分钟触发赛后补全 + 预测链(`group_runner --group postmatch`:`fotmob_incremental_multi → core_silver_build → model_predict → prediction_register → postmatch_settle → reco_auto_settle`,组内任务互相独立);需要 `THORDATA_PROXY` |
+| `allwin-derive.service` + `.timer` | oneshot,每 30 分钟触发派生数据构建(`group_runner --group derive`:`odds_silver_build → analysis_bundle_build`) |
+| `allwin-maintenance.service` + `.timer` | oneshot,每天 04:00 Asia/Shanghai 触发慢变维护(`group_runner --group maintenance`:`entity_resolution → metrics_rebuild`) |
+| `allwin-digest.service` + `.timer` | oneshot,每天 23:30 Asia/Shanghai 触发每日管道汇总推送(`daily_digest`,不属于上面的任务链,`--key <北京日期>` 幂等) |
+| `allwin-backup.service` + `.timer` | 每日 UTC 19:00(≈北京 03:00)备份三库(`.backup` + `integrity_check` + checksum + 可选 S3) |
+| `allwin-opscheck.service` + `.timer` | oneshot,每 30 分钟运维体检(只读)+ WARN/CRITICAL 时经 Server 酱推送(24h 去重) |
+| `allwin-content-health.service` + `.timer` | oneshot,每 5 分钟 curl `/healthz` 做轻量存活检查(与上面的管道任务无关,更早期加的独立探活) |
+| `allwin-daily-content.service` + `.timer` | oneshot,每天 06:15 与 18:15 Asia/Shanghai 刷新活跃联赛内容(独立于 PIPELINE_REDESIGN_V2 的管道任务链) |
 
 共同点:`User=allwin`(非 root 系统用户)、`WorkingDirectory=/opt/allwin/current`、
 `EnvironmentFile=/opt/allwin/shared/.env`、`UMask=0077`、`NoNewPrivileges=true`、
 `PrivateTmp=true`、`ProtectSystem=full`、合理的 `TimeoutStartSec`/`TimeoutStopSec`。
-安装/更新(每次改动 `deploy/systemd/*` 后都要做,普通代码 release **不会**自动生效):
+每个单元文件自己的安装命令与设计理由写在该文件顶部注释里(如
+`deploy/systemd/allwin-odds.service` 的"安装:"段落),本节只给批量操作与
+跨单元的调度拓扑说明,不逐条重复每个文件已经写好的内容。
+
+安装/更新全部单元(每次改动 `deploy/systemd/*` 后都要做,普通代码 release
+**不会**自动生效):
 
 ```bash
 sudo cp deploy/systemd/allwin-*.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now allwin-api allwin-web allwin-worker.timer \
-  allwin-poll.timer allwin-backup.timer
-# 确认服务器上安装的 unit 与当前 release 模板一致(避免手改漂移):
-diff /etc/systemd/system/allwin-worker.service \
-  /opt/allwin/current/deploy/systemd/allwin-worker.service
+sudo systemctl enable --now allwin-api allwin-web \
+  allwin-odds.timer allwin-lineup.timer allwin-fixtures.timer allwin-gates.timer \
+  allwin-postmatch.timer allwin-derive.timer allwin-maintenance.timer \
+  allwin-digest.timer allwin-backup.timer allwin-opscheck.timer \
+  allwin-content-health.timer allwin-daily-content.timer
+# 确认服务器上安装的 unit 与当前 release 模板一致(避免手改漂移),对任意单元同理:
+diff /etc/systemd/system/allwin-odds.service \
+  /opt/allwin/current/deploy/systemd/allwin-odds.service
 ```
 
 如果本机装有 `systemd-analyze`,发布前用它做静态校验:
 `systemd-analyze verify /etc/systemd/system/allwin-*.service`(本仓库开发/测试机是
 macOS,没有 systemd,这一步在开发环境**保持 UNVERIFIED**,只在真实服务器上跑)。
 
-### 调度拓扑:避免 poll 与 worker 链重复调度
+### 从旧两定时器切换到新 7 定时器(生产尚未执行,待批准)
 
-`nowgoal_snapshot`/`fotmob_snapshot` 曾经同时被两个定时器调度:`allwin-poll.timer`
-每 5 分钟独立触发,`allwin-worker.timer` 每 15 分钟的默认任务链里也包含这两步。
-两个定时器会争抢同一个 `data/locks/<job>.lock`,而 `run_chain()` 把"被锁"与
-"失败"同等对待,会让 15 分钟链上其余全部步骤(silver build/model predict/
-analysis bundle/postmatch settle/manifest——都不依赖 nowgoal/fotmob 本轮是否真的
-抓取到新数据)被无谓地级联跳过。现在:
+历史背景(PIPELINE_REDESIGN_V2 P3 之前):`nowgoal_snapshot`/`fotmob_snapshot`
+曾经同时被两个定时器调度——`allwin-poll.timer` 每 5 分钟独立触发,
+`allwin-worker.timer` 每 15 分钟的默认任务链里也包含这两步,两者争抢同一个
+`data/locks/<job>.lock`,而旧的 `run_chain()` 把"被锁"与"失败"同等对待,会让
+15 分钟链上其余全部步骤被无谓地级联跳过;当时用 `--periodic` 参数跳过
+`PERIODIC_CHAIN_EXCLUDE`(= nowgoal_snapshot/fotmob_snapshot)绕开这个问题。
 
-- `allwin-poll.timer` 是这两步**唯一**的周期调度者(5 分钟一次到期判断);
-- `allwin-worker.service` 改用 `--chain --periodic`,`--periodic` 会跳过
-  `nowgoal_snapshot`/`fotmob_snapshot`(`backend/worker/runner.py` 的
-  `PERIODIC_CHAIN_EXCLUDE`);
-- 手动端到端重跑仍用完整链(不带 `--periodic`):
-  `/opt/allwin/current/.venv/bin/python -m backend.worker.runner --chain`。
+这套"两个定时器 + 排除列表"的补丁已经整体删除(不是重命名或并存)。现在的
+不变量更简单:**每个任务只有一个定时器负责,不需要排除**——7 个新定时器合起
+来的任务集合恰好等于 `DEFAULT_CHAIN` 的全部任务,不多不少
+(`tests/backend/test_job_order.py::TestSevenTimerTopologyInvariant`),不存在
+两个定时器共享同一把任务锁的情况,因此也不再需要 `--periodic`/
+`PERIODIC_CHAIN_EXCLUDE`(两者已从 `backend/worker/runner.py` 删除)或
+`poll_wrapper.py`(已改名为 `backend/worker/group_runner.py`,详见
+`docs/architecture.md` §6)。
 
-`allwin-poll.service` 本身也不再是两条独立 `ExecStart=`(NowGoal 失败会让 systemd
-跳过后面那条 FotMob 的 ExecStart=,与"两个采集任务独立执行"的设计矛盾)——现在
-用 `backend.worker.poll_wrapper` 顺序执行两个任务、汇总退出码,两者各自的真实
-状态仍完整写入 `job_runs`,只是 service 层面的成功/失败判定不再互相拖累。
+真正把生产服务器从旧两定时器切换到新 7 定时器,建议顺序(**尚未在生产执行,
+需要站长明确批准后才能做**):
+
+1. `cp deploy/systemd/allwin-{odds,lineup,fixtures,gates,postmatch,derive,
+   maintenance}.{service,timer} /etc/systemd/system/` + `daemon-reload`;
+2. `systemctl enable --now` 上述 7 个新 `.timer`;
+3. 观察至少一个完整周期(建议 ≥1 天,覆盖 `allwin-maintenance` 的每日档),
+   确认 `job_runs` 里对应任务正常产出、`allwin-gates` 未告警新增异常;
+4. 确认无误后再 `systemctl disable --now allwin-worker.timer allwin-poll.timer`
+   并删除这两个旧 unit 文件(仓库里对应的 `.service`/`.timer` 源文件本身已在
+   P3 删除,服务器上残留的是历史安装产物)。
+
+手动端到端重跑(切换前后均可用,生产不再有定时器周期性调用):
+`/opt/allwin/current/.venv/bin/python -m backend.worker.runner --chain`。
 
 ## 3. 发布 / 回滚(deploy/scripts/release.sh)
 
@@ -245,9 +292,12 @@ HIT/BYPASS 行为的验证——本轮未实际登录 AWS/Cloudflare 控制台�
      + migration 无 pending/checksum drift(对恢复出的库副本只读检查,不修改
      任何库);恢复到 `mktemp` 临时目录,不修改备份源、不修改真实数据库;
      退出码即结果;
-  2. 真恢复:停 `allwin-api`/`allwin-worker.timer`/`allwin-poll.timer` → 把
-     备份目录内三库复制回 `/opt/allwin/shared/data/`(先把现场坏库 mv 走留证)
-     → `python -m backend.db.migrate --status` 确认版本 → 起服务 → curl `/readyz`。
+  2. 真恢复:停 `allwin-api` 和全部 `allwin-*.timer`(用
+     `systemctl list-timers 'allwin-*'` 现场列出服务器上实际安装的定时器名再
+     逐个停,不要硬编码某个固定的定时器名单——生产切换到新 7 定时器前后名单
+     不同,见 §2)→ 把备份目录内三库复制回 `/opt/allwin/shared/data/`(先把
+     现场坏库 mv 走留证)→ `python -m backend.db.migrate --status` 确认版本
+     → 起服务 → curl `/readyz`。
 
 ## 6. 磁盘与告警
 

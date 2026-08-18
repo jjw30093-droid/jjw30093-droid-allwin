@@ -137,11 +137,16 @@ python -m backend.cli.export_openapi                           # 导出 OpenAPI 
 ```bash
 python -m backend.worker.runner --list                     # 列出注册任务
 python -m backend.worker.runner --job core_silver_build    # 单任务(silver_build 为兼容别名)
-python -m backend.worker.runner --job schedule_sync --key 2026-07-19    # 幂等键
-python -m backend.worker.runner --chain                    # 全链(生产 allwin-worker.timer 每 15 分钟)
+python -m backend.worker.runner --job schedule_sync_multi --key 2026-07-19    # 幂等键
+python -m backend.worker.runner --chain                    # 全链(手动全量重跑/故障排查用,生产无定时器周期性调用,CLAUDE.md §13)
 python -m backend.worker.runner --chain --from core_silver_build        # 从中间步骤重跑
-# 赛前采集另由 allwin-poll.timer 每 5 分钟触发 nowgoal_snapshot + fotmob_snapshot
-# (真实采集频率由 odds.db poll_state 节流:2–72h 每 15 分钟,0–2h 每 5 分钟)
+# 生产按任务拆成 7 个独立 systemd 定时器(deploy/systemd/allwin-{odds,lineup,
+# fixtures,gates,postmatch,derive,maintenance}.timer),不再是单一大链;
+# 例如 nowgoal_snapshot 由 allwin-odds.timer、fotmob_snapshot 由
+# allwin-lineup.timer 每 5 分钟触发"到期判断"——真实采集频率由 odds.db
+# poll_state 按来源分级节流,不是每次触发都真的请求数据源(CLAUDE.md §6.3;
+# 调度拓扑细节见 docs/architecture.md §6,生产安装状态见
+# docs/deployment-aws-cloudflare.md)
 ```
 
 ### 数据脚本(legacy,直接以脚本运行)

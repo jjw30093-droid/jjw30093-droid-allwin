@@ -96,17 +96,21 @@ process):
 ```text
 deploy/systemd/allwin-daily-content.service
 deploy/systemd/allwin-daily-content.timer
-deploy/systemd/allwin-poll.service
-deploy/systemd/allwin-poll.timer
+deploy/systemd/allwin-odds.service
+deploy/systemd/allwin-odds.timer
+deploy/systemd/allwin-lineup.service
+deploy/systemd/allwin-lineup.timer
 deploy/systemd/allwin-content-health.service
 deploy/systemd/allwin-content-health.timer
 ```
 
 The daily timer refreshes schedule/standings and rebuilds content at 06:15 and
-18:15 Asia/Shanghai. The existing five-minute poll timer invokes the existing
-persisted `poll_state` due checks; frequent timer activation does not imply an
-external request. The health timer checks the API and database every five
-minutes without contacting a provider.
+18:15 Asia/Shanghai. `allwin-odds`/`allwin-lineup` (PIPELINE_REDESIGN_V2 P3;
+the earlier combined `allwin-poll` timer no longer exists) each fire a
+five-minute due-check for NowGoal odds and FotMob lineup/sideline
+respectively, invoking the same persisted `poll_state` due checks; frequent
+timer activation does not imply an external request. The health timer checks
+the API and database every five minutes without contacting a provider.
 
 ## Health, retention, backup, and logs
 
