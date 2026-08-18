@@ -17,13 +17,29 @@ def _sorted_players(players) -> list[dict]:
     return sorted(out, key=lambda x: (str(x["id"]), str(x["name"])))
 
 
+def _coach_brief(c) -> dict | None:
+    """只取 {id, name}。刻意丢弃 age / primaryTeamId / primaryTeamName /
+    countryCode / firstName / lastName / isCoach / usualPlayingPositionId:
+    age 每年生日 +1、primaryTeam* 赛季中可变,把它们纳入 canonical payload 等于
+    给每场比赛凭空制造一次假的"阵容变化"。没有可显示姓名时如实 None,不返回
+    {} 也不返回空串(CLAUDE.md §6.2 缺失即 NULL,不猜测)。coach 是 dict,
+    canonical_payload_json 的 sort_keys=True 已递归归一,不需要像
+    _sorted_players 那样再排序(那是因为数组有序)。"""
+    if not isinstance(c, dict):
+        return None
+    name = c.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return {"id": c.get("id"), "name": name}
+
+
 def extract_lineup_snapshot(match_details_payload: dict) -> dict:
     """从 match_details 的 pageProps 提取阵容最小 canonical 子集。
 
-    结构:{"lineup_type", "source", "home"/"away": {team_id, formation, starters[], subs[]}};
-    球员列表按 id 排序,保证同一阵容 hash 稳定。
-    payload 无 lineup 时给空侧(team_id/formation=None,空列表)——这是一次
-    合法观察("尚无阵容"),交给 hash-diff 判断是否变化。
+    结构:{"lineup_type", "source", "home"/"away": {team_id, formation, coach,
+    starters[], subs[]}};球员列表按 id 排序,保证同一阵容 hash 稳定。
+    payload 无 lineup 时给空侧(team_id/formation/coach=None,空列表)——这是
+    一次合法观察("尚无阵容"),交给 hash-diff 判断是否变化。
 
     lineup_type/source(2026-08-15 新增,真实探测:content.lineup 顶层字段,
     homeTeam/awayTeam 的兄弟节点,不是每队各自一份):真实观测值
@@ -31,6 +47,11 @@ def extract_lineup_snapshot(match_details_payload: dict) -> dict:
     source="lastStartingLineups"。展示层必须用这个字段区分"预计 vs 已确认",
     不得把它当成本场官方名单(CLAUDE.md §6.2 不伪装精确度)。旧快照(本字段
     上线前写入的行)没有这两个键,读侧按缺失处理,不回填猜测值。
+
+    coach(2026-08-18 新增,Fix 2):来源路径 content.lineup.{home,away}Team.coach
+    ——每侧一个,两队教练不同,绝不提到顶层(与 lineup_type 提到顶层的理由正好
+    相反,那个字段一场只有一份)。只取 {id, name},见 _coach_brief 的字段取舍
+    理由。旧快照没有这个键,读侧按缺失处理(None),不回填猜测值。
     """
     lineup = (match_details_payload or {}).get("content", {}).get("lineup") or {}
     snapshot = {
@@ -42,6 +63,7 @@ def extract_lineup_snapshot(match_details_payload: dict) -> dict:
         snapshot[out_key] = {
             "team_id": side.get("id"),
             "formation": side.get("formation"),
+            "coach": _coach_brief(side.get("coach")),
             "starters": _sorted_players(side.get("starters")),
             "subs": _sorted_players(side.get("subs")),
         }

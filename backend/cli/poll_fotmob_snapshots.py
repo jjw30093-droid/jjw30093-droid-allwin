@@ -6,9 +6,10 @@
 - payload 不变(hash 相同)不重复落库(ingest 层 hash-diff);
 - FotMob 不声明阵容/伤停更新时间 → source_updated_at 恒 NULL;
 - 采集窗口与到期判断走 poll_windows.poll_decision()/cadence_fotmob_lineup(按
-  league_id 查表,PIPELINE_REDESIGN_V2 P1):discovery 收窄到 T-24h,
-  T-24h..watch-window-start 每 12h,watch-window-start..T-0 每 5 分钟到底
-  (BIG-5=T-1.5h,其余联赛=T-1.25h),poll_state 持久化节流;
+  league_id 查表):cadence 窗口 72h,T-72h..T-24h 每 24h,T-24h..watch-window-start
+  每 12h,watch-window-start..T-0 每 5 分钟到底(BIG-5=T-1.5h,其余联赛=T-1.25h),
+  poll_state 持久化节流;候选池宽度独立于 cadence 窗口,为
+  FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS(168h),只为让"首次发现即采"结构上可达;
 - 真实抓取需 THORDATA_PROXY;离线用 --offline-payload 验证同一条代码链路。
 
 --write-match-details(裁判/天气赛前数据能力实测,本轮任务):
@@ -41,7 +42,7 @@ from backend.ingest.odds_snapshots import (
     record_source_health,
 )
 from backend.ingest.poll_windows import (
-    FOTMOB_LINEUP_DISCOVERY_HOURS,
+    FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS,
     SOURCE_FOTMOB_SNAPSHOT,
     mark_polled,
     poll_decision,
@@ -128,6 +129,7 @@ def run_snapshot_poll(
         "window_candidates": 0,
         "due_matches": 0,
         "not_due_skipped": 0,
+        "out_of_window_skipped": 0,
         "snapshots_inserted": 0,
         "snapshots_skipped": 0,
         "match_details_written": 0,
@@ -149,7 +151,7 @@ def run_snapshot_poll(
             targets = [(r, None) for r in rows if r is not None]
         else:
             candidates = upcoming_precise_matches(
-                conn_core, now, window_hours=FOTMOB_LINEUP_DISCOVERY_HOURS
+                conn_core, now, window_hours=FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS
             )
             summary["window_candidates"] = len(candidates)
             targets = []
@@ -164,7 +166,15 @@ def run_snapshot_poll(
                     c["kickoff_source"], last_polled_at, now, league_id=c["League_ID"],
                 )
                 if not decision.due:
-                    summary["not_due_skipped"] += 1
+                    # 候选池(168h)比 cadence 窗口(72h)宽,窗外未到"首次发现即采"
+                    # 的场次(tier is None)与窗内被正常节流的场次(tier 非 None)
+                    # 是两件不同的事,必须分开计数——否则 168h 池下大多数窗外
+                    # 场次会无处归属(window_candidates ≈ 99,due ≈ 2,
+                    # not_due ≈ 5,~92 场既不 due 也不计入 not_due_skipped)。
+                    if decision.tier is not None:
+                        summary["not_due_skipped"] += 1
+                    else:
+                        summary["out_of_window_skipped"] += 1
                     continue
                 targets.append((c, decision.tier))
 
@@ -237,7 +247,8 @@ def main(argv=None) -> int:
     )
     print(f"[poll_fotmob_snapshots] mode={summary['mode']} now={summary['now']}")
     print(f"  窗口候选: {summary['window_candidates']},本轮抓取: {summary['due_matches']},"
-          f"未到期跳过: {summary['not_due_skipped']}")
+          f"窗内节流跳过: {summary['not_due_skipped']},窗外未到发现跳过: "
+          f"{summary['out_of_window_skipped']}")
     print(f"  快照: 落库 {summary['snapshots_inserted']} 条,hash 未变跳过 {summary['snapshots_skipped']} 条")
     if args.write_match_details:
         print(f"  裁判/天气: {summary['match_details_written']}/{summary['due_matches']} 场写入了至少一个非空字段")

@@ -161,6 +161,7 @@ function DataGroup({
               homeName={homeName}
               awayName={awayName}
               lineupType={preview.lineups.lineup_type ?? null}
+              source={preview.lineups.source ?? null}
               observedAt={preview.lineups.observed_at ?? null}
               home={preview.lineups.home ?? null}
               away={preview.lineups.away ?? null}

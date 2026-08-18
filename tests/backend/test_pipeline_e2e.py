@@ -34,6 +34,7 @@ NOW = datetime.now(timezone.utc).replace(microsecond=0)
 T0 = _iso(NOW)
 T0_PLUS_5MIN = _iso(NOW + timedelta(minutes=5))
 T1 = _iso(NOW + timedelta(hours=1))             # 1 小时 → 第二轮 due(见下)
+T2 = _iso(NOW + timedelta(hours=1, minutes=5))  # T1+5min → watch 档(300s)再次 due
 # NowGoal 三段节流(PIPELINE_REDESIGN_V2 P1)下:距开球 2.5h 落在 T-6h..T-0 档
 # (间隔 3600s=1 小时)。T0 首轮 due;T0+5min(300s)节流;T0+1h(3600s)到期——
 # 保持本用例"先节流再到期"的原意。League_ID=47(英超,BIG-5)驱动 FotMob 阵容
@@ -75,10 +76,14 @@ def _fixture_file(tmp_path, name: str, latest_home: str) -> str:
     return str(p)
 
 
-def _fm_payload(formation: str, home_sidelined: list[str]) -> dict:
+def _fm_payload(formation: str, home_sidelined: list[str], home_coach_id: int = 501) -> dict:
+    """home_coach_id 默认恒定(501)——两轮常规调用(T0/T1)教练不变,只有 formation/
+    伤停按参数变化。test_full_chain 的第三轮显式传入不同 id 单独隔离"只换教练"
+    这一种变化(Fix 2 / C2 的链路镜像)。"""
     return {"content": {"lineup": {
         "homeTeam": {
             "id": HOME_ID, "formation": formation,
+            "coach": {"id": home_coach_id, "name": f"Coach {home_coach_id}"},
             "starters": [{"id": 1, "name": "A"}], "subs": [],
             "unavailable": [
                 {"id": 90 + i, "name": n, "unavailability": {"type": "injury"}}
@@ -87,6 +92,7 @@ def _fm_payload(formation: str, home_sidelined: list[str]) -> dict:
         },
         "awayTeam": {
             "id": AWAY_ID, "formation": "4-4-2",
+            "coach": {"id": 601, "name": "Away Coach"},
             "starters": [{"id": 2, "name": "B"}], "subs": [], "unavailable": [],
         },
     }}}
@@ -369,6 +375,26 @@ class TestOfflinePipelineE2E:
         r2 = run_odds_silver()
         assert r2 == {"odds_moves_inserted": 0, "event_moves_inserted": 0,
                       "cooccurrence_inserted": 0}
+
+        # ── 第三轮 FotMob(T2):只改主教练,阵型/首发/伤停均与第二轮完全相同
+        # (C2 test_coach_change_emits_a_described_lineup_change 的链路镜像:
+        # 单元测试直接调 _lineup_change_summary,这里走完整 bronze→silver 链路)
+        f3 = run_snapshot_poll(
+            now_iso=T2,
+            offline_payloads={str(MATCH_ID): _fm_payload("4-2-3-1", ["Saka"], home_coach_id=502)},
+        )
+        assert f3["snapshots_inserted"] == 1     # 只有 lineup 变了(教练);两队伤停 hash 不变
+        assert f3["snapshots_skipped"] == 2
+        r3 = run_odds_silver()
+        assert r3["event_moves_inserted"] == 1   # 只有一条新 lineup_change(教练变化)
+        lineup_move_3 = conn_odds.execute(
+            "SELECT detail_json FROM silver_event_moves"
+            " WHERE event_type='lineup_change' AND fotmob_match_id=?"
+            " ORDER BY id DESC LIMIT 1",
+            (MATCH_ID,),
+        ).fetchone()
+        detail3 = json.loads(lineup_move_3["detail_json"])
+        assert detail3 == {"home": {"coach": {"prev": "Coach 501", "new": "Coach 502"}}}
 
         # FINAL:kickoff 前最后一条 pre_match 快照 = v2(需完整 provenance 三元组)
         fin = final_pre_match_snapshot(

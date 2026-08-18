@@ -88,6 +88,30 @@ class TestAvailability:
         assert body["sidelined"]["away"] == []  # 确认无伤停,是合法结果不是缺失
         assert body["home_window"] == {"matches": 3, "from": "2026-04-10", "to": "2026-04-12"}
 
+    def test_preview_exposes_coach_when_snapshot_has_it(self, data_dir, client):
+        """API 级断言(2026-08-18,Fix 2)。MatchPreview* 模型没有 extra="forbid",
+        Pydantic 会静默丢掉未声明的键——这是唯一能抓住"忘了改 DTO"这类回归的
+        测试(query 层的 dict 早就有 coach,只有 DTO 忘声明字段才会在这里丢失)。"""
+        seed_basic_core(data_dir)
+        conn_odds = connect_rw("odds")
+        _seed_lineup(conn_odds, 9002, {
+            "lineup_type": "lastStarting11", "source": "lastStartingLineups",
+            "home": {"team_id": 1001, "formation": "4-3-3",
+                      "coach": {"id": 7, "name": "Diego Simeone"},
+                      "starters": [{"id": 1, "name": "Home Striker", "shirt_number": "9"}],
+                      "subs": []},
+            "away": {"team_id": 1002, "formation": "4-4-2",
+                      "starters": [{"id": 2, "name": "Away Striker", "shirt_number": "10"}],
+                      "subs": []},
+        })
+        conn_odds.commit()
+        conn_odds.close()
+        r = client.get("/api/v1/matches/9002/preview")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["lineups"]["home"]["coach"] == {"id": 7, "name": "Diego Simeone"}
+        assert body["lineups"]["away"]["coach"] is None
+
     def test_no_lineup_snapshot_gives_null_not_empty_sides(self, data_dir, client):
         """从未采集过阵容快照的比赛:lineups.home/away 必须是 None,
         不能伪装成"两队都零阵容"的空侧结构(那会被误读成已核实为空)。"""

@@ -48,7 +48,7 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 | `ingest/entity_resolution.py` | NowGoal↔FotMob 实体解析 | 别名种子、按日 ±1 天候选匹配、auto_ok/needs_review,绝不静默 verified |
 | `ingest/odds_snapshots.py` | odds.db 快照落库 | hash-diff(payload 不变不落库)、source_health append-only |
 | `providers/nowgoal.py` | NowGoal Provider Adapter | 日程/赔率解析(纯函数)、主客反转归一、WAF 检测、网络获取分离 |
-| `providers/fotmob_snapshots.py` | FotMob 阵容/伤停快照 | `extract_*` 纯函数离线可测;`fetch_match_payload` 延迟 import fotmob_client |
+| `providers/fotmob_snapshots.py` | FotMob 阵容/伤停/主教练快照 | `extract_*` 纯函数离线可测;`fetch_match_payload` 延迟 import fotmob_client |
 | `silver/odds_moves.py` | odds.db 派生 | 变化点(silver_odds_moves/silver_event_moves)+ 时间共现(gold_move_cooccurrence),幂等 |
 | `models/` | 模型 | `features/build_match_features.py`(int_match_features)、`build_wdl_baseline.py`(DC+isotonic 训练)、`predict_wdl_future.py`(固定参数出未来预测) |
 | `eval/metrics.py` | 评估指标纯函数 | Accuracy/Brier/LogLoss/RPS/Calibration,离线运行 |

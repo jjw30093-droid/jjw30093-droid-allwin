@@ -103,6 +103,43 @@ def test_write_match_details_updates_only_three_columns(data_dir, core_conn):
     assert row["away_score"] is None
 
 
+def test_real_prematch_fixture_lands_coach_and_bench_in_bronze(data_dir, core_conn):
+    """真实赛前 payload(prematch-5104961.json,非合成)端到端落库,读回主教练与
+    9 名替补——这是唯一用真实抓取产物覆盖 Fix 2(教练提取)与窗口放宽后"远端
+    比赛也有替补"这条路径的测试。非 ASCII 教练名(Røjkjær)顺带覆盖 canonical
+    JSON 的 UTF-8 往返(2026-08-18 Stage E)。"""
+    _seed_match(core_conn)
+    payload = _load_payload()
+
+    summary = run_snapshot_poll(
+        now_iso="2026-07-31T00:00:00Z",
+        offline_payloads={str(MATCH_ID): payload},
+        match_ids=[MATCH_ID],
+    )
+    assert summary["failures"] == []
+
+    conn_odds = connect_rw("odds")
+    try:
+        row = conn_odds.execute(
+            "SELECT payload_json, lineup_type FROM bronze_fm_lineup_snap"
+            " WHERE fotmob_match_id=? ORDER BY id DESC LIMIT 1",
+            (MATCH_ID,),
+        ).fetchone()
+    finally:
+        conn_odds.close()
+    assert row is not None
+    assert row["lineup_type"] == "lastStarting11"
+
+    snap = json.loads(row["payload_json"])
+    assert snap["lineup_type"] == "lastStarting11"
+    assert snap["home"]["coach"]["name"] == "Casper Røjkjær"
+    assert snap["away"]["coach"]["name"] == "Andreas Tegström"
+    assert len(snap["home"]["starters"]) == 11
+    assert len(snap["home"]["subs"]) == 9
+    assert len(snap["away"]["starters"]) == 11
+    assert len(snap["away"]["subs"]) == 9
+
+
 def test_write_match_details_never_regresses_known_value_to_null(data_dir, core_conn):
     """已知裁判/天气 + 一次拿到空值的解析(合成 payload,无 content.weather/referee)
     → 旧值必须原样保留,不能被这次的 None 覆盖成未知。"""

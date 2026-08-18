@@ -44,7 +44,9 @@
 }
 
 .observed {
-  font-size: 11.5px;
+  /* 曾是 11.5px,低于 CLAUDE.md §11.2 的 12px 下限;DESIGN.md §3 阶梯上没有
+     11.5 这个值,改用阶梯上最近的 12px。 */
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -398,4 +400,69 @@
   font-size: 12px;
   line-height: 1.65;
   color: var(--ink-3);
+}
+
+/* ── 主教练(2026-08-18)─────────────────────────
+ * 一条 bronze_fm_lineup_snap 里两队各有一个 coach,所以这行跟着主/客 tab 走,
+ * 不能像 lineup_type/observed_at 那样提到组件顶层。 */
+.coachRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface);
+}
+
+.coachLabel {
+  /* 与 .etaLabel 同规格:字段名不是数据 */
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.coachName {
+  /* 教练名是真实数据 → --ink,不降级到 --ink-3 */
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 空态是说明不是数据:降一档对比、允许换行。不用红(CLAUDE.md §11.2 红=真实
+   错误)。DESIGN.md §3 阶梯上没有 12.5,用阶梯上的 12px(与 .coachLabel 同级,
+   而不是明细计划草稿里写的 12.5px——那个值不在阶梯上)。 */
+.coachName[data-empty="true"] {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: normal;
+}
+
+/* 替补空态标题:.benchSummary 的静态孪生,去掉 cursor:pointer。DESIGN.md §3
+   阶梯上没有 13px,用阶梯上更接近 .benchSummary(13px 视觉重量)的 13.5px。 */
+.benchHead {
+  margin: 0 0 var(--sp-2);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+/* 新增空态说明(替补空态 / 单侧空首发 / 两侧皆空)是本模块最长的正文——
+   CLAUDE.md §11.2「正文 14px 起」,不能沿用 .emptyInline/.noticeText 的
+   12.5px(那个值也不在 DESIGN.md §3 字号阶梯上)。视觉上仍是 .emptyInline 的
+   孪生(同底色同圆角),只是字号取阶梯上满足正文下限的 14.5px。 */
+.emptyNote {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-control);
+  background: var(--surface-soft);
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
 }

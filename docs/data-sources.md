@@ -222,6 +222,29 @@ API 拷贝到临时库做一次独立复核,列分布与由 `payload_json` 直�
   四态分别措辞的 `describeLineup(lineupType)`。
 - 详见 `docs/current-state.md` §52。
 
+### 1.4.1 主教练(`content.lineup.{home,away}Team.coach`,2026-08-18 新增)
+
+来源路径是 `content.lineup.homeTeam.coach` / `content.lineup.awayTeam.coach`——
+**每侧一个**,两队教练不同,不像 `lineup_type`/`source` 那样是整条快照共享的
+顶层字段。`backend/providers/fotmob_snapshots.py::_coach_brief()` 只取
+`{id, name}`,刻意丢弃真实 payload 里还带着的 `age`、`countryCode`、
+`countryName`、`firstName`、`lastName`、`isCoach`、`primaryTeamId`、
+`primaryTeamName`、`usualPlayingPositionId`:`age` 每年生日 +1、
+`primaryTeamId`/`primaryTeamName` 赛季中可能变化(转会),把它们纳入
+canonical payload 会让每场比赛在与本次采集无关的时间点凭空产生一次假的
+"阵容变化"。来源没有给出教练、或给出的对象没有可用姓名(空串/纯空白)时,
+`coach` 如实为 `None`,不返回 `{}` 也不猜测姓名。
+
+2026-08-18 之前写入 `bronze_fm_lineup_snap` 的历史行 payload 里没有这个键;
+读侧(`backend/queries/lineup_preview.py::latest_lineup`)按缺失处理,同样
+返回 `None`,不回填猜测值。
+
+教练名**不经过** `dim_player_i18n`:该表只由球员来源(`translate_players.py`
+`FROM dim_player`、`translate_top5_players.py` `FROM fact_player_match_stats`)
+填充,结构上永不含教练;教练 id 与球员 id 的命名空间也无法证明互斥,强行复用
+一旦碰撞会把某位教练悄悄改名成某个球员。因此教练名当前按来源原样渲染拉丁
+原文(如 `Diego Simeone`、`Casper Røjkjær`),中文化是独立于本次的新工作。
+
 ## 2. NowGoal(部分验证,逐项标注)
 
 ### 2.1 端点与格式
@@ -458,8 +481,11 @@ side='away' 赢盘 ⟺ adjusted_home_margin < 0
   - 只有 `kickoff_at_utc` 精确、状态 NotStarted、开球落在采集窗口内的比赛
     进入轮询(缺精确开球时间的比赛不进入,不按当天 00:00 伪装);
   - 具体按来源分级的节奏表(NowGoal 赔率三档 + last_call、FotMob 阵容/伤停
-    按联赛查表的观察窗)见 CLAUDE.md §6.3,单一真源不在此重复;两条通用下限
-    ——距开球 2–72h 最小间隔 15 分钟、0–2h 最小间隔 5 分钟——两个来源均满足;
+    按联赛查表的三档观察窗)见 CLAUDE.md §6.3,单一真源不在此重复;三条通用
+    下限——首次发现即采、距开球 2–72h 最小间隔 15 分钟、0–2h 最小间隔 5
+    分钟——所有来源均满足;FotMob 阵容的"首次发现即采"依赖候选池(168h)
+    严格宽于节奏窗口(72h),在 168h 以内可达,以外仍不可达(与 NowGoal 同一
+    近似,不是完全满足"不论距开球多远");
   - 已开球即退出赛前窗口(in-play 采集是显式的另一件事,当前未实现);
   - 到期状态持久化于 odds.db `poll_state`,进程重启不重复采集。
 - **日程发现**:窗口内未映射比赛按其北京日期(NowGoal timezone=8)抓日程,
@@ -531,6 +557,9 @@ market, company_id) 一条序列)、`bronze_fm_lineup_snap`、`bronze_fm_sidelin
 | Silver move(`silver_odds_moves`,真实数据) | **仍 UNVERIFIED**:`build_odds_silver` 从未对含真实二次变化的库运行过——本项目历史上从未产出过一条 `silver_odds_moves`。计划见 `docs/data-plan.md` §3/§5 |
 | `--due` 72h 到期窗口(真实数据) | **TIME-DEPENDENT UNVERIFIED**:2026-07-21 会话内样本比赛距开球 > 72h(窗口约 8 小时后开启),`--due` 如实返回 0 候选,未伪造当前时间 |
 | 按来源分级轮询(NowGoal 三档 + last_call、FotMob 阵容按联赛观察窗,CLAUDE.md §6.3) | **已实现**(`poll_windows.poll_decision`/`cadence_fotmob_lineup`;`poll_state` 持久化节流);离线 fixture 验证,真实端点连续采集仍 UNVERIFIED |
+| FotMob 阵容采集节奏窗口 72h 三档 + 候选池 168h(2026-08-18,CLAUDE.md §6.3) | **已实现 / 离线 fixture 已验证**(`tests/backend/test_poll_cadence.py`/`test_poll_fotmob_snapshots_due.py::TestCandidatePoolWidth`);**真实端点在 24–72h 带的持续采集行为仍 UNVERIFIED**——本轮只离线验证了同一条到期判定代码链路,未跑真实定时器观察 72h 外比赛是否真的落库新快照 |
+| `content.lineup.{home,away}Team.coach` 提取(2026-08-18) | **已实现 / 离线 fixture 已验证**(`tests/backend/test_poll_fotmob_snapshots_match_details.py` 用仓内真实抓取产物 `prematch-5104961.json` 读回两队真实教练姓名);2026-08-18 真实网络探测(经代理打生产,只读未写库)确认 `predicted`/`lastStarting11` 两种 lineupType 在探测到的每个 horizon 都带 coach 字段,提取不产生额外请求 |
+| 教练名中文化 | **未实现**:`dim_player_i18n` 只由球员来源填充,结构上不含教练;当前教练名按来源原文渲染(含变音符号,如 `Casper Røjkjær`),不经机器翻译,不冒充已译名 |
 | `bronze_fm_lineup_snap.lineup_type` 落列 + 真实分布 | **已验证(2026-08-17,§1.4)**:228 行全量扫描,缺失=154/`lastStarting11`=57/`predicted`=16/`standard`=1/`confirmed`=0;`confirmed` 从未观测到,发生条件待 P5(已推迟)网络探测 |
 | `market_phase` / `FINAL` 精确判定 | **已实现**(唯一真源 `normalize_exact_kickoff`,按完整 provenance 判 pre_match/in_play/unknown;不精确时 FINAL 返回 None);对缺精确开球的比赛如实标 `unknown`,不伪装收盘 |
 | 采集窗口混合时区筛选 | **已修复**(`upcoming_precise_matches` 用 `julianday()` 比较窗口边界,带 `-05:00`/`+08:00` 偏移的合法 kickoff 不被裸文本范围误排除) |

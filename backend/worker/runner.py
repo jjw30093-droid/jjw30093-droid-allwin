@@ -432,7 +432,12 @@ REGISTRY: dict[str, dict] = {
         "cwd": str(PROJECT_ROOT),
         "require_env": ("THORDATA_PROXY",),
         "max_attempts": 2,
-        "timeout_seconds": 900,
+        # 2026-08-18 候选池从 24h 放宽到 168h(§6.3)后,首轮 due 场次约 97 场
+        # 串行请求:fotmob_client 是 timeout=25 + hard_timeout=35s + max_retries=3
+        # 指数退避,单场最坏约 113s。97 × 113s ≈ 10970s 的理论上限太夸张,但
+        # 只要 5 场硬失败就能吃满旧的 900s;留够首轮回填的余量,不靠"被超时
+        # 杀掉是安全的"这种默认预期。
+        "timeout_seconds": 1800,
         "backoff_seconds": 60,
         "description": "FotMob 阵容/伤停快照:同场同轮单次 payload,三快照共用 observed_at(需住宅代理)",
     },

@@ -907,9 +907,18 @@ class MatchPreviewPlayerDTO(BaseModel):
     shirt_number: Optional[str] = None
 
 
+class MatchPreviewCoachDTO(BaseModel):
+    """FotMob content.lineup.{home,away}Team.coach 的最小子集(只有 id/name)。
+    2026-08-18 之前写入的快照 payload 没有这个键,读侧如实 None,不回填猜测值。"""
+
+    id: Optional[int] = None
+    name: str
+
+
 class MatchPreviewLineupSideDTO(BaseModel):
     team_id: Optional[int] = None
     formation: Optional[str] = None
+    coach: Optional[MatchPreviewCoachDTO] = None
     starters: list[MatchPreviewPlayerDTO]
     subs: list[MatchPreviewPlayerDTO]
 

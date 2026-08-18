@@ -15,6 +15,12 @@ kickoff_at_utc 是否非空或字符串是否含 'T'。已开球不再属于赛�
 (进程重启不得无界重复采集)。
 
 Worker/systemd 每 5 分钟触发一次到期判断;真正是否请求数据源由本模块决定。
+
+FotMob 阵容/伤停另有独立的分档表(cadence_fotmob_lineup,见下):cadence 窗口
+72 小时,候选池宽度独立于 cadence 窗口、为 168 小时——候选池必须严格宽于
+cadence 窗口,否则"首次发现即采"分支结构性不可达(2026-08-18 之前候选池与
+cadence 窗口同为 24 小时,该分支对阵容不可达,是当时 99 场未来比赛零阵容
+快照的根因之一)。
 """
 
 import sqlite3
@@ -84,15 +90,28 @@ CADENCE_BY_SOURCE = {
     SOURCE_NOWGOAL_SCHEDULE: CADENCE_LEGACY,
 }
 
-# FotMob 阵容/伤停(PIPELINE_REDESIGN_V2 P1,替换旧 CADENCE_LEGACY 两档):
-#   discovery 收窄到 T-24h(24h 前没有阵容意义上的东西可采);进窗口即采一次;
-#   T-24h..watch-window-start 每 12h;watch-window-start..T-0 每 5 分钟到底,
-#   无早停(真正的"确认阵容探测"是 P5 的事,这里先老实全程 5 分钟)。
+# FotMob 阵容/伤停(PIPELINE_REDESIGN_V2 P1 引入,2026-08-18 修复候选池全零覆盖
+# 事故时改为三档):cadence 窗口 72h(T-72h..T-24h 每 24h;T-24h..watch-window-
+# start 每 12h;watch-window-start..T-0 每 5 分钟到底,无早停——真正的"确认阵容
+# 探测"是 P5 的事,这里先老实全程 5 分钟)。候选池宽度独立于 cadence 窗口、为
+# 168h(FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS,与 NowGoal 的
+# DISCOVERY_WINDOW_HOURS=168 同构),只为让"首次发现即采"这一档结构上可达——
+# 168h 外的比赛一生最多补采一次,采完即被 poll_state 挡住,不会无界重复。
+#
+# 2026-08-18 之前:候选池宽度与 cadence 窗口曾经都是同一个常量
+# FOTMOB_LINEUP_DISCOVERY_HOURS=24(discovery 收窄到 T-24h,声称"24h 前没有
+# 阵容意义上的东西可采")。这句话已被真实网络探测推翻(T-77.5h 仍返回带 11
+# 首发+9 替补+教练的 lastStarting11),且候选池=cadence 窗口使 poll_decision()
+# 的 first_discovery 分支(只在 s > window_hours*3600 时触发)对阵容结构性
+# 不可达——是当时 99 场未来比赛(最近一场 T-38.5h)零阵容快照的主因。
 BIG5_LEAGUE_IDS = frozenset({47, 87, 55, 54, 53})
 
-FOTMOB_LINEUP_DISCOVERY_HOURS = 24
-FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS = 43200
-FOTMOB_LINEUP_WATCH_INTERVAL_SECONDS = 300
+FOTMOB_LINEUP_WINDOW_HOURS = 72                    # cadence 窗口
+FOTMOB_LINEUP_PRE_WATCH_UPPER_HOURS = 24           # 12h 档上界
+FOTMOB_LINEUP_FAR_INTERVAL_SECONDS = 86400         # 72h-24h:每 24h
+FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS = 43200   # 24h-watch:每 12h(不变)
+FOTMOB_LINEUP_WATCH_INTERVAL_SECONDS = 300         # watch-T0:每 5 分钟(不变)
+FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS = 168         # 候选池,独立于 cadence 窗口
 
 # watch-window-start(小时,进入后转 5 分钟节奏)按联赛查表,不是单一硬编码常量——
 # 站长明确说以后可能要给具体联赛单独调(如欧战 42/73/10216 目前落回默认档)。
@@ -105,10 +124,11 @@ def cadence_fotmob_lineup(league_id: int | None) -> PollCadence:
         league_id, FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS_DEFAULT
     )
     return PollCadence(
-        "fotmob_lineup", FOTMOB_LINEUP_DISCOVERY_HOURS,
+        "fotmob_lineup", FOTMOB_LINEUP_WINDOW_HOURS,
         tiers=((watch_hours, FOTMOB_LINEUP_WATCH_INTERVAL_SECONDS),
-               (FOTMOB_LINEUP_DISCOVERY_HOURS, FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS)),
-    )
+               (FOTMOB_LINEUP_PRE_WATCH_UPPER_HOURS, FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS),
+               (FOTMOB_LINEUP_WINDOW_HOURS, FOTMOB_LINEUP_FAR_INTERVAL_SECONDS)),
+    )   # last_call_seconds 保持 None:阵容没有 FINAL/收盘语义,不照抄赔率的 last_call
 
 
 def _tier_interval(cadence: PollCadence, seconds_to_kickoff: float) -> int:

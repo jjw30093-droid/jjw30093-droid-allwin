@@ -21,7 +21,12 @@ from backend.ingest.odds_snapshots import (
     record_source_health,
 )
 from backend.providers import nowgoal
-from backend.silver.odds_moves import build_cooccurrence, build_event_moves, build_odds_moves
+from backend.silver.odds_moves import (
+    _lineup_change_summary,
+    build_cooccurrence,
+    build_event_moves,
+    build_odds_moves,
+)
 
 from .authflow import wechat_scan_login
 
@@ -986,6 +991,87 @@ class TestMovesAndCooccurrence:
         assert row["window_seconds"] == 900
         # 幂等
         assert build_cooccurrence(odds_conn, window_seconds=900) == 0
+
+
+# ── 主教练/替补/lineup_type 变化摘要(2026-08-18,Fix 2/3)───────────────
+
+
+class TestLineupCoachAndSubsChanges:
+    T0, T1 = ("2026-07-19T10:00:00Z", "2026-07-19T10:30:00Z")
+
+    @staticmethod
+    def _lineup(home_coach=None, away_coach=None, home_starters=None, home_subs=None,
+                lineup_type="lastStarting11"):
+        return {
+            "lineup_type": lineup_type,
+            "source": "lastStartingLineups",
+            "home": {"team_id": 9825, "formation": "4-3-3", "coach": home_coach,
+                      "starters": home_starters or [{"id": 10, "name": "A"}],
+                      "subs": home_subs if home_subs is not None else []},
+            "away": {"team_id": 8455, "formation": "4-4-2", "coach": away_coach,
+                      "starters": [{"id": 40, "name": "D"}], "subs": []},
+        }
+
+    def test_coach_only_change_is_a_real_insert_not_a_skip(self, odds_conn):
+        """部署后每个"有旧快照且未开球"的比赛,coach 字段第一次出现会让 hash
+        变化 ⇒ append-only 多一行——这是有意为之的设计后果并非要防的 bug
+        (计划 Fix 2.2:实际规模 ≈0,但机制真实存在,这里把它写成文档性断言)。"""
+        r1 = ingest_lineup_snapshot(odds_conn, 9001, self._lineup(home_coach=None), self.T0, "r1")
+        assert r1 == {"inserted": 1, "skipped": 0}
+        r2 = ingest_lineup_snapshot(
+            odds_conn, 9001, self._lineup(home_coach={"id": 7, "name": "Diego Simeone"}),
+            self.T1, "r2",
+        )
+        assert r2 == {"inserted": 1, "skipped": 0}
+
+    def test_coach_change_emits_a_described_lineup_change(self):
+        """两条快照都有可用教练、只有 id 不同 → 真正的换帅,必须描述出来。"""
+        prev = json.dumps(self._lineup(home_coach={"id": 1, "name": "A教练"}))
+        new = json.dumps(self._lineup(home_coach={"id": 2, "name": "B教练"}))
+        detail = _lineup_change_summary(prev, new)
+        assert detail["home"]["coach"] == {"prev": "A教练", "new": "B教练"}
+
+    def test_first_time_coach_observation_is_not_a_lineup_change(self):
+        """守卫必须基于值不是键:prev coach=None、new 首次给出教练,其余不变 →
+        不能报"换帅"(我们无法区分"来源这次才给"与"真的换人",也无法区分
+        "刚开始采集这个字段"与"当时确实没有教练")。"""
+        prev = json.dumps(self._lineup(home_coach=None))
+        new = json.dumps(self._lineup(home_coach={"id": 7, "name": "Diego Simeone"}))
+        assert _lineup_change_summary(prev, new) == {}
+
+    def test_first_time_coach_observation_writes_no_lineup_change_row(self, odds_conn):
+        """端到端镜像上一条:hash 变了(coach 从 None → 有值)但摘要描述不出
+        差异 → _build_event_moves_for 的 `if not detail: continue` 必须挡住
+        这一行,不写一条 detail_json='{}' 的空壳 lineup_change(它会被"同期
+        事件"渲染成一句我们支持不了的"观察到阵容变化",§2.2 违规)。"""
+        ingest_lineup_snapshot(odds_conn, 9001, self._lineup(home_coach=None), self.T0, "r1")
+        ingest_lineup_snapshot(
+            odds_conn, 9001, self._lineup(home_coach={"id": 7, "name": "Diego Simeone"}),
+            self.T1, "r2",
+        )
+        inserted = build_event_moves(odds_conn)
+        assert inserted == 0
+        n = odds_conn.execute(
+            "SELECT COUNT(*) FROM silver_event_moves WHERE event_type='lineup_change'"
+        ).fetchone()[0]
+        assert n == 0
+
+    def test_subs_only_change_is_described(self):
+        """只有替补名单变化 → 必须描述出来,否则会被上面的"空 detail 不落库"
+        守卫连同一起吃掉(C3 的守卫与本条必须同时实现)。"""
+        prev = json.dumps(self._lineup(home_subs=[{"id": 30, "name": "C"}]))
+        new = json.dumps(self._lineup(home_subs=[{"id": 31, "name": "E"}]))
+        detail = _lineup_change_summary(prev, new)
+        assert detail["home"]["subs_added"] == [{"id": "31", "name": "E"}]
+        assert detail["home"]["subs_removed"] == [{"id": "30", "name": "C"}]
+
+    def test_lineup_type_flip_is_described(self):
+        """lastStarting11 → predicted,其余不变 → 必须描述出来(同样是 C3 的
+        空 detail 守卫必须留活口的另一种变化)。"""
+        prev = json.dumps(self._lineup(lineup_type="lastStarting11"))
+        new = json.dumps(self._lineup(lineup_type="predicted"))
+        detail = _lineup_change_summary(prev, new)
+        assert detail["lineup_type"] == {"prev": "lastStarting11", "new": "predicted"}
 
 
 # ── source_health ────────────────────────────────────────────────────────

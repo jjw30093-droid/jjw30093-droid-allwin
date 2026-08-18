@@ -340,6 +340,77 @@ class TestFotmobSnapshots:
         assert snap["home"]["starters"] == []
         assert snap["lineup_type"] is None
 
+    # ── 主教练提取(2026-08-18,Fix 2)────────────────────────────────────
+
+    def test_coach_extracted_per_side(self):
+        """content.lineup.{home,away}Team.coach 每侧一份,真实形状(含
+        age/isCoach/primaryTeamId 等要被丢弃的字段)只取 {id, name}。"""
+        payload = _fm_payload()
+        payload["content"]["lineup"]["homeTeam"]["coach"] = {
+            "age": 33, "countryCode": "DEN", "countryName": "Denmark",
+            "firstName": "Casper", "id": 287248, "isCoach": True,
+            "lastName": "Røjkjær", "name": "Casper Røjkjær",
+            "primaryTeamId": 8417, "primaryTeamName": "Fredrikstad",
+            "usualPlayingPositionId": None,
+        }
+        payload["content"]["lineup"]["awayTeam"]["coach"] = {
+            "id": 500001, "name": "Some Coach", "age": 50,
+        }
+        snap = fotmob_snapshots.extract_lineup_snapshot(payload)
+        assert snap["home"]["coach"] == {"id": 287248, "name": "Casper Røjkjær"}
+        assert snap["away"]["coach"] == {"id": 500001, "name": "Some Coach"}
+
+    def test_coach_missing_gives_none_not_empty_dict(self):
+        """_fm_payload() 两侧都没有 coach 键(2026-08-18 之前写入的历史快照即此
+        形状)→ 如实 None,不返回 {} 或空字符串。"""
+        snap = fotmob_snapshots.extract_lineup_snapshot(_fm_payload())
+        assert snap["home"]["coach"] is None
+        assert snap["away"]["coach"] is None
+
+    def test_coach_without_usable_name_is_none(self):
+        payload = _fm_payload()
+        payload["content"]["lineup"]["homeTeam"]["coach"] = {"id": 1}
+        payload["content"]["lineup"]["awayTeam"]["coach"] = {"id": 1, "name": "  "}
+        snap = fotmob_snapshots.extract_lineup_snapshot(payload)
+        assert snap["home"]["coach"] is None
+        assert snap["away"]["coach"] is None
+
+    def test_coach_absent_side_gives_none(self):
+        snap = fotmob_snapshots.extract_lineup_snapshot({"content": {}})
+        assert snap["home"]["coach"] is None
+        assert snap["away"]["coach"] is None
+
+    def test_coach_age_change_does_not_change_canonical_hash(self):
+        """字段取舍守卫:只改 coach.age 时 canonical JSON 必须完全相等——防止
+        有人"顺手"把整个 coach 对象搬进去,每年生日就制造一次假阵容变化。
+
+        必须额外断言 coach 确实被提取成 {id, name}(今天是 KeyError,这才是
+        真正的 RED):否则本测试在"extractor 根本不读 coach"的今天也天然是绿的
+        (两份 payload 的输出逐字节相同),防不住它要防的回归。"""
+        p1, p2 = _fm_payload(), _fm_payload()
+        p1["content"]["lineup"]["homeTeam"]["coach"] = {
+            "id": 7, "name": "Diego Simeone", "age": 55,
+        }
+        p2["content"]["lineup"]["homeTeam"]["coach"] = {
+            "id": 7, "name": "Diego Simeone", "age": 56,
+        }
+        s1 = fotmob_snapshots.extract_lineup_snapshot(p1)
+        s2 = fotmob_snapshots.extract_lineup_snapshot(p2)
+        assert s1["home"]["coach"] == {"id": 7, "name": "Diego Simeone"}
+        assert nowgoal.canonical_payload_json(s1) == nowgoal.canonical_payload_json(s2)
+
+    def test_coach_key_order_does_not_change_canonical_hash(self):
+        """与既有 test_lineup_hash_stable_regardless_of_player_order 并列:源
+        payload 的 coach 字典键序不同不应影响 hash。同样必须额外断言提取形状
+        (见上一条注释的理由)。"""
+        p1, p2 = _fm_payload(), _fm_payload()
+        p1["content"]["lineup"]["homeTeam"]["coach"] = {"id": 7, "name": "Diego Simeone"}
+        p2["content"]["lineup"]["homeTeam"]["coach"] = {"name": "Diego Simeone", "id": 7}
+        s1 = fotmob_snapshots.extract_lineup_snapshot(p1)
+        s2 = fotmob_snapshots.extract_lineup_snapshot(p2)
+        assert s1["home"]["coach"] == {"id": 7, "name": "Diego Simeone"}
+        assert nowgoal.canonical_payload_json(s1) == nowgoal.canonical_payload_json(s2)
+
     def test_sideline_extraction(self):
         snap = fotmob_snapshots.extract_sideline_snapshot(_fm_payload(), 9825)
         assert snap["team_id"] == 9825

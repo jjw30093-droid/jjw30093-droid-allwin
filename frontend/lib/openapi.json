@@ -11122,6 +11122,31 @@
     "type": "object",
     "title": "MatchPreviewChainMetricDTO"
    },
+   "MatchPreviewCoachDTO": {
+    "properties": {
+     "id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "title": "MatchPreviewCoachDTO",
+    "description": "FotMob content.lineup.{home,away}Team.coach 的最小子集(只有 id/name)。\n2026-08-18 之前写入的快照 payload 没有这个键,读侧如实 None,不回填猜测值。"
+   },
    "MatchPreviewDefensivePressureDTO": {
     "properties": {
      "tier": {
@@ -11308,6 +11333,16 @@
        }
       ],
       "title": "Formation"
+     },
+     "coach": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchPreviewCoachDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "starters": {
       "items": {

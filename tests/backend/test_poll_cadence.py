@@ -13,9 +13,13 @@ from backend.ingest.poll_windows import (
     BIG5_LEAGUE_IDS,
     CADENCE_LEGACY,
     CADENCE_NOWGOAL_ODDS,
-    FOTMOB_LINEUP_DISCOVERY_HOURS,
+    FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS,
+    FOTMOB_LINEUP_FAR_INTERVAL_SECONDS,
+    FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS,
+    FOTMOB_LINEUP_PRE_WATCH_UPPER_HOURS,
     FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS,
     FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS_DEFAULT,
+    FOTMOB_LINEUP_WINDOW_HOURS,
     INTERVAL_FAR_SECONDS,
     INTERVAL_NEAR_SECONDS,
     SOURCE_FOTMOB_SNAPSHOT,
@@ -130,9 +134,12 @@ class TestLastCall:
 
 
 class TestFotmobLineupTiers:
-    """CADENCE_FOTMOB_LINEUP(cadence_fotmob_lineup()):discovery 收窄到 24h,
-    watch-window-start 按联赛查表(BIG-5=1.5h,其余=1.25h),窗内 5 分钟到底,
-    无早停。"""
+    """CADENCE_FOTMOB_LINEUP(cadence_fotmob_lineup()):cadence 窗口 72h(用户
+    决策 A),三档——72h–24h 每 24h、24h–watch-window-start 每 12h、
+    watch-window-start–T0 每 5 分钟到底(无早停);watch-window-start 按联赛
+    查表(BIG-5=1.5h,其余=1.25h)。候选池宽度独立于 cadence 窗口,为 168h
+    (见 test_poll_fotmob_snapshots_due.py::TestCandidatePoolWidth),只为落实
+    §6.3「首次发现即采」下限的结构可达性。"""
 
     BIG5_SAMPLE = 47
     OTHER_LEAGUE = 999
@@ -140,31 +147,95 @@ class TestFotmobLineupTiers:
     def test_big5_league_ids_are_the_confirmed_five(self):
         assert BIG5_LEAGUE_IDS == frozenset({47, 87, 55, 54, 53})
 
-    def test_discovery_window_is_24h_not_72h(self):
-        assert FOTMOB_LINEUP_DISCOVERY_HOURS == 24
+    def test_lineup_window_is_72h(self):
+        """cadence 窗口从 24h 放宽到 72h(用户决策 A)——FOTMOB_LINEUP_DISCOVERY_HOURS
+        一个名字曾身兼三职(cadence 窗口/12h 档上界/候选池宽度)正是 bug 的结构性
+        成因,现整体删除、不留别名,拆成三个语义单一的常量。"""
+        assert FOTMOB_LINEUP_WINDOW_HOURS == 72
+
+    def test_far_tier_interval_is_24h(self):
+        assert FOTMOB_LINEUP_FAR_INTERVAL_SECONDS == 86400
+
+    def test_pre_watch_upper_hours_is_24h(self):
+        assert FOTMOB_LINEUP_PRE_WATCH_UPPER_HOURS == 24
+
+    def test_pre_watch_interval_is_12h_and_unchanged(self):
+        assert FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS == 43200
+
+    def test_candidate_window_is_wider_than_cadence_window(self):
+        """候选池(168h)必须严格宽于 cadence 窗口(72h)——这是 §6.3「首次发现
+        即采」分支结构上可达的前提:poll_decision() 的 first_discovery 分支只在
+        s > cadence.window_hours*3600 时触发。放宽前候选池与 cadence 窗口相等
+        (都是 24h),{s: s>86400} ∩ {s: s<=86400} = ∅,该分支对阵容结构性不可达,
+        这正是 99 场比赛零快照能发生的根因之一。"""
+        assert FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS > FOTMOB_LINEUP_WINDOW_HOURS
+
+    def test_cadence_has_three_tiers_ascending_and_monotone(self):
+        for league_id in (self.BIG5_SAMPLE, self.OTHER_LEAGUE, None):
+            cadence = cadence_fotmob_lineup(league_id)
+            assert len(cadence.tiers) == 3
+            upper_hours = [t[0] for t in cadence.tiers]
+            intervals = [t[1] for t in cadence.tiers]
+            assert upper_hours == sorted(upper_hours), (league_id, upper_hours)
+            assert intervals == sorted(intervals), (league_id, intervals)
 
     def test_default_watch_window_start_is_1_25h(self):
         assert FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS_DEFAULT == 1.25
 
-    def test_discovery_entry_at_24h_is_first_poll_checkpoint(self):
-        """恰好 T-24h:进窗口,从未轮询过 → due,常规 checkpoint_24h(不是
-        first_discovery——first_discovery 专属"窗口外"分支,24h 整点已在窗内)。"""
+    def test_boundary_24h_is_regular_checkpoint_not_discovery_entry(self):
+        """恰好 T-24h:仍在 72h cadence 窗口深处,从未轮询过 → due,常规
+        checkpoint_24h。这不再是"discovery 入口"——放宽后窗口入口是 T-72h,
+        T-24h 只是 24h 档与 12h 档的切换点(旧名字在窗口放宽后变成了假话,
+        故重命名并改写 docstring;三行断言逐字不变)。"""
         d = _decide(_kickoff(hours=24), None, source=SOURCE_FOTMOB_SNAPSHOT,
                     league_id=self.OTHER_LEAGUE)
         assert d.due is True and d.tier == "checkpoint_24h" and d.interval_seconds == 43200
 
-    def test_beyond_24h_and_never_polled_is_first_discovery(self):
-        """T-24h01min:跨出窗口。引擎的 first_discovery 分支与来源无关——只要
-        从未轮询过就补一枪,这一点 FotMob 和 NowGoal 共用同一条逻辑。"""
-        far = _iso(NOW + timedelta(hours=24, minutes=1))
+    def test_beyond_72h_and_never_polled_is_first_discovery(self):
+        """T-72h01min:跨出 72h cadence 窗口(仍在 168h 候选池内)。引擎的
+        first_discovery 分支与来源无关——只要从未轮询过就补一枪,这一点
+        FotMob 和 NowGoal 共用同一条逻辑。"""
+        far = _iso(NOW + timedelta(hours=72, minutes=1))
         d = _decide(far, None, source=SOURCE_FOTMOB_SNAPSHOT, league_id=self.OTHER_LEAGUE)
         assert d.due is True and d.tier == "first_discovery"
 
-    def test_beyond_24h_and_already_polled_is_not_due(self):
-        far = _iso(NOW + timedelta(hours=24, minutes=1))
+    def test_beyond_72h_and_already_polled_is_not_due(self):
+        far = _iso(NOW + timedelta(hours=72, minutes=1))
         already = _iso(NOW - timedelta(hours=1))
         d = _decide(far, already, source=SOURCE_FOTMOB_SNAPSHOT, league_id=self.OTHER_LEAGUE)
         assert d.due is False and d.tier is None
+
+    @pytest.mark.parametrize("hours", [24.5, 38.5, 48.0, 62.5, 72.0])
+    @pytest.mark.parametrize("league_id", [47, 999])
+    def test_far_band_interval_is_24h(self, hours, league_id):
+        """72h–24h 档:每 24h(86400s)。38.5h/62.5h 是 2026-08-18 真实网络探测过的
+        地平线(生产最近一场比赛开球在 T-38.5h),不是凭空取的边界。"""
+        kickoff = _kickoff(hours=hours)
+        d = _decide(kickoff, None, source=SOURCE_FOTMOB_SNAPSHOT, league_id=league_id)
+        assert d.due is True and d.tier == "checkpoint_72h" and d.interval_seconds == 86400
+        just_before = _iso(NOW - timedelta(seconds=86399))
+        exactly = _iso(NOW - timedelta(seconds=86400))
+        assert _decide(kickoff, just_before, source=SOURCE_FOTMOB_SNAPSHOT,
+                        league_id=league_id).due is False
+        assert _decide(kickoff, exactly, source=SOURCE_FOTMOB_SNAPSHOT,
+                        league_id=league_id).due is True
+
+    def test_boundary_24h_switches_far_to_pre_watch(self):
+        """T-24h 整 → checkpoint_24h/43200(12h 档);T-24h01m → checkpoint_72h/86400
+        (24h-72h 档)——闭区间在 24h 整点这一侧。"""
+        at_24h = _decide(_kickoff(hours=24), None, source=SOURCE_FOTMOB_SNAPSHOT,
+                          league_id=self.OTHER_LEAGUE)
+        just_beyond = _decide(_iso(NOW + timedelta(hours=24, minutes=1)), None,
+                               source=SOURCE_FOTMOB_SNAPSHOT, league_id=self.OTHER_LEAGUE)
+        assert at_24h.tier == "checkpoint_24h" and at_24h.interval_seconds == 43200
+        assert just_beyond.tier == "checkpoint_72h" and just_beyond.interval_seconds == 86400
+
+    def test_boundary_72h_exactly_in_window(self):
+        """T-72h 整落在 cadence 窗口边界内(闭区间),仍是常规 checkpoint_72h,
+        不是 first_discovery——window_hours 就是 72。"""
+        d = _decide(_kickoff(hours=72), None, source=SOURCE_FOTMOB_SNAPSHOT,
+                    league_id=self.OTHER_LEAGUE)
+        assert d.due is True and d.tier == "checkpoint_72h" and d.interval_seconds == 86400
 
     def test_pre_watch_tier_is_12h(self):
         """T-24h..watch-window-start:每 12h(43200s)——用非 BIG-5 联赛,10h 处于该档。"""
