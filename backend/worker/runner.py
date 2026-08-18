@@ -269,6 +269,85 @@ def _job_daily_digest() -> dict:
     return {"output_count": 1, "meta": {**digest, "alert": alert}}
 
 
+def _watermark_core_silver_build() -> dict:
+    """core_silver_build 只聚合 dim_match.status='Finish' 的场次(见
+    backend/silver/build_silver.py),按联赛+赛季全量 DELETE+INSERT——没有
+    新完赛比赛时重跑毫无意义。dim_match/fact_team_match_stats/fact_match_events
+    三张 Bronze 表本身没有任何时间戳列(已核实实际 schema),无法做真正的
+    "自上次以来新增行"增量水位;退而求其次用"当前 Finish 总数"作粗粒度信号
+    ——已知局限:对已是 Finish 的比赛做比分/统计修正而不改变总数时,本水位
+    检测不到(不隐瞒这个限制,见本 phase 改动说明)。"""
+    from backend.db.connections import connect_ro
+
+    conn = connect_ro("core")
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM dim_match WHERE status='Finish'").fetchone()[0]
+    finally:
+        conn.close()
+    return {"finished_matches": int(n)}
+
+
+def _watermark_odds_silver_build() -> dict:
+    """odds_silver_build 每次全量重扫三张 odds Bronze 表,并且
+    build_odds_moves()(backend/silver/odds_moves.py)额外要求
+    dim_match_xref.review_status IN ('auto_ok','confirmed')
+    (_ACTIVE_XREF_STATUSES)才为该场比赛产出行——这是第二个独立输入,
+    2026-08-17 真实发现:已落库的 Bronze 快照,若当时 xref 还是
+    needs_review,之后管理员经 /api/v1/admin/xref/{id}/confirm 把它转成
+    auto_ok/confirmed 时不产生任何新 Bronze 行,只看三张 Bronze 表
+    MAX(id) 的水位对此完全不可见,会让本来已经能产出的历史快照悄悄卡在
+    Silver 之外。加入活跃 xref 集合的 MAX(updated_at)(confirm/reject 接口
+    真实更新这一列)作为第二个水位分量,覆盖这条独立路径。"""
+    from backend.db.connections import connect_ro
+
+    conn = connect_ro("odds")
+    try:
+        odds_max = conn.execute("SELECT COALESCE(MAX(id),0) FROM bronze_ng_odds_snap").fetchone()[0]
+        lineup_max = conn.execute("SELECT COALESCE(MAX(id),0) FROM bronze_fm_lineup_snap").fetchone()[0]
+        sideline_max = conn.execute(
+            "SELECT COALESCE(MAX(id),0) FROM bronze_fm_sideline_snap").fetchone()[0]
+        xref_updated_at = conn.execute(
+            "SELECT COALESCE(MAX(updated_at),'') FROM dim_match_xref"
+            " WHERE provider='nowgoal' AND review_status IN ('auto_ok','confirmed')"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return {
+        "bronze_ng_odds_snap_max_id": int(odds_max),
+        "bronze_fm_lineup_snap_max_id": int(lineup_max),
+        "bronze_fm_sideline_snap_max_id": int(sideline_max),
+        "active_xref_max_updated_at": str(xref_updated_at),
+    }
+
+
+def _watermark_model_predict() -> dict:
+    """model_predict 硬编码只对 League_ID=FUTURE_LEAGUE_ID / Season=FUTURE_SEASON
+    重算(backend/models/predict_wdl_future.py 的联赛边界说明:wdl_baseline_params.pkl
+    只用该联赛历史拟合,套到其它联赛是"假预测")——水位必须同样限定在这个
+    真实作用域内,否则会被其它联赛的完赛/赛程变化误判为"有新工作"。两个方向
+    都要看:新完赛比赛改变 rolling xG 输入;新增/减少的 NotStarted 赛程改变
+    要出预测的比赛集合本身。"""
+    from backend.db.connections import connect_ro
+    from backend.models.predict_wdl_future import FUTURE_LEAGUE_ID, FUTURE_SEASON
+
+    conn = connect_ro("core")
+    try:
+        finished = conn.execute(
+            "SELECT COUNT(*) FROM dim_match WHERE status='Finish' AND League_ID=?",
+            (FUTURE_LEAGUE_ID,),
+        ).fetchone()[0]
+        not_started = conn.execute(
+            "SELECT COUNT(*) FROM dim_match WHERE status='NotStarted' AND League_ID=? AND Season=?",
+            (FUTURE_LEAGUE_ID, FUTURE_SEASON),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return {
+        f"league{FUTURE_LEAGUE_ID}_finished": int(finished),
+        f"league{FUTURE_LEAGUE_ID}_{FUTURE_SEASON}_not_started": int(not_started),
+    }
+
+
 def _alert_job_failure(conn, run_id, job_name, error_summary,
                        source: str = "pipeline_step_failure") -> None:
     """任务失败 → CRITICAL 告警(调用点保证已先 _finish_run 落 job_runs)。
@@ -330,9 +409,12 @@ REGISTRY: dict[str, dict] = {
         "argv": [sys.executable, "-m", "backend.cli.fotmob_incremental_multi", "--due"],
         "cwd": str(PROJECT_ROOT),
         "require_env": ("THORDATA_PROXY",),
-        "max_attempts": 2,
+        # PIPELINE_REDESIGN_V2 P4 起 max_attempts=1(此前是 2/backoff 120s)——
+        # 比赛级重试计数(backend.ingest.postmatch_retry)才是正确的责任层,
+        # 任务级快速重试会在同一个 allwin-postmatch 30 分钟 tick 内让仍
+        # stale 的比赛被重复计数,提前吃掉 MAX_ATTEMPTS 安全余量。
+        "max_attempts": 1,
         "timeout_seconds": 3600,
-        "backoff_seconds": 120,
         "description": "增量抓取新完赛场次(全联赛,比分+xG+事件+阵容,需住宅代理)",
     },
     "nowgoal_snapshot": {
@@ -370,7 +452,8 @@ REGISTRY: dict[str, dict] = {
         "max_attempts": 1,
         "timeout_seconds": 1800,
         "backoff_seconds": 0,
-        "description": "core Bronze → Silver 聚合(按联赛+赛季 DELETE+INSERT,幂等)",
+        "watermark_fn": _watermark_core_silver_build,
+        "description": "core Bronze → Silver 聚合(按联赛+赛季 DELETE+INSERT,幂等;水位守卫:无新完赛则跳过)",
     },
     "odds_silver_build": {
         "kind": "subprocess",
@@ -379,7 +462,8 @@ REGISTRY: dict[str, dict] = {
         "max_attempts": 1,
         "timeout_seconds": 900,
         "backoff_seconds": 0,
-        "description": "odds Bronze → 变化点/时间共现(UNIQUE 幂等,needs_review 映射不产出)",
+        "watermark_fn": _watermark_odds_silver_build,
+        "description": "odds Bronze → 变化点/时间共现(UNIQUE 幂等,needs_review 映射不产出;水位守卫:无新 Bronze 行则跳过)",
     },
     "model_predict": {
         "kind": "subprocess",
@@ -388,7 +472,8 @@ REGISTRY: dict[str, dict] = {
         "max_attempts": 1,
         "timeout_seconds": 1800,
         "backoff_seconds": 0,
-        "description": "对 NotStarted 场次重算 WDL 概率(固定模型参数,只更新 rolling 输入)",
+        "watermark_fn": _watermark_model_predict,
+        "description": "对 NotStarted 场次重算 WDL 概率(固定模型参数,只更新 rolling 输入;水位守卫:目标联赛无新完赛/新赛程则跳过)",
     },
     "prediction_register": {
         "kind": "fn",
@@ -668,14 +753,50 @@ def _run_fn(fn, timeout) -> dict:
     return result
 
 
-def _execute_once(spec: dict, timeout: int) -> dict:
+def _last_succeeded_meta(conn, job_name: str) -> dict | None:
+    row = conn.execute(
+        "SELECT meta_json FROM job_runs WHERE job_name=? AND status='succeeded' "
+        "ORDER BY finished_at DESC LIMIT 1",
+        (job_name,),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["meta_json"] or "{}")
+    except ValueError:
+        return {}
+
+
+def _execute_once(spec: dict, timeout: int, conn=None, job_name: str | None = None) -> dict:
+    """水位守卫(PIPELINE_REDESIGN_V2 P4,3.4):spec 声明 watermark_fn 时,
+    先算当前信号,与"上一次成功执行"落在 job_runs.meta_json 里的信号比较——
+    未变化则复用既有的 JobSkipped → status='skipped' 路径(与 optional kind
+    候选模块缺失时的跳过是同一条已测试过的路径),不新建一套并行状态机;
+    变化(或从未成功执行过)时照常真跑,并把本次信号写回结果 meta 供下次比较。
+    """
     kind = spec.get("kind", "fn" if "fn" in spec else "subprocess")
+    watermark_fn = spec.get("watermark_fn")
+    current_watermark = None
+    if watermark_fn is not None:
+        current_watermark = watermark_fn()
+        if conn is not None and job_name is not None:
+            prior_meta = _last_succeeded_meta(conn, job_name)
+            if prior_meta is not None and prior_meta.get("watermark") == current_watermark:
+                raise JobSkipped(f"watermark 未变化(自上次成功运行以来无新数据):{current_watermark}")
+
     if kind == "fn":
-        return _run_fn(spec["fn"], timeout)
-    if kind == "optional":
+        result = _run_fn(spec["fn"], timeout)
+    elif kind == "optional":
         argv = _resolve_optional(spec)
-        return _run_subprocess(argv, spec.get("cwd"), timeout)
-    return _run_subprocess(spec["argv"], spec.get("cwd"), timeout)
+        result = _run_subprocess(argv, spec.get("cwd"), timeout)
+    else:
+        result = _run_subprocess(spec["argv"], spec.get("cwd"), timeout)
+
+    if watermark_fn is not None:
+        meta = dict(result.get("meta") or {})
+        meta["watermark"] = current_watermark
+        result = {**result, "meta": meta}
+    return result
 
 
 def run_job(job_name: str, idempotency_key: str | None = None, force: bool = False) -> dict:
@@ -731,7 +852,7 @@ def run_job(job_name: str, idempotency_key: str | None = None, force: bool = Fal
                 attempt += 1
                 _mark_running(conn, run_id, attempt)
                 try:
-                    result = _execute_once(spec, timeout)
+                    result = _execute_once(spec, timeout, conn=conn, job_name=job_name)
                 except JobSkipped as e:
                     _finish_run(conn, run_id, "skipped", meta_update={"reason": str(e)})
                     return {"run_id": run_id, "status": "skipped", "attempt": attempt,

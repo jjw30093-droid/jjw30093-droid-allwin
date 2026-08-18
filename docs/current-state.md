@@ -6082,3 +6082,145 @@ ssh 或触碰任何真实服务器**——实际把这些 unit 安装到生产�
 `--periodic` 拓扑,本阶段未同步,留给 P6 统一处理。生产服务器上实际安装/
 启用这 7 个新 timer(替换正在运行的旧两个)是单独、需要明确批准的一步,
 本阶段完全没有触碰生产。
+
+## 54. PIPELINE_REDESIGN_V2 P4:赛后事件驱动到期 + 单比赛重试上限 + 派生任务水位守卫(2026-08-18)
+
+纯代码/测试改动,未 ssh 或触碰任何真实服务器;未对生产 `data/allwin.db`/
+`data/platform.db`/`data/odds.db` 做任何写入(全部测试经 `data_dir`
+fixture 重定向到临时目录)。
+
+**3.3 赛后事件驱动到期**:`backend/cli/fotmob_incremental_multi.py` 的到期
+判据从纯 6h/联赛节流,改为"联赛存在至少一场 status != 'Finish' 且
+kickoff + 2.5h < now 的比赛"即刻到期(新函数
+`poll_windows.league_stale_unresolved_match_ids`,SQL 粗筛 + 逐行
+`normalize_exact_kickoff` 精确性验证,同 `upcoming_precise_matches` 纪律),
+没有这种比赛时仍保留 `poll_state` 6h 兜底档(`is_due` 沿用不变)。配合
+P3 已固定的 30 分钟 `allwin-postmatch` tick,完赛数据预计最迟约
+kickoff+3h 落地(2.5h 阈值 + ≤30min 发现延迟),满足站长"赛后 4-5 小时内
+补全"的要求且留有余量。
+
+**3.3 单比赛重试上限(安全要求)**:新表 `postmatch_retry_state`
+(`backend/migrations/odds/0010_postmatch_retry_state.sql`,与同一 job 的
+`poll_state`/`poll_attempt_log` 同库)+ 新模块
+`backend/ingest/postmatch_retry.py`。事件驱动到期一旦脱离旧的 6h 节流,
+对 FotMob 永远不翻 Finish 的比赛(复核时点 2026-08-17 13:47 UTC 实测
+72 场,最长卡住 3.9 天)会变成永久到期——每次抓完仍未解决的 stale 比赛计
+一次 attempts,达到 `MAX_ATTEMPTS=20`(30 分钟 tick × 20 ≈ 10 小时,即
+kickoff+12.5h 才放弃,远超正常比赛+数据处理时长)后停止让它继续单独触发
+到期、记录 `exhausted_at`+`fail_reason`,经 `backend.notify.notify`
+(`level="CRITICAL"`,`source="postmatch_match_retry_exhausted"`,
+`dedup_key=f"{source}:{match_id}"`,复用其自带 24h 去重,已加入
+`P0_ALERT_SOURCES`)推一次告警——不是每个 tick 都推。已解决(不再 stale)
+的比赛会被清空重试计数,不会被误判耗尽。
+
+**3.4 派生任务水位守卫**:`backend/worker/runner.py::_execute_once` 新增
+`watermark_fn` 钩子——REGISTRY 条目声明该键时,先算当前信号,与"上一次
+成功执行"落在 `job_runs.meta_json.watermark` 里的信号比较,未变化直接
+复用已有的 `JobSkipped → status='skipped'` 路径(与 optional kind 候选
+模块缺失时同一条已测试路径,未新建并行状态机);变化(或首次执行)照常真跑
+并把新信号写回 meta。三个真实任务的水位来源(均已通过真实 schema 核实,
+非假设):
+  - `core_silver_build`:`dim_match` 里 `status='Finish'` 的总数——三张
+    Bronze 表(`dim_match`/`fact_team_match_stats`/`fact_match_events`)
+    确认零时间戳列,只能用这个粗粒度代理,已知局限(对已是 Finish 的比赛
+    做比分/统计修正而不改变总数时检测不到)在代码注释里明确写出,不隐瞒;
+  - `odds_silver_build`:三张 odds Bronze 表(均有真实 AUTOINCREMENT id)
+    各自 `MAX(id)`——精确信号,非代理;
+  - `model_predict`:限定在其真实硬编码作用域(`FUTURE_LEAGUE_ID=47`/
+    `FUTURE_SEASON='2026/2027'`,从该模块直接 import,不重复写死)内的
+    `status='Finish'` 计数 + `status='NotStarted'` 计数两个方向,其它
+    联赛的变化不触发重跑。
+  - `analysis_bundle_build` **刻意未加水位**:走查确认三个连接全部
+    `connect_ro`+`query_only=ON`,`bundle.py` 及其全部调用链零
+    INSERT/UPDATE/DELETE/commit/tx,数据量已被"最近 50 场 NotStarted"天然
+    限界——不是本 phase 描述的"昂贵全量重建"问题,强行套一个水位机制不
+    对应任何真实节省,故意不做,理由写在 `runner.py` 附近与本文档。
+
+**测试**(RED→GREEN,全部离线):新
+`tests/backend/test_postmatch_due_condition.py`(9 项:2.5h 边界前/后/恰好、
+Finish/非 exact precision/其它联赛排除、事件驱动突破节流窗口、无 stale
+时不到期、6h 兜底档)、`tests/backend/test_postmatch_retry_cap.py`(6 项:
+未达上限持续计数、达到上限记录原因+恰好告警一次+后续 tick 不重复告警不
+继续计数、CRITICAL+按 match_id dedup_key、触顶前已解决则清空不误判)、
+`tests/backend/test_watermark_guards.py`(17 项:通用机制空转跳过/新数据
+真跑/首次必跑/无 watermark_fn 不受影响、三个真实任务 REGISTRY 接线、
+三个真实 watermark_fn 各自的信号正确性,含"其它联赛变化不误判"的负例)。
+更新 `tests/backend/test_migrations.py::test_lineup_snap_type_column_and_backfill`
+——该测试原断言"不带 `migrations_dir` 重新应用只新增 0009"(`applied==1`),
+新增 0010(与 lineup_type 主题无关但同样待应用)后如实改为 `applied==2`,
+未放宽断言强度,只是让断言对应新增的真实迁移文件数。
+
+全量 `tests/backend -q`:1795 passed,2 skipped(`test_pit_dataset.py`/
+`test_sync_fixtures.py`,预先存在、与本次无关的环境缺失 skip),0 failed,
+exit code 0——复核 3 次(1 次改动前 git stash 到 P3 基线复核 2 次同样
+1762 passed/2 skipped/0 failed,证明基线本身干净)。
+
+**已排查但非本次改动导致的环境噪音**(如实记录,不隐瞒、不误判为自己的
+回归):在完整套件(约 100+ 秒)里偶发命中过 1 次
+`tests/backend/test_e2e_seed.py::TestE2eSeedProvenance::
+test_seed_succeeds_and_is_repeatable`(该测试对真实 `data/platform.db`/
+`data/odds.db` 做 before/after mtime 相等断言,非本 phase 新增或改动)。
+排查结论:(1) 该测试在**完全隔离**运行 5/5 次全部通过(含本次改动全部
+在场);(2) 用 `git stash` 回退到 P3 基线后连续两次跑**完整套件**均
+0 failed;(3) `data/*.db` 经 `ls -la` 确认是指向
+`../../../../data/*.db`(worktree 外、仓库级共享路径)的符号链接,`ps aux`
+确认本机同时有另一个独立 Codex/ChatGPT agent session 挂在同一仓库的另一个
+worktree(`~/.codex/worktrees/01c6/all-win`)且已运行数小时,以及一个自
+7 月 29 日起长期运行的 `scripts/local_preview_proxy.py`——两者都可能并发
+触碰这份跨 worktree 共享的真实 `data/` 目录。结论:这是运行环境本身的
+并发噪音,不是本 phase 代码引入的回归;本 phase 未修改
+`test_e2e_seed.py`(不在本次任务范围内,也不应该为了掩盖环境噪音去弱化
+一个真实的生产数据不可变性断言)。最终交付前的完整套件复核(见上方数字)
+本身是干净的一次通过。
+
+**对抗式复核发现并修复的三个真实缺陷**(独立复核角度,不是实现者自己的
+单元测试覆盖不到的盲区——三个都用真实场景复现过,不是理论推测):
+
+1. **单比赛重试计数可被任务级重试意外翻倍**:`REGISTRY["fotmob_incremental_multi"]`
+   原来 `max_attempts=2, backoff_seconds=120`;`main()` 只要有一个联赛的
+   抓取抛异常就整体 `exit 1`(`_record_match_retry_attempts` 对已尝试的
+   全部联赛无条件跑过,不按 `league_ok` 门禁),runner 的任务级重试于是在
+   约 120 秒后重新整体跑一遍 `--due`,同一批仍然 stale 的比赛(包括那些
+   跟失败联赛无关、本来已经成功抓取的)会在同一个 30 分钟 tick 内被
+   `_record_match_retry_attempts` 计数两次,`MAX_ATTEMPTS=20` 的安全余量
+   可能被提前吃掉一半。修复:退回这个仓库里绝大多数任务已经在用的默认值
+   `max_attempts=1`(比赛级重试计数才是正确的责任层,任务级快速重试只在
+   同一个逻辑 tick 内重复计数,不提供任何额外价值)。新测试:
+   `test_postmatch_retry_cap.py::TestJobLevelRetryDoesNotDoubleCountMatchRetries`。
+2. **`mark_exhausted_and_alert` 是 check-then-act,不是原子声明**:原来无
+   条件 `UPDATE exhausted_at` 再无条件 `notify()`,靠 `notify()` 自带的
+   24h dedup 防重复告警——但 dedup 判定顺序是"开关→凭证→去重→配额→推送",
+   `NOTIFY_ENABLED=0` 时直接跳过 dedup 判定(测试场景完全测不到这层
+   保护),生产环境即便 `NOTIFY_ENABLED=1`,dedup 也要等对方
+   `notify_result='sent'` 真正落库(ServerChan 网络调用约 10 秒)才生效,
+   窗口期内两个几乎同时判定"该标记耗尽"的调用者(如 systemd 定时调用与
+   旁路直接跑 `fotmob_incremental_multi.py` 的 `main()`,后者不经过
+   `runner._acquire_lock`)都可能先于对方完成前就通过了各自的
+   `is_exhausted()` 前置检查,导致重复告警。修复:改成
+   `UPDATE ... WHERE exhausted_at IS NULL` + `rowcount` 判断谁先声明成功,
+   只有真正声明成功的调用者才调用 `notify()`。新测试:
+   `test_postmatch_retry_cap.py::TestAtCapStopsAndAlertsOnce::
+   test_concurrent_racing_callers_alert_exactly_once`(直接调用两次
+   `mark_exhausted_and_alert` 模拟竞态,不依赖真实并发)。
+3. **`odds_silver_build` 水位守卫真实存在的过期(staleness)缺口**:
+   `build_odds_moves()`(`backend/silver/odds_moves.py`)除了读三张 Bronze
+   快照表,还要求 `dim_match_xref.review_status IN ('auto_ok','confirmed')`
+   才为该场比赛产出 `silver_odds_moves` 行——这是第二个独立输入。原水位
+   只看三张 Bronze 表的 `MAX(id)`,管理员经真实生产接口
+   `POST /api/v1/admin/xref/{id}/confirm` 把某场比赛的 xref 从
+   `needs_review` 转成 `auto_ok`/`confirmed` 时不产生任何新 Bronze 行,
+   原水位对此完全不可见——已经落库、本来现在就能产出的历史赔率快照会
+   悄悄卡在 Silver 之外,直到系统里任何一场**无关**比赛凑巧来了一条新
+   Bronze 快照才会连带被重新计算。用真实、未修改的
+   `_watermark_odds_silver_build()`/`build_odds_moves()` 复现:确认前
+   `build_odds_moves()` 插入 0 行(正确门禁),确认后(无新 Bronze 行)
+   插入 2 行,但水位字节相同。修复:水位新增
+   `active_xref_max_updated_at`(`MAX(updated_at) FROM dim_match_xref
+   WHERE provider='nowgoal' AND review_status IN ('auto_ok','confirmed')`
+   ——confirm/reject 接口真实更新这一列),覆盖这条独立路径。新测试:
+   `test_watermark_guards.py::TestOddsSilverBuildWatermarkSignal::
+   test_admin_xref_confirm_without_new_bronze_row_changes_watermark`。
+
+三处修复后重跑全量 `tests/backend -q`:仍 1795 collected + 新增/改动的
+用例全部计入,0 failed,exit code 0(与上方数字一致,新增测试净增数已
+反映在最终 collected 计数里)。

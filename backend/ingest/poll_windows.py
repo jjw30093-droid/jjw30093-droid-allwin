@@ -39,8 +39,17 @@ SOURCE_FOTMOB_INCREMENTAL = "fotmob_incremental"  # 完赛增量节流键(subjec
 # 使 15 分钟 chain 反复触发赛程 job 也不会真去多打 FotMob(16 联赛 × 4 次/天)。
 FIXTURE_SYNC_INTERVAL_SECONDS = 21600
 # 完赛增量(scheduler.step1)同一节流:每联赛 6 小时,替代旧"单联赛被 15 分钟
-# chain 反复触发约 96 次/天"的行为(数据管道重建 Phase 6 去硬编码)。
+# chain 反复触发约 96 次/天"的行为(数据管道重建 Phase 6 去硬编码)。此常量
+# PIPELINE_REDESIGN_V2 P4 起降级为"兜底档"(见 league_stale_unresolved_match_ids
+# 与事件驱动到期条件),不再是唯一到期判据。
 INCREMENTAL_SYNC_INTERVAL_SECONDS = 21600
+
+# 赛后完赛增量事件驱动到期阈值(PIPELINE_REDESIGN_V2 P4,CLAUDE.md 站长要求
+# "赛后 4-5 小时内补全"):kickoff + 本值 < now 且 status != 'Finish' 视为
+# "该结束却仍未结束",使所在联赛立即到期,不必等满 6h 兜底档。配合 30 分钟
+# 一次的 allwin-postmatch 定时器,完赛数据最迟约 kickoff+3h 落地(2.5h 阈值
+# + 至多 30 分钟发现延迟),留出安全余量。
+POSTMATCH_STALE_THRESHOLD_HOURS = 2.5
 
 
 @dataclass(frozen=True)
@@ -239,6 +248,41 @@ def mark_polled(
                VALUES (?, ?, ?, ?, ?, ?)""",
             (source, str(subject), now_iso, tier, 1 if ok else 0, poll_run_id),
         )
+
+
+def league_stale_unresolved_match_ids(
+    conn_core: sqlite3.Connection,
+    league_id: int,
+    now_iso: str,
+    threshold_hours: float = POSTMATCH_STALE_THRESHOLD_HOURS,
+) -> set[int]:
+    """该联赛里"kickoff + threshold_hours < now 但 status != 'Finish'"的比赛
+    (PIPELINE_REDESIGN_V2 P4 事件驱动到期信号)。
+
+    SQL 先按 status/kickoff_precision/kickoff_source 粗筛,真正的精确性验证
+    仍经 normalize_exact_kickoff(同 upcoming_precise_matches 的纪律,CLAUDE.md
+    §6.2.1)——没有可验证精确开球时间的比赛不参与判定,不得推断补零。
+    """
+    rows = conn_core.execute(
+        """SELECT Match_ID, kickoff_at_utc, kickoff_precision, kickoff_source
+           FROM dim_match
+           WHERE League_ID=? AND status != 'Finish'
+             AND kickoff_precision='exact' AND kickoff_source IS NOT NULL
+             AND kickoff_at_utc IS NOT NULL""",
+        (league_id,),
+    ).fetchall()
+    now = _parse_iso(now_iso)
+    stale: set[int] = set()
+    for r in rows:
+        normalized = normalize_exact_kickoff(
+            r["kickoff_at_utc"], r["kickoff_precision"], r["kickoff_source"]
+        )
+        if normalized is None:
+            continue
+        elapsed_hours = (now - _parse_iso(normalized)).total_seconds() / 3600.0
+        if elapsed_hours > threshold_hours:
+            stale.add(int(r["Match_ID"]))
+    return stale
 
 
 def upcoming_precise_matches(

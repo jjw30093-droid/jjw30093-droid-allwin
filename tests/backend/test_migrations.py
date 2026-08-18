@@ -144,7 +144,10 @@ def test_lineup_snap_type_column_and_backfill(tmp_path):
     conn.close()
 
     applied = migrate.apply_all("odds", db_file=db, quiet=True)
-    assert applied == 1  # 只新增 0009
+    # 不带 migrations_dir 时从真实目录(非 staged 副本)接着应用——staged 只到
+    # 0008,真实目录此时还有 0009(lineup_type)与 0010(PIPELINE_REDESIGN_V2 P4
+    # 的 postmatch_retry_state,与本测试主题无关但同样待应用)两个未应用版本。
+    assert applied == 2
 
     conn = sqlite3.connect(db)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(bronze_fm_lineup_snap)")}
