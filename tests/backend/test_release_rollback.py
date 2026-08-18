@@ -315,10 +315,16 @@ class TestCopyModelArtifacts:
     def test_copies_artifact_into_fresh_release_dir(self, tmp_path):
         app_root = _setup_app_root(tmp_path)
         expected_bytes = (app_root / "shared" / "models" / "wdl_baseline_params.pkl").read_bytes()
+        fake_bin = _ensure_fake_systemctl_sudo(tmp_path)
+        # 测试沙箱没有真实 allwin 系统组,chgrp 会失败——只验证拷贝内容本身,
+        # sudo chgrp/chmod 的调用参数由 test_copy_chgrp_and_chmod_target_
+        # copied_artifact_via_sudo 单独验证。
+        (fake_bin / "sudo").write_text('#!/bin/sh\nexit 0\n')
+        (fake_bin / "sudo").chmod(0o755)
         r = _run(
             f'{SOURCE_RELEASE}; preflight; do_rsync; copy_model_artifacts; '
             f'echo "RELEASE_DIR=$RELEASE_DIR"',
-            _base_env(app_root),
+            _base_env(app_root, tmp_path),
         )
         assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
         release_dir = Path(next(l for l in r.stdout.splitlines() if l.startswith("RELEASE_DIR="))
@@ -326,6 +332,40 @@ class TestCopyModelArtifacts:
         copied = release_dir / "backend" / "models" / "artifacts" / "wdl_baseline_params.pkl"
         assert copied.exists(), "copy_model_artifacts 必须把模型参数文件放进新 release 目录"
         assert copied.read_bytes() == expected_bytes, "拷贝内容必须与 shared/models/ 源文件字节一致"
+
+    def test_copy_chgrp_and_chmod_target_copied_artifact_via_sudo(self, tmp_path):
+        """2026-08-18 真实生产事故:plain cp 不带 -p,新文件属组是运行 release.sh
+        的部署用户(ubuntu)的默认组,不是 allwin——线上 allwin-postmatch.service
+        以 User=allwin 运行,model_predict 读这个文件时 PermissionError(mode
+        640、group=ubuntu,allwin 用户不在 ubuntu 组,拿到的是"其它用户"权限位,
+        本例中是 0)。同 fix_next_permissions 的先例(.next 缓存目录属组问题),
+        显式 chgrp+chmod 到 allwin 组,不依赖 cp 的默认行为。"""
+        app_root = _setup_app_root(tmp_path)
+        env = _base_env(app_root, tmp_path)
+        fake_bin = _ensure_fake_systemctl_sudo(tmp_path)
+        log_file = tmp_path / "sudo_calls_artifact.log"
+        # 记录调用参数即可,不真的执行(测试沙箱里没有 allwin 系统组)——同
+        # TestFixNextPermissions 对 sudo chgrp 的验证方式一致。
+        (fake_bin / "sudo").write_text(f'#!/bin/sh\necho "$@" >> "{log_file}"\nexit 0\n')
+        (fake_bin / "sudo").chmod(0o755)
+
+        r = _run(
+            f'{SOURCE_RELEASE}; preflight; do_rsync; copy_model_artifacts; '
+            f'echo "RELEASE_DIR=$RELEASE_DIR"',
+            env,
+        )
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        release_dir = Path(next(l for l in r.stdout.splitlines() if l.startswith("RELEASE_DIR="))
+                            .split("=", 1)[1])
+        copied = release_dir / "backend" / "models" / "artifacts" / "wdl_baseline_params.pkl"
+        assert copied.exists()
+        calls = log_file.read_text().splitlines()
+        assert any(c.startswith("chgrp allwin ") and c.endswith(str(copied)) for c in calls), (
+            f"未见预期的 sudo chgrp allwin 调用: {calls}"
+        )
+        assert any(c.startswith("chmod g+r ") and c.endswith(str(copied)) for c in calls), (
+            f"未见预期的 sudo chmod g+r 调用: {calls}"
+        )
 
     def test_do_build_calls_copy_model_artifacts(self, tmp_path):
         """do_build 必须自动包含这一步,不能只靠手动调用——否则每次发布又会
