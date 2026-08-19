@@ -29,7 +29,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSection";
+import { ProjectedLineupSection, rowsFor } from "@/components/matches/ProjectedLineupSection";
 import type { components } from "@/lib/api-types";
 
 afterEach(cleanup);
@@ -278,6 +278,48 @@ describe("ProjectedLineupSection 整场都没有快照(生产 100% 状态,此前
     expect(container.textContent).toContain("暂无数据");
     expect(container.textContent).toContain("该场暂无伤停快照采集记录");
     expect(container.textContent).not.toContain("0 人");
+  });
+});
+
+describe("rowsFor E-full:按真实球场坐标分行分列(H8 真修复,不再是止损)", () => {
+  /** id 故意乱序、且与真实站位相反(最小 id 分给前锋、最大 id 分给门将),
+   * 防止实现"偷懒"继续依赖 id 排序侥幸凑对——必须真的按 pos_y/pos_x 分行。
+   * 坐标取自仓内真实 fixture(prematch-5104961.json,formation 3-4-2-1)的
+   * 真实观测值。 */
+  const shuffledStarters = [
+    { id: 5, name: "FW", shirt_number: "9", pos_x: 0.5, pos_y: 0.87 },
+    { id: 40, name: "MID4", shirt_number: "8", pos_x: 0.875, pos_y: 0.485 },
+    { id: 60, name: "DEF3", shirt_number: "6", pos_x: 0.79, pos_y: 0.292 },
+    { id: 99, name: "GK", shirt_number: "1", pos_x: 0.5, pos_y: 0.1 },
+    { id: 80, name: "AM2", shirt_number: "11", pos_x: 0.7, pos_y: 0.678 },
+    { id: 20, name: "MID2", shirt_number: "4", pos_x: 0.125, pos_y: 0.485 },
+    { id: 10, name: "DEF1", shirt_number: "2", pos_x: 0.21, pos_y: 0.292 },
+    { id: 50, name: "MID3", shirt_number: "7", pos_x: 0.625, pos_y: 0.485 },
+    { id: 15, name: "AM1", shirt_number: "10", pos_x: 0.3, pos_y: 0.678 },
+    { id: 70, name: "DEF2", shirt_number: "5", pos_x: 0.5, pos_y: 0.292 },
+    { id: 30, name: "MID1", shirt_number: "3", pos_x: 0.375, pos_y: 0.485 },
+  ];
+
+  it("按 pos_y 分行(门将永远是 y 最小的那个,不是数组第 0 个)、行内按 pos_x 从左到右排", () => {
+    const rows = rowsFor({
+      team_id: 1, formation: "3-4-2-1", coach: null, subs: [],
+      starters: shuffledStarters,
+    });
+    expect(rows?.map((r) => r.map((p) => p.id))).toEqual([
+      [99],
+      [10, 70, 60],
+      [20, 30, 50, 40],
+      [15, 80],
+      [5],
+    ]);
+  });
+
+  it("任一首发缺 pos_x/pos_y(旧快照)时返回 null,不按错误顺序猜测摆位", () => {
+    const starters = shuffledStarters.map((p, i) =>
+      i === 0 ? { ...p, pos_x: null, pos_y: null } : p,
+    );
+    const rows = rowsFor({ team_id: 1, formation: "3-4-2-1", coach: null, subs: [], starters });
+    expect(rows).toBeNull();
   });
 });
 

@@ -8,8 +8,26 @@
 """
 
 
+def _layout_coord(v) -> float | None:
+    """从 verticalLayout.x / verticalLayout.y 取一个数字坐标,非数字/缺失如实
+    None——0 是合法坐标值(门将常见 y≈0.1,不是 0),不能当哨兵用 `or` 短路。"""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return round(float(v), 4)
+    return None
+
+
 def _player_brief(p: dict) -> dict:
-    return {"id": p.get("id"), "name": p.get("name"), "shirt_number": p.get("shirtNumber")}
+    layout = p.get("verticalLayout")
+    layout = layout if isinstance(layout, dict) else {}
+    return {
+        "id": p.get("id"),
+        "name": p.get("name"),
+        "shirt_number": p.get("shirtNumber"),
+        "pos_x": _layout_coord(layout.get("x")),
+        "pos_y": _layout_coord(layout.get("y")),
+    }
 
 
 def _sorted_players(players) -> list[dict]:
@@ -52,6 +70,19 @@ def extract_lineup_snapshot(match_details_payload: dict) -> dict:
     ——每侧一个,两队教练不同,绝不提到顶层(与 lineup_type 提到顶层的理由正好
     相反,那个字段一场只有一份)。只取 {id, name},见 _coach_brief 的字段取舍
     理由。旧快照没有这个键,读侧按缺失处理(None),不回填猜测值。
+
+    pos_x/pos_y(2026-08-19 新增,Fix H8):修复真实用户报告的门将站位错误(马竞
+    vs 马拉加,奥布拉克被画成中卫)。根因是 _sorted_players 为了 hash 稳定按
+    id 重排首发数组,销毁了来源数组"门将在前、沿球场纵深排列"的真实顺序,
+    前端 rowsFor 又天真地把重排后的 starters[0] 当门将——两个问题叠加导致
+    整张球场图的分行都不可信,不只是门将。仓内 fixture(prematch-5104961.json)
+    实测确认上游随每名球员下发 verticalLayout.{x,y}(归一化 0..1 坐标,y 越小
+    离己方球门越近),取这两个数字随 id 一起存,前端据此重新按真实坐标分行,
+    不再依赖数组顺序,和"按 id 排序保证 hash 稳定"这条既有不变量完全不冲突。
+    只取 x/y 两个数字,不取 positionId/usualPlayingPositionId——这两个字段的
+    完整取值含义没有逐值验证过,不能拿未经验证的枚举去决定"谁是门将"这种会被
+    用户看到并较真的展示细节。旧快照没有 verticalLayout 键,如实 None,不回填
+    猜测坐标(前端据此退化成不画球场图,而不是继续按错误顺序画错位置)。
     """
     lineup = (match_details_payload or {}).get("content", {}).get("lineup") or {}
     snapshot = {

@@ -939,6 +939,11 @@ class MatchPreviewPlayerDTO(BaseModel):
     id: int
     name: str
     shirt_number: Optional[str] = None
+    # 归一化球场坐标(0..1,y 越小离己方球门越近),来源没给(旧快照/替补席从不
+    # 带坐标)时如实 None——前端据此判断能否画真实站位球场图,不得补 0
+    # (backend/providers/fotmob_snapshots.py 的 pos_x/pos_y 字段取舍注释)。
+    pos_x: Optional[float] = None
+    pos_y: Optional[float] = None
 
 
 class MatchPreviewCoachDTO(BaseModel):

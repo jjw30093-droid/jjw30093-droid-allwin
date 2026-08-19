@@ -411,6 +411,67 @@ class TestFotmobSnapshots:
         assert s1["home"]["coach"] == {"id": 7, "name": "Diego Simeone"}
         assert nowgoal.canonical_payload_json(s1) == nowgoal.canonical_payload_json(s2)
 
+    # ── 球场坐标提取(2026-08-19,Fix H8):真实首发数组顺序 = 门将在前、
+    # 沿 verticalLayout.y 从小到大排列(离己方球门越近 y 越小),但
+    # _sorted_players 为了 hash 稳定按 id 重排会把这个顺序打乱、连"谁是门将"
+    # 都保不住。上游其实随每名球员下发了 verticalLayout(归一化 0..1 坐标,
+    # 仓内 fixture tests/fixtures/fotmob/prematch-5104961.json 实测验证:
+    # 门将 y=0.1,后卫线 y=0.292,中场线 y=0.485...)。只取 x/y 两个数字,不取
+    # positionId/usualPlayingPositionId 等未逐值验证含义的字段。──────────
+
+    def test_position_layout_extracted_per_player(self):
+        payload = _fm_payload()
+        starters = payload["content"]["lineup"]["homeTeam"]["starters"]
+        next(p for p in starters if p["id"] == 10)["verticalLayout"] = {
+            "x": 0.5, "y": 0.1, "width": 1, "height": 0.192,
+        }
+        next(p for p in starters if p["id"] == 20)["verticalLayout"] = {
+            "x": 0.21, "y": 0.292, "width": 0.192, "height": 0.192,
+        }
+        snap = fotmob_snapshots.extract_lineup_snapshot(payload)
+        by_id = {p["id"]: (p["pos_x"], p["pos_y"]) for p in snap["home"]["starters"]}
+        assert by_id[10] == (0.5, 0.1)
+        assert by_id[20] == (0.21, 0.292)
+
+    def test_position_layout_missing_gives_none_not_zero(self):
+        """_fm_payload() 的球员本来就没有 verticalLayout 键(旧快照同形状)——
+        如实 None,不得默认成 0(0 恰好是合法坐标值,不能拿它当"缺失"哨兵)。"""
+        snap = fotmob_snapshots.extract_lineup_snapshot(_fm_payload())
+        assert all(p["pos_x"] is None and p["pos_y"] is None for p in snap["home"]["starters"])
+
+    def test_position_layout_non_numeric_gives_none(self):
+        payload = _fm_payload()
+        starters = payload["content"]["lineup"]["homeTeam"]["starters"]
+        next(p for p in starters if p["id"] == 10)["verticalLayout"] = {"x": "n/a", "y": None}
+        snap = fotmob_snapshots.extract_lineup_snapshot(payload)
+        by_id = {p["id"]: (p["pos_x"], p["pos_y"]) for p in snap["home"]["starters"]}
+        assert by_id[10] == (None, None)
+
+    def test_position_layout_does_not_break_hash_stability_across_source_order(self):
+        """新增字段后,既有的"来源球员数组顺序不同不影响 hash"这条不变量必须
+        继续成立(_sorted_players 仍按 id 重排,不受 pos_x/pos_y 影响)。"""
+        p1, p2 = _fm_payload(), _fm_payload()
+        for p in p1["content"]["lineup"]["homeTeam"]["starters"]:
+            p["verticalLayout"] = {"x": 0.5, "y": 0.1 if p["id"] == 10 else 0.292}
+        for p in p2["content"]["lineup"]["homeTeam"]["starters"]:
+            p["verticalLayout"] = {"x": 0.5, "y": 0.1 if p["id"] == 10 else 0.292}
+        p2["content"]["lineup"]["homeTeam"]["starters"].reverse()
+        s1 = fotmob_snapshots.extract_lineup_snapshot(p1)
+        s2 = fotmob_snapshots.extract_lineup_snapshot(p2)
+        assert nowgoal.canonical_payload_json(s1) == nowgoal.canonical_payload_json(s2)
+
+    def test_position_layout_change_does_change_canonical_hash(self):
+        """字段取舍守卫的反面:pos_x/pos_y 真的进入了 canonical payload,不是
+        提取了却又在别处被丢弃——否则本次修复对已投产的旧数据毫无意义。"""
+        p1, p2 = _fm_payload(), _fm_payload()
+        target1 = next(p for p in p1["content"]["lineup"]["homeTeam"]["starters"] if p["id"] == 10)
+        target1["verticalLayout"] = {"x": 0.5, "y": 0.1}
+        target2 = next(p for p in p2["content"]["lineup"]["homeTeam"]["starters"] if p["id"] == 10)
+        target2["verticalLayout"] = {"x": 0.5, "y": 0.292}
+        s1 = fotmob_snapshots.extract_lineup_snapshot(p1)
+        s2 = fotmob_snapshots.extract_lineup_snapshot(p2)
+        assert nowgoal.canonical_payload_json(s1) != nowgoal.canonical_payload_json(s2)
+
     def test_sideline_extraction(self):
         snap = fotmob_snapshots.extract_sideline_snapshot(_fm_payload(), 9825)
         assert snap["team_id"] == 9825

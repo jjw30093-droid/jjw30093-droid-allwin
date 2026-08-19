@@ -3015,6 +3015,10 @@ export interface components {
             name: string;
             /** Shirt Number */
             shirt_number?: string | null;
+            /** Pos X */
+            pos_x?: number | null;
+            /** Pos Y */
+            pos_y?: number | null;
         };
         /** MatchPreviewPlayerShareBlockDTO */
         MatchPreviewPlayerShareBlockDTO: {

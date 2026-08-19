@@ -15,13 +15,14 @@
  * 把它们提到组件顶层,不比照原始设计稿把它们塞进每一侧,那样会诱使未来的改动
  * 误以为两队可能有不同的 lineup_type。
  *
- * 球场图:按 formation 分行排布,并在图下写明「位置为按阵型示意」。这不是因为
- * 数据源不给站位坐标——仓内 fixture 显示上游其实给了归一化 verticalLayout/
- * horizontalLayout,只是当前 extract_lineup_snapshot 的 _player_brief 只取
- * {id, name, shirt_number},没有保留它(2026-08-18 复核,H7)。真正画对站位
- * 需要后端先保留坐标或来源顺序,是独立的后续任务,这里的分行只是示意,不代表
- * 真实站位;_sorted_players 还会按 id 重排,连"谁是门将"都不可靠(H8),所以
- * 图下文案也不再点名任何具体球员。
+ * 球场图(2026-08-19 真修复 H7/H8,不再是止损):真实用户报告马竞 vs 马拉加
+ * 一场把奥布拉克画成中卫、卡多索画成门将——根因是后端 _sorted_players 为了
+ * hash 稳定按 id 重排过首发数组,数组顺序早就不代表场上位置,组件此前却把
+ * starters[0] 当门将、按数组切片当各线。现在后端 extract_lineup_snapshot 会
+ * 额外保留每名球员的归一化球场坐标(pos_x/pos_y,来自上游 verticalLayout,
+ * 2026-08-19 新增),rowsFor 按坐标重新排序、分行、分列,不再依赖数组顺序——
+ * 该字段上线前写入的旧快照没有坐标,rowsFor 对这类快照如实返回 null,组件
+ * 退化成不画球场图(纯名单列表),不会用旧顺序继续画错位置。
  * (components/matches/PitchFormation.tsx 是赛后阵型图,那里有 extra_json 的
  *  归一化坐标,两者不是同一份数据,不要复用。)
  */
@@ -124,15 +125,31 @@ function describeLineup(lineupType: string | null, source: string | null): Lineu
   };
 }
 
-/** 按 formation 分行:[门将] + 各线。formation 缺失或首发不足 11 人时退化为不画球场。 */
-function rowsFor(side: LineupSide): Player[][] | null {
+/**
+ * 按 formation 分行:[门将] + 各线。formation 缺失或首发不足 11 人时退化为
+ * 不画球场。
+ *
+ * 2026-08-19 修复(H8,真实用户报告:马竞 vs 马拉加球场图把奥布拉克画成中卫,
+ * 卡多索画成门将)——此前按 side.starters 的数组顺序切片,但后端
+ * _sorted_players 为了 hash 稳定按 id 重排过这个数组,数组顺序早就不代表
+ * 场上位置,starters[0] 也不可靠是门将。现在改为按数据源真实给出的球场坐标
+ * (pos_y 从小到大 = 从己方球门到对方球门,同一行内 pos_x 从小到大 = 从左到
+ * 右)重新排序后再按阵型行数切片,不再依赖数组顺序。任一首发缺坐标(旧快照,
+ * 该字段上线前写入)时如实返回 null——不能对一部分球员有真坐标、另一部分没有
+ * 时还硬画,那样只是把"整体乱"换成"部分乱",一样是编造。
+ */
+export function rowsFor(side: LineupSide): Player[][] | null {
   if (!side.formation || side.starters.length < 11) return null;
   const lines = side.formation.split("-").map(Number);
   if (lines.some((n) => !Number.isInteger(n) || n <= 0)) return null;
-  const rows: Player[][] = [[side.starters[0]]];
+  if (side.starters.some((p) => p.pos_x == null || p.pos_y == null)) return null;
+  const ordered = [...side.starters].sort(
+    (a, b) => (a.pos_y as number) - (b.pos_y as number) || (a.pos_x as number) - (b.pos_x as number),
+  );
+  const rows: Player[][] = [[ordered[0]]];
   let i = 1;
   for (const n of lines) {
-    rows.push(side.starters.slice(i, i + n));
+    rows.push(ordered.slice(i, i + n));
     i += n;
   }
   return rows;
@@ -338,7 +355,10 @@ export function ProjectedLineupSection({
                     <Pitch side={active} isHome={side === "home"} />
                     <p className={styles.pitchNote}>
                       {pitchCaption}:{side === "home" ? homeName : awayName}{" "}
-                      {active.formation ?? "阵型未知"}。图中球员只按阵型分行摆放,本站保存的这条快照没有保留数据源给的位置信息,所以某名球员落在哪一行、行内排第几个,都不代表他在场上的真实位置。
+                      {active.formation ?? "阵型未知"}。
+                      {rowsFor(active)
+                        ? "图中站位按数据源给出的球场坐标摆放,坐标为归一化示意坐标,不是精确 GPS,门将/各线的先后顺序真实可信。"
+                        : "本站保存的这条快照没有带球场坐标,球员只能按名单顺序列出,不代表真实站位(开赛前会再次采集,新采集的快照通常带坐标)。"}
                     </p>
                     {active.subs.length > 0 ? (
                       <details className={styles.bench}>
