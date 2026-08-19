@@ -31,6 +31,7 @@ import {
   MatchDetailBody,
   type AnalysisBundle,
 } from "@/components/matches/MatchDetailBody";
+import { relatedMatchesQuery } from "@/lib/match-links";
 import styles from "@/components/league/MemberLeagueSection.module.css";
 
 type LoadedData = {
@@ -77,8 +78,12 @@ export function MemberMatchDetail({
         clientFetch<MatchPreviewResponse>(`/api/v1/matches/${matchId}/preview`).catch(
           () => null,
         ),
+        // query 串收口到 lib/match-links.ts::relatedMatchesQuery——与 SSR 路径
+        // (app/matches/[matchId]/page.tsx)共用同一个函数,不允许出现第二套
+        // 拼接逻辑(2026-08-19 性能修复;此前这里独立内联了一份 limit=200,
+        // 与 SSR 路径各自维护,是这类"两处取数各写一次"bug 的又一个真实案例)。
         clientFetch<MatchListResponse>(
-          `/api/v1/matches?league_id=${detail.match.league_id}&status=upcoming&window=7d&limit=200`,
+          `/api/v1/matches?${relatedMatchesQuery(detail.match.league_id)}`,
         ).catch(() => null),
       ]);
       const relatedMatches = related?.matches ?? [];

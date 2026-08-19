@@ -112,7 +112,75 @@ def odds_coverage_sets(conn_odds: sqlite3.Connection) -> tuple[set[int], set[int
     return full, legacy
 
 
-def odds_last_observed_by_match(conn_odds: sqlite3.Connection) -> dict[int, str]:
+def odds_coverage_for_match(conn_odds: sqlite3.Connection, match_id: int) -> tuple[bool, bool]:
+    """odds_coverage_sets 的单场版:(该场是否有完整时间线, 该场是否有旧两点摘要)。
+
+    2026-08-19 性能修复:GET /matches/{id} 只需要标注**这一场**比赛的覆盖档位,
+    却在调 odds_coverage_sets() 时被迫先算出全站约 2,291 场比赛的两个集合再
+    做 `match_id in ...` 判断——遍历 737K 条索引项只为了扔掉其中 2,290 场的
+    结果。这里复用同一张覆盖索引 idx_ng_snap_series(provider_match_id, ...)
+    直接按 provider_match_id 探测,SQLite 走 SEARCH 而不是 SCAN(EXPLAIN QUERY
+    PLAN 已核实),生产实测从 209ms(与 odds_last_observed_for_match 合计)
+    降到 0.01ms 量级。
+
+    与 odds_coverage_sets 逐位等价(同一 JOIN 条件、同一 review_status 门槛),
+    由 tests/backend/test_odds_single_match_scoped.py 钉住;列表端点仍然用
+    整表版(那里"一次算全部、避免 N+1"是正确优化,不受本函数影响)。
+    """
+    try:
+        full = conn_odds.execute(
+            """SELECT 1
+                 FROM dim_match_xref x
+                 JOIN bronze_ng_odds_snap b
+                   ON b.provider_match_id=x.provider_match_id
+                WHERE x.provider='nowgoal'
+                  AND x.review_status IN ('auto_ok','confirmed')
+                  AND x.fotmob_match_id=?
+                LIMIT 1""",
+            (match_id,),
+        ).fetchone() is not None
+    except sqlite3.OperationalError:
+        full = False
+    try:
+        legacy = conn_odds.execute(
+            "SELECT 1 FROM bronze_legacy_odds_summary WHERE fotmob_match_id=? LIMIT 1",
+            (match_id,),
+        ).fetchone() is not None
+    except sqlite3.OperationalError:
+        legacy = False
+    return full, legacy
+
+
+def odds_last_observed_for_match(conn_odds: sqlite3.Connection, match_id: int) -> str | None:
+    """odds_last_observed_by_match 的单场版:该场 full_timeline 赔率最后一次
+    真实 observed_at,没有快照时如实 None(不是抛异常,也不编造时间)。
+
+    2026-08-19 性能修复:同 odds_coverage_for_match 的理由——单场详情端点
+    不该为了一场比赛的时间戳去算全站 GROUP BY。与整表版同一 JOIN 条件、
+    同一 review_status 门槛,由 tests/backend/test_odds_single_match_scoped.py
+    钉住等价性。
+    """
+    try:
+        row = conn_odds.execute(
+            """SELECT MAX(b.observed_at)
+                 FROM dim_match_xref x
+                 JOIN bronze_ng_odds_snap b
+                   ON b.provider_match_id=x.provider_match_id
+                WHERE x.provider='nowgoal'
+                  AND x.review_status IN ('auto_ok','confirmed')
+                  AND x.fotmob_match_id=?""",
+            (match_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if row is None or row[0] is None:
+        return None
+    return str(row[0])
+
+
+def odds_last_observed_by_match(
+    conn_odds: sqlite3.Connection, match_ids: set[int] | None = None
+) -> dict[int, str]:
     """{fotmob_match_id: 该场 NowGoal 完整时间线赔率最后一次真实 observed_at}。
 
     只覆盖 full_timeline(auto_ok/confirmed 的 NowGoal 快照,与 odds_coverage_sets
@@ -123,16 +191,31 @@ def odds_last_observed_by_match(conn_odds: sqlite3.Connection) -> dict[int, str]
 
     一次 GROUP BY 查询拿到所有比赛的 MAX(observed_at),每请求调一次,不逐场
     比赛单独查(N+1)。
+
+    match_ids(2026-08-19 性能修复):可选收窄——省略/None 时行为与之前逐字节
+    相同(全站 737K 条索引项的 GROUP BY,生产实测 142ms);列表端点在算完这一
+    页真正返回哪些比赛后,把这批 id 传进来,只放大对这一页有用的结果集,
+    不改变返回值的形状或语义,只改变覆盖范围。空集合直接返回 {}(不发查询)。
     """
+    if match_ids is not None and not match_ids:
+        return {}
+    scope_clause = ""
+    params: list = []
+    if match_ids is not None:
+        placeholders = ",".join("?" for _ in match_ids)
+        scope_clause = f" AND x.fotmob_match_id IN ({placeholders})"
+        params = sorted(match_ids)
     try:
         rows = conn_odds.execute(
-            """SELECT x.fotmob_match_id, MAX(b.observed_at)
+            f"""SELECT x.fotmob_match_id, MAX(b.observed_at)
                  FROM dim_match_xref x
                  JOIN bronze_ng_odds_snap b
                    ON b.provider_match_id=x.provider_match_id
                 WHERE x.provider='nowgoal'
                   AND x.review_status IN ('auto_ok','confirmed')
-                GROUP BY x.fotmob_match_id"""
+                  {scope_clause}
+                GROUP BY x.fotmob_match_id""",
+            params,
         ).fetchall()
     except sqlite3.OperationalError:
         return {}
@@ -173,6 +256,7 @@ def classify_odds_freshness(last_observed_at: str | None, *, now: datetime | Non
 
 def latest_1x2_by_match(
     conn_odds: sqlite3.Connection,
+    match_ids: set[int] | None = None,
 ) -> dict[int, dict[str, Any]]:
     """所有比赛的最新 Bet365 1x2 去水概率——一次查询,不逐场请求。
 
@@ -194,7 +278,21 @@ def latest_1x2_by_match(
 
     返回的每场只有一个 observed_at——三段概率条底部必须显示这个时间,
     不得把它当成"实时"文案(数据可能是几小时甚至更久前的快照,§6.2 不伪装)。
+
+    match_ids(2026-08-19 性能修复):可选收窄——省略/None 时行为与之前逐字节
+    相同(全站取回全部 38,888 行并逐行 json.loads,生产实测 104ms)。列表端点
+    对非 boost=free_predicted 的常见路径,在算完这一页真正返回哪些比赛后
+    传入这批 id;boost=free_predicted 明确要求"完整候选窗口内确定性地找",
+    该路径必须继续传 None。空集合直接返回 {}(不发查询)。
     """
+    if match_ids is not None and not match_ids:
+        return {}
+    scope_clause = ""
+    scope_params: list = []
+    if match_ids is not None:
+        scope_placeholders = ",".join("?" for _ in match_ids)
+        scope_clause = f" AND x.fotmob_match_id IN ({scope_placeholders})"
+        scope_params = sorted(match_ids)
     placeholders = ",".join("?" for _ in _WIN_PROB_COMPANY_PRIORITY)
     try:
         rows = conn_odds.execute(
@@ -204,8 +302,9 @@ def latest_1x2_by_match(
                     ON x.provider_match_id = b.provider_match_id AND x.provider='nowgoal'
                  WHERE b.market='1x2' AND b.market_phase='pre_match'
                    AND b.company_id IN ({placeholders})
-                   AND x.review_status IN ('auto_ok','confirmed')""",
-            _WIN_PROB_COMPANY_PRIORITY,
+                   AND x.review_status IN ('auto_ok','confirmed')
+                   {scope_clause}""",
+            list(_WIN_PROB_COMPANY_PRIORITY) + scope_params,
         ).fetchall()
     except sqlite3.OperationalError:
         return {}

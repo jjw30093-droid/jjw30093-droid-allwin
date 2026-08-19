@@ -9,6 +9,7 @@ from backend.media.team_crests import resolve_team_crest_url
 from backend.queries.teams import (
     display_name_for_team,
     provider_name_for_team,
+    team_display_for,
     team_display_map,
 )
 
@@ -237,7 +238,12 @@ def list_matches(
         f"SELECT * FROM dim_match WHERE {cond} ORDER BY {order} LIMIT ? OFFSET ?",
         params + order_params + [limit, offset],
     ).fetchall()
-    display = team_display_map(conn)
+    # 2026-08-19 性能修复:team_display_map() 每次都全扫 dim_match(33,868 行)
+    # 求 304 支球队的译名,只为了本页 ≤limit 场比赛里出现的球队——改成只查
+    # 这一页真正出现过的 team_id(见 backend/queries/teams.py::team_display_for
+    # 的等价性说明与 tests/backend/test_team_display_for.py)。
+    page_team_ids = {r["Home_Team_ID"] for r in rows} | {r["Away_Team_ID"] for r in rows}
+    display = team_display_for(conn, page_team_ids)
     return {"total": total, "matches": [_row_to_summary(r, display) for r in rows]}
 
 
@@ -245,7 +251,8 @@ def match_by_id(conn: sqlite3.Connection, match_id: int) -> dict | None:
     r = conn.execute("SELECT * FROM dim_match WHERE Match_ID=?", (match_id,)).fetchone()
     if r is None:
         return None
-    return _row_to_summary(r, team_display_map(conn))
+    display = team_display_for(conn, {r["Home_Team_ID"], r["Away_Team_ID"]})
+    return _row_to_summary(r, display)
 
 
 def recent_form(
@@ -257,7 +264,13 @@ def recent_form(
            ORDER BY Date DESC LIMIT ?""",
         (before_date, team_id, team_id, limit),
     ).fetchall()
-    display = team_display_map(conn)
+    # 只有对手需要译名(见下方 _team_ref(opp_id,...)),team_id 自己不出现在
+    # 输出里——按真正返回的对手 id 收窄,不查全表。
+    opponent_ids = {
+        (r["Away_Team_ID"] if r["Home_Team_ID"] == team_id else r["Home_Team_ID"])
+        for r in rows
+    }
+    display = team_display_for(conn, opponent_ids)
     out = []
     for r in rows:
         is_home = r["Home_Team_ID"] == team_id
@@ -465,7 +478,7 @@ def recent_shot_map_spec(
     except sqlite3.OperationalError:
         return None
 
-    display = team_display_map(conn)
+    display = team_display_for(conn, {target["Home_Team_ID"], target["Away_Team_ID"]})
     teams = [
         {
             "team_id": int(target["Home_Team_ID"]),
