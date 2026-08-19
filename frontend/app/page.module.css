@@ -84,6 +84,27 @@
   white-space: nowrap;
 }
 
+/* 「焦点战」标签(2026-08-19 强强对话优先)——复用上面的 pill 版式,只换配色。
+ *
+ * §11.2 三条硬约束:
+ * - **不用红色**:红=真实错误或不可用。这是"这场值得看"的正向强调,用品牌
+ *   青绿(--brand-teal,§11.2 语义表里的"主要操作/选中")。
+ * - 字号 12px,落在 DESIGN.md 字号阶梯(11 · 12 · 13.5 · 14.5 · 16 · 19 · 22 · 30)
+ *   上,也满足"用户可见文字最小 12px"。
+ * - 深浅两套只换 CSS 变量,同一份 JSX + 同一条规则,不复制组件树。
+ * 对比度:--brand-teal 对 --gold-hi 底 = 4.58:1(浅)/ 5.45:1(深),均 ≥ 4.5 AA。
+ */
+.pairMarqueeBadge {
+  padding: 2px 8px;
+  border: 1px solid var(--brand-teal);
+  border-radius: var(--r-pill);
+  background: var(--gold-hi);
+  color: var(--brand-teal);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .pairBody {
   display: flex;
   min-width: 0;

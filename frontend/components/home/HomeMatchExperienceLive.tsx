@@ -26,7 +26,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clientFetch, type GetJson, type MatchListResponse } from "@/lib/api-v1";
-import { selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
+import { marqueeRank, selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
 import { KickoffCountdown } from "@/components/matches/KickoffCountdown";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { LeagueBadge } from "@/components/matches/LeagueBadge";
@@ -61,12 +61,17 @@ export async function fetchHomeData(): Promise<{
 }> {
   const [upcoming, todayList, tomorrowList, shotsList] = await Promise.all([
     // boost=free_predicted:与 app/page.tsx 的 SSR 请求同一个参数、同一个
-    // 目的——把"已发布概率"的比赛在服务端顶进 limit=8 截断线以内,不能只看
-    // API 原始顺序的前 8 条(见 lib/homepage.ts 顶部注释:这里和 SSR 必须用
+    // 目的——把"已发布概率"的比赛在服务端顶进 limit 截断线以内,不能只看
+    // API 原始顺序的前几条(见 lib/homepage.ts 顶部注释:这里和 SSR 必须用
     // 同一套判据)。参数名沿用后端既有 query 定义(backend/api/routes_public.py),
     // 与登录态无关,只是"这场比赛是否已算出概率"的服务端筛选提示。
+    //
+    // limit=70(2026-08-19,原为 8):理由见 app/page.tsx 同一处请求的注释
+    // ——24h 窗口 + 强强对话优先需要看到整个窗口的候选,8 场不够;70 对齐的是
+    // 滚动 24h 窗口的实测最大容量(生产 3798 场赛程实测 70 场),不是自然日峰值。
+    // 两处必须同步改,否则挂载后的客户端刷新会用不同候选池换掉 SSR 选出的重点卡。
     clientFetch<MatchListResponse>(
-      "/api/v1/matches?status=upcoming&window=7d&limit=8&boost=free_predicted",
+      "/api/v1/matches?status=upcoming&window=7d&limit=70&boost=free_predicted",
     ),
     clientFetch<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=today&limit=1",
@@ -224,7 +229,20 @@ function KickoffRow({ match }: { match: HomeMatchCard["match"] }) {
   );
 }
 
-function CardHeader({ match }: { match: HomeMatchCard["match"] }) {
+/**
+ * `marquee` = 这场是强强对话(lib/homepage.ts::marqueeRank,同一份 team_id
+ * 名单,组件里不写第二套判据)。排序规则把它顶到重点位之后,卡面必须说明
+ * "为什么是这场",否则用户只看到一张普通比赛卡、规则等于没生效。
+ *
+ * §11.2:卡头最多三层——联赛·轮次 + 焦点战 + 比赛状态,不再加第四枚胶囊。
+ */
+function CardHeader({
+  match,
+  marquee = false,
+}: {
+  match: HomeMatchCard["match"];
+  marquee?: boolean;
+}) {
   return (
     <header className={styles.pairHeader}>
       <span className={styles.pairLeague}>
@@ -233,6 +251,7 @@ function CardHeader({ match }: { match: HomeMatchCard["match"] }) {
         {match.round ? ` · 第${match.round}轮` : ""}
       </span>
       <span className={styles.pairBadges}>
+        {marquee && <span className={styles.pairMarqueeBadge}>焦点战</span>}
         <span className={styles.pairStatusBadge}>{STATUS_ZH[match.status] ?? match.status}</span>
       </span>
     </header>
@@ -247,7 +266,7 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
 
   return (
     <article className={styles.featuredCard} data-testid="featured-match-card">
-      <CardHeader match={match} />
+      <CardHeader match={match} marquee={marqueeRank(card) === 0} />
 
       <div className={styles.pairBody}>
         <div className={styles.pairMatchup}>
