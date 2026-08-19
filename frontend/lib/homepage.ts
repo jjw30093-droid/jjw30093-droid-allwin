@@ -103,12 +103,22 @@ function kickoffMsOf(card: HomeMatchCard): number {
  * 是否落在重点位窗口内:开球时刻 ∈ (now, now + FEATURED_WINDOW_HOURS]。
  *
  * 右边界取**闭区间**:恰好 24h 后开球的比赛算在窗口内。
- * 左边界取**开区间**:已开球的比赛不进窗口,归入回退档 —— 重点位是"接下来
- * 该看哪场",不是"刚刚踢了哪场"。
+ * 左边界取**开区间**:已开球的比赛不进这一档 —— 见 isUpcoming,它们排在
+ * 所有未开赛比赛之后(站长要求「比赛一开始就放下一场」)。
  */
 function inFeaturedWindow(card: HomeMatchCard, nowMs: number): boolean {
   const ahead = kickoffMsOf(card) - nowMs;
   return ahead > 0 && ahead <= FEATURED_WINDOW_MS;
+}
+
+/**
+ * 是否尚未开球。站长要求(2026-08-19):「比赛一开始就放下一场」——
+ * 重点位讲的是"接下来该看哪场",开球那一刻就该轮换到下一场,而不是
+ * 继续占着位置。因此已开球的比赛(含进行中、已完赛)一律排在**所有**
+ * 未开赛比赛之后,只有在候选池里一场未开赛的比赛都没有时才会露面。
+ */
+function isUpcoming(card: HomeMatchCard, nowMs: number): boolean {
+  return kickoffMsOf(card) - nowMs > 0;
 }
 
 /** 一场比赛"点进去有没有东西看"的真实判据。 */
@@ -151,14 +161,15 @@ export function dataRichness(card: HomeMatchCard, signals: MatchDataSignals): nu
  * - 第三版(2026-08-19,站长要求)把"重点比赛必须是 24 小时内的"定为硬门槛,
  *   富集度降级为窗口内的次级键;周末比赛多时,窗口内的**强强对话优先**。
  *
- * 现在的排序键:
- *   主键 1  是否落在 24h 窗口内(见 inFeaturedWindow;已开赛的比赛不算);
- *   主键 2  窗口内: 强强对话 → 数据富集度 → 开球时间正向就近 → 联赛档位;
- *           窗口外: |开球时间 − now| → 强强对话 → 数据富集度 → 联赛档位。
+ * 现在的排序键(三档,依次比较):
+ *   档 A  未开赛 且 在 24h 窗口内 → 强强对话 → 数据富集度 → 开球就近 → 联赛档位
+ *   档 B  未开赛 但 在 24h 之外   → 开球就近 → 强强对话 → 数据富集度 → 联赛档位
+ *   档 C  已开球(进行中/已完赛)  → |开球时间 − now| → 强强对话 → 富集度 → 档位
  *
- * 窗口内用**正向**距离(kickoff − now)而不是 |Δ|:窗口内本来就全是未开赛的
- * 比赛,两者等价,写成正向是为了让意图显式。窗口外仍用 `Math.abs`,精确保留
- * 第二版的回退语义(刚开球 30 分钟的比赛可以比 3 天后的比赛更近)。
+ * 档 A/B 的分界就是站长要的「24 小时」硬门槛;A、B 都为空时才轮到 C。
+ * 「比赛一开始就放下一场」由 A、B 恒排在 C 之前来保证:只要候选池里还有
+ * **任何**一场未开赛的比赛,重点位就不会是一场已经开球的比赛。
+ * 档 B 内部按开球就近排序,对应站长的「没有重点比赛就放最近的比赛」。
  *
  * 富集度依旧只做粗分档、不做连续排序。
  *
@@ -175,16 +186,23 @@ export function selectHomepageMatches(
 } {
   const nowMs = now.getTime();
   const ordered = [...cards].sort((a, b) => {
+    // 主键 0:未开赛的一律排在已开球的之前(站长:「比赛一开始就放下一场」)。
+    const aUp = isUpcoming(a, nowMs);
+    const bUp = isUpcoming(b, nowMs);
+    if (aUp !== bUp) return aUp ? -1 : 1;
+
+    // 主键 1:未开赛内部再按是否落在 24h 窗口分档。
     const aIn = inFeaturedWindow(a, nowMs);
     const bIn = inFeaturedWindow(b, nowMs);
-    if (aIn !== bIn) return aIn ? -1 : 1;
+    if (aUp && aIn !== bIn) return aIn ? -1 : 1;
 
     const ma = marqueeRank(a);
     const mb = marqueeRank(b);
     const ra = dataRichness(a, signals);
     const rb = dataRichness(b, signals);
 
-    if (aIn) {
+    if (aUp && aIn) {
+      // 档 A(24h 窗口内):强强对话 → 富集度 → 开球就近 → 联赛档位
       if (ma !== mb) return ma - mb;
       if (ra !== rb) return rb - ra;
       const ahead = kickoffMsOf(a) - kickoffMsOf(b);
@@ -192,6 +210,17 @@ export function selectHomepageMatches(
       return tierOf(a) - tierOf(b);
     }
 
+    if (aUp) {
+      // 档 B(未开赛、24h 之外):先按开球就近 —— 站长的「没有重点比赛就放
+      // 最近的比赛」。强强对话不在这里越级抢位,否则等于变相放宽 24h 门槛。
+      const ahead = kickoffMsOf(a) - kickoffMsOf(b);
+      if (ahead !== 0) return ahead;
+      if (ma !== mb) return ma - mb;
+      if (ra !== rb) return rb - ra;
+      return tierOf(a) - tierOf(b);
+    }
+
+    // 档 C(已开球):只有候选池里一场未开赛的都没有时才会成为重点位。
     const da = Math.abs(kickoffMsOf(a) - nowMs);
     const db = Math.abs(kickoffMsOf(b) - nowMs);
     if (da !== db) return da - db;

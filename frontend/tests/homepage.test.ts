@@ -244,7 +244,7 @@ describe("selectHomepageMatches:24 小时窗口内的强强对话优先", () => 
 });
 
 describe("selectHomepageMatches(2026-08-12 改版:按开球时间就近排序)", () => {
-  it("选中开球时间离当前最近的一场,不论是刚开球还是即将开球", () => {
+  it("选中开球时间离当前最近的一场,已开球的排在所有未开赛之后", () => {
     const now = new Date("2026-08-12T12:00:00Z");
     const justKickedOff = match(1, "2026-08-12T11:30:00Z"); // 30min 前
     const soon = match(2, "2026-08-12T12:20:00Z"); // 20min 后(离 now 更近)
@@ -253,7 +253,10 @@ describe("selectHomepageMatches(2026-08-12 改版:按开球时间就近排序)",
     const result = selectHomepageMatches([justKickedOff, soon, farAway], now);
 
     expect(result.featured?.match.match_id).toBe(2);
-    expect(result.secondary.map((c) => c.match.match_id)).toEqual([1, 3]);
+    // 2026-08-19 站长要求「比赛一开始就放下一场」后,secondary 由 [1,3] 改为
+    // [3,1]:已开球的 1 让位给 3 天后但仍未开赛的 3。featured 不受影响(仍是 2),
+    // 变的只是已开球比赛在列表里的位次 —— 这是新规则的直接结果,不是放松断言。
+    expect(result.secondary.map((c) => c.match.match_id)).toEqual([3, 1]);
   });
 
   it("同一时刻撞车时按联赛档位打平(英超 > 西甲/意甲/德甲/法甲 > 巴甲 > 其它)", () => {
@@ -387,5 +390,77 @@ describe("publicRecordView", () => {
 
     expect(publicRecordView(empty)).toEqual({ status: "empty" });
     expect(publicRecordView(null, true)).toEqual({ status: "error" });
+  });
+});
+
+/**
+ * 2026-08-19 站长补充要求(原话):「没有重点比赛就放最近的比赛,然后比赛
+ * 一开始就放下一场」。
+ *
+ * 前半句(没有则放最近)由 N2 与 L3 覆盖;后半句是本组的目标。
+ *
+ * ⚠️ 本组曾被实现成完全相反的语义:上一版加了一个"进行中/刚结束"粘滞档
+ * (开球后 4 小时内一直占据重点位),并在注释里把它记成「站长要求比赛结束后
+ * 2 小时才轮换」—— 那条要求站长从未提出过,是实现阶段自行加入的。站长实际
+ * 要求的是**开球即轮换**,故整组用例连同该档一并推翻重写(2026-08-19),
+ * 保留本段说明以免日后再被改回去。
+ */
+describe("重点比赛:比赛一开球就轮换到下一场", () => {
+  const now = new Date("2026-08-12T12:00:00Z");
+
+  function live(matchId: number, kickoff: string, status = "InPlay"): HomeMatchCard {
+    const card = match(matchId, kickoff);
+    (card.match as { status: string }).status = status;
+    return card;
+  }
+
+  it("L1:比赛一开球就让位给下一场(哪怕还在进行中)", () => {
+    const inPlay = live(1, "2026-08-12T11:00:00Z"); // 1 小时前开球,进行中
+    const upcoming = match(2, "2026-08-12T13:00:00Z"); // 1 小时后开球
+
+    const result = selectHomepageMatches([upcoming, inPlay], now);
+
+    expect(result.featured?.match.match_id).toBe(2);
+  });
+
+  it("L2:已开球的比赛即使还没结束,也排在 24h 之外的未开赛比赛之后", () => {
+    const inPlay = live(1, "2026-08-12T11:00:00Z"); // 进行中
+    const farAway = match(2, "2026-08-15T12:00:00Z"); // 3 天后,已在 24h 窗口外
+
+    const result = selectHomepageMatches([inPlay, farAway], now);
+
+    // 未开赛恒优先于已开球:哪怕它远在 3 天后。
+    expect(result.featured?.match.match_id).toBe(2);
+  });
+
+  it("L3:全部已开球时才轮到它们,并按离现在最近的一场", () => {
+    const older = live(1, "2026-08-12T08:00:00Z", "Finish");
+    const newer = live(2, "2026-08-12T11:00:00Z", "Finish");
+
+    const result = selectHomepageMatches([older, newer], now);
+
+    expect(result.featured?.match.match_id).toBe(2);
+  });
+
+  it("L4:强强对话一旦开球同样让位,不因是德比而赖着不走", () => {
+    const derby = live(1, "2026-08-12T11:00:00Z");
+    (derby.match.home as { team_id?: number }).team_id = 8633; // 皇马
+    (derby.match.away as { team_id?: number }).team_id = 8634; // 巴萨
+    const ordinary = match(2, "2026-08-12T13:00:00Z");
+
+    const result = selectHomepageMatches([derby, ordinary], now);
+
+    expect(result.featured?.match.match_id).toBe(2);
+  });
+
+  it("L5:全部已开球时,强强对话在该档内部仍然优先", () => {
+    const ordinary = live(1, "2026-08-12T11:00:00Z");
+    const derby = live(2, "2026-08-12T11:00:00Z");
+    (derby.match.home as { team_id?: number }).team_id = 8633; // 皇马
+    (derby.match.away as { team_id?: number }).team_id = 8634; // 巴萨
+
+    const result = selectHomepageMatches([ordinary, derby], now);
+
+    expect(result.featured?.match.match_id).toBe(2);
   });
 });
