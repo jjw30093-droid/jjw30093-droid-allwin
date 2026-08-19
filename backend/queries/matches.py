@@ -55,22 +55,45 @@ def _iso_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+# 自然日档(北京时间,UTC+8 无夏令时)相对今天的偏移。三段首尾严格相接。
+_CALENDAR_DAY_OFFSETS = {"yesterday": -1, "today": 0, "tomorrow": 1}
+
+# 滚动档天数。正数向未来 [now, now+N),负数向过去 [now-N, now)。
+_ROLLING_WINDOW_DAYS = {"3d": 3, "7d": 7, "past3d": -3, "past7d": -7}
+
+
 def _window_bounds(
     window: str | None, now: datetime
 ) -> tuple[str | None, str | None]:
+    """把 window token 翻成半开区间 [start, end) 的 UTC ISO 字符串。
+
+    两档语义(2026-08-19 增加向过去的窗口后,每档都是双向的):
+    - 自然日档 yesterday/today/tomorrow:按**北京自然日**切,不是滚动 24h。
+      这不是风格选择——生产实测同一时刻"按 UTC 滚动 24h"是 0 场、"按北京
+      自然日"是 5 场,选错用户就看不到昨天的比赛。`today` 因此天然双向,
+      「今天赛果」= window=today & status=finished,不需要另造 token。
+    - 滚动档 3d/7d/past3d/past7d:以请求时刻 now 为锚,past{N}d = [now-N, now)
+      与 {N}d = [now, now+N) 在 now 处严格互补。边界半开,所以开球时刻恰好
+      等于 now 的比赛只属于未来窗,不会被两个窗口同时选中。
+
+    注意上界随请求时刻移动,叠加 60 秒共享缓存后最多滞后 60 秒——文案不得
+    声称赛果窗口"精确到当前时刻"。
+    """
     if window in (None, "all"):
         return None, None
     current = now.astimezone(timezone.utc)
-    if window in {"today", "tomorrow"}:
+    day_offset = _CALENDAR_DAY_OFFSETS.get(window)
+    if day_offset is not None:
         local = current.astimezone(ZoneInfo("Asia/Shanghai"))
-        day_offset = 1 if window == "tomorrow" else 0
         start_local = (local + timedelta(days=day_offset)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         return _iso_utc(start_local), _iso_utc(start_local + timedelta(days=1))
-    days = {"3d": 3, "7d": 7}.get(window)
+    days = _ROLLING_WINDOW_DAYS.get(window)
     if days is None:
         raise ValueError("unsupported match window")
+    if days < 0:
+        return _iso_utc(current + timedelta(days=days)), _iso_utc(current)
     return _iso_utc(current), _iso_utc(current + timedelta(days=days))
 
 
@@ -176,6 +199,11 @@ def list_matches(
     # 数据,只是粒度粗;北京时间是固定 UTC+8 无夏令时偏移,按 UTC 排序等价于
     # 按北京时间排序,不需要额外转换)。
     if status == "finished":
+        # 赛果:最新在前。这条分支**刻意不建 priority CASE**——调用方
+        # (routes_public.py 的 /api/v1/matches)每次都传 priority_match_ids,
+        # 但把"免费且已发布概率"提到前面对赛程有意义、对赛果只会打乱时间倒序,
+        # 用户翻赛果就是要按时间从近到远看。所以 boost=free_predicted 对
+        # status=finished 无效是**设计如此**,不是漏了,别当成 bug 补上。
         order = "julianday(COALESCE(kickoff_at_utc, Date)) DESC, Match_ID DESC"
     else:
         # 两层优先级(2026-08-16 首页重点位确定性选场修复):

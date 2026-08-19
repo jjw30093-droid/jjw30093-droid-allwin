@@ -52,6 +52,7 @@ import {
 import {
   buildMatchesApiQuery,
   buildMatchesHref,
+  defaultWindowFor,
   type MatchFilters as Filters,
 } from "@/lib/match-filters";
 import { MatchRow } from "./MatchRow";
@@ -75,13 +76,39 @@ const STATUS_TABS = [
   ["finished", "已完赛"],
 ] as const;
 
-const WINDOW_TABS = [
+/**
+ * 时间 chip 按状态分叉(2026-08-19)。
+ *
+ * 两套刻意都是 5 个 chip:移动端首屏"第一场比赛 y < 495px"这条验收只剩
+ * 25px 余量(e2e/matches-mobile-first-screen.spec.ts、
+ * matches-mobile-touch-targets.spec.ts 都断言它),chip 行数或行高一变就顶穿。
+ *
+ * 赛果侧的「今天」复用既有的 `today` token,不另造:`today` 本来就是北京
+ * 自然日 [今天00:00, 明天00:00),天然双向,配 status=finished 就是"今天已经
+ * 结束的比赛"。其余三个是新增的向过去窗口(见 backend/queries/matches.py
+ * 的 _window_bounds)。
+ */
+const UPCOMING_WINDOW_TABS = [
   ["today", "今天"],
   ["tomorrow", "明天"],
   ["3d", "未来三天"],
   ["7d", "未来七天"],
   ["all", "全部未来"],
 ] as const;
+
+const FINISHED_WINDOW_TABS = [
+  ["today", "今天"],
+  ["yesterday", "昨天"],
+  ["past3d", "近三天"],
+  ["past7d", "近七天"],
+  ["all", "全部赛果"],
+] as const;
+
+function windowTabsFor(
+  status: Filters["status"],
+): readonly (readonly [Filters["window"], string])[] {
+  return status === "upcoming" ? UPCOMING_WINDOW_TABS : FINISHED_WINDOW_TABS;
+}
 
 /** 分组 key:精确 kickoff 缺失时退回 date_utc,与 MatchRow 渲染该字段时的
  * fallback 约定一致(见 MatchRow.tsx:`match.kickoff_at_utc ? <LocalTime .../> :
@@ -165,11 +192,13 @@ export function MatchListLive({
       <div className={styles.filters}>
         <div className={styles.chipRow}>
           <span className={styles.chipLabel}>时间</span>
-          {WINDOW_TABS.map(([value, label]) => (
+          {/* 刻意**不**写 status:"upcoming" —— 那是修掉的 bug:用户切到
+              已完赛后点任意时间 chip 就被弹回赛程,赛果里等于没有时间筛选。
+              保留当前 status,时间与状态是两个正交维度。 */}
+          {windowTabsFor(status).map(([value, label]) => (
             <Link
               key={value}
               href={buildMatchesHref(filters, {
-                status: "upcoming",
                 window: value,
                 date: undefined,
                 page: 1,
@@ -234,12 +263,16 @@ export function MatchListLive({
           <div className={styles.moreFiltersBody}>
             <div className={styles.chipRow}>
               <span className={styles.chipLabel}>状态</span>
+              {/* 切状态必须同时改写 window:两侧的时间 token 不通用(带着
+                  past7d 切回未开赛 = 恒空,而 isWindowAutoWidenEligible 因为
+                  window 显式存在也不会放宽 → 白板且无任何解释)。统一走
+                  defaultWindowFor,不再硬编码 "all"。 */}
               {STATUS_TABS.map(([value, label]) => (
                 <Link
                   key={label}
                   href={buildMatchesHref(filters, {
                     status: value ?? "all",
-                    window: value === "finished" || value == null ? "all" : filters.window,
+                    window: defaultWindowFor(value ?? "all"),
                     page: 1,
                   })}
                   className={status === (value ?? "all") ? styles.chipActive : styles.chip}
@@ -344,6 +377,18 @@ export function MatchListLive({
       {matches.length === 0 ? (
         <div className={styles.emptyBox}>
           <p>没有符合当前筛选条件的比赛。</p>
+          {/* 选了一个已经过去的日期却停在赛程视图 = 恒空(date ∧ 未开赛)。
+              这是"看不到已结束比赛"的第二条死路,而且白板不给任何解释。
+              这里只给出口,不自动改写用户的筛选——静默改写会让 URL 与界面
+              上显示的筛选状态对不上。 */}
+          {date && status === "upcoming" && (
+            <p className={styles.emptyHint}>
+              这一天的比赛可能已经结束了。
+              <Link href={buildMatchesHref(filters, { status: "finished", window: "all", page: 1 })}>
+                查看 {date} 的赛果 →
+              </Link>
+            </p>
+          )}
         </div>
       ) : (
         <div className={styles.card}>

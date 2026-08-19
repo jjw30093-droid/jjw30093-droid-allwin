@@ -270,7 +270,13 @@ def list_matches(
     # 自然年赛季联赛(挪超/瑞超)是 "2026" 形式,所以放宽到两种写法都接受。
     season: str | None = Query(None, pattern=r"^\d{4}(/\d{4})?$"),
     status: str | None = Query(None, pattern="^(upcoming|finished)$"),
-    window: str | None = Query(None, pattern="^(today|tomorrow|3d|7d|all)$"),
+    # 向过去的窗口(2026-08-19):yesterday/past3d/past7d 是"赛果"视图用的,
+    # 与 today/tomorrow/3d/7d 一一对称(语义见 q_matches._window_bounds)。
+    # today 本来就是北京自然日、天然双向,「今天赛果」用 today&status=finished
+    # 即可,刻意不另造 token。
+    window: str | None = Query(
+        None, pattern="^(today|tomorrow|3d|7d|all|yesterday|past3d|past7d)$"
+    ),
     content: str | None = Query(None, pattern="^(analysis|odds|shots)$"),
     # 首页重点位确定性选场(2026-08-16):default limit 分页天然只看"前 N 条
     # API 原始顺序",完整候选窗口里更靠后的比赛永远没机会被选中,哪怕它才是

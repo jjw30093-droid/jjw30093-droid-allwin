@@ -1463,7 +1463,7 @@
        "anyOf": [
         {
          "type": "string",
-         "pattern": "^(today|tomorrow|3d|7d|all)$"
+         "pattern": "^(today|tomorrow|3d|7d|all|yesterday|past3d|past7d)$"
         },
         {
          "type": "null"

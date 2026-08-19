@@ -56,3 +56,46 @@ describe("SiteNav:登录状态不再展示套餐徽标", () => {
     expect(accountLink.querySelector("span")).toBeNull();
   });
 });
+
+/**
+ * 「比赛」与「赛果」是同一条路由 /matches 的两种视图(靠 ?status 区分)。
+ * 选中态若只看 pathname,两项会同时高亮——这不是纯视觉问题:导航是用户判断
+ * "我现在在哪"的唯一依据,两个都亮等于没有指示。
+ */
+describe("SiteNav:比赛 / 赛果 是同一路由的两个视图,选中态必须互斥", () => {
+  function renderAt(pathname: string, search: string) {
+    vi.resetModules();
+    vi.doMock("next/navigation", () => ({
+      usePathname: () => pathname,
+      useSearchParams: () => new URLSearchParams(search),
+    }));
+    return import("@/components/SiteNav");
+  }
+
+  it.each([
+    ["", "比赛"],
+    ["status=upcoming", "比赛"],
+    ["status=finished", "赛果"],
+  ])("/matches?%s → 只有「%s」是选中态", async (search, expectedActive) => {
+    mockMeFetch({ authenticated: false });
+    const { SiteNav: Nav } = await renderAt("/matches", search);
+    const { container } = render(<Nav />);
+    // 只看顶部主导航:底部导航的「比赛」是路由级入口(两个视图共用一个槽位,
+    // 手机端 5 个槽位已满,刻意不加第 6 个「赛果」),它在两种视图下都该亮。
+    const topNav = container.querySelector('nav[aria-label="主导航"]')!;
+    const current = Array.from(topNav.querySelectorAll('a[aria-current="page"]')).map(
+      (a) => a.textContent,
+    );
+    expect(current).toEqual([expectedActive]);
+  });
+
+  it("赛果入口指向 /matches?status=finished(不带 window —— 省略即该状态的默认窗口)", async () => {
+    mockMeFetch({ authenticated: false });
+    const { SiteNav: Nav } = await renderAt("/", "");
+    const { container } = render(<Nav />);
+    const link = Array.from(container.querySelectorAll("a")).find(
+      (a) => a.textContent === "赛果",
+    );
+    expect(link?.getAttribute("href")).toBe("/matches?status=finished");
+  });
+});

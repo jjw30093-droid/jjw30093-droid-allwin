@@ -12,9 +12,14 @@ import { getMe, type MeResponse } from "@/lib/api-v1";
 import styles from "./SiteNav.module.css";
 import { ThemeToggle } from "./ThemeToggle";
 
+/** 「比赛」与「赛果」是同一条路由 /matches 的两种视图,靠 ?status 区分,
+ * 所以选中态不能只看 pathname——两项会同时高亮。带 `status` 字段的项由
+ * NavLinks 读 searchParams 精确判定(与下方 BottomNavWithTab 同一套 Next 16
+ * Suspense 约定)。 */
 const NAV_ITEMS = [
   { href: "/", label: "首页", exact: true, mobile: false },
-  { href: "/matches", label: "比赛", mobile: true },
+  { href: "/matches", label: "比赛", mobile: true, status: "upcoming" },
+  { href: "/matches?status=finished", label: "赛果", mobile: true, status: "finished" },
   {
     href: "/leagues",
     label: "联赛数据",
@@ -136,6 +141,42 @@ function BottomNavLinks({
   );
 }
 
+/** 主导航链接。`status` 是当前 URL 的 ?status 值(SSR fallback 下为 null,
+ * 此时按"未开赛"这个默认值判定,与 app/matches/page.tsx 的解析口径一致)。 */
+function NavLinks({ pathname, status }: { pathname: string; status: string | null }) {
+  const isActive = (item: (typeof NAV_ITEMS)[number]) => {
+    if (item.exact) return pathname === item.href;
+    if (item.status) {
+      // /matches 的两个视图:pathname 相同,靠 status 区分。URL 没带 status
+      // 时等同 "upcoming"(与页面解析同口径),不能让两项同时高亮。
+      if (pathname !== "/matches") return false;
+      return (status ?? "upcoming") === item.status;
+    }
+    const prefix = item.prefix ?? item.href;
+    return pathname.startsWith(prefix);
+  };
+  return (
+    <>
+      {NAV_ITEMS.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={isActive(item) ? styles.active : styles.link}
+          aria-current={isActive(item) ? "page" : undefined}
+          data-mobile={item.mobile ? "show" : "hide"}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </>
+  );
+}
+
+function NavLinksWithStatus({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  return <NavLinks pathname={pathname} status={searchParams.get("status")} />;
+}
+
 function BottomNavWithTab(props: { pathname: string; authed: boolean }) {
   const searchParams = useSearchParams();
   return <BottomNavLinks {...props} tab={searchParams.get("tab")} />;
@@ -157,11 +198,6 @@ export function SiteNav() {
     };
   }, [pathname]);
 
-  const isActive = (item: (typeof NAV_ITEMS)[number]) => {
-    if (item.exact) return pathname === item.href;
-    const prefix = item.prefix ?? item.href;
-    return pathname.startsWith(prefix);
-  };
 
   const role = me?.authenticated ? me.user?.role : null;
   const authed = Boolean(me?.authenticated);
@@ -179,16 +215,9 @@ export function SiteNav() {
             <span className={styles.brandDescriptor}>足球数据与比赛分析</span>
           </Link>
           <nav className={styles.nav} aria-label="主导航">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={isActive(item) ? styles.active : styles.link}
-                data-mobile={item.mobile ? "show" : "hide"}
-              >
-                {item.label}
-              </Link>
-            ))}
+            <Suspense fallback={<NavLinks pathname={pathname} status={null} />}>
+              <NavLinksWithStatus pathname={pathname} />
+            </Suspense>
             {(role === "analyst" || role === "admin") && (
               <Link
                 href="/studio"

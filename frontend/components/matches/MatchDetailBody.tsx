@@ -373,8 +373,13 @@ export function MatchDetailBody({
             <Link href={`/matches/${previousMatch.match_id}`}>上一场</Link>
           )}
           {nextMatch && <Link href={`/matches/${nextMatch.match_id}`}>下一场</Link>}
-          <Link href="/matches?status=upcoming&window=7d" className={styles.contextNavWide}>
-            查看本周其他比赛
+          {/* 已完赛比赛不该把用户送回"未来七天赛程"——那是另一个语境。
+              指向赛果视图,用户能接着看别的已完赛比赛。 */}
+          <Link
+            href={finished ? "/matches?status=finished" : "/matches?status=upcoming&window=7d"}
+            className={styles.contextNavWide}
+          >
+            {finished ? "查看更多赛果" : "查看本周其他比赛"}
           </Link>
         </span>
       </nav>

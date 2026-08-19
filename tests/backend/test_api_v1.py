@@ -125,6 +125,40 @@ class TestPredictionFieldGate:
         assert body["prediction"] is None
 
 
+class TestMatchWindowParam:
+    """window 参数白名单(2026-08-19 增加向过去的窗口)。
+
+    前后端白名单必须同一次落地:前端先放行 past7d 而这里的正则没改 → 422 →
+    Next.js 的 serverGet 抛错 → /matches 整页渲染成"数据暂时无法加载"错误框
+    (不是空态)。所以这三条断言实际上在守发布顺序,不只是守参数。"""
+
+    @pytest.mark.parametrize(
+        "window",
+        ["today", "tomorrow", "3d", "7d", "all", "yesterday", "past3d", "past7d"],
+    )
+    def test_all_supported_windows_are_accepted(self, app, seeded, window):
+        client = TestClient(app)
+        r = client.get(f"/api/v1/matches?window={window}")
+        assert r.status_code == 200, r.text
+
+    @pytest.mark.parametrize("window", ["past999d", "-7d", "past7", "yesteryear", ""])
+    def test_unsupported_window_is_rejected_not_silently_ignored(self, app, seeded, window):
+        """乱填必须 422。静默忽略会让"窗口没生效"看起来像"这段时间真的没有
+        比赛",是最难查的一类假空态。"""
+        client = TestClient(app)
+        assert client.get(f"/api/v1/matches?window={window}").status_code == 422
+
+    def test_past_window_never_returns_unfinished_matches_when_status_finished(
+        self, app, seeded
+    ):
+        """seeded 布景里 9001 是未来的未开赛比赛。赛果窗口下它必须不出现——
+        钉住"过去窗 + status=finished"不会漏进未开赛行。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches?status=finished&window=past7d").json()
+        assert all(m["status"] == "Finish" for m in body["matches"])
+        assert 9001 not in {m["match_id"] for m in body["matches"]}
+
+
 class TestLeagueGate:
     """2026-08-16 产品权限口径修正:除"每日精选"外全部比赛内容对匿名完全
     开放,不再有任何联赛级登录门禁;LeagueInfo.accessible/entitlement/

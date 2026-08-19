@@ -59,13 +59,24 @@ export function FollowedMatches() {
               <span className={styles.teams}>
                 {m.home.name} vs {m.away.name}
               </span>
-              <span className={styles.time}>
-                {m.kickoff_at_utc ? (
-                  <LocalTime iso={m.kickoff_at_utc} fallback={m.date_utc} />
-                ) : (
-                  m.date_utc
-                )}
-              </span>
+              {/* 已完赛显示比分,不显示开球时间——这两块保存的是 match_id,
+                  比赛踢完后仍留在列表里,继续显示"开球时间"会让用户以为比赛
+                  还没开始(CLAUDE.md §2.2)。判据与 MatchRow.tsx 完全一致:
+                  status==="Finish" 且两个 score 都非空才算有比分,缺分时如实
+                  退回时间,不编造。 */}
+              {m.status === "Finish" && m.home_score != null && m.away_score != null ? (
+                <span className={`${styles.time} num`}>
+                  {m.home_score} - {m.away_score}
+                </span>
+              ) : (
+                <span className={styles.time}>
+                  {m.kickoff_at_utc ? (
+                    <LocalTime iso={m.kickoff_at_utc} fallback={m.date_utc} />
+                  ) : (
+                    m.date_utc
+                  )}
+                </span>
+              )}
             </Link>
           </li>
         ))}

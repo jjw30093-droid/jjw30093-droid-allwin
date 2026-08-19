@@ -13,11 +13,57 @@
 
 .header {
   display: flex;
-  align-items: baseline;
+  /* 2026-08-19:baseline → center。右侧多了一个 44px 高的赛程/赛果切换器,
+   * 按基线对齐会把整行撑得比 max(标题, 切换器) 更高,顶穿移动端首屏
+   * "第一场比赛 y < 495px" 的验收(余量只有 25px)。 */
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+}
+
+/* ── 赛程 | 赛果 分段切换器 ──
+ * 放在 .header 右侧本来就空着的位置,不新增任何一行(首屏预算见上)。
+ * 视觉与筛选 chip 同一套 token(青绿/金渐变选中态 = §11.2 的"主要操作/选中",
+ * 不引入第三种选中色),触控区同样 ≥44px。 */
+
+/* 容器刻意不加 padding/border:每个 44px 的触控区已经决定了行高,外层再包
+ * 3px padding + 1px 边框会让这一行变成 52px,而移动端首屏"第一场比赛
+ * y < 495px"的余量只有个位数(375px 实测:加切换器前 470px,52px 版本 489px,
+ * 现在这版 481px)。 */
+.modeSwitch {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.mode,
+.modeOn {
+  font-size: 13px;
+  border-radius: var(--r-pill);
+  padding: 5px 18px;
+  text-decoration: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+}
+
+.mode {
+  color: var(--ink-2);
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.mode:hover {
+  background: var(--surface-2);
+}
+
+.modeOn {
+  color: #2a1b06;
+  background: var(--gold-grad);
+  font-weight: 700;
 }
 
 .title {
@@ -247,6 +293,26 @@
 
 .emptySub {
   margin-top: 10px !important;
+}
+
+/* 空态出口(选了已过去的日期却停在赛程视图)。触控区 ≥44px:它是空态里
+ * 唯一可点的东西,比普通行内链接更该点得中。 */
+.emptyHint {
+  margin-top: 12px !important;
+  font-size: 13.5px;
+}
+
+.emptyHint a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-left: 4px;
+  color: var(--gold-300);
+  text-decoration: none;
+}
+
+.emptyHint a:hover {
+  text-decoration: underline;
 }
 
 .emptyLink {
