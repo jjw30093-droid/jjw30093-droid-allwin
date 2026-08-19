@@ -619,6 +619,26 @@ class MarketDriverFactorDTO(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class MarketLineCalibrationDTO(BaseModel):
+    """折叠区"本市场各盘口线的历史回测"一行:market.lines(该市场全部已标定
+    线,不止默认线)中某一条的标定结果,与卡片顶层 line/signal_grade/
+    hit_rate/lean(结论区,只看默认线,B6:不换线)完全独立的第二组数据,
+    纯粹是"我们对这条线做过什么离线回测"的透明度展示。
+
+    signal_grade 为 None 时(该线从未标定过,或标定了但外样本不单调),
+    hit_rate 与 sample_size 必须同为 None——由后端在这里就置空,不是前端
+    选择性隐藏(B2:未定级的线禁止展示命中率数值)。
+    """
+
+    line: float
+    # 是否是卡片顶层结论区当前正在使用的那条线(真实盘口或统计参考线)——
+    # 仅供前端提示"这行对应上面的结论",不影响 hit_rate/signal_grade 的取值。
+    is_default: bool
+    signal_grade: Optional[Literal["★★★", "★★", "★"]] = None
+    hit_rate: Optional[float] = None
+    sample_size: Optional[int] = None
+
+
 class MarketCardDTO(BaseModel):
     market: str
     label: str
@@ -642,6 +662,20 @@ class MarketCardDTO(BaseModel):
     data_quality: Literal["ok", "insufficient_sample", "no_history", "no_calibration"]
     driver_factors: list[MarketDriverFactorDTO]
     driver_factors_away: list[MarketDriverFactorDTO]
+    # 该市场全部已标定盘口线(market.lines,不止默认线)各自的回测结果——
+    # 折叠区"本市场各盘口线的历史回测"小节的数据源。默认线的判定字段
+    # (line/signal_grade/hit_rate/lean,以上)一字不变(B6);这里纯粹是
+    # 额外的透明度展示,data_quality 不是 "ok" 时恒为空列表。
+    lines: list[MarketLineCalibrationDTO] = []
+    # market_calibration.calibrated_at——卡片默认线所查到的那条标定记录的
+    # 离线回测运行时间(UTC ISO)。没有查到任何标定档位时为 None。
+    calibrated_at: Optional[str] = None
+    # no_calibration 的原因细分(2026-08-19):真实盘口线常见整数线
+    # (10.0/9.0/…),根本不在 market.lines 这个已标定线集合内
+    # ("line_not_calibrated"),与"线本身在集合内、但这次查不到任何标定行"
+    # ("line_unresolved",理论上不该发生)是两种不同的诚实降级,前端文案不
+    # 应该混为一谈。data_quality 不是 "no_calibration" 时恒为 None。
+    no_calibration_reason: Optional[Literal["line_not_calibrated", "line_unresolved"]] = None
 
 
 class MatchMarketCardsResponse(BaseModel):

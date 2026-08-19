@@ -174,6 +174,49 @@ Pydantic(`backend/api/schemas.py`)为单一真源 →
 `cd frontend && npm run gen:api`(openapi-typescript 生成 `lib/api-types.ts`)。
 不手写第二套相互漂移的 schema。
 
+## 5. `GET /matches/{id}/markets` 市场卡:`lines[]` 与"默认线定结论"口径
+(2026-08-19「数据倾向」填充新增)
+
+结论来自 `backend/queries/market_cards.py` 查 `platform.db` 的
+`market_calibration`(`backend/eval/calibrate_markets.py` 离线回测产物,
+不在线上重新计算任何统计意义上的信号——见该文件顶部方法论说明)。
+`MarketCardDTO` 一张卡同时携带两层信息,读者不能混用:
+
+- **结论区(顶层字段)**:`line`/`line_source`/`estimate`/`bucket_index`/
+  `hit_rate`/`sample_size`/`signal_grade`/`lean`/`calibration_scope`/
+  `data_quality`——只描述**默认线**(`goals`/`corners` 有真实 NowGoal 盘口时
+  用真实线,否则用 `calibrate_markets.py` 配置的统计参考线)。这是页面结论
+  区渲染的唯一数据源。
+- **折叠区透明度展示(`lines[]`)**:`MarketLineCalibrationDTO` 数组,对该
+  市场 `MarketDef.lines` 里**全部**已标定线(不止默认线)各自查一遍
+  `market_calibration`,每条独立携带 `line`/`is_default`/`signal_grade`/
+  `hit_rate`/`sample_size`。`data_quality != "ok"` 时恒为空列表。
+
+**默认线驱动结论,其余线仅作回测透明度——这条政策不可违反**:
+`lines[]` 里任何一条非默认线的 `signal_grade` 比默认线更好看(例如角球默认
+线 9.5 外样本不单调、被标记未定级,而 8.5/10.5 有 ★★),都**不得**据此
+换用那条线的结果去填充顶层 `signal_grade`/`hit_rate`/`lean`。顶层字段与
+`lines[]` 的查询在 `match_market_cards()` 里是完全独立的两组
+`_bucket_lookup` 调用,前端也不得自行"挑选" `lines[]` 里最好看的一条顶替
+结论区渲染。
+
+`lines[]` 同样遵守全站"未定级不给数字"的纪律:某条线 `signal_grade is
+None` 时(该线从未标定过,或标定后外样本命中率不单调),`hit_rate` 与
+`sample_size` 由**后端**置为 `None`——数字根本不下发到浏览器,不是前端
+选择性隐藏。
+
+其余两个新字段:
+
+- `calibrated_at`:默认线所查到的那条 `market_calibration` 记录的
+  `calibrated_at`(离线回测运行时间,UTC ISO)。没有查到任何档位时为
+  `None`。
+- `no_calibration_reason`(仅 `data_quality="no_calibration"` 时非空):
+  `"line_not_calibrated"` = 当前使用的线根本不在该市场 `MarketDef.lines`
+  这个已标定线集合内(常见于真实盘口线是整数线,如角球 10.0/9.0/11.0/8.0,
+  而 `calibrate_markets.py` 只标定了半球线 8.5/9.5/10.5);
+  `"line_unresolved"` = 线本身在集合内,但这次查询没有返回任何标定行
+  (理论上不该发生)。两者前端文案不同,不得合并成同一句通用提示。
+
 ## 附:2026-08-07 市场基线研究口径(研究态,非正式评估)
 
 docs/audits/multileague-point-in-time-model-v1.md 完成了 §2.1b 要求的可复现

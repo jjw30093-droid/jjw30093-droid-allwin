@@ -2647,6 +2647,15 @@ export interface components {
             driver_factors: components["schemas"]["MarketDriverFactorDTO"][];
             /** Driver Factors Away */
             driver_factors_away: components["schemas"]["MarketDriverFactorDTO"][];
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["MarketLineCalibrationDTO"][];
+            /** Calibrated At */
+            calibrated_at?: string | null;
+            /** No Calibration Reason */
+            no_calibration_reason?: ("line_not_calibrated" | "line_unresolved") | null;
         };
         /** MarketDriverFactorDTO */
         MarketDriverFactorDTO: {
@@ -2666,6 +2675,29 @@ export interface components {
             avg?: number | null;
             /** N */
             n: number;
+        };
+        /**
+         * MarketLineCalibrationDTO
+         * @description 折叠区"本市场各盘口线的历史回测"一行:market.lines(该市场全部已标定
+         *     线,不止默认线)中某一条的标定结果,与卡片顶层 line/signal_grade/
+         *     hit_rate/lean(结论区,只看默认线,B6:不换线)完全独立的第二组数据,
+         *     纯粹是"我们对这条线做过什么离线回测"的透明度展示。
+         *
+         *     signal_grade 为 None 时(该线从未标定过,或标定了但外样本不单调),
+         *     hit_rate 与 sample_size 必须同为 None——由后端在这里就置空,不是前端
+         *     选择性隐藏(B2:未定级的线禁止展示命中率数值)。
+         */
+        MarketLineCalibrationDTO: {
+            /** Line */
+            line: number;
+            /** Is Default */
+            is_default: boolean;
+            /** Signal Grade */
+            signal_grade?: ("★★★" | "★★" | "★") | null;
+            /** Hit Rate */
+            hit_rate?: number | null;
+            /** Sample Size */
+            sample_size?: number | null;
         };
         /** MatchDetailResponse */
         MatchDetailResponse: {

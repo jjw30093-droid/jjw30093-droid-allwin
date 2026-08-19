@@ -222,3 +222,64 @@
   border-bottom: 1px solid var(--border);
   color: var(--ink);
 }
+
+/* 数据倾向卡片填充(2026-08-19):对手侧表、各线回测小节共用的折叠区新增
+   元素。全部新增文字 >=12px(CLAUDE.md §11.2 用户可见文字最小 12px)。 */
+
+.subheading {
+  margin: 14px 0 2px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.foldNote {
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 对手侧表格每格数值下方的样本量小字——逐指标标注,不共用一个"共 N 场"
+   (touches_opp_box 全库仅 89% 覆盖,与 100% 覆盖的指标口径不同)。 */
+.cellN {
+  display: block;
+  margin-top: 1px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.linesSection {
+  margin-top: 4px;
+}
+
+.linesList {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.lineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 4px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+/* 当前卡片顶层结论区正在使用的那条线——轻微高亮,提示"这行对应上面的结论"。 */
+.lineRow[data-default="true"] {
+  background: var(--surface-soft);
+  border-radius: var(--r-card);
+}
+
+.lineRowNote {
+  flex-basis: 100%;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 12px;
+}

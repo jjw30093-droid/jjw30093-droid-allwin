@@ -6401,3 +6401,131 @@ cd frontend && npm run build
 出现 `first_discovery`/`checkpoint_72h`/`checkpoint_24h`)、
 `detail_json='{}'` 的 `lineup_change` 行数(应为 0)。这几个数字是把上方
 UNVERIFIED #1/#2 转为已验证所需的证据,本次会话未连接生产环境,不做。
+
+## 56. 数据倾向卡片填充:市场卡 lines[] + 折叠归因补全(2026-08-19)
+
+### 背景与生产实测(会话内在生产库/生产 API 上实测,非估算)
+
+用户反馈比赛详情页「数据倾向」很多卡片空着。抽样 40 场未来比赛(120 张
+市场卡)测得三态分布:`ok` 65 张(54%)、`insufficient_sample` 30 张
+(25%)、`no_calibration` 25 张(21%)。
+
+两条成因完全不同,只有第二条在本次范围内:
+
+1. **样本不足(25%)——数据缺口,现有字段救不了。** 样本分布是**二元的**:
+   球队要么全库 0 场、要么 ≥10 场,**没有中间带**——`MIN_SAMPLE` 从 3 降到
+   1 一支队都救不回来;查询口径从"同联赛"放宽到"全部赛事"也只多救
+   +1.4%(3875 场里 +56 场)。252 支参赛队里 80 支(31.7%)全库零场次,
+   其中 72 支属于 4 个从未补采历史赛季的联赛(英冠 48/荷甲 57/葡超
+   61/巴甲 268,各自只有 8-12 场已完赛,该四联赛失败率 100%,占未来比赛
+   34%);五大联赛失败率仅 12-22%,全是升班马。根治方式是补采这 4 个
+   联赛的历史赛季,已按站长决定单独排期,不在本次范围。
+2. **未标定(21%)——本次真正填的那块。** `market_calibration` 有 8 组
+   (市场 × 盘口线,均为跨联赛合并档):角球 8.5/9.5/10.5(仅 8.5、10.5
+   定级,9.5 五档全未定级)、大小球 2.5/3.5(均已定级)、罚牌
+   2.5/3.5/4.5(均已定级)。而 9.5 正是角球卡的默认线
+   (`calibrate_markets.py` `MARKETS["corners"].default_line`),所以角球
+   卡几乎永远"未标定",8.5/10.5 的真实回测结果此前完全没有被查询层使用
+   ——`backend/queries/market_cards.py` 每张卡此前只查一条线,**8 组标定
+   只用了 3 组**。
+
+**Fix 6 追加实测(2026-08-19,推翻会话内此前的初步判断)**:NowGoal 的市场
+只有 `1x2`/`ah`/`ou`/`corners_ou` 四个,没有任何罚牌/黄牌盘;角球盘口存在
+且采集正常——按同期口径(角球 08-17 开采)`corners_ou` 覆盖 48/66 = 73% 的
+在采比赛(此前"仅 54 场"的印象来自 `ou` 含 2020 年起的历史回填,跨 6 年
+2290 场,不是同期可比数字)。真正的问题是真实线的**取值**:同期样本里
+真实角球线 10.0/9.0/11.0/8.0(整数线)合计 26 场,9.5/10.5/8.5(半球线)
+合计 23 场——53% 的真实角球线是整数线,而 `calibrate_markets.py` 只标定了
+三条半球线,这些比赛落进 `no_calibration` 是结构性必然,不是缺陷。
+
+### 本次点亮了什么(零新查询/零新推断,只暴露已经算出来但被丢弃的数据)
+
+- **Fix 1**:`backend/queries/market_cards.py::match_market_cards` 对
+  `market.lines`(该市场全部已标定线,不止默认线)逐条调用 `_bucket_lookup`,
+  产出 `MarketCardDTO.lines[]`(新 `MarketLineCalibrationDTO`)。默认线的
+  既有判定字段(`line`/`signal_grade`/`hit_rate`/`lean`)逐字节未改
+  (B6:结论区不换线)。`lines[]` 里 `signal_grade is None` 的行,
+  `hit_rate`/`sample_size` 在后端就置 `None`(B2 落到数据层,不是前端选择
+  性隐藏)——由 `tests/backend/test_market_cards.py::TestMarketCardLinesArray`
+  的 `test_ungraded_line_carries_no_hit_rate_number` 直接钉死。
+- **Fix 2**(纯前端):`MarketDriverFactorDTO.against` 与
+  `MarketFactorSideDTO.n` 已经在 payload 里、已经算好,`MarketCard.tsx` 的
+  `mergeDrivers()` 此前只读 `.for.avg`。新增 `mergeAgainstDrivers()` 在折叠区
+  既有驱动表下方追加同结构"对手侧"表(不在既有 3 列表上加列,§11.2 窄屏
+  优先),每格数值各自标注自己的实际场次(不共用一个"共 N 场"——
+  `touches_opp_box` 全库仅 89.05% 覆盖,与 100% 覆盖的指标口径不同)。
+- **Fix 3**:新增 `_EXTRA_DRIVER_KEYS_BY_MARKET`(`market_cards.py`,不改
+  `calibrate_markets.py` 的 `driver_keys`),折叠区按市场相关性补充
+  `team_recent_profile` 已经算出但被丢弃的高阶指标——大小球
+  +`expected_goals_on_target`/`big_chance_missed`/`shots_inside_box`,
+  罚牌 +`tackles`/`duel_won`,角球 +`shots_outside_box`/`shot_blocks`。
+  零新 SQL 查询(同一份 profile 内已有)。
+- **Fix 4**:修复 `frontend/components/matches/zh.ts` `TEAM_STAT_LABELS`
+  的两处真实 §11.2 违规——`blocked_shots`(角球卡既有 driver_keys 之一)
+  与 `shots_off_target` 此前都没有中文标签,`MarketCard.tsx` 的
+  `DRIVER_LABEL[row.key] ?? row.key` 兜底会把英文 key 原样渲染给用户。
+  补齐为「封堵射门」「射偏」。
+- **Fix 5**:`market_calibration.calibrated_at` 已入库多时,但
+  `_bucket_lookup` 此前没有 SELECT 它。补进查询与 `MarketCardDTO`,折叠区
+  展示"回测数据更新于 {北京时间}",复用既有 `formatBeijingDateTime`
+  (纯算术,SSR 安全,不新写日期格式化函数)。
+- **Fix 6**:`no_calibration` 新增原因细分字段
+  `no_calibration_reason`——线不在该市场已标定线集合内
+  (`line_not_calibrated`,典型场景:真实角球线是整数线)vs 线在集合内但
+  这次查不到任何标定行(`line_unresolved`,理论上不该发生,沿用原通用
+  文案)。前者的新文案点名具体线值与已回测的线列表,不再是一句没头没尾的
+  "该盘口线暂无历史回测数据"。
+
+角球卡此前几乎永远因默认线 9.5 未定级而结论区空着;折叠区此前只有一张
+基础驱动因子表(且其中 `blocked_shots` 一项因缺中文标签而把英文 key 泄漏
+给用户),没有各线回测、对手侧数据、回测更新时间。现在结论区行为不变
+(如实展示"暂无倾向",不换线冒充有信号),折叠区新增如实展示 8.5/10.5
+的真实回测结果、对手侧数据、更多驱动指标与回测更新时间,卡片比此前更
+充实。
+
+### 契约变更
+
+`MarketCardDTO` 新增 `lines: list[MarketLineCalibrationDTO] = []`、
+`calibrated_at: Optional[str] = None`、
+`no_calibration_reason: Optional[Literal["line_not_calibrated",
+"line_unresolved"]] = None`,均为可选字段,向后兼容;不改任何既有字段
+类型或语义,不涉及 migration(`market_calibration` 表结构本身未变,只是
+查询层此前没有 SELECT 全部已有列)。
+
+### 真实命令与退出码
+
+```
+.venv/bin/python -m pytest -q                              → exit 0
+  (1848 passed, 2 skipped[环境缺失真实文件,与本次改动无关], 0 failed;
+   §55 记录的上一次审计基线是 1842 collected,此处 1850 = 1848+2,+8 恰好
+   等于本次新增的 8 个后端测试
+   [tests/backend/test_market_cards.py::TestMarketCardLinesArray],
+   本次只跑了一次全量、未做改动前/改动后两次全量对照运行,+8 是与 §55
+   历史记录的差值,不是本次会话内的前后对照)
+.venv/bin/python -m backend.cli.export_openapi              → exit 0
+cd frontend && npm run gen:api                               → exit 0
+cd frontend && npm run check:api-drift                       → exit 0(无漂移)
+cd frontend && npm run lint                                  → exit 0
+cd frontend && npm run typecheck                             → exit 0
+cd frontend && npm run test                                  → exit 0(291 passed, 49 files;
+   本次只在 market-card.test.tsx 新增 F1-F6 六个用例,未新增/删除任何测试
+   文件或既有用例——未做改动前的全量对照运行,291 里含且仅含这 6 个新增)
+cd frontend && npm run build                                  → exit 0
+```
+
+`frontend/tests/market-card.test.tsx:51`(`queryByText(/51%/)).toBeNull()`)
+与 `:86`(`insufficient_sample` 不展示预估值)两条既有测试**逐字节未改**,
+全程保持通过——git diff 可核对这两个 `it()` 块本身没有任何改动,只在文件
+末尾追加了新 `describe` 块。`frontend/e2e/anonymous.spec.ts:244-289`
+(断言角球默认线出现"样本外测试中不够稳定")本次未运行(未跑
+`npm run e2e`),标 `UNVERIFIED`。
+
+### UNVERIFIED(部署前不得声称已验证)
+
+1. **Playwright 端到端**——本次未运行 `npm run e2e`,折叠区新增的"各线
+   回测"/"对手侧"/回测更新时间在真实浏览器里的渲染效果未做端到端验证,
+   只有 Vitest 单元测试(jsdom)覆盖。
+2. **生产用户实际看到的填充效果**——需部署后人工核对真实比赛的市场卡
+   (尤其角球卡折叠区是否如实展示 8.5/10.5 回测结果)。
+3. **per-league 标定重跑是否能通过 `MIN_BUCKET_SAMPLE=20`**——本次未跑
+   `calibrate_markets.py --league-id`,继续标 UNVERIFIED(不在本次范围)。

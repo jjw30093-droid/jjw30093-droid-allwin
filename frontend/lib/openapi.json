@@ -10652,6 +10652,40 @@
       },
       "type": "array",
       "title": "Driver Factors Away"
+     },
+     "lines": {
+      "items": {
+       "$ref": "#/components/schemas/MarketLineCalibrationDTO"
+      },
+      "type": "array",
+      "title": "Lines",
+      "default": []
+     },
+     "calibrated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Calibrated At"
+     },
+     "no_calibration_reason": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "line_not_calibrated",
+         "line_unresolved"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "No Calibration Reason"
      }
     },
     "type": "object",
@@ -10711,6 +10745,63 @@
     ],
     "title": "MarketFactorSideDTO",
     "description": "某一侧(for=本队自己创造 / against=本队对手创造)的历史均值汇总。\navg 为 None 表示样本不足(<3 场)或该指标缺失,不是 0——0 是\"历史均值\n确实为 0\"的合法值,不能拿来表示\"没有数据\"。"
+   },
+   "MarketLineCalibrationDTO": {
+    "properties": {
+     "line": {
+      "type": "number",
+      "title": "Line"
+     },
+     "is_default": {
+      "type": "boolean",
+      "title": "Is Default"
+     },
+     "signal_grade": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "★★★",
+         "★★",
+         "★"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Signal Grade"
+     },
+     "hit_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hit Rate"
+     },
+     "sample_size": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sample Size"
+     }
+    },
+    "type": "object",
+    "required": [
+     "line",
+     "is_default"
+    ],
+    "title": "MarketLineCalibrationDTO",
+    "description": "折叠区\"本市场各盘口线的历史回测\"一行:market.lines(该市场全部已标定\n线,不止默认线)中某一条的标定结果,与卡片顶层 line/signal_grade/\nhit_rate/lean(结论区,只看默认线,B6:不换线)完全独立的第二组数据,\n纯粹是\"我们对这条线做过什么离线回测\"的透明度展示。\n\nsignal_grade 为 None 时(该线从未标定过,或标定了但外样本不单调),\nhit_rate 与 sample_size 必须同为 None——由后端在这里就置空,不是前端\n选择性隐藏(B2:未定级的线禁止展示命中率数值)。"
    },
    "MatchDetailResponse": {
     "properties": {
