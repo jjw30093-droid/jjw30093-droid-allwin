@@ -3290,6 +3290,13 @@ export interface components {
             sub_in_player_name?: string | null;
             /** Sub Out Player Name */
             sub_out_player_name?: string | null;
+            /** Half Kind */
+            half_kind?: ("HT" | "FT" | "AET") | null;
+            /**
+             * Is Own Goal
+             * @default false
+             */
+            is_own_goal: boolean;
         };
         /** MatchReportLineupPlayer */
         MatchReportLineupPlayer: {

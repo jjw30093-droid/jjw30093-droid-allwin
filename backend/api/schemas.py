@@ -831,6 +831,13 @@ class MatchReportEvent(BaseModel):
     assist_player_name: Optional[str] = None
     sub_in_player_name: Optional[str] = None
     sub_out_player_name: Optional[str] = None
+    half_kind: Optional[Literal["HT", "FT", "AET"]] = None
+    """仅 event_type='Half' 有值:HT=中场,FT=常规时间结束,AET=加时赛结束。
+    查询层已按白名单收窄,来源出现第四种值时投影为 None,不会撑破本 Literal。"""
+    is_own_goal: bool = False
+    """乌龙球。注意:本 DTO 的 is_home 是**受益方**(得分的一队),而
+    player_name 是对方把球踢进本方球门的球员——这是来源(FotMob)的语义,
+    全库 1066/1066 核验一致,不是数据错误。"""
 
 
 class MatchReportShot(BaseModel):

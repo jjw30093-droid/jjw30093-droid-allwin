@@ -39,9 +39,37 @@ class TestAvailability:
         assert home["is_home"] is True and home["formation"] == "4-3-3"
         assert away["is_home"] is False and away["formation"] == "4-4-2"
         assert len(home["starters"]) == 2 and len(home["bench"]) == 1
-        assert len(body["events"]) == 6
+        assert len(body["events"]) == 9
         assert len(body["team_stats"]) == 2
         assert body["team_stats"][0]["is_home"] is True
+
+    def test_half_kind_and_own_goal_derived_fields(self, seeded_report, client):
+        """extra_json 投影(2026-08-21):half_kind 区分中场/全场,is_own_goal
+        判据只认顶层 ownGoal——见 backend/queries/match_report.py::HALF_KINDS
+        与 coreseed.py 的种子数据注释。"""
+        r = client.get("/api/v1/matches/9002/report")
+        events = {e["event_index"]: e for e in r.json()["events"]}
+
+        # 非 Half 事件 half_kind 恒为 None
+        assert events[0]["half_kind"] is None
+
+        # 两条 Half:中场(HT)与全场(FT)必须能区分,不能都读成"半场"
+        assert events[2]["event_type"] == "Half" and events[2]["half_kind"] == "HT"
+        assert events[6]["event_type"] == "Half" and events[6]["half_kind"] == "FT"
+
+        # 普通进球不是乌龙球
+        assert events[0]["is_own_goal"] is False
+
+        # 顶层 ownGoal=true → 乌龙球;is_home 是受益方(主队),player_name 是
+        # 客队球员(p200/Away Defender)踢进本方球门——语义上"客队球员+主队
+        # 比分增加"是正确的,不是数据错误。
+        assert events[7]["is_own_goal"] is True
+        assert events[7]["is_home"] is True
+        assert events[7]["player_name"] == "Away Defender"
+
+        # 哨兵:ownGoal=null 但 shotmapEvent.isOwnGoal=true 时不得判为乌龙球
+        # ——判据必须只认顶层 ownGoal,这正是选中它而不是 shotmapEvent 的理由。
+        assert events[8]["is_own_goal"] is False
 
     def test_not_started_match_unavailable(self, seeded_report, client):
         r = client.get("/api/v1/matches/9001/report")

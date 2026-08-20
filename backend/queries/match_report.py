@@ -71,6 +71,11 @@ TEAM_STAT_KEYS: dict[str, str] = {
 # 交叉验证 0 ⇔ GK;position_id 是 11..105 的来源内部码,不外露)。
 POSITION_GROUPS = {0: "GK", 1: "DEF", 2: "MID", 3: "FWD"}
 
+# fact_match_events.extra_json 白名单(同 TEAM_STAT_KEYS 的约定:动态 dict
+# 不原样透传,只显式投影已核验过的 key)。halfStrShort 全库分布:HT 13050 /
+# FT 13050 / AET 6,event_type='Half' 的行里该字段无 NULL。
+HALF_KINDS = frozenset({"HT", "FT", "AET"})
+
 _PERIOD_ORDER = {
     "FirstHalf": 1, "SecondHalf": 2,
     "FirstHalfExtra": 3, "SecondHalfExtra": 4,
@@ -146,12 +151,18 @@ def _events(conn, match_id, i18n):
                   home_score, away_score, player_id, player_name, card_type,
                   assist_player_id, assist_player_name,
                   sub_in_player_id, sub_in_player_name,
-                  sub_out_player_id, sub_out_player_name, minutes_added
+                  sub_out_player_id, sub_out_player_name, minutes_added,
+                  extra_json
            FROM fact_match_events WHERE Match_ID=? ORDER BY event_index""",
         (match_id,),
     ).fetchall()
     out = []
     for r in rows:
+        try:
+            extra = json.loads(r["extra_json"] or "{}")
+        except ValueError:
+            extra = {}
+        half_short = extra.get("halfStrShort")
         out.append({
             "event_index": r["event_index"],
             "event_type": r["event_type"],
@@ -169,6 +180,12 @@ def _events(conn, match_id, i18n):
                 r["sub_in_player_id"], r["sub_in_player_name"], i18n),
             "sub_out_player_name": _display_name(
                 r["sub_out_player_id"], r["sub_out_player_name"], i18n),
+            "half_kind": half_short if half_short in HALF_KINDS else None,
+            # 乌龙球判据只认顶层 ownGoal:全库 1079 条 ownGoal=true 的事件里
+            # 13 条没有 shotmapEvent、2 条 shotmapEvent.isOwnGoal 与顶层矛盾;
+            # 反向(ownGoal 空但 shotmapEvent.isOwnGoal=true)漏报 0 条。
+            # 不要改用 shotmapEvent.isOwnGoal。
+            "is_own_goal": extra.get("ownGoal") is True,
         })
     return out
 

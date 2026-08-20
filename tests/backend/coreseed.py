@@ -130,22 +130,36 @@ def seed_match_report(conn, match_id=9002, home_id=1001, away_id=1002):
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)",
             (match_id, t, ih, form, pid, name, shirt, upos, st, cap, rating, extra),
         )
+    # extra_json 最后一个字段:HT/FT 用 halfStrShort 区分中场/全场(见
+    # backend/queries/match_report.py::HALF_KINDS);乌龙球用顶层 ownGoal——
+    # event_index=7 的判据必须只认顶层 ownGoal,不看 shotmapEvent.isOwnGoal
+    # (event_index=8 是故意矛盾的哨兵:ownGoal=null 但 shotmapEvent.isOwnGoal
+    # =true,真实库里有 2 条这种矛盾,查询层必须判为非乌龙球)。乌龙球事件
+    # is_home 是**受益方**(全库 1066/1066 核验),不是乌龙球员所属队——这里
+    # is_home=1(主队受益),球员却是客队的 p200,复刻真实语义。
     events = [
-        (0, "Goal", 24, 0, 1, 1, 0, "p100", "Test Striker", None, "p101", "Home Keeper"),
-        (1, "Card", 40, 0, 0, None, None, "p200", "Away Defender", "Yellow", None, None),
-        (2, "Half", 45, 0, None, None, None, None, None, None, None, None),
-        (3, "AddedTime", 90, 0, None, None, None, None, None, None, None, None),
-        (4, "Substitution", 60, 0, 1, None, None, None, None, None, None, None),
-        (5, "VAR", 70, 1, 0, None, None, "p200", "Away Defender", None, None, None),
+        (0, "Goal", 24, 0, 1, 1, 0, "p100", "Test Striker", None, "p101", "Home Keeper", None),
+        (1, "Card", 40, 0, 0, None, None, "p200", "Away Defender", "Yellow", None, None, None),
+        (2, "Half", 45, 0, None, None, None, None, None, None, None, None,
+         '{"halfStrShort": "HT"}'),
+        (3, "AddedTime", 90, 0, None, None, None, None, None, None, None, None, None),
+        (4, "Substitution", 60, 0, 1, None, None, None, None, None, None, None, None),
+        (5, "VAR", 70, 1, 0, None, None, "p200", "Away Defender", None, None, None, None),
+        (6, "Half", 90, 0, None, 2, 1, None, None, None, None, None,
+         '{"halfStrShort": "FT"}'),
+        (7, "Goal", 75, 0, 1, 2, 0, "p200", "Away Defender", None, None, None,
+         '{"ownGoal": true}'),
+        (8, "Goal", 80, 0, 0, 1, 0, "p100", "Test Striker", None, None, None,
+         '{"ownGoal": null, "shotmapEvent": {"isOwnGoal": true}}'),
     ]
-    for idx, etype, minute, overload, ih, hs, as_, pid, pname, card, apid, apname in events:
+    for idx, etype, minute, overload, ih, hs, as_, pid, pname, card, apid, apname, extra in events:
         conn.execute(
             "INSERT INTO fact_match_events (Match_ID, event_index, event_type, minute,"
             " overload_time, is_home, home_score, away_score, player_id, player_name,"
-            " card_type, assist_player_id, assist_player_name, minutes_added)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " card_type, assist_player_id, assist_player_name, minutes_added, extra_json)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (match_id, idx, etype, minute, overload, ih, hs, as_, pid, pname, card,
-             apid, apname, 4 if etype == "AddedTime" else None),
+             apid, apname, 4 if etype == "AddedTime" else None, extra),
         )
     shots = [
         # (pid, team, minute, period, x, y, xg, outcome)

@@ -12646,6 +12646,27 @@
        }
       ],
       "title": "Sub Out Player Name"
+     },
+     "half_kind": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "HT",
+         "FT",
+         "AET"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Half Kind"
+     },
+     "is_own_goal": {
+      "type": "boolean",
+      "title": "Is Own Goal",
+      "default": false
      }
     },
     "type": "object",
