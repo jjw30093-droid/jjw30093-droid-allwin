@@ -121,6 +121,51 @@ class TestLatestLineup:
         # 没有译名的球员如实显示来源名,不因为查不到就报错或留空。
         assert out["home"]["subs"][0]["name"] == "Untranslated Sub"
 
+    def test_coach_passed_through_per_side(self, data_dir):
+        """coach 是每侧属性,两队教练不同,必须各自透传(2026-08-18,Fix 2)。"""
+        conn = connect_rw("odds")
+        core = _core_conn(data_dir)
+        payload = {
+            **_FULL_LINEUP,
+            "home": {**_FULL_LINEUP["home"], "coach": {"id": 7, "name": "Diego Simeone"}},
+            "away": {**_FULL_LINEUP["away"], "coach": {"id": 8, "name": "Someone Else"}},
+        }
+        _seed_lineup(conn, 5803535, payload)
+        conn.commit()
+        out = q.latest_lineup(conn, core, 5803535)
+        assert out["home"]["coach"]["name"] == "Diego Simeone"
+        assert out["away"]["coach"]["id"] == 8
+
+    def test_old_snapshot_without_coach_gives_none_not_a_guess(self, data_dir):
+        """2026-08-18 之前写入的行没有 coach 键——不得回填猜测值(镜像
+        test_old_snapshot_missing_lineup_type_returns_none_not_a_guess)。"""
+        conn = connect_rw("odds")
+        core = _core_conn(data_dir)
+        _seed_lineup(conn, 5803536, _FULL_LINEUP)  # 无 coach 键的旧形状
+        conn.commit()
+        out = q.latest_lineup(conn, core, 5803536)
+        assert out["home"]["coach"] is None
+        assert out["away"]["coach"] is None
+
+    def test_player_i18n_row_with_same_id_does_not_rename_coach(self, data_dir):
+        """教练 id 与球员 id 的命名空间无法证明互斥;coach 绝不能经过
+        _translate_players,否则一次碰撞会把某位教练悄悄改名成某个球员。"""
+        conn = connect_rw("odds")
+        core = _core_conn(data_dir)
+        core.execute(
+            "INSERT INTO dim_player_i18n (Player_ID, name_en, name_zh, name_zh_short)"
+            " VALUES ('7', 'Some Player', '某球员', NULL)"
+        )
+        core.commit()
+        payload = {
+            **_FULL_LINEUP,
+            "home": {**_FULL_LINEUP["home"], "coach": {"id": 7, "name": "Diego Simeone"}},
+        }
+        _seed_lineup(conn, 5803537, payload)
+        conn.commit()
+        out = q.latest_lineup(conn, core, 5803537)
+        assert out["home"]["coach"]["name"] == "Diego Simeone"
+
 
 class TestLatestSidelinedForTeam:
     def test_no_snapshot_returns_empty_list(self, data_dir):

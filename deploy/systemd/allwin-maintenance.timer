@@ -1,0 +1,12 @@
+# 每天 04:00(Asia/Shanghai)触发一次慢变维护任务(allwin-maintenance.service)。
+# 挑凌晨是因为这个时段比赛少、管道其它定时器负载低;Persistent=true:
+# 错过触发(停机窗口)开机后补跑一次。
+[Unit]
+Description=Run allwin daily maintenance at 04:00 Asia/Shanghai
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Shanghai
+Persistent=true
+
+[Install]
+WantedBy=timers.target

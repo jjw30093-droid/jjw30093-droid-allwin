@@ -45,6 +45,7 @@ P0_ALERT_SOURCES = frozenset({
     "league_coverage_regression",
     "fixtures_window_empty",
     "entity_resolution_degraded",
+    "postmatch_match_retry_exhausted",
 })
 
 DEDUP_HOURS = 24

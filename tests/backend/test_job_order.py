@@ -4,7 +4,7 @@
 没有。写成 pytest(而不是 CLI)保证 CI 必跑。
 """
 
-from backend.worker import poll_wrapper, runner
+from backend.worker import group_runner, runner
 
 
 def _idx(name: str) -> int:
@@ -49,12 +49,35 @@ class TestNoOrphanJobs:
             assert name not in runner.DEFAULT_CHAIN, f"{name} 已在链上,不应再进白名单"
 
 
-class TestPeriodicExcludeInvariant:
-    def test_periodic_exclude_equals_pollwrapper_chain_intersection(self):
-        """runner.py 注释里的锁竞争不变量,变成可执行断言:
-        被 allwin-poll.timer(poll_wrapper)独立调度、又在默认链上的任务,
-        恰好就是 --periodic 要排除的集合——多排会漏跑,少排会锁竞争级联 skip。"""
-        assert runner.PERIODIC_CHAIN_EXCLUDE == set(poll_wrapper.JOBS) & set(runner.DEFAULT_CHAIN)
+class TestSevenTimerTopologyInvariant:
+    """PIPELINE_REDESIGN_V2 P3:`allwin-worker.timer`(15 分钟大链)+
+    `allwin-poll.timer`(5 分钟双采集)拆成 7 个各自一个职责的独立定时器后,
+    `PERIODIC_CHAIN_EXCLUDE` 那种"两个定时器排除对方任务"的补丁不再需要——
+    换成更强的不变量:每个 DEFAULT_CHAIN 任务(daily_digest 除外,它独立于
+    这 7 个定时器之外)必须恰好被 7 个新定时器中的一个调度,不多不少。"""
+
+    @staticmethod
+    def _all_new_timer_jobs() -> list[str]:
+        jobs = list(group_runner.SINGLE_JOB_TIMERS.values())
+        for names in group_runner.JOB_GROUPS.values():
+            jobs.extend(names)
+        return jobs
+
+    def test_no_job_scheduled_by_more_than_one_new_timer(self):
+        jobs = self._all_new_timer_jobs()
+        assert len(jobs) == len(set(jobs)), f"任务被超过一个新定时器调度: {jobs}"
+
+    def test_every_new_timer_job_is_registered(self):
+        for name in self._all_new_timer_jobs():
+            assert name in runner.REGISTRY, f"新定时器引用了未注册任务 {name}"
+
+    def test_new_timer_jobs_cover_default_chain_exactly(self):
+        scheduled = set(self._all_new_timer_jobs())
+        expected = set(runner.DEFAULT_CHAIN)
+        assert scheduled == expected, (
+            "7 个新定时器的任务集合必须恰好等于 DEFAULT_CHAIN(仍是完整手动链的唯一真源): "
+            f"缺失 {expected - scheduled}, 多出 {scheduled - expected}"
+        )
 
 
 class TestJobSpecCompleteness:

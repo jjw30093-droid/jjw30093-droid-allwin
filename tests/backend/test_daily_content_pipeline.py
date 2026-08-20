@@ -36,14 +36,13 @@ def _odds_connection() -> sqlite3.Connection:
     return conn
 
 
-def test_league_configs_keep_content_and_polling_windows_separate() -> None:
+def test_league_configs_hold_content_identity_not_polling_cadence() -> None:
+    """LeagueConfig 只承载内容/身份配置(PIPELINE_REDESIGN_V2 P1 起,轮询节奏统一
+    由 poll_windows.poll_decision() 决定,不再在这里按联赛重复声明间隔字段)。"""
     eliteserien = LEAGUES["eliteserien"]
     assert eliteserien.fotmob_competition_id == 59
     assert eliteserien.expected_competition_name == "Eliteserien"
     assert eliteserien.content_horizon_days == 7
-    assert eliteserien.odds_high_frequency_hours == 72
-    assert eliteserien.odds_far_interval_seconds == 900
-    assert eliteserien.odds_near_interval_seconds == 300
     assert {"allsvenskan", "mls"} <= set(LEAGUES)
     assert all(config.identity_evidence for config in LEAGUES.values())
 
@@ -189,28 +188,38 @@ def test_assembly_context_uses_selected_match_not_mvp_sample_constants() -> None
 
 
 @pytest.mark.parametrize(
-    ("kickoff", "has_observation", "expected_due", "phase", "interval"),
+    ("kickoff", "seed_last_polled_at", "expected_due", "phase", "interval"),
     [
-        ("2026-08-05T00:00:00Z", False, True, "INITIAL_LOW_FREQUENCY", None),
-        ("2026-08-05T00:00:00Z", True, False, "WAITING_FOR_72H_WINDOW", None),
-        ("2026-07-30T00:00:00Z", True, True, "T_MINUS_72H_TO_2H", 900),
-        ("2026-07-28T01:00:00Z", True, True, "T_MINUS_2H_TO_KICKOFF", 300),
-        ("2026-07-27T23:59:00Z", True, False, "CLOSED", None),
+        # 从未轮询过 + 超出 72h 窗口 → poll_windows.poll_decision 的 first_discovery
+        # 分支(与 has_observation 无关,单一决策权威只看 poll_state.last_polled_at)。
+        ("2026-08-05T00:00:00Z", None, True, "INITIAL_LOW_FREQUENCY", None),
+        # 超出 72h 窗口但之前已经轮询过一次 → 等窗口,不重复。
+        ("2026-08-05T00:00:00Z", "2026-07-20T00:00:00Z", False, "WAITING_FOR_72H_WINDOW", None),
+        ("2026-07-30T00:00:00Z", None, True, "T_MINUS_72H_TO_24H", 86400),
+        ("2026-07-28T12:00:00Z", None, True, "T_MINUS_24H_TO_6H", 21600),
+        ("2026-07-28T01:00:00Z", None, True, "T_MINUS_6H_TO_KICKOFF", 3600),
+        ("2026-07-28T00:10:00Z", None, True, "LAST_CALL", 900),
+        ("2026-07-27T23:59:00Z", None, False, "CLOSED", None),
     ],
 )
 def test_odds_due_policy(
     kickoff: str,
-    has_observation: bool,
+    seed_last_polled_at: str | None,
     expected_due: bool,
     phase: str,
     interval: int | None,
 ) -> None:
     conn = _odds_connection()
     try:
+        if seed_last_polled_at is not None:
+            conn.execute(
+                "INSERT INTO poll_state (source, subject, last_polled_at, updated_at)"
+                " VALUES ('nowgoal_odds', '5104968', ?, ?)",
+                (seed_last_polled_at, seed_last_polled_at),
+            )
         result = _poll_decision(
             kickoff,
             now_iso="2026-07-28T00:00:00Z",
-            has_observation=has_observation,
             conn=conn,
             match_id=5104968,
         )

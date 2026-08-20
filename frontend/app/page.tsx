@@ -49,13 +49,25 @@ type HomePageData = {
  */
 export const getHomePageData = cache(async (): Promise<HomePageData> => {
   const [upcoming, todayList, tomorrowList, shotsList, freshness] = await Promise.all([
-    // boost=free_predicted(2026-08-16):limit=8 只是原始 API 顺序的前 8 条,
+    // boost=free_predicted(2026-08-16):limit 截断的是原始 API 顺序,
     // 完整 7 天窗口里更靠后的比赛没机会进这一页——哪怕它才是唯一一场
     // "免费且已发布概率"的比赛(见 backend/api/routes_public.py::list_matches
     // 同名参数文档)。opt-in 参数把这场比赛在服务端顶进 limit 截断线以内,
     // 不需要把整窗口 ~95 场完整 MatchSummary 都下发到这里再筛。
+    //
+    // limit=70(2026-08-19,原为 8):重点位改成"24 小时内 + 强强对话优先"
+    // (lib/homepage.ts::selectHomepageMatches)后,8 场候选结构性不够用——
+    // 一场晚间的 Big6 内战完全可能排在第 15 位而根本进不了池。
+    //
+    // 70 这个数字对齐的是**滚动 24 小时窗口**的容量,不是"峰值日场次":门槛
+    // 是 (now, now+24h] 这个滑动窗口,会横跨两个自然日。对生产 3798 场未来
+    // 赛程实测,最密集的滚动 24h 窗口有 70 场(起点 2026-11-21T00:00Z),
+    // 按自然日峰值(49 场)取 50 会让其中约 20 场结构性地进不了候选池。
+    // 上限是后端的 Query(le=200),70 仍有余量。
+    // 必须与 HomeMatchExperienceLive.tsx::fetchHomeData 保持同一个 limit:
+    // 两处用的是同一个纯函数判据,候选池不一样会让挂载后的刷新换掉重点卡。
     serverGet<MatchListResponse>(
-      "/api/v1/matches?status=upcoming&window=7d&limit=8&boost=free_predicted",
+      "/api/v1/matches?status=upcoming&window=7d&limit=70&boost=free_predicted",
       { revalidate: 60 },
     ),
     serverGetOptional<MatchListResponse>(

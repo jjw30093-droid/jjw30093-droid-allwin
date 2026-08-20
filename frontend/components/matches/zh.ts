@@ -125,16 +125,30 @@ export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "nu
   // shots[] 求和的"射门图 xG 合计"是两个独立来源,分别命名(不同名混称
   // 会让用户误以为数值不一致是 bug)。
   { key: "expected_goals", label: "官方统计 xG", format: "num1" },
+  // 同一来源、同一命名逻辑的射正版本(数据倾向卡片 Fix 3,大小球市场折叠区补充)。
+  { key: "expected_goals_on_target", label: "官方统计 xGOT", format: "num1" },
   { key: "total_shots", label: "射门", format: "num" },
   { key: "shots_on_target", label: "射正", format: "num" },
+  // 射门图/球队统计口径的"未射正"(§11.2 修内部枚举泄漏:此前缺中文标签,
+  // 英文 key 会直接渲染给用户)。
+  { key: "shots_off_target", label: "射偏", format: "num" },
   { key: "big_chance", label: "绝佳机会", format: "num" },
+  { key: "big_chance_missed", label: "错失绝佳机会", format: "num" },
   { key: "shots_inside_box", label: "禁区内射门", format: "num" },
+  { key: "shots_outside_box", label: "禁区外射门", format: "num" },
+  // 己方射门被对方封堵的次数(进攻视角)。§11.2 修内部枚举泄漏:此前缺
+  // 中文标签,角球卡驱动因子会把 "blocked_shots" 原样渲染给用户。
+  { key: "blocked_shots", label: "封堵射门", format: "num" },
   { key: "touches_opp_box", label: "对方禁区触球", format: "num" },
   { key: "accurate_passes", label: "成功传球", format: "num" },
   { key: "accurate_crosses", label: "成功传中", format: "num" },
   { key: "corners", label: "角球", format: "num" },
   { key: "tackles", label: "抢断", format: "num" },
   { key: "interceptions", label: "拦截", format: "num" },
+  // 己方球员用身体封堵对方射门的次数(防守视角)——与上面 blocked_shots
+  // (自己的射门被对方封堵,进攻视角)是两个方向相反的独立指标,不能共用
+  // 一个中文名,否则两张表会显示出两个一模一样的"封堵射门"行。
+  { key: "shot_blocks", label: "封堵对方射门", format: "num" },
   { key: "clearances", label: "解围", format: "num" },
   { key: "keeper_saves", label: "门将扑救", format: "num" },
   { key: "duel_won", label: "对抗成功", format: "num" },

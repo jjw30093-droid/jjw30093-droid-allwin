@@ -6,35 +6,18 @@ import { test, expect } from "@playwright/test";
  * 面向 30-40 岁手机用户:正文/重要辅助信息不得小于 CLAUDE.md §11.2 的
  * 12px 可读下限;关键可点击链接/按钮的触控区(getBoundingClientRect）
  * 至少 44×44px。真实回归(改前):
- * - MatchRow.module.css `.syncLine[data-state="UNAVAILABLE"]` 显式写死
- *   font-size:11px,低于 12px 下限;
- * - matches.module.css 的筛选 chip(时间/内容/联赛)、`.filterBtn`
+ * - matches.module.css 的筛选 chip(时间/联赛)、`.filterBtn`
  *   (筛选/搜索提交按钮)、`.moreFiltersSummary`("更多筛选"折叠触发器)
  *   触控区实测远小于 44px(chip ≈31.5px 高,summary ≈19.5px 高)。
  *
  * 这里量真实渲染出的 computed style / boundingClientRect,不是靠经验假设
  * (风格与 e2e/match-detail-charts.spec.ts 的 computed-style 断言一致)。
+ *
+ * 2026-08-20:MatchRow 的 sync_state/odds_coverage_tier 提示行(此前这里有
+ * 一条守着 `.syncLine[data-state="UNAVAILABLE"]` 字号不低于 12px 的回归
+ * 测试)已按站长要求整行删除,不再存在于页面上——测试一并删除,不留一个
+ * 测不到任何真实 DOM 的空断言。
  */
-
-test("MatchRow: sync_state=UNAVAILABLE 提示文字不低于 12px 可读下限", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/matches");
-
-  // e2e 种子库没有 data/e2e/content_status.json,几乎所有比赛的
-  // sync_state 都会走 UNAVAILABLE 分支(见 backend/content_status.py
-  // ::public_status_for_match 对不匹配 match_id 的降级),这是自然产生的
-  // 真实数据状态,不用另外造 fixture。
-  const unavailable = page.locator('[data-state="UNAVAILABLE"]').first();
-  await expect(unavailable).toBeVisible();
-  await expect(unavailable).toHaveText("部分数据暂不可用");
-
-  const fontSize = await unavailable.evaluate((el) =>
-    parseFloat(getComputedStyle(el).fontSize),
-  );
-  expect(fontSize).toBeGreaterThanOrEqual(12);
-});
 
 test("MatchRow: 主客队名与开球时间(核心信息)不低于 14px 正文下限", async ({
   page,
@@ -58,7 +41,7 @@ test("MatchRow: 主客队名与开球时间(核心信息)不低于 14px 正文�
   expect(awaySize).toBeGreaterThanOrEqual(14);
 });
 
-test('/matches 筛选 chip("时间/内容/联赛")触控区至少 44×44px', async ({
+test('/matches 筛选 chip("时间/联赛")触控区至少 44×44px', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });

@@ -138,6 +138,16 @@ def market_fixture(data_dir):
 
 
 class TestMatchMarketsRoute:
+    def test_goals_market_excluded_only_cards_and_corners_returned(self, app, market_fixture):
+        """2026-08-20 站长要求:「数据倾向」板块只保留罚牌/角球,大小球
+        (goals)不展示。calibrate_markets.py 的 MARKETS 全集仍然定义了
+        goals(离线标定不受影响,只是这个端点不再把它拼进卡片),所以这里
+        直接断言返回的 market 集合恰好是 {yellow_cards, corners},而不是
+        单纯断言"goals 不存在"——后者漏不掉"某个市场被误删"这类回归。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        assert {c["market"] for c in body["cards"]} == {"yellow_cards", "corners"}
+
     def test_free_league_ok_with_calibrated_card(self, app, market_fixture):
         client = TestClient(app)
         r = client.get("/api/v1/matches/9500/markets")
@@ -196,11 +206,10 @@ class TestMatchMarketsRoute:
         assert corners["signal_grade"] == "★★"
         assert corners["lean"] == "over"
 
-        # goals 真实盘口线 2.75 也生效(line_source 赋值先于 data_quality 判断,
-        # 两队历史没造 expected_goals,预估值算不出来,但线本身必须是真实值)。
-        goals = by_market["goals"]
-        assert goals["line_source"] == "market"
-        assert goals["line"] == pytest.approx(2.75)
+        # goals(大小球)不在返回的卡片里(2026-08-20 站长要求「数据倾向」
+        # 板块只保留罚牌/角球)——9503 造的 ou 真实盘口快照本身仍然存在于
+        # odds.db,只是这个端点不再把它拼进卡片,不需要在这里断言它。
+        assert "goals" not in by_market
 
         # yellow_cards 在 NowGoal 上没有真实市场(§见 market_cards.py 头注),
         # 恒为统计参考线,不受本场造的真实盘口影响。
@@ -244,3 +253,137 @@ class TestMatchMarketsRoute:
     def test_unknown_match_404(self, app, market_fixture):
         client = TestClient(app)
         assert client.get("/api/v1/matches/9999999/markets").status_code == 404
+
+
+class TestMarketCardLinesArray:
+    """数据倾向卡片填充(2026-08-19):Fix 1(lines[] 全量已标定线)、Fix 5
+    (calibrated_at)、Fix 6(no_calibration 原因细分)。Fix 2(against/n 已在
+    payload 里)与 Fix 4(zh 标签)是纯前端改动,不在这里测。
+
+    corners 市场 lines=[8.5, 9.5, 10.5](见 calibrate_markets.py MARKETS),
+    market_fixture 只预置了 league_id=47/line=10.5 的标定;这里额外补
+    line=8.5,让 8.5(已定级)/9.5(默认线,未定级)/10.5(已定级)三条线覆盖
+    A1-A4 需要的全部组合。
+    """
+
+    def _seed_line_8_5(self):
+        conn_platform = connect_rw("platform")
+        _seed_calibration(conn_platform, "corners", 47, 8.5,
+                           bucket_hit_rates=[0.25, 0.35, 0.45, 0.55, 0.70])
+        conn_platform.commit()
+        conn_platform.close()
+
+    def test_card_exposes_all_calibrated_lines(self, app, market_fixture):
+        self._seed_line_8_5()
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+
+        lines_by_value = {ln["line"]: ln for ln in corners["lines"]}
+        assert set(lines_by_value) == {8.5, 9.5, 10.5}
+        assert lines_by_value[9.5]["is_default"] is True
+        assert lines_by_value[8.5]["is_default"] is False
+        assert lines_by_value[10.5]["is_default"] is False
+
+    def test_ungraded_line_carries_no_hit_rate_number(self, app, market_fixture):
+        self._seed_line_8_5()
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+
+        # 9.5(默认线)在本测试从未被标定过——B2 落到数据层:signal_grade
+        # 为 None 时,hit_rate/sample_size 必须同为 None,不能只是前端不渲染。
+        row_95 = next(ln for ln in corners["lines"] if ln["line"] == 9.5)
+        assert row_95["signal_grade"] is None
+        assert row_95["hit_rate"] is None
+        assert row_95["sample_size"] is None
+
+    def test_graded_non_default_line_keeps_its_real_hit_rate(self, app, market_fixture):
+        self._seed_line_8_5()
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+
+        # 8.5 不是默认线,但确实被标定过(本测试新增种子)——估算值 11.0
+        # 落最后一档,命中率必须是真实数字 0.70,不能因为不是默认线就被抹掉。
+        row_85 = next(ln for ln in corners["lines"] if ln["line"] == 8.5)
+        assert row_85["signal_grade"] == "★★"
+        assert row_85["hit_rate"] == pytest.approx(0.70)
+        assert row_85["sample_size"] == 200
+
+    def test_default_line_verdict_unchanged_when_ungraded(self, app, market_fixture):
+        """B6 回归钉:8.5/10.5 有★不能让默认线(9.5)的结论跟着"变好看"——
+        结论区判定字段只看 9.5 自己有没有标定,与 lines[] 里其它线的星级
+        完全无关。这条在改动前后都应该是绿的(9.5 本来就没被标定过)。"""
+        self._seed_line_8_5()
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+
+        assert corners["line"] == pytest.approx(9.5)
+        assert corners["line_source"] == "statistical"
+        assert corners["signal_grade"] is None
+        assert corners["lean"] is None
+        assert corners["hit_rate"] is None
+
+    def test_calibrated_at_exposed(self, app, market_fixture):
+        """yellow_cards(3.5,跨联赛合并标定)在 market_fixture 里已完整定级,
+        calibrated_at 必须是造数时写入的真实 ISO 时间戳,不是 None。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        yc = {c["market"]: c for c in body["cards"]}["yellow_cards"]
+        assert yc["calibrated_at"] == "2026-01-01T00:00:00Z"
+
+    def test_real_integer_line_reports_line_not_calibrated(self, app, market_fixture):
+        """真实盘口线 = 10.0,不在 corners.lines=[8.5, 9.5, 10.5] 内(真实角球
+        盘口常见整数线,Fix 6)——必须诚实标注"这条线根本不在已标定集合里"
+        这个原因,不能跟"线在集合内、但这次查不到档位"共用同一句笼统文案。"""
+        conn_core = connect_rw("core")
+        kickoff_date = (date.today() + timedelta(days=3)).isoformat()
+        insert_match(conn_core, 9505, league_id=47, season="2025/2026", date=kickoff_date,
+                     home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
+        conn_core.commit()
+        conn_core.close()
+
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "830003", 9505)
+        _seed_odds_snap(conn_odds, "830003", "corners_ou", 10.0)
+        conn_odds.commit()
+        conn_odds.close()
+
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9505/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+        assert corners["line_source"] == "market"
+        assert corners["line"] == pytest.approx(10.0)
+        assert corners["data_quality"] == "no_calibration"
+        assert corners["no_calibration_reason"] == "line_not_calibrated"
+
+    def test_real_calibrated_line_still_resolves_bucket(self, app, market_fixture):
+        """9503:真实盘口线 10.5 恰好是 corners.lines 的成员且已标定——回归钉,
+        证明 Fix 6 给 no_calibration 加原因细分,不会误伤这条本来就能查到
+        档位的真实盘口路径(与既有 test_real_market_line_used_when_odds_present
+        断言同一事实,但只挑不随实现变化的字段,全程保持绿)。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9503/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+        assert corners["line_source"] == "market"
+        assert corners["line"] == pytest.approx(10.5)
+        assert corners["data_quality"] == "ok"
+        assert corners["signal_grade"] == "★★"
+        assert corners["hit_rate"] == pytest.approx(0.65)
+
+    def test_extra_team_stat_driver_keys_present_per_market(self, app, market_fixture):
+        """Fix 3:折叠区补充已算好但被丢弃的高阶指标,零新查询——纯 driver_keys
+        清单扩充。两个市场(罚牌/角球,大小球不再展示,见上方
+        test_real_market_line_used_when_odds_present 的注释)各自应该出现
+        计划里列的新增 key。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        by_market = {c["market"]: c for c in body["cards"]}
+
+        def keys_of(market_key):
+            return {row["key"] for row in by_market[market_key]["driver_factors"]}
+
+        assert {"tackles", "duel_won"} <= keys_of("yellow_cards")
+        assert {"shots_outside_box", "shot_blocks"} <= keys_of("corners")

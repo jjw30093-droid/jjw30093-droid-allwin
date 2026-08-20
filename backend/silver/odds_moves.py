@@ -101,13 +101,31 @@ def build_odds_moves(conn_odds: sqlite3.Connection) -> int:
     return inserted
 
 
+def _coach_of(side: dict) -> dict | None:
+    """side 里可用的教练(有 name 才算可用),否则 None——用于换帅判定的"值"守卫。"""
+    c = side.get("coach")
+    return c if isinstance(c, dict) and c.get("name") else None
+
+
 def _lineup_change_summary(prev_payload: str, new_payload: str) -> dict:
-    """阵容变化摘要:两侧阵型变化 + 首发进出名单(只描述差异,不解释原因)。"""
+    """阵容变化摘要:lineup_type 翻转 + 两侧阵型/教练变化 + 首发/替补进出名单
+    (只描述差异,不解释原因)。
+
+    教练守卫基于**值**不是**键**:只有两侧都有可用教练(name 非空)且 id 不同
+    才算"换帅"。None→X 与 X→None 一律不报——部署后每条旧快照被重新采集时都会
+    多出 "coach" 键(值可能仍是 null),键存在性守卫会把"来源这次才给出教练"
+    误报成换帅;我们也无法区分"刚开始采集这个字段"(旧行缺键)与"当时确实
+    没有教练"。"""
     try:
         prev, new = json.loads(prev_payload), json.loads(new_payload)
     except json.JSONDecodeError:
         return {"note": "payload 解析失败,仅记录 hash 变化"}
     summary: dict = {}
+    if prev.get("lineup_type") != new.get("lineup_type"):
+        summary["lineup_type"] = {
+            "prev": prev.get("lineup_type"),
+            "new": new.get("lineup_type"),
+        }
     for side in ("home", "away"):
         p_side, n_side = prev.get(side) or {}, new.get(side) or {}
         side_sum = {}
@@ -124,6 +142,17 @@ def _lineup_change_summary(prev_payload: str, new_payload: str) -> dict:
             side_sum["starters_added"] = [{"id": i, "name": n_starters[i]} for i in added]
         if removed:
             side_sum["starters_removed"] = [{"id": i, "name": p_starters[i]} for i in removed]
+        p_subs = {str(x.get("id")): x.get("name") for x in p_side.get("subs") or []}
+        n_subs = {str(x.get("id")): x.get("name") for x in n_side.get("subs") or []}
+        subs_added = sorted(set(n_subs) - set(p_subs))
+        subs_removed = sorted(set(p_subs) - set(n_subs))
+        if subs_added:
+            side_sum["subs_added"] = [{"id": i, "name": n_subs[i]} for i in subs_added]
+        if subs_removed:
+            side_sum["subs_removed"] = [{"id": i, "name": p_subs[i]} for i in subs_removed]
+        p_coach, n_coach = _coach_of(p_side), _coach_of(n_side)
+        if p_coach and n_coach and str(p_coach.get("id")) != str(n_coach.get("id")):
+            side_sum["coach"] = {"prev": p_coach.get("name"), "new": n_coach.get("name")}
         if side_sum:
             summary[side] = side_sum
     return summary
@@ -165,6 +194,14 @@ def _build_event_moves_for(
         if prev["payload_hash"] == snap["payload_hash"]:
             continue
         detail = summarize(prev["payload_json"], snap["payload_json"])
+        if not detail:
+            # hash 变了但我们描述不出任何可展示的差异(如仅字段形状变化)。
+            # silver_event_moves 会被"同期事件"渲染成"该时段观察到阵容变化",
+            # 写一条我们说不出内容的记录 = 一次无法支持的用户可见断言(CLAUDE.md
+            # §2.2)。bronze 层的 append-only 快照才是审计真源,这里不补空壳。
+            # 影响面:_sideline_change_summary 恒返回非空的 {"team_id": ...},
+            # 这条守卫事实上只作用于 lineup_change。
+            continue
         cur = conn_odds.execute(
             """INSERT OR IGNORE INTO silver_event_moves
                (fotmob_match_id, event_type, detail_json, from_snapshot_id,

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 「数据」tab 内的子 tab:阵容 / 风格 / 球员。
+ * 「数据」tab 内的子 tab:阵容 / 风格 / 球员 / 射门。
  * 视觉与 MatchPreTabs 刻意不同 —— 父级是下划线 tab,子级是 pill,
  * 避免两层 tab 长得一样分不清层级。pill 写法取自 TeamQuadrantChart 的视角切换器。
  *
@@ -12,25 +12,28 @@
 import { useState, type ReactNode } from "react";
 import styles from "./MatchDataTabs.module.css";
 
-export type DataTabKey = "lineup" | "style" | "players";
+export type DataTabKey = "lineup" | "style" | "players" | "shots";
 
 const TABS: { key: DataTabKey; label: string }[] = [
   { key: "lineup", label: "阵容" },
   { key: "style", label: "风格" },
   { key: "players", label: "球员" },
+  { key: "shots", label: "射门" },
 ];
 
 export function MatchDataTabs({
   lineup,
   style,
   players,
+  shots,
 }: {
   lineup: ReactNode;
   style: ReactNode;
   players: ReactNode;
+  shots: ReactNode;
 }) {
   const [active, setActive] = useState<DataTabKey>("lineup");
-  const panels: Record<DataTabKey, ReactNode> = { lineup, style, players };
+  const panels: Record<DataTabKey, ReactNode> = { lineup, style, players, shots };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;

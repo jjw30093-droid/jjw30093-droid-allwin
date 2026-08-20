@@ -48,13 +48,13 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 | `ingest/entity_resolution.py` | NowGoal↔FotMob 实体解析 | 别名种子、按日 ±1 天候选匹配、auto_ok/needs_review,绝不静默 verified |
 | `ingest/odds_snapshots.py` | odds.db 快照落库 | hash-diff(payload 不变不落库)、source_health append-only |
 | `providers/nowgoal.py` | NowGoal Provider Adapter | 日程/赔率解析(纯函数)、主客反转归一、WAF 检测、网络获取分离 |
-| `providers/fotmob_snapshots.py` | FotMob 阵容/伤停快照 | `extract_*` 纯函数离线可测;`fetch_match_payload` 延迟 import fotmob_client |
+| `providers/fotmob_snapshots.py` | FotMob 阵容/伤停/主教练快照 | `extract_*` 纯函数离线可测;`fetch_match_payload` 延迟 import fotmob_client |
 | `silver/odds_moves.py` | odds.db 派生 | 变化点(silver_odds_moves/silver_event_moves)+ 时间共现(gold_move_cooccurrence),幂等 |
 | `models/` | 模型 | `features/build_match_features.py`(int_match_features)、`build_wdl_baseline.py`(DC+isotonic 训练)、`predict_wdl_future.py`(固定参数出未来预测) |
 | `eval/metrics.py` | 评估指标纯函数 | Accuracy/Brier/LogLoss/RPS/Calibration,离线运行 |
 | `studio/bundle.py` | analysis_bundle | 同一份 bundle 驱动比赛详情页与 Studio;含导出渲染(txt/srt) |
-| `worker/runner.py` | 轻量 Worker | 任务注册表、job_runs 全生命周期、文件锁、幂等键、有限重试/退避/超时、`--chain --from --periodic`(`--periodic` 跳过 `PERIODIC_CHAIN_EXCLUDE`=nowgoal_snapshot/fotmob_snapshot,避免与 allwin-poll.timer 重复调度) |
-| `worker/poll_wrapper.py` | allwin-poll.service 调度包装 | 顺序执行 nowgoal_snapshot + fotmob_snapshot,任一失败不阻止另一个被尝试,汇总退出码(代替两条独立 systemd ExecStart=) |
+| `worker/runner.py` | 轻量 Worker | 任务注册表、job_runs 全生命周期、文件锁、幂等键、有限重试/退避/超时;`DEFAULT_CHAIN`/`run_chain()`/裸 `--chain --from` 现在只是人工全量重跑的手动逃生舱,生产没有任何定时器再周期性调用它(P3 起,见 §6) |
+| `worker/group_runner.py` | `allwin-postmatch`/`allwin-derive`/`allwin-maintenance` 三个多任务定时器的调度包装 | `run_group(name)`:顺序尝试组内每个任务,任一失败不阻止其余被尝试,汇总退出码;取代旧的 `poll_wrapper.py`(已删除),单任务定时器(odds/lineup/fixtures/gates)不经过这里,直接 `runner --job <name>` |
 | `cli/` | 命令行工具 | `create_admin`、`import_gold_predictions`、`evaluate_predictions`、`build_manifest`、`poll_nowgoal`、`poll_fotmob_snapshots`、`resolve_entities`、`build_odds_silver`、`repair_kickoff_provenance`、`export_openapi`、`ops_check`(只读运维检查,见 docs/deployment-aws-cloudflare.md §11) |
 
 ### 2.2 既有(legacy)模块,保留兼容
@@ -63,7 +63,7 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 |---|---|
 | `api_server.py` | 旧 4 路 `/api/league/*` GET 路由;由 `api/app.py` 挂载并标 deprecated,不再扩展;`?simulate_membership` 绕过入口已移除,门禁走 AuthContext |
 | `fotmob_client.py` | curl_cffi + Chrome TLS 指纹 + ThorData 住宅代理;模块 import 时即要求 `THORDATA_PROXY` |
-| `scheduler.py` | 旧英超增量调度脚本;worker 的 `fotmob_incremental` 复用其 step1 |
+| `scheduler.py` | 旧英超增量调度脚本;worker 的 `fotmob_incremental_multi` 逐联赛复用其 `step1_ingest_newly_finished` |
 | `schema.py` / `init_db.py` | allwin.db 旧建表 DDL 与初始化 |
 | `ingest/ingest_league.py` / `ingest_match.py` / `ingest_future_fixtures.py` | FotMob Bronze 采集脚本 |
 | `i18n/` | 中文名映射(seed_curated / translate_players,DashScope Qwen-MT) |
@@ -143,23 +143,61 @@ gold_wdl_predictions ──cli/import_gold_predictions──▶ platform.db 预�
 - `gold_wdl_predictions` 是模型当前产物(整季 DELETE+INSERT 可重写);公开账本是 platform.db 登记簿,锁定后不可改(见 `docs/prediction-integrity.md`)。
 - 时间共现只表达"固定时间窗内同期发生",表名与文案不用因果词(CLAUDE.md §6.4)。
 
-## 6. Worker 任务链
+## 6. Worker 任务链与调度拓扑
 
-`backend/worker/runner.py`,job_runs 记录在 platform.db。生产两个 timer:
-`allwin-worker.timer`(15 分钟)触发 `--chain --periodic`(跳过
-nowgoal_snapshot/fotmob_snapshot,这两步已由 allwin-poll.timer 独立调度,
-避免两个定时器争抢同一把 `data/locks/<job>.lock`——`run_chain()` 把"被锁"
-和"失败"同等对待,重复调度会让整条 15 分钟链被良性锁竞争无谓地级联跳过);
-`allwin-poll.timer`(5 分钟)通过 `backend/worker/poll_wrapper.py` 顺序执行
-nowgoal_snapshot + fotmob_snapshot 两个采集任务的"到期判断"(真实频率由
-odds.db poll_state 节流:2–72h 每 15 分钟,0–2h 每 5 分钟),两者互不阻塞、
-汇总退出码。手动端到端重跑仍用不带 `--periodic` 的完整 `--chain`。
+> 本节 2026-08-18 随 PIPELINE_REDESIGN_V2 P6 复核更新,取代此前(2026-07-19
+> 核对版)描述的 `allwin-worker.timer`(15 分钟大链)+ `allwin-poll.timer`
+> (5 分钟双采集,`--periodic`/`PERIODIC_CHAIN_EXCLUDE` 互相排除)两定时器
+> 方案——该方案的代码(`allwin-worker.{service,timer}`、
+> `allwin-poll.{service,timer}`、`backend/worker/poll_wrapper.py`、
+> `PERIODIC_CHAIN_EXCLUDE`、`--periodic`)已在 commit 92f3b2c(P3,
+> 2026-08-17)整体删除,不是重命名或并存。**生产服务器截至本次文档更新尚未
+> 安装/启用下面描述的 7 个新 timer**——服务器上实际仍在运行旧的
+> `allwin-worker.timer`/`allwin-poll.timer`;把新 unit 换上去是单独、需要
+> 明确批准的部署步骤,见 `docs/deployment-aws-cloudflare.md`。本文件其余
+> 章节仍以文首 2026-07-19 核对为准,未随本次一并重新核对。
+
+`backend/worker/runner.py`,job_runs 记录在 platform.db。当前代码定义的调度
+是 7 个各自单一职责、互不影响失败域的 systemd 定时器(`deploy/systemd/`):
+
+| 定时器 | 触发频率 | 调用方式 | 任务 |
+|---|---|---|---|
+| `allwin-odds` | 每 5 分钟(到期判断) | `runner --job` 直调 | `nowgoal_snapshot` |
+| `allwin-lineup` | 每 5 分钟(到期判断) | `runner --job` 直调 | `fotmob_snapshot` |
+| `allwin-fixtures` | 每 30 分钟 | `runner --job` 直调 | `schedule_sync_multi` |
+| `allwin-gates` | 每 30 分钟 | `runner --job` 直调 | `pipeline_gates` |
+| `allwin-postmatch` | 每 30 分钟 | `group_runner --group postmatch` | `fotmob_incremental_multi → core_silver_build → model_predict → prediction_register → postmatch_settle → reco_auto_settle` |
+| `allwin-derive` | 每 30 分钟 | `group_runner --group derive` | `odds_silver_build → analysis_bundle_build` |
+| `allwin-maintenance` | 每天 04:00 Asia/Shanghai | `group_runner --group maintenance` | `entity_resolution → metrics_rebuild` |
+
+四个单任务定时器直接 `python -m backend.worker.runner --job <name>`;三个
+"任务组"定时器用 `backend/worker/group_runner.py --group <name>` 顺序尝试
+组内每个任务,任一任务失败不阻止组内其余任务被尝试,整体退出码只在组内出现
+failed/locked 时非零。以上 7 个定时器合起来的任务集合恰好等于下面
+`DEFAULT_CHAIN` 的全部 14 个任务,不多不少、不重复调度
+(`tests/backend/test_job_order.py::TestSevenTimerTopologyInvariant`)。
+
+另有独立的 `allwin-digest.timer`(每天 23:30 Asia/Shanghai,`--key <北京
+日期>` 幂等)调度 `daily_digest`;它和 `silver_build`(`core_silver_build`
+的兼容别名)一样,注册在 Worker 里但不属于 `DEFAULT_CHAIN`
+(`NON_CHAIN_JOBS = {"silver_build", "daily_digest"}`)。
+
+`--chain`(`DEFAULT_CHAIN`)现在只是人工全量重跑/故障排查用的手动逃生舱,
+生产没有任何定时器再周期性调用它;裸 `--chain` 仍按顺序执行、某步
+failed/locked 后续步骤记 skipped(依赖检查)、`--from <step>` 支持从中间
+步骤重跑:
 
 ```text
-schedule_sync → fotmob_incremental → nowgoal_snapshot → fotmob_snapshot
-→ entity_resolution → core_silver_build → odds_silver_build → model_predict
-→ prediction_register → analysis_bundle_build → postmatch_settle → metrics_rebuild
+schedule_sync_multi → fotmob_incremental_multi → nowgoal_snapshot
+→ fotmob_snapshot → entity_resolution → core_silver_build
+→ odds_silver_build → model_predict → prediction_register
+→ analysis_bundle_build → postmatch_settle → reco_auto_settle
+→ metrics_rebuild → pipeline_gates
 ```
+
+`pipeline_gates` 必须排最后:它是质量门(赛程窗口/退化/实体解析/赔率与收盘
+覆盖/公司口径/WAF),违反通过告警表达,不通过任务失败表达,没有下游需要被
+级联跳过。
 
 核心任务全部为真实注册任务(CLAUDE.md §13):
 - `nowgoal_snapshot` = `python -m backend.cli.poll_nowgoal --due`;
@@ -170,7 +208,6 @@ schedule_sync → fotmob_incremental → nowgoal_snapshot → fotmob_snapshot
   (与详情页 /Studio 共用同一 `backend/studio/bundle.py`)。
 外部凭证缺失时任务如实记 failed + 原因,不以"模块不存在"跳过。
 
-- 某步 failed 后,后续步骤记 skipped(依赖检查);`--from <step>` 支持从中间重跑。
 - 幂等键 `(job_name, idempotency_key)` 已成功 → skipped;`--force` 强制重跑。
 - 文件锁 `data/locks/<job>.lock` 防叠跑(陈锁按 pid 存活自动清理)。
 - 采集失败只写 job_runs/source_health,不拖垮 API,不覆盖最后成功数据。

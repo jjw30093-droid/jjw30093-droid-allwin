@@ -599,7 +599,8 @@ class FotMobClient:
           kickoff_at_utc, kickoff_precision, kickoff_source,
           Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name,
           home_score, away_score, status,
-          Temperature, Wind_Speed, Referee, Match_Round, Who_Lost_On_Penalties
+          Temperature, Wind_Speed, Referee, Match_Round, Who_Lost_On_Penalties,
+          Venue_Name, Venue_City, Venue_Country, Weather_Description
         """
         general = page_props.get("general", {})
         header  = page_props.get("header", {})
@@ -684,15 +685,32 @@ class FotMobClient:
         # ── 天气 ────────────────────────────────────────────────────────
         temperature = None
         wind_speed  = None
+        weather_description = None
         weather_raw = content.get("weather") or general.get("weather")
         if isinstance(weather_raw, dict):
             temperature = weather_raw.get("temperature") or weather_raw.get("temp")
             wind_speed  = weather_raw.get("windSpeed") or weather_raw.get("wind")
+            # description 优先于 defaultTitle："Partly Cloudy/Wind" 比 "Windy" 信息量大；
+            # 两者都取自英文原始来源，不在这里翻中文（翻译是展示层的事，见 §6.2 —— 库里
+            # 只存来源原文，不存加工结果，否则来源文案改了这里也不会同步）。
+            weather_description = weather_raw.get("description") or weather_raw.get("defaultTitle")
             # FotMob 有时把天气包在 .conditions 里
             cond = weather_raw.get("conditions", {})
             if isinstance(cond, dict):
                 temperature = temperature or cond.get("temperature") or cond.get("temp")
                 wind_speed  = wind_speed  or cond.get("windSpeed")
+                weather_description = weather_description or cond.get("description")
+
+        # ── 场馆 ────────────────────────────────────────────────────────
+        # 只有一个真实来源位置(content.matchFacts.infoBox.Stadium)，不像裁判/
+        # 天气那样存在多个历史备选位置——没有就是没有，不额外猜测其它路径。
+        venue_name = venue_city = venue_country = None
+        info_box_for_venue = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
+        stadium = info_box_for_venue.get("Stadium")
+        if isinstance(stadium, dict):
+            venue_name    = stadium.get("name")
+            venue_city    = stadium.get("city")
+            venue_country = stadium.get("country")
 
         # ── 点球大战失利方 ───────────────────────────────────────────────
         who_lost_penalties = None
@@ -728,6 +746,10 @@ class FotMobClient:
             "Temperature":          str(temperature) if temperature is not None else None,
             "Wind_Speed":           str(wind_speed)  if wind_speed  is not None else None,
             "Who_Lost_On_Penalties": who_lost_penalties,
+            "Venue_Name":           venue_name,
+            "Venue_City":           venue_city,
+            "Venue_Country":        venue_country,
+            "Weather_Description":  weather_description,
         }
 
     def parse_shotmap_records(

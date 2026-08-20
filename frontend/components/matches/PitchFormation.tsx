@@ -11,6 +11,7 @@
  */
 
 import type { MatchReportResponse } from "@/lib/api-v1";
+import { FootballPitchBackground } from "./FootballPitchBackground";
 import styles from "./PitchFormation.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
@@ -38,10 +39,7 @@ export function PitchFormation({ home, away }: { home: LineupTeam; away: LineupT
         away.formation ?? "未知阵型"
       }(攻向左)`}
     >
-      <div className={styles.halfLine} aria-hidden />
-      <div className={styles.centerCircle} aria-hidden />
-      <div className={`${styles.box} ${styles.boxLeft}`} aria-hidden />
-      <div className={`${styles.box} ${styles.boxRight}`} aria-hidden />
+      <FootballPitchBackground />
       {homeDots.map((p) => (
         <div
           key={p.player_id}

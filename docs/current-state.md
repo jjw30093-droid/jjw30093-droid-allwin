@@ -5862,3 +5862,670 @@ tests 通过;`npx tsc --noEmit` 0 错误;`npm run build` 成功(18 路由);
 worktree),未执行 git commit/push,未连接或修改 AWS 上的任何服务;
 本节及以上全部"实测"均为本地临时端口(8000/3000)上重启的开发态进程,
 不代表生产环境已经运行本节描述的任何代码。
+
+## 51. PIPELINE_REDESIGN_V2 P1:FotMob 阵容收敛到 poll_decision()(2026-08-17)
+
+单一到期判定权威从三处收敛为一处:`backend/ingest/poll_windows.py::poll_decision()`
+现在同时驱动 NowGoal 赔率与 FotMob 阵容/伤停两个来源;`content_pipeline.py`
+不再有第二套 `_poll_decision` 重算逻辑,`poll_fotmob_snapshots.py` 不再用
+`required_interval_seconds()+is_due()` 的旧两档路径。
+
+- `CADENCE_NOWGOAL_ODDS` 由旧六档改为三档 checkpoint(站长确认目标):
+  T-72h..T-24h 每 24h、T-24h..T-6h 每 6h、T-6h..T-0 每 1h,T-15min last_call
+  强制补一枪不变(`§6.3` 下限不变,discovery T+7 行为不变)。
+  单场预计请求数从 20+ 降到约 12-13(spec 估算,未做生产真实计数)。
+- 新增 `cadence_fotmob_lineup(league_id)`:discovery 窗口收窄到 T-24h
+  (从旧 `CADENCE_LEGACY` 72h/900s-300s 两档收窄);T-24h..watch-window-start
+  每 12h;watch-window-start..T-0 每 5 分钟到底,无早停(真正的"确认阵容
+  探测"是 P5 的事,本阶段老实全程 5 分钟)。watch-window-start 按联赛查表:
+  BIG-5(47/87/55/54/53)= T-1.5h,其余联赛(含欧战 42/73/10216)= T-1.25h
+  默认档。单场预计请求数从约 150 降到约 20(spec 估算)。
+- `poll_decision()` 新增 `league_id` 可选参数(仅 `SOURCE_FOTMOB_SNAPSHOT`
+  据此查表选 cadence)与 `PollDecision.interval_seconds` 字段(供调用方算
+  `next_due_at`,不必再自行重复 `_tier_interval` 逻辑)。
+- `poll_fotmob_snapshots.py` 的 `--due` 分支改为直接调用 `poll_decision()`
+  (候选池窗口同步收窄为 `FOTMOB_LINEUP_DISCOVERY_HOURS=24`);顺带修正
+  `mark_polled()` 的 `finally` 块默认参数 bug——此前无论抓取成功/失败都写
+  `tier=NULL, ok=1`,`poll_attempt_log` 无法区分真实失败与成功,`tier` 也
+  从未反映 `poll_decision` 命中的档。现在如实记录 `tier=decision.tier`、
+  失败时 `ok=0`。
+- `content_pipeline.py::_poll_decision` 改为薄封装:查 `poll_state` 拿
+  `last_polled_at` 后直接调用 `poll_windows.poll_decision()`,按 `reason`/
+  `tier` 映射到 `INITIAL_LOW_FREQUENCY`/`WAITING_FOR_72H_WINDOW`/
+  `T_MINUS_72H_TO_24H`/`T_MINUS_24H_TO_6H`/`T_MINUS_6H_TO_KICKOFF`/
+  `LAST_CALL`/`CLOSED` 六个 phase(旧两档 phase 名
+  `T_MINUS_72H_TO_2H`/`T_MINUS_2H_TO_KICKOFF` 废止)。`has_observation`
+  参数与其唯一的计算来源(`run_fresh()` 里对 `dim_match_xref`+
+  `bronze_ng_odds_snap` 的查询)一并删除——新引擎的 first_discovery/窗口内
+  判定只看 `poll_state.last_polled_at`,不再需要这个信号。`run_fresh()`
+  返回值里的 `odds_policy` 元数据字段同步改名并从 `CADENCE_NOWGOAL_ODDS`
+  常量取值,不再是过时的 900/300 硬编码。
+- **收敛后确认 `required_interval_seconds()` 生产调用方归零**(独立
+  `grep backend/` 复核):直接删除该函数,而不是留作"以防万一"的薄封装——
+  同一批复核也发现 `content_pipeline.py::LeagueConfig` 的
+  `odds_far_interval_seconds`/`odds_near_interval_seconds`/
+  `odds_high_frequency_hours`/`odds_near_hours` 四个字段自始至终只被赋值、
+  从未被任何生产代码读取,一并删除(三条联赛配置各删 4 行赋值)。
+  `tests/backend/test_pipeline_e2e.py::TestPollWindows` 整个类(只测
+  `required_interval_seconds`)随之删除——其边界/精度校验场景
+  (`kicked_off`/`no_exact_kickoff`/`date_only`/`naive`)在
+  `test_poll_cadence.py` 里通过 `poll_decision()` 已有等价覆盖
+  (`test_no_exact_kickoff_never_due`/`test_kicked_off_never_due*`),不是
+  裸删掉未经确认的覆盖。`test_daily_content_pipeline.py` 里同样只改名/
+  精简了 `test_league_configs_keep_content_and_polling_windows_separate`
+  (更名 `test_league_configs_hold_content_identity_not_polling_cadence`),
+  不影响该测试仍然覆盖的内容/身份字段。
+
+**测试**(RED→GREEN,均离线):`tests/backend/test_poll_cadence.py`
+(36 项,新增边界测试覆盖 NowGoal 三档每个边界 + FotMob discovery/12h 档/
+5 分钟档/BIG-5 与默认档分野边界——含最初遗漏的两项:BIG-5 自己的
+1.5h 边界双侧验证、`FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS[47]==1.5`
+的直接断言,均由独立对抗式复核补齐);新增
+`tests/backend/test_poll_decision_convergence.py`(证明
+`content_pipeline._poll_decision` 与 `poll_fotmob_snapshots.py` 的候选筛选
+和直接调用 `poll_decision()` 逐比特一致,不再各算各的);新增
+`tests/backend/test_poll_fotmob_snapshots_due.py`(证明 `mark_polled` 的
+`tier`/`ok` 如实记录成功与失败);更新
+`tests/backend/test_daily_content_pipeline.py`(`_poll_decision` 新 phase
+表,`has_observation` 参数删除,`LeagueConfig` 死字段清理)、
+`tests/backend/test_pipeline_e2e.py`(kickoff/T1 offset 调整以匹配
+NowGoal 新 1 小时档,FotMob 侧使用 League_ID=47 验证 BIG-5
+watch-window-start,`TestPollWindows` 死代码测试类删除)。
+`tests/backend/test_poll_scheduling.py`、`tests/backend/test_job_order.py`
+未改动(systemd 拓扑与 job 链顺序不在本阶段范围,`grep` 确认两个文件均无
+任何节奏数值字面量)。
+
+**未做(明确留给后续阶段)**:7 个新 systemd timer 的安装/拓扑(P3);
+"确认阵容探测"早停(需要真实网络探测,P5);`prediction_snapshots` 锁定/
+审计语义不变,本阶段未触碰。
+
+**验证**:`cd` 到 worktree 根目录,
+`.venv/bin/python -m pytest tests/backend -q` ——1720 项收集,1718 通过,
+2 项 skip(与本次改动无关,预先存在),0 失败,exit code 0(死代码清理与
+补测后重跑,结果一致)。过程中一次 `data/*.db` mtime 断言 flake
+(`test_e2e_seed.py`,size 相同、mtime 因共享 worktree 的并发进程漂移),
+单独重跑该文件 4/4 通过,确认与本次改动无关。未执行 `git commit`/`push`,
+未连接生产环境或任何真实 FotMob/NowGoal 网络请求(全部离线 fixture/
+offline-payload)。
+
+## 52. PIPELINE_REDESIGN_V2 P2:bronze_fm_lineup_snap.lineup_type 落列 + 前端诚实文案修复(2026-08-17)
+
+`bronze_fm_lineup_snap.lineup_type` 此前只活在 `payload_json` 里的同名 JSON
+字段,无法查询/过滤,也不能给 P5 的早停逻辑当停止条件用。新增迁移
+`backend/migrations/odds/0009_lineup_snap_type.sql`:`ALTER TABLE ADD COLUMN
+lineup_type TEXT` + `UPDATE ... SET lineup_type = json_extract(payload_json,
+'$.lineup_type') WHERE lineup_type IS NULL`(与 core/0002、platform/0003 的
+kickoff provenance 回填同一模式)+ `CREATE INDEX idx_fm_lineup_type ON
+bronze_fm_lineup_snap(fotmob_match_id, lineup_type)`。
+
+- **真实分布复核(228 行全量,data/odds.db)**:payload 缺 lineup_type
+  键=154、`lastStarting11`=57、`predicted`(source=`enetpulse`)=16、
+  `standard`(source=null,0 首发)=1。与计划文档的假设有出入:
+  `predicted` 计划称 13 行,真实是 16 行(3 行漂移,采集持续进行中导致);
+  `"confirmed"` 从未出现过一次。
+- **迁移安全验证(未碰生产库)**:用 `sqlite3.Connection.backup()`
+  (SQLite Backup API,非 WAL 期间裸拷主文件)把生产 `data/odds.db`
+  备份到临时目录,对副本跑 `python -m backend.db.migrate --db odds
+  --db-file <副本>`——回填后分布与副本迁移前用 payload_json 直接统计的
+  分布完全一致(None=154/lastStarting11=57/predicted=16/standard=1),
+  `PRAGMA integrity_check` = ok,重复执行同一条 `--db-file` 命令
+  `applied 0` 幂等确认,随后删除临时副本。生产 `data/odds.db` 本身
+  自始至终仍停在 0008(`--status` 复核:`8 applied, pending=
+  ['0009_lineup_snap_type.sql']`)——本任务未对生产 odds.db 执行任何写
+  操作,migration 是否真正 apply 到生产库由部署流程决定。
+- 写路径 `backend/ingest/odds_snapshots.py::ingest_lineup_snapshot` 同步改为
+  INSERT 时直接带上 `snapshot.get("lineup_type")`,不再只靠一次性回填——新
+  行落库即有该列,不依赖后续再跑一次 backfill。
+- 前端 `frontend/components/matches/ProjectedLineupSection.tsx`:原来的
+  `confirmed = lineupType === "confirmed"` 判断从未在真实数据里为
+  true(见上面分布),但非 confirmed 分支的文案无条件承诺"确认阵容通常在
+  开赛前 1 小时才更新;更新后本区会换成「已确认首发」"——一个当前实现
+  兑现不了的产品承诺(CLAUDE.md §2.2)。同时,`lineup_type=predicted`
+  (Enetpulse 对本场的第三方预测阵容)被和 `lastStarting11`(上一场真实
+  首发)共用同一句"数据源给的是两队上一场的首发",把预测说成了既成事实
+  ——一处独立的事实性错误。新增 `describeLineup(lineupType)` 按
+  `confirmed`/`predicted`/`lastStarting11`/其他(含 `standard`、键缺失)
+  四路分支给出各自的 tag/notice/球场图注记,不再共用一句话;`confirmed`
+  分支结构保留(万一 FotMob 未来真的下发该值仍可正确渲染),但文案不再
+  承诺"稍后会自动变成这个状态"。
+
+**测试**(RED→GREEN,均离线):新增
+`tests/backend/test_migrations.py::test_odds_fresh_init_includes_lineup_type_column`
+`test_lineup_snap_type_column_and_backfill`(staged 0001-0008 升级场景,
+插入四种真实 payload 形状,验证回填值 + 重跑幂等 + 索引存在);新增
+`tests/backend/test_odds_pipeline.py::TestHashDiff::
+test_lineup_snapshot_write_populates_lineup_type_column`
+`test_lineup_snapshot_write_lineup_type_null_when_absent`(写路径直接落
+lineup_type 列,缺键时如实 NULL 不编造);新增
+`frontend/tests/projected-lineup-section.test.tsx`(9 项:五种 lineup_type
+下都不出现"更新后本区会换成"这句承诺;`predicted` 不得出现
+"数据源给的是两队上一场的首发"、必须提到"预测";`lastStarting11` 仍标注
+"基于上一场";`standard` 等未知类型同样不得冒充"上一场首发")。全部先确认
+RED(改动前跑必现失败,原因分别是"列不存在"/"承诺文案仍在"),再实现到
+GREEN。
+
+**验证**:`cd` 到 worktree 根目录,
+`.venv/bin/python -m pytest tests/backend -q -rA`(该仓库的 `-q` 不打印
+聚合计数行,`-rA` 强制输出逐条短摘要复核)——1720 PASSED + 2 SKIPPED
+(`test_pit_dataset.py::...`/`test_sync_fixtures.py::...`,均为环境缺失
+真实只读快照/Phase 0 UCL 探测产物导致的预先存在 skip,与本次改动无关)、
+0 FAILED,exit code 0;4 项新测试均在完整套件里逐条确认 PASSED
+(`test_odds_fresh_init_includes_lineup_type_column`、
+`test_lineup_snap_type_column_and_backfill`、
+`test_lineup_snapshot_write_populates_lineup_type_column`、
+`test_lineup_snapshot_write_lineup_type_null_when_absent`)。
+`cd frontend && npm run typecheck && npm run lint && npm run test`——
+tsc 0 error、eslint 0 warning、48 个测试文件 265 项全部通过(含新增的 9
+项)。未执行 `git commit`/`push`,未对生产 `data/odds.db`/`data/allwin.db`/
+`data/platform.db` 做任何写入。
+
+**明确未做(P5,按计划不在本阶段范围)**:`backend/fotmob_client.py:899`
+的 `confirmedLineup` key 复核确认与 `bronze_fm_lineup_snap`/`lineup_type`
+无关(那是 `fact_player_match_stats` 的球员名单兜底提取分支,不写
+`bronze_fm_lineup_snap`,也不影响本次改动)——是否存在另一个真正携带
+"本场已确认阵容"的 payload 容器,需要真实网络抓取才能证实,标
+`UNVERIFIED`,本阶段未做任何探测或早停实现。
+
+## 53. PIPELINE_REDESIGN_V2 P3:拆 7 个独立 systemd 定时器,删除 PERIODIC_CHAIN_EXCLUDE(2026-08-17)
+
+`allwin-worker.timer`(15 分钟大链)+ `allwin-poll.timer`(5 分钟双采集)
+拆成 7 个各自单一职责、独立失败域的定时器,均为**代码/测试改动,未
+ssh 或触碰任何真实服务器**——实际把这些 unit 安装到生产服务器是单独一步
+(仍待用户明确批准)。
+
+- 新建 `allwin-odds`(5min,`nowgoal_snapshot`)、`allwin-lineup`(5min,
+  `fotmob_snapshot`)、`allwin-fixtures`(30min,`schedule_sync_multi`)、
+  `allwin-gates`(30min,`pipeline_gates`,`runner --job` 直调)、
+  `allwin-postmatch`(30min,`fotmob_incremental_multi→core_silver_build→
+  model_predict→prediction_register→postmatch_settle→reco_auto_settle`)、
+  `allwin-derive`(30min,`odds_silver_build→analysis_bundle_build`)、
+  `allwin-maintenance`(每天 04:00 Asia/Shanghai,`entity_resolution→
+  metrics_rebuild`)共 14 个新文件;删除 `allwin-worker.{service,timer}`、
+  `allwin-poll.{service,timer}`。其余 6 个 unit(api/web/backup/opscheck/
+  digest/content-health)`git diff` 确认字节级未变。
+- `backend/worker/poll_wrapper.py`(仅服务旧 `allwin-poll.service` 的两任务
+  包装)删除,行为参数化保留进新建的 `backend/worker/group_runner.py`
+  (`run_group()`,给 postmatch/derive/maintenance 三个多任务定时器
+  复用"组内任务互相独立、一个失败不阻止其余被尝试"这条已被测试验证过的
+  契约,不重新发明)。单任务定时器不经过这个模块,直接
+  `runner --job <name>`。
+- `backend/worker/runner.py` 删除 `PERIODIC_CHAIN_EXCLUDE` 常量与
+  `--periodic` CLI 参数(不是清空,是整个删除);`DEFAULT_CHAIN`/
+  `run_chain()`/裸 `--chain` 保留作为人工全量重跑的手动逃生舱,生产不再
+  有任何定时器周期性调用它。
+- **核心正确性属性**(全案最重要的一条,已用真实故障场景验证,非
+  tautological):`allwin-gates` 现在与其它任何定时器这一轮成败完全无关
+  ——验证覆盖两种真实故障路径,(1) `postmatch` 组内 `model_predict` 真实
+  抛异常后,独立 `runner.run_job("pipeline_gates")` 仍然真正执行成功;
+  (2) `core_silver_build` 的真实文件锁被占用、`run_job` 返回 `locked`
+  期间,`pipeline_gates` 仍然真正执行成功——旧 `run_chain()` 把 `locked`
+  和 `failed` 同等处理级联跳过下游的问题不会再影响 `allwin-gates`,因为
+  它不再经过 `run_chain()`。
+- `tests/backend/test_job_order.py::TestPeriodicExcludeInvariant` 替换为
+  `TestSevenTimerTopologyInvariant`:更强的不变量——7 个新定时器合起来的
+  任务集合必须恰好等于 `DEFAULT_CHAIN`(不多不少,无重复调度),取代旧的
+  "两个定时器互相排除"式补丁。
+- 本地 macOS 开发用 `deploy/scripts/poll_local.sh` 同步改为两条独立
+  `runner --job` 调用(不再依赖 `poll_wrapper`)。
+
+**测试**(RED→GREEN,全部离线,未连接任何真实服务器):新
+`tests/backend/test_poll_scheduling.py`(`TestGroupRunner` 参数化验证三个
+任务组"组内互相独立"契约;`TestGatesIndependentOfOtherTimers` 两项真实
+故障场景;`TestSystemdUnitTopology` 覆盖 7 个新 unit 的 ExecStart/加固
+指令/超时/环境文件与旧 unit 已被移除);更新
+`tests/backend/test_job_order.py`。全量:1762 passed,2 skipped(预先
+存在,与本次无关),0 failed,exit code 0(独立复核一次同样结果)。
+
+**明确未做(按计划推迟到 P6)**:`CLAUDE.md` §6.3/§13、
+`docs/architecture.md`、`docs/deployment-aws-cloudflare.md`、
+`README.md`、`PLANS.md` 里仍描述旧的 `allwin-worker`/`allwin-poll`/
+`--periodic` 拓扑,本阶段未同步,留给 P6 统一处理。生产服务器上实际安装/
+启用这 7 个新 timer(替换正在运行的旧两个)是单独、需要明确批准的一步,
+本阶段完全没有触碰生产。
+
+## 54. PIPELINE_REDESIGN_V2 P4:赛后事件驱动到期 + 单比赛重试上限 + 派生任务水位守卫(2026-08-18)
+
+纯代码/测试改动,未 ssh 或触碰任何真实服务器;未对生产 `data/allwin.db`/
+`data/platform.db`/`data/odds.db` 做任何写入(全部测试经 `data_dir`
+fixture 重定向到临时目录)。
+
+**3.3 赛后事件驱动到期**:`backend/cli/fotmob_incremental_multi.py` 的到期
+判据从纯 6h/联赛节流,改为"联赛存在至少一场 status != 'Finish' 且
+kickoff + 2.5h < now 的比赛"即刻到期(新函数
+`poll_windows.league_stale_unresolved_match_ids`,SQL 粗筛 + 逐行
+`normalize_exact_kickoff` 精确性验证,同 `upcoming_precise_matches` 纪律),
+没有这种比赛时仍保留 `poll_state` 6h 兜底档(`is_due` 沿用不变)。配合
+P3 已固定的 30 分钟 `allwin-postmatch` tick,完赛数据预计最迟约
+kickoff+3h 落地(2.5h 阈值 + ≤30min 发现延迟),满足站长"赛后 4-5 小时内
+补全"的要求且留有余量。
+
+**3.3 单比赛重试上限(安全要求)**:新表 `postmatch_retry_state`
+(`backend/migrations/odds/0010_postmatch_retry_state.sql`,与同一 job 的
+`poll_state`/`poll_attempt_log` 同库)+ 新模块
+`backend/ingest/postmatch_retry.py`。事件驱动到期一旦脱离旧的 6h 节流,
+对 FotMob 永远不翻 Finish 的比赛(复核时点 2026-08-17 13:47 UTC 实测
+72 场,最长卡住 3.9 天)会变成永久到期——每次抓完仍未解决的 stale 比赛计
+一次 attempts,达到 `MAX_ATTEMPTS=20`(30 分钟 tick × 20 ≈ 10 小时,即
+kickoff+12.5h 才放弃,远超正常比赛+数据处理时长)后停止让它继续单独触发
+到期、记录 `exhausted_at`+`fail_reason`,经 `backend.notify.notify`
+(`level="CRITICAL"`,`source="postmatch_match_retry_exhausted"`,
+`dedup_key=f"{source}:{match_id}"`,复用其自带 24h 去重,已加入
+`P0_ALERT_SOURCES`)推一次告警——不是每个 tick 都推。已解决(不再 stale)
+的比赛会被清空重试计数,不会被误判耗尽。
+
+**3.4 派生任务水位守卫**:`backend/worker/runner.py::_execute_once` 新增
+`watermark_fn` 钩子——REGISTRY 条目声明该键时,先算当前信号,与"上一次
+成功执行"落在 `job_runs.meta_json.watermark` 里的信号比较,未变化直接
+复用已有的 `JobSkipped → status='skipped'` 路径(与 optional kind 候选
+模块缺失时同一条已测试路径,未新建并行状态机);变化(或首次执行)照常真跑
+并把新信号写回 meta。三个真实任务的水位来源(均已通过真实 schema 核实,
+非假设):
+  - `core_silver_build`:`dim_match` 里 `status='Finish'` 的总数——三张
+    Bronze 表(`dim_match`/`fact_team_match_stats`/`fact_match_events`)
+    确认零时间戳列,只能用这个粗粒度代理,已知局限(对已是 Finish 的比赛
+    做比分/统计修正而不改变总数时检测不到)在代码注释里明确写出,不隐瞒;
+  - `odds_silver_build`:三张 odds Bronze 表(均有真实 AUTOINCREMENT id)
+    各自 `MAX(id)`——精确信号,非代理;
+  - `model_predict`:限定在其真实硬编码作用域(`FUTURE_LEAGUE_ID=47`/
+    `FUTURE_SEASON='2026/2027'`,从该模块直接 import,不重复写死)内的
+    `status='Finish'` 计数 + `status='NotStarted'` 计数两个方向,其它
+    联赛的变化不触发重跑。
+  - `analysis_bundle_build` **刻意未加水位**:走查确认三个连接全部
+    `connect_ro`+`query_only=ON`,`bundle.py` 及其全部调用链零
+    INSERT/UPDATE/DELETE/commit/tx,数据量已被"最近 50 场 NotStarted"天然
+    限界——不是本 phase 描述的"昂贵全量重建"问题,强行套一个水位机制不
+    对应任何真实节省,故意不做,理由写在 `runner.py` 附近与本文档。
+
+**测试**(RED→GREEN,全部离线):新
+`tests/backend/test_postmatch_due_condition.py`(9 项:2.5h 边界前/后/恰好、
+Finish/非 exact precision/其它联赛排除、事件驱动突破节流窗口、无 stale
+时不到期、6h 兜底档)、`tests/backend/test_postmatch_retry_cap.py`(6 项:
+未达上限持续计数、达到上限记录原因+恰好告警一次+后续 tick 不重复告警不
+继续计数、CRITICAL+按 match_id dedup_key、触顶前已解决则清空不误判)、
+`tests/backend/test_watermark_guards.py`(17 项:通用机制空转跳过/新数据
+真跑/首次必跑/无 watermark_fn 不受影响、三个真实任务 REGISTRY 接线、
+三个真实 watermark_fn 各自的信号正确性,含"其它联赛变化不误判"的负例)。
+更新 `tests/backend/test_migrations.py::test_lineup_snap_type_column_and_backfill`
+——该测试原断言"不带 `migrations_dir` 重新应用只新增 0009"(`applied==1`),
+新增 0010(与 lineup_type 主题无关但同样待应用)后如实改为 `applied==2`,
+未放宽断言强度,只是让断言对应新增的真实迁移文件数。
+
+全量 `tests/backend -q`:1795 passed,2 skipped(`test_pit_dataset.py`/
+`test_sync_fixtures.py`,预先存在、与本次无关的环境缺失 skip),0 failed,
+exit code 0——复核 3 次(1 次改动前 git stash 到 P3 基线复核 2 次同样
+1762 passed/2 skipped/0 failed,证明基线本身干净)。
+
+**已排查但非本次改动导致的环境噪音**(如实记录,不隐瞒、不误判为自己的
+回归):在完整套件(约 100+ 秒)里偶发命中过 1 次
+`tests/backend/test_e2e_seed.py::TestE2eSeedProvenance::
+test_seed_succeeds_and_is_repeatable`(该测试对真实 `data/platform.db`/
+`data/odds.db` 做 before/after mtime 相等断言,非本 phase 新增或改动)。
+排查结论:(1) 该测试在**完全隔离**运行 5/5 次全部通过(含本次改动全部
+在场);(2) 用 `git stash` 回退到 P3 基线后连续两次跑**完整套件**均
+0 failed;(3) `data/*.db` 经 `ls -la` 确认是指向
+`../../../../data/*.db`(worktree 外、仓库级共享路径)的符号链接,`ps aux`
+确认本机同时有另一个独立 Codex/ChatGPT agent session 挂在同一仓库的另一个
+worktree(`~/.codex/worktrees/01c6/all-win`)且已运行数小时,以及一个自
+7 月 29 日起长期运行的 `scripts/local_preview_proxy.py`——两者都可能并发
+触碰这份跨 worktree 共享的真实 `data/` 目录。结论:这是运行环境本身的
+并发噪音,不是本 phase 代码引入的回归;本 phase 未修改
+`test_e2e_seed.py`(不在本次任务范围内,也不应该为了掩盖环境噪音去弱化
+一个真实的生产数据不可变性断言)。最终交付前的完整套件复核(见上方数字)
+本身是干净的一次通过。
+
+**对抗式复核发现并修复的三个真实缺陷**(独立复核角度,不是实现者自己的
+单元测试覆盖不到的盲区——三个都用真实场景复现过,不是理论推测):
+
+1. **单比赛重试计数可被任务级重试意外翻倍**:`REGISTRY["fotmob_incremental_multi"]`
+   原来 `max_attempts=2, backoff_seconds=120`;`main()` 只要有一个联赛的
+   抓取抛异常就整体 `exit 1`(`_record_match_retry_attempts` 对已尝试的
+   全部联赛无条件跑过,不按 `league_ok` 门禁),runner 的任务级重试于是在
+   约 120 秒后重新整体跑一遍 `--due`,同一批仍然 stale 的比赛(包括那些
+   跟失败联赛无关、本来已经成功抓取的)会在同一个 30 分钟 tick 内被
+   `_record_match_retry_attempts` 计数两次,`MAX_ATTEMPTS=20` 的安全余量
+   可能被提前吃掉一半。修复:退回这个仓库里绝大多数任务已经在用的默认值
+   `max_attempts=1`(比赛级重试计数才是正确的责任层,任务级快速重试只在
+   同一个逻辑 tick 内重复计数,不提供任何额外价值)。新测试:
+   `test_postmatch_retry_cap.py::TestJobLevelRetryDoesNotDoubleCountMatchRetries`。
+2. **`mark_exhausted_and_alert` 是 check-then-act,不是原子声明**:原来无
+   条件 `UPDATE exhausted_at` 再无条件 `notify()`,靠 `notify()` 自带的
+   24h dedup 防重复告警——但 dedup 判定顺序是"开关→凭证→去重→配额→推送",
+   `NOTIFY_ENABLED=0` 时直接跳过 dedup 判定(测试场景完全测不到这层
+   保护),生产环境即便 `NOTIFY_ENABLED=1`,dedup 也要等对方
+   `notify_result='sent'` 真正落库(ServerChan 网络调用约 10 秒)才生效,
+   窗口期内两个几乎同时判定"该标记耗尽"的调用者(如 systemd 定时调用与
+   旁路直接跑 `fotmob_incremental_multi.py` 的 `main()`,后者不经过
+   `runner._acquire_lock`)都可能先于对方完成前就通过了各自的
+   `is_exhausted()` 前置检查,导致重复告警。修复:改成
+   `UPDATE ... WHERE exhausted_at IS NULL` + `rowcount` 判断谁先声明成功,
+   只有真正声明成功的调用者才调用 `notify()`。新测试:
+   `test_postmatch_retry_cap.py::TestAtCapStopsAndAlertsOnce::
+   test_concurrent_racing_callers_alert_exactly_once`(直接调用两次
+   `mark_exhausted_and_alert` 模拟竞态,不依赖真实并发)。
+3. **`odds_silver_build` 水位守卫真实存在的过期(staleness)缺口**:
+   `build_odds_moves()`(`backend/silver/odds_moves.py`)除了读三张 Bronze
+   快照表,还要求 `dim_match_xref.review_status IN ('auto_ok','confirmed')`
+   才为该场比赛产出 `silver_odds_moves` 行——这是第二个独立输入。原水位
+   只看三张 Bronze 表的 `MAX(id)`,管理员经真实生产接口
+   `POST /api/v1/admin/xref/{id}/confirm` 把某场比赛的 xref 从
+   `needs_review` 转成 `auto_ok`/`confirmed` 时不产生任何新 Bronze 行,
+   原水位对此完全不可见——已经落库、本来现在就能产出的历史赔率快照会
+   悄悄卡在 Silver 之外,直到系统里任何一场**无关**比赛凑巧来了一条新
+   Bronze 快照才会连带被重新计算。用真实、未修改的
+   `_watermark_odds_silver_build()`/`build_odds_moves()` 复现:确认前
+   `build_odds_moves()` 插入 0 行(正确门禁),确认后(无新 Bronze 行)
+   插入 2 行,但水位字节相同。修复:水位新增
+   `active_xref_max_updated_at`(`MAX(updated_at) FROM dim_match_xref
+   WHERE provider='nowgoal' AND review_status IN ('auto_ok','confirmed')`
+   ——confirm/reject 接口真实更新这一列),覆盖这条独立路径。新测试:
+   `test_watermark_guards.py::TestOddsSilverBuildWatermarkSignal::
+   test_admin_xref_confirm_without_new_bronze_row_changes_watermark`。
+
+三处修复后重跑全量 `tests/backend -q`:仍 1795 collected + 新增/改动的
+用例全部计入,0 failed,exit code 0(与上方数字一致,新增测试净增数已
+反映在最终 collected 计数里)。
+
+## 55. 阵容采集窗口 72h + 主教练 + 替补诚实空态(2026-08-18)
+
+### 因果链(只读审计确认,详见方案文档,不复述具体行数)
+
+用户报告比赛详情页「数据」→「阵容」看不到预计首发/替补/主教练。确认是三个
+互相独立的问题叠加:① `poll_fotmob_snapshots.py` 的候选池宽度与
+`cadence_fotmob_lineup` 的节奏窗口曾经共用同一个常量
+(`FOTMOB_LINEUP_DISCOVERY_HOURS=24`),导致 `poll_decision()` 的
+`first_discovery`(§6.3 首次发现即采)分支对阵容结构性不可达——候选池必须
+严格宽于节奏窗口这一条件在放宽前不成立;② `extract_lineup_snapshot` 从未
+提取 `content.lineup.{home,away}Team.coach`,DTO 与前端均无该字段;③ 前端
+`ProjectedLineupSection.tsx` 在 `subs` 为空时整块静默隐藏,且空首发时渲染出
+「门将 」+ 空球场,球场图注文案还断言了两处不实内容(声称数据源不给站位
+坐标、点名一个排序算法保证不了的人当门将)。
+
+### 实现的三处修复
+
+1. **采集窗口**(`backend/ingest/poll_windows.py`、`backend/cli/
+   poll_fotmob_snapshots.py`):`cadence_fotmob_lineup` 节奏窗口从 24h 放宽到
+   72h(三档:72h–24h 每 24h、24h–观察窗起点每 12h、观察窗起点–T0 每 5
+   分钟,后两档数值不变);候选池宽度独立拆出为
+   `FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS=168`,与 NowGoal 的
+   `DISCOVERY_WINDOW_HOURS` 同构。`FOTMOB_LINEUP_DISCOVERY_HOURS` 整体删除
+   (不留别名)。`not_due_skipped` 计数器拆分为窗内节流(`not_due_skipped`)
+   与窗外未到发现(新增 `out_of_window_skipped`)两个独立计数器,
+   `window_candidates == due_matches + not_due_skipped + out_of_window_skipped`
+   这条不变量由新测试钉住。详见 CLAUDE.md §6.3(已同步更新)。
+2. **主教练端到端**(`backend/providers/fotmob_snapshots.py::_coach_brief`
+   → `backend/silver/odds_moves.py::_lineup_change_summary` →
+   `backend/queries/lineup_preview.py` → `backend/api/schemas.py::
+   MatchPreviewCoachDTO`):只取 `{id, name}`,刻意丢弃 `age`/
+   `primaryTeamId`/`primaryTeamName` 等赛季中可变字段,避免每年生日或转会
+   窗口凭空制造假的"阵容变化"。`_lineup_change_summary` 同时补齐了此前完全
+   没有比较的 `lineup_type` 翻转与 `subs` 进出摘要,并在 `_build_event_moves_for`
+   加了 `if not detail: continue` 守卫——hash 变了但描述不出可展示差异时
+   (如仅新增了 `coach:null` 这类字段形状变化)不再写一条会被"同期事件"
+   渲染成"观察到阵容变化"的空壳 `lineup_change` 行。教练"出现/消失"不报为
+   换帅,守卫基于值(两侧都有可用教练且 id 不同)而非键存在性。
+3. **前端诚实空态**(`frontend/components/matches/ProjectedLineupSection.tsx`
+   + `.module.css`,`frontend/components/matches/MatchDetailBody.tsx` 补传
+   `source` prop):替补三态(有替补保持默认折叠 `<details>`;`predicted` 且
+   `source==="enetpulse"` 时说明第三方预测阵容不下发替补;其它类型说明本次
+   观测只给了首发;空态绝不折叠);新增主教练行(随主/客 tab 切换,`coach`
+   绝不经过 `_translate_players`,防止教练 id 与球员 id 命名空间碰撞);
+   单侧空首发与两侧皆空首发两种此前零测试覆盖的状态各有独立的诚实文案
+   (单侧空替换该侧 pitch+note+替补整块为一句话,不让空球场与图注文案自相
+   矛盾);球场图注删除了"不含站位坐标"(fixture 证明数据源其实给了
+   `verticalLayout`,只是提取器没保留)和"门将 {name}"(`_sorted_players`
+   按字符串化 id 排序,不保证第一个是门将)两处不实内容;tab 标签修正"有
+   快照无阵型"与"无快照"两种状态的区分;`observed_at` 改用已有的
+   `formatBeijingDateTime` 呈现北京时间;`.observed` 字号从 11.5px(低于
+   CLAUDE.md §11.2 的 12px 下限)修到 12px,新增的空态说明段落使用 14.5px
+   (CLAUDE.md §11.2「正文 14px 起」),均取自 DESIGN.md §3 字号阶梯
+   (11·12·13.5·14.5·16·19·22·30px)上的值,不发明阶梯外字号。
+
+### 测试(RED-first,分 A–F 六个 Stage 实现)
+
+- Stage A(`test_poll_cadence.py`/`test_poll_fotmob_snapshots_due.py` 新增
+  `TestCandidatePoolWidth`/`test_poll_decision_convergence.py`/
+  `test_pipeline_e2e.py`):新增/改名约 20 项断言,含候选池宽度这一此前
+  完全无测试覆盖的维度(放宽前该维度改成任何值全套件仍绿)。
+- Stage B(`test_nowgoal_provider.py::TestFotmobSnapshots`):新增 6 项教练
+  提取断言,其中"只改 `coach.age`"与"键序无关"两条额外断言了提取结果的
+  精确形状(不只断言 hash 相等),否则这两条在 extractor 完全不读 coach 的
+  今天也会天然是绿的,防不住它们要防的回归。
+- Stage C(`test_odds_pipeline.py` 新增 `TestLineupCoachAndSubsChanges`):
+  6 项,覆盖教练变化摘要、首次观测到教练不算换帅(摘要级 + 落库级两条镜像)、
+  替补/lineup_type 变化摘要。
+- Stage D(`test_lineup_preview.py`/`test_match_preview.py`):5 项,含
+  API 级断言(`MatchPreview*` 模型无 `extra="forbid"`,忘了改 DTO 会被
+  Pydantic 静默丢键,这是唯一能抓住该回归的测试层级)。
+- Stage E(`test_poll_fotmob_snapshots_match_details.py` 新增
+  `test_real_prematch_fixture_lands_coach_and_bench_in_bronze`,复用仓内
+  真实抓取产物 `prematch-5104961.json`;`test_pipeline_e2e.py::test_full_chain`
+  追加第三轮"只改教练"的链路级验证):2 项,证明教练/替补提取在真实 payload
+  形状下端到端可用。
+- Stage F(`frontend/tests/projected-lineup-section.test.tsx`):新增 18 项
+  (原有 9 项一字不改继续通过),覆盖替补三态、教练随 tab 切换、单/双侧空
+  首发、H7/H8 止损、tab 标签修正、北京时间呈现。RED 阶段发现并修正了三处
+  测试自身的问题(而非实现缺陷):`screen.getByText("主队"/"客队")` 因为
+  伤停卡片标题同名文字而查询歧义,改用按钮结构定位;两处测试误把
+  `source` 参数写反(应传非 enetpulse 却传了 enetpulse,或反之);
+  "不得用另一条快照的替补顶替空替补"的正则 `/上一场.*替补/` 因页面上
+  "上一场"(来自阵型标签)与"替补"(来自空态说明)本来就会各自合法共存
+  而无界匹配误报,改为有界距离正则。
+
+### 真实命令与退出码
+
+```
+.venv/bin/pytest tests/backend/test_poll_cadence.py tests/backend/test_poll_fotmob_snapshots_due.py tests/backend/test_poll_decision_convergence.py tests/backend/test_pipeline_e2e.py -q
+  → exit 0
+.venv/bin/pytest tests/backend/test_nowgoal_provider.py -q
+  → exit 0
+.venv/bin/pytest tests/backend/test_odds_pipeline.py -q
+  → exit 0
+.venv/bin/pytest tests/backend/test_lineup_preview.py tests/backend/test_match_preview.py -q
+  → exit 0
+.venv/bin/python -m backend.cli.export_openapi && cd frontend && npm run gen:api && npm run check:api-drift
+  → exit 0(api-types.ts 与 openapi.json 无漂移)
+.venv/bin/pytest tests/backend/test_poll_fotmob_snapshots_match_details.py tests/backend/test_pipeline_e2e.py -q
+  → exit 0(15 passed)
+cd frontend && npm run test -- projected-lineup-section
+  → exit 0(27 passed)
+.venv/bin/python -m pytest -q(全量,不用 -k 子集)
+  → exit 1(1842 collected = 1836 passed + 4 failed + 2 skipped,逐字符核对
+    progress bar 与 --collect-only 总数一致)。唯一的 4 项失败全部在
+    test_backup_restore.py(TestRestoreVerifyRejectsIncomplete ×2、
+    TestMigrationDriftDetection ×2),经 git stash 把本次全部改动挪开、对
+    未改动代码重跑同一文件复现完全相同的 4 项失败——根因是本 worktree
+    (`.claude/worktrees/wonderful-swirles-9cf0dc`)没有自己的 `.venv`,
+    `deploy/scripts/restore_verify.sh` 的 `PY="$ROOT/.venv/bin/python"`
+    探测不到该路径后回退到 `command -v python3`,在本机解析为系统
+    `/usr/bin/python3`(3.9.6),不支持 `backend/db/util.py` 里
+    `str | None` 类型注解的运行期求值(`TypeError: unsupported operand
+    type(s) for |`)。这是本 worktree 环境本身的基础设施缺口,与本次改动
+    无关、不是本次引入的回归,也不在本次任务范围内修(未被要求配置部署
+    环境)。2 项 skip 与本次改动无关(预先存在的环境缺失 skip,未逐一核对
+    但数量与 §54 记录的历史基线量级一致)。
+cd frontend && npm run lint
+  → exit 0
+cd frontend && npm run typecheck
+  → exit 0
+cd frontend && npm run test(全量)
+  → exit 0(283 passed,48 files)
+cd frontend && npm run build
+  → exit 0
+```
+
+### UNVERIFIED(部署 + 真实定时器运行前不得声称已验证)
+
+1. **真实 FotMob 在 24–72h 带的持续采集行为**——本次只验证了同一条到期
+   判定代码链路(离线 fixture),未跑真实网络定时器观察 72h 外比赛是否
+   真的落库新快照。
+2. **"部署后每个有旧快照且未开球的比赛 +1 行 append-only bronze"**——这是
+   基于当前生产状态(旧阵容快照均属已完赛比赛)推出的预测,不是测量结果;
+   部署后需按方案文档 Deployment 一节的 SQL 实测再改写此条。
+3. **Playwright**——本次任务未运行 `npm run e2e`,未覆盖匿名浏览 数据 tab
+   → 阵容子页的端到端交互。
+4. **`predicted` payload 每球员键集是否含坐标**(决定 H8 真实站位修复能否做)
+   ——未做真实网络探测。
+5. **生产 `allwin.db` 的 `dim_player_i18n` 是否真的没有教练 id 行**——本次
+   只核对了结构性理由(填充来源不含教练),未查询生产库。
+6. **`confirmed` 这个 `lineup_type` 是否真的存在**——沿用既有结论(228 行
+   全量扫描 0 次出现),本次未重新扫描,继续标 `UNVERIFIED`。
+
+### 未在本次范围内的后续项(按优先级)
+
+1. **`_gate_lineup_coverage` 覆盖门(最高优先级)**——`pipeline_gates.py`
+   目前没有任何一门检查阵容覆盖率,这正是候选池全零覆盖能在生产无声运行
+   的根因之一;应比照既有 `_gate_odds_coverage` 的形状独立实现,不在本次
+   顺带做以免扩大本次 diff 与告警面。
+2. **H8 真实站位坐标(E-full)**——后端保留来源 `verticalLayout`/球员原始
+   顺序并在前端画出真实站位,依赖对 `predicted` payload 每球员键集的
+   真实探测(见上方 UNVERIFIED #4),是第二次 payload 形状变更。
+3. **教练名中文化**——需要 `dim_coach_i18n` 或扩展现有 i18n 源查询 + 人工
+   审校,当前教练名按来源拉丁原文渲染。
+4. **`_sideline_change_summary` 的空壳问题**——该函数恒返回非空的
+   `{"team_id": ...}`,"无进出的伤停变化"同样会产出一条说不出内容的
+   `lineup_change` 同类问题的事件,与本次修的是同一缺陷类,但改它会动
+   伤停语义,留待独立提交。
+5. **`.benchSummary` 24px 触控区**(同文件 `.sideTab` 是 44px)、
+   `_tier_name` 的 `int()` 截断(BIG5 1.5h 档与非 BIG5 1.25h 档在
+   `poll_attempt_log` 里同名记为 `le_1h`,逐联赛节奏审计做不了)——纯打磨
+   项,不影响正确性。
+6. **生产已存在的空 `detail_json='{}'` 的 `lineup_change` 行**——不做
+   破坏性清理(CLAUDE.md §17),仅记录其存在与成因。
+
+### 部署前手工验证清单(不在本次会话范围内完成)
+
+方案文档 Deployment 一节要求:停 `allwin-lineup.timer` → 手工跑一次
+`--due` 语义的 `fotmob_snapshot` job(不用 `--match-id`,避免污染
+`poll_attempt_log` 的 `tier` 字段)→ 起 timer → 只读核对新快照场次数、
+`lineup_type` 分布、coach 非空行数、`poll_attempt_log` 的 tier 分布(应
+出现 `first_discovery`/`checkpoint_72h`/`checkpoint_24h`)、
+`detail_json='{}'` 的 `lineup_change` 行数(应为 0)。这几个数字是把上方
+UNVERIFIED #1/#2 转为已验证所需的证据,本次会话未连接生产环境,不做。
+
+## 56. 数据倾向卡片填充:市场卡 lines[] + 折叠归因补全(2026-08-19)
+
+### 背景与生产实测(会话内在生产库/生产 API 上实测,非估算)
+
+用户反馈比赛详情页「数据倾向」很多卡片空着。抽样 40 场未来比赛(120 张
+市场卡)测得三态分布:`ok` 65 张(54%)、`insufficient_sample` 30 张
+(25%)、`no_calibration` 25 张(21%)。
+
+两条成因完全不同,只有第二条在本次范围内:
+
+1. **样本不足(25%)——数据缺口,现有字段救不了。** 样本分布是**二元的**:
+   球队要么全库 0 场、要么 ≥10 场,**没有中间带**——`MIN_SAMPLE` 从 3 降到
+   1 一支队都救不回来;查询口径从"同联赛"放宽到"全部赛事"也只多救
+   +1.4%(3875 场里 +56 场)。252 支参赛队里 80 支(31.7%)全库零场次,
+   其中 72 支属于 4 个从未补采历史赛季的联赛(英冠 48/荷甲 57/葡超
+   61/巴甲 268,各自只有 8-12 场已完赛,该四联赛失败率 100%,占未来比赛
+   34%);五大联赛失败率仅 12-22%,全是升班马。根治方式是补采这 4 个
+   联赛的历史赛季,已按站长决定单独排期,不在本次范围。
+2. **未标定(21%)——本次真正填的那块。** `market_calibration` 有 8 组
+   (市场 × 盘口线,均为跨联赛合并档):角球 8.5/9.5/10.5(仅 8.5、10.5
+   定级,9.5 五档全未定级)、大小球 2.5/3.5(均已定级)、罚牌
+   2.5/3.5/4.5(均已定级)。而 9.5 正是角球卡的默认线
+   (`calibrate_markets.py` `MARKETS["corners"].default_line`),所以角球
+   卡几乎永远"未标定",8.5/10.5 的真实回测结果此前完全没有被查询层使用
+   ——`backend/queries/market_cards.py` 每张卡此前只查一条线,**8 组标定
+   只用了 3 组**。
+
+**Fix 6 追加实测(2026-08-19,推翻会话内此前的初步判断)**:NowGoal 的市场
+只有 `1x2`/`ah`/`ou`/`corners_ou` 四个,没有任何罚牌/黄牌盘;角球盘口存在
+且采集正常——按同期口径(角球 08-17 开采)`corners_ou` 覆盖 48/66 = 73% 的
+在采比赛(此前"仅 54 场"的印象来自 `ou` 含 2020 年起的历史回填,跨 6 年
+2290 场,不是同期可比数字)。真正的问题是真实线的**取值**:同期样本里
+真实角球线 10.0/9.0/11.0/8.0(整数线)合计 26 场,9.5/10.5/8.5(半球线)
+合计 23 场——53% 的真实角球线是整数线,而 `calibrate_markets.py` 只标定了
+三条半球线,这些比赛落进 `no_calibration` 是结构性必然,不是缺陷。
+
+### 本次点亮了什么(零新查询/零新推断,只暴露已经算出来但被丢弃的数据)
+
+- **Fix 1**:`backend/queries/market_cards.py::match_market_cards` 对
+  `market.lines`(该市场全部已标定线,不止默认线)逐条调用 `_bucket_lookup`,
+  产出 `MarketCardDTO.lines[]`(新 `MarketLineCalibrationDTO`)。默认线的
+  既有判定字段(`line`/`signal_grade`/`hit_rate`/`lean`)逐字节未改
+  (B6:结论区不换线)。`lines[]` 里 `signal_grade is None` 的行,
+  `hit_rate`/`sample_size` 在后端就置 `None`(B2 落到数据层,不是前端选择
+  性隐藏)——由 `tests/backend/test_market_cards.py::TestMarketCardLinesArray`
+  的 `test_ungraded_line_carries_no_hit_rate_number` 直接钉死。
+- **Fix 2**(纯前端):`MarketDriverFactorDTO.against` 与
+  `MarketFactorSideDTO.n` 已经在 payload 里、已经算好,`MarketCard.tsx` 的
+  `mergeDrivers()` 此前只读 `.for.avg`。新增 `mergeAgainstDrivers()` 在折叠区
+  既有驱动表下方追加同结构"对手侧"表(不在既有 3 列表上加列,§11.2 窄屏
+  优先),每格数值各自标注自己的实际场次(不共用一个"共 N 场"——
+  `touches_opp_box` 全库仅 89.05% 覆盖,与 100% 覆盖的指标口径不同)。
+- **Fix 3**:新增 `_EXTRA_DRIVER_KEYS_BY_MARKET`(`market_cards.py`,不改
+  `calibrate_markets.py` 的 `driver_keys`),折叠区按市场相关性补充
+  `team_recent_profile` 已经算出但被丢弃的高阶指标——大小球
+  +`expected_goals_on_target`/`big_chance_missed`/`shots_inside_box`,
+  罚牌 +`tackles`/`duel_won`,角球 +`shots_outside_box`/`shot_blocks`。
+  零新 SQL 查询(同一份 profile 内已有)。
+- **Fix 4**:修复 `frontend/components/matches/zh.ts` `TEAM_STAT_LABELS`
+  的两处真实 §11.2 违规——`blocked_shots`(角球卡既有 driver_keys 之一)
+  与 `shots_off_target` 此前都没有中文标签,`MarketCard.tsx` 的
+  `DRIVER_LABEL[row.key] ?? row.key` 兜底会把英文 key 原样渲染给用户。
+  补齐为「封堵射门」「射偏」。
+- **Fix 5**:`market_calibration.calibrated_at` 已入库多时,但
+  `_bucket_lookup` 此前没有 SELECT 它。补进查询与 `MarketCardDTO`,折叠区
+  展示"回测数据更新于 {北京时间}",复用既有 `formatBeijingDateTime`
+  (纯算术,SSR 安全,不新写日期格式化函数)。
+- **Fix 6**:`no_calibration` 新增原因细分字段
+  `no_calibration_reason`——线不在该市场已标定线集合内
+  (`line_not_calibrated`,典型场景:真实角球线是整数线)vs 线在集合内但
+  这次查不到任何标定行(`line_unresolved`,理论上不该发生,沿用原通用
+  文案)。前者的新文案点名具体线值与已回测的线列表,不再是一句没头没尾的
+  "该盘口线暂无历史回测数据"。
+
+角球卡此前几乎永远因默认线 9.5 未定级而结论区空着;折叠区此前只有一张
+基础驱动因子表(且其中 `blocked_shots` 一项因缺中文标签而把英文 key 泄漏
+给用户),没有各线回测、对手侧数据、回测更新时间。现在结论区行为不变
+(如实展示"暂无倾向",不换线冒充有信号),折叠区新增如实展示 8.5/10.5
+的真实回测结果、对手侧数据、更多驱动指标与回测更新时间,卡片比此前更
+充实。
+
+### 契约变更
+
+`MarketCardDTO` 新增 `lines: list[MarketLineCalibrationDTO] = []`、
+`calibrated_at: Optional[str] = None`、
+`no_calibration_reason: Optional[Literal["line_not_calibrated",
+"line_unresolved"]] = None`,均为可选字段,向后兼容;不改任何既有字段
+类型或语义,不涉及 migration(`market_calibration` 表结构本身未变,只是
+查询层此前没有 SELECT 全部已有列)。
+
+### 真实命令与退出码
+
+```
+.venv/bin/python -m pytest -q                              → exit 0
+  (1848 passed, 2 skipped[环境缺失真实文件,与本次改动无关], 0 failed;
+   §55 记录的上一次审计基线是 1842 collected,此处 1850 = 1848+2,+8 恰好
+   等于本次新增的 8 个后端测试
+   [tests/backend/test_market_cards.py::TestMarketCardLinesArray],
+   本次只跑了一次全量、未做改动前/改动后两次全量对照运行,+8 是与 §55
+   历史记录的差值,不是本次会话内的前后对照)
+.venv/bin/python -m backend.cli.export_openapi              → exit 0
+cd frontend && npm run gen:api                               → exit 0
+cd frontend && npm run check:api-drift                       → exit 0(无漂移)
+cd frontend && npm run lint                                  → exit 0
+cd frontend && npm run typecheck                             → exit 0
+cd frontend && npm run test                                  → exit 0(291 passed, 49 files;
+   本次只在 market-card.test.tsx 新增 F1-F6 六个用例,未新增/删除任何测试
+   文件或既有用例——未做改动前的全量对照运行,291 里含且仅含这 6 个新增)
+cd frontend && npm run build                                  → exit 0
+```
+
+`frontend/tests/market-card.test.tsx:51`(`queryByText(/51%/)).toBeNull()`)
+与 `:86`(`insufficient_sample` 不展示预估值)两条既有测试**逐字节未改**,
+全程保持通过——git diff 可核对这两个 `it()` 块本身没有任何改动,只在文件
+末尾追加了新 `describe` 块。`frontend/e2e/anonymous.spec.ts:244-289`
+(断言角球默认线出现"样本外测试中不够稳定")本次未运行(未跑
+`npm run e2e`),标 `UNVERIFIED`。
+
+### UNVERIFIED(部署前不得声称已验证)
+
+1. **Playwright 端到端**——本次未运行 `npm run e2e`,折叠区新增的"各线
+   回测"/"对手侧"/回测更新时间在真实浏览器里的渲染效果未做端到端验证,
+   只有 Vitest 单元测试(jsdom)覆盖。
+2. **生产用户实际看到的填充效果**——需部署后人工核对真实比赛的市场卡
+   (尤其角球卡折叠区是否如实展示 8.5/10.5 回测结果)。
+3. **per-league 标定重跑是否能通过 `MIN_BUCKET_SAMPLE=20`**——本次未跑
+   `calibrate_markets.py --league-id`,继续标 UNVERIFIED(不在本次范围)。

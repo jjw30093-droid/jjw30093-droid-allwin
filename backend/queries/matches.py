@@ -9,6 +9,7 @@ from backend.media.team_crests import resolve_team_crest_url
 from backend.queries.teams import (
     display_name_for_team,
     provider_name_for_team,
+    team_display_for,
     team_display_map,
 )
 
@@ -51,26 +52,75 @@ def _row_to_summary(r, display) -> dict:
 }
 
 
+def _int_or_none(value) -> int | None:
+    """dim_match.Temperature/Wind_Speed 是 TEXT 列(采集端 str() 落库,§见
+    fotmob_client.parse_match_dim);容错解析,解析不出来就是 None,不硬转崩溃。"""
+    if value is None:
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _venue_weather_referee(r) -> dict:
+    """详情页专属字段(2026-08-20,MatchDetailSummary)。只在 match_by_id 合入,
+    不进 _row_to_summary——列表端点不需要,也不该为每张卡片多带这几列。"""
+    keys = r.keys()
+    return {
+        "referee": r["Referee"] if "Referee" in keys else None,
+        "temperature_c": _int_or_none(r["Temperature"] if "Temperature" in keys else None),
+        "wind_speed_kmh": _int_or_none(r["Wind_Speed"] if "Wind_Speed" in keys else None),
+        "weather_description": r["Weather_Description"] if "Weather_Description" in keys else None,
+        "venue_name": r["Venue_Name"] if "Venue_Name" in keys else None,
+        "venue_city": r["Venue_City"] if "Venue_City" in keys else None,
+        "venue_country": r["Venue_Country"] if "Venue_Country" in keys else None,
+    }
+
+
 def _iso_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+# 自然日档(北京时间,UTC+8 无夏令时)相对今天的偏移。三段首尾严格相接。
+_CALENDAR_DAY_OFFSETS = {"yesterday": -1, "today": 0, "tomorrow": 1}
+
+# 滚动档天数。正数向未来 [now, now+N),负数向过去 [now-N, now)。
+_ROLLING_WINDOW_DAYS = {"3d": 3, "7d": 7, "past3d": -3, "past7d": -7}
 
 
 def _window_bounds(
     window: str | None, now: datetime
 ) -> tuple[str | None, str | None]:
+    """把 window token 翻成半开区间 [start, end) 的 UTC ISO 字符串。
+
+    两档语义(2026-08-19 增加向过去的窗口后,每档都是双向的):
+    - 自然日档 yesterday/today/tomorrow:按**北京自然日**切,不是滚动 24h。
+      这不是风格选择——生产实测同一时刻"按 UTC 滚动 24h"是 0 场、"按北京
+      自然日"是 5 场,选错用户就看不到昨天的比赛。`today` 因此天然双向,
+      「今天赛果」= window=today & status=finished,不需要另造 token。
+    - 滚动档 3d/7d/past3d/past7d:以请求时刻 now 为锚,past{N}d = [now-N, now)
+      与 {N}d = [now, now+N) 在 now 处严格互补。边界半开,所以开球时刻恰好
+      等于 now 的比赛只属于未来窗,不会被两个窗口同时选中。
+
+    注意上界随请求时刻移动,叠加 60 秒共享缓存后最多滞后 60 秒——文案不得
+    声称赛果窗口"精确到当前时刻"。
+    """
     if window in (None, "all"):
         return None, None
     current = now.astimezone(timezone.utc)
-    if window in {"today", "tomorrow"}:
+    day_offset = _CALENDAR_DAY_OFFSETS.get(window)
+    if day_offset is not None:
         local = current.astimezone(ZoneInfo("Asia/Shanghai"))
-        day_offset = 1 if window == "tomorrow" else 0
         start_local = (local + timedelta(days=day_offset)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         return _iso_utc(start_local), _iso_utc(start_local + timedelta(days=1))
-    days = {"3d": 3, "7d": 7}.get(window)
+    days = _ROLLING_WINDOW_DAYS.get(window)
     if days is None:
         raise ValueError("unsupported match window")
+    if days < 0:
+        return _iso_utc(current + timedelta(days=days)), _iso_utc(current)
     return _iso_utc(current), _iso_utc(current + timedelta(days=days))
 
 
@@ -176,6 +226,11 @@ def list_matches(
     # 数据,只是粒度粗;北京时间是固定 UTC+8 无夏令时偏移,按 UTC 排序等价于
     # 按北京时间排序,不需要额外转换)。
     if status == "finished":
+        # 赛果:最新在前。这条分支**刻意不建 priority CASE**——调用方
+        # (routes_public.py 的 /api/v1/matches)每次都传 priority_match_ids,
+        # 但把"免费且已发布概率"提到前面对赛程有意义、对赛果只会打乱时间倒序,
+        # 用户翻赛果就是要按时间从近到远看。所以 boost=free_predicted 对
+        # status=finished 无效是**设计如此**,不是漏了,别当成 bug 补上。
         order = "julianday(COALESCE(kickoff_at_utc, Date)) DESC, Match_ID DESC"
     else:
         # 两层优先级(2026-08-16 首页重点位确定性选场修复):
@@ -209,7 +264,12 @@ def list_matches(
         f"SELECT * FROM dim_match WHERE {cond} ORDER BY {order} LIMIT ? OFFSET ?",
         params + order_params + [limit, offset],
     ).fetchall()
-    display = team_display_map(conn)
+    # 2026-08-19 性能修复:team_display_map() 每次都全扫 dim_match(33,868 行)
+    # 求 304 支球队的译名,只为了本页 ≤limit 场比赛里出现的球队——改成只查
+    # 这一页真正出现过的 team_id(见 backend/queries/teams.py::team_display_for
+    # 的等价性说明与 tests/backend/test_team_display_for.py)。
+    page_team_ids = {r["Home_Team_ID"] for r in rows} | {r["Away_Team_ID"] for r in rows}
+    display = team_display_for(conn, page_team_ids)
     return {"total": total, "matches": [_row_to_summary(r, display) for r in rows]}
 
 
@@ -217,7 +277,8 @@ def match_by_id(conn: sqlite3.Connection, match_id: int) -> dict | None:
     r = conn.execute("SELECT * FROM dim_match WHERE Match_ID=?", (match_id,)).fetchone()
     if r is None:
         return None
-    return _row_to_summary(r, team_display_map(conn))
+    display = team_display_for(conn, {r["Home_Team_ID"], r["Away_Team_ID"]})
+    return {**_row_to_summary(r, display), **_venue_weather_referee(r)}
 
 
 def recent_form(
@@ -229,7 +290,13 @@ def recent_form(
            ORDER BY Date DESC LIMIT ?""",
         (before_date, team_id, team_id, limit),
     ).fetchall()
-    display = team_display_map(conn)
+    # 只有对手需要译名(见下方 _team_ref(opp_id,...)),team_id 自己不出现在
+    # 输出里——按真正返回的对手 id 收窄,不查全表。
+    opponent_ids = {
+        (r["Away_Team_ID"] if r["Home_Team_ID"] == team_id else r["Home_Team_ID"])
+        for r in rows
+    }
+    display = team_display_for(conn, opponent_ids)
     out = []
     for r in rows:
         is_home = r["Home_Team_ID"] == team_id
@@ -437,7 +504,7 @@ def recent_shot_map_spec(
     except sqlite3.OperationalError:
         return None
 
-    display = team_display_map(conn)
+    display = team_display_for(conn, {target["Home_Team_ID"], target["Away_Team_ID"]})
     teams = [
         {
             "team_id": int(target["Home_Team_ID"]),

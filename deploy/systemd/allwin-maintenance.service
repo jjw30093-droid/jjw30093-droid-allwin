@@ -1,0 +1,34 @@
+# 慢变维护任务(oneshot,由 allwin-maintenance.timer 每天触发一次)。
+# 顺序执行 entity_resolution → metrics_rebuild,用 backend.worker.group_runner
+# ——两步彼此独立,一步失败不应该让另一步不被尝试。
+#
+# 这两步之前挂在 15 分钟的 allwin-worker.timer 大链上,但都是慢变数据:
+# 实体解析靠新行触发(采集轮内已内联解析,这里只是兜底汇报别名种子/
+# xref 审核状态),metrics_rebuild 每天最多产出 1 条 manifest 版本(内容
+# 不变不加版本)——原来每天被触发 96 次(15 分钟一次)却只有 ≤1 次真正
+# 产出新内容,改成每天一次更符合它们的真实变化频率。
+#
+# 安装:cp allwin-maintenance.service allwin-maintenance.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-maintenance.timer
+# 手动跑一次:systemctl start allwin-maintenance.service
+[Unit]
+Description=allwin daily maintenance (entity_resolution -> metrics_rebuild, once a day)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.group_runner --group maintenance
+TimeoutStartSec=1800
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

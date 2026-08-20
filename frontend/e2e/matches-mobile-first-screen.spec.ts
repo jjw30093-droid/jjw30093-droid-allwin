@@ -22,7 +22,7 @@ test("390px 视口下第一场比赛不需要划过大段筛选控件就能看�
   await expect(page.getByLabel("日期")).toBeHidden();
   await expect(page.getByLabel("球队")).toBeHidden();
 
-  // 主筛选行(时间/内容/联赛)仍然可见。
+  // 主筛选行(时间/联赛)仍然可见。
   await expect(page.getByText("时间", { exact: true })).toBeVisible();
   await expect(page.getByText("联赛", { exact: true })).toBeVisible();
 

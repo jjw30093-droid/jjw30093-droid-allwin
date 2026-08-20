@@ -1463,7 +1463,7 @@
        "anyOf": [
         {
          "type": "string",
-         "pattern": "^(today|tomorrow|3d|7d|all)$"
+         "pattern": "^(today|tomorrow|3d|7d|all|yesterday|past3d|past7d)$"
         },
         {
          "type": "null"
@@ -10652,6 +10652,40 @@
       },
       "type": "array",
       "title": "Driver Factors Away"
+     },
+     "lines": {
+      "items": {
+       "$ref": "#/components/schemas/MarketLineCalibrationDTO"
+      },
+      "type": "array",
+      "title": "Lines",
+      "default": []
+     },
+     "calibrated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Calibrated At"
+     },
+     "no_calibration_reason": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "line_not_calibrated",
+         "line_unresolved"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "No Calibration Reason"
      }
     },
     "type": "object",
@@ -10712,10 +10746,67 @@
     "title": "MarketFactorSideDTO",
     "description": "某一侧(for=本队自己创造 / against=本队对手创造)的历史均值汇总。\navg 为 None 表示样本不足(<3 场)或该指标缺失,不是 0——0 是\"历史均值\n确实为 0\"的合法值,不能拿来表示\"没有数据\"。"
    },
+   "MarketLineCalibrationDTO": {
+    "properties": {
+     "line": {
+      "type": "number",
+      "title": "Line"
+     },
+     "is_default": {
+      "type": "boolean",
+      "title": "Is Default"
+     },
+     "signal_grade": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "★★★",
+         "★★",
+         "★"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Signal Grade"
+     },
+     "hit_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hit Rate"
+     },
+     "sample_size": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sample Size"
+     }
+    },
+    "type": "object",
+    "required": [
+     "line",
+     "is_default"
+    ],
+    "title": "MarketLineCalibrationDTO",
+    "description": "折叠区\"本市场各盘口线的历史回测\"一行:market.lines(该市场全部已标定\n线,不止默认线)中某一条的标定结果,与卡片顶层 line/signal_grade/\nhit_rate/lean(结论区,只看默认线,B6:不换线)完全独立的第二组数据,\n纯粹是\"我们对这条线做过什么离线回测\"的透明度展示。\n\nsignal_grade 为 None 时(该线从未标定过,或标定了但外样本不单调),\nhit_rate 与 sample_size 必须同为 None——由后端在这里就置空,不是前端\n选择性隐藏(B2:未定级的线禁止展示命中率数值)。"
+   },
    "MatchDetailResponse": {
     "properties": {
      "match": {
-      "$ref": "#/components/schemas/MatchSummary"
+      "$ref": "#/components/schemas/MatchDetailSummary"
      },
      "data_updated_at": {
       "anyOf": [
@@ -10755,6 +10846,298 @@
      "match"
     ],
     "title": "MatchDetailResponse"
+   },
+   "MatchDetailSummary": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "type": "string",
+      "title": "Season"
+     },
+     "date_utc": {
+      "type": "string",
+      "title": "Date Utc"
+     },
+     "kickoff_at_utc": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kickoff At Utc"
+     },
+     "round": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Round"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "home": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "away": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "home_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Score"
+     },
+     "away_score": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Score"
+     },
+     "sync_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sync State"
+     },
+     "data_updated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Data Updated At"
+     },
+     "last_success_sync_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Success Sync At"
+     },
+     "next_planned_sync_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next Planned Sync At"
+     },
+     "probability_source": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "MODEL",
+         "MARKET_BASELINE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Probability Source"
+     },
+     "odds_observation_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Observation Count"
+     },
+     "odds_coverage_tier": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "full_timeline",
+         "open_close_only",
+         "none"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Coverage Tier"
+     },
+     "odds_last_observed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Last Observed At"
+     },
+     "odds_freshness_state": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "FRESH",
+         "STALE",
+         "UNAVAILABLE"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odds Freshness State"
+     },
+     "win_probability": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/WinProbabilityDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "referee": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Referee"
+     },
+     "temperature_c": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Temperature C"
+     },
+     "wind_speed_kmh": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Wind Speed Kmh"
+     },
+     "weather_description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Weather Description"
+     },
+     "venue_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue Name"
+     },
+     "venue_city": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue City"
+     },
+     "venue_country": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue Country"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "league_id",
+     "season",
+     "date_utc",
+     "status",
+     "home",
+     "away"
+    ],
+    "title": "MatchDetailSummary",
+    "description": "详情页专属:在 MatchSummary 之上追加球场/天气/裁判字段(2026-08-20)。\n\n刻意不加进 MatchSummary 本体——那会让 /api/v1/matches 列表响应里每张\n卡片都多出这几个恒为 null 的字段(列表接口从不查询这些列,§10.3 契约\n纪律要求\"每个 operation 声明自己的成功响应模型\",不是全站共用一个胖\nDTO)。只有 /matches/{id} 详情端点用这个子类。\n\n全部可空:Referee/Temperature/Wind_Speed 是 dim_match 基线列,产线覆盖\n率分别约 71%/16%/16%(不是每场都有);Venue_*/Weather_Description 是本次\n新增列,历史比赛无 FotMob 原始快照可回填,恒为 NULL。前端按字段各自\n判空隐藏,不得为凑齐卡片而编造占位值。\n\ntemperature_c/wind_speed_kmh 的单位是摄氏度/公里每小时——FotMob 原始\npayload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),\n非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响\n其它字段。"
    },
    "MatchListResponse": {
     "properties": {
@@ -11122,6 +11505,31 @@
     "type": "object",
     "title": "MatchPreviewChainMetricDTO"
    },
+   "MatchPreviewCoachDTO": {
+    "properties": {
+     "id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "title": "MatchPreviewCoachDTO",
+    "description": "FotMob content.lineup.{home,away}Team.coach 的最小子集(只有 id/name)。\n2026-08-18 之前写入的快照 payload 没有这个键,读侧如实 None,不回填猜测值。"
+   },
    "MatchPreviewDefensivePressureDTO": {
     "properties": {
      "tier": {
@@ -11308,6 +11716,16 @@
        }
       ],
       "title": "Formation"
+     },
+     "coach": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchPreviewCoachDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "starters": {
       "items": {
@@ -11584,6 +12002,28 @@
        }
       ],
       "title": "Shirt Number"
+     },
+     "pos_x": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pos X"
+     },
+     "pos_y": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pos Y"
      }
     },
     "type": "object",

@@ -1,11 +1,14 @@
-"""生产可靠性收口:systemd 调度拓扑测试。
+"""生产可靠性收口:systemd 调度拓扑测试(PIPELINE_REDESIGN_V2 P3)。
 
 覆盖:
-- allwin-poll.service 用 poll_wrapper 顺序执行两个采集任务,任一失败不阻止
-  另一个被尝试,整体退出码如实反映是否有失败;
-- `--chain --periodic` 跳过 nowgoal_snapshot/fotmob_snapshot(避免与
-  allwin-poll.timer 的独立调度重复竞争同一把锁),裸 `--chain` 保持完整手动链
-  不变;
+- `allwin-worker`/`allwin-poll` 两个旧定时器已被彻底移除,换成 7 个各自
+  一个清晰职责的独立定时器(allwin-odds/lineup/fixtures/postmatch/derive/
+  gates/maintenance);
+- 单任务定时器(odds/lineup/fixtures/gates)直接 `runner --job <name>`;
+  多任务定时器(postmatch/derive/maintenance)用 `group_runner --group <name>`
+  顺序执行组内任务,任一失败不阻止另一个被尝试,整体退出码如实反映是否有失败;
+- 最重要的不变量:`allwin-gates`(pipeline_gates)是完全独立的失败域——
+  其它任何定时器这一轮的任务失败,都不得阻止/跳过 pipeline_gates 真正执行;
 - 系统单元文件的静态检查(硬化指令、ExecStart 拓扑),不依赖真实 systemd
   (本机无 systemd-analyze,相关真实验证保持 UNVERIFIED)。
 """
@@ -14,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.worker import poll_wrapper, runner
+from backend.worker import group_runner, runner
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMD_DIR = ROOT / "deploy" / "systemd"
@@ -28,127 +31,208 @@ def registry():
     runner.REGISTRY.update(saved)
 
 
-class TestPeriodicChainExcludesSnapshotJobs:
-    def test_plain_chain_still_includes_snapshot_jobs(self):
-        assert "nowgoal_snapshot" in runner.DEFAULT_CHAIN
-        assert "fotmob_snapshot" in runner.DEFAULT_CHAIN
+class TestGroupRunner:
+    """allwin-postmatch/allwin-derive/allwin-maintenance 三个定时器共用的
+    "组内任务彼此独立、顺序执行、汇总退出码"包装——继承自旧 poll_wrapper.py
+    对 nowgoal_snapshot+fotmob_snapshot 两个任务已经验证过的同一份契约,
+    只是参数化到任意任务组。"""
 
-    def test_periodic_exclude_set_matches_the_two_snapshot_jobs(self):
-        assert runner.PERIODIC_CHAIN_EXCLUDE == {"nowgoal_snapshot", "fotmob_snapshot"}
-
-    def test_cli_periodic_flag_filters_out_snapshot_jobs(self, registry, data_dir, monkeypatch):
-        seen_chains = []
-
-        def fake_run_chain(names=None, start_from=None):
-            seen_chains.append(list(names) if names else list(runner.DEFAULT_CHAIN))
-            return []
-
-        monkeypatch.setattr(runner, "run_chain", fake_run_chain)
-        rc = runner.main(["--chain", "--periodic"])
-        assert rc == 0
-        assert len(seen_chains) == 1
-        assert "nowgoal_snapshot" not in seen_chains[0]
-        assert "fotmob_snapshot" not in seen_chains[0]
-        # 其余步骤原样保留,顺序不变
-        assert seen_chains[0] == [n for n in runner.DEFAULT_CHAIN
-                                   if n not in runner.PERIODIC_CHAIN_EXCLUDE]
-
-    def test_cli_without_periodic_uses_full_default_chain(self, registry, data_dir, monkeypatch):
-        seen_chains = []
-
-        def fake_run_chain(names=None, start_from=None):
-            seen_chains.append(names)
-            return []
-
-        monkeypatch.setattr(runner, "run_chain", fake_run_chain)
-        rc = runner.main(["--chain"])
-        assert rc == 0
-        assert seen_chains == [None]   # None → run_chain 内部用完整 DEFAULT_CHAIN
-
-
-class TestPollWrapper:
-    def test_both_jobs_attempted_even_if_first_fails(self, registry, data_dir):
+    @pytest.mark.parametrize("group_name", sorted(group_runner.JOB_GROUPS))
+    @pytest.mark.parametrize("fail_index", [0, -1])
+    def test_all_jobs_attempted_even_if_one_fails(self, group_name, fail_index, registry, data_dir):
+        jobs = group_runner.JOB_GROUPS[group_name]
+        boom_job = jobs[fail_index]
         calls = []
 
-        def nowgoal_boom():
-            calls.append("nowgoal_snapshot")
-            raise RuntimeError("模拟 NowGoal 失败")
+        for job in jobs:
+            if job == boom_job:
+                def make_boom(job=job):
+                    def boom():
+                        calls.append(job)
+                        raise RuntimeError(f"模拟 {job} 失败")
+                    return boom
+                runner.register_job(job, fn=make_boom(), max_attempts=1)
+            else:
+                def make_ok(job=job):
+                    def ok():
+                        calls.append(job)
+                        return {"input_count": 0, "output_count": 0}
+                    return ok
+                runner.register_job(job, fn=make_ok(), max_attempts=1)
 
-        def fotmob_ok():
-            calls.append("fotmob_snapshot")
-            return {"input_count": 1, "output_count": 1}
+        rc, results = group_runner.run_group(group_name)
 
-        runner.register_job("nowgoal_snapshot", fn=nowgoal_boom, max_attempts=1)
-        runner.register_job("fotmob_snapshot", fn=fotmob_ok, max_attempts=1)
-
-        rc, results = poll_wrapper.run_all()
-        assert calls == ["nowgoal_snapshot", "fotmob_snapshot"], (
-            "NowGoal 失败不得阻止 FotMob 被尝试"
+        assert calls == list(jobs), (
+            f"{group_name} 组内 {boom_job} 失败不得阻止其余任务被尝试(实际尝试顺序: {calls})"
         )
         assert rc == 1, "任一任务失败时整体退出码必须非零"
         statuses = {r["job"]: r["status"] for r in results}
-        assert statuses["nowgoal_snapshot"] == "failed"
-        assert statuses["fotmob_snapshot"] == "succeeded"
+        assert statuses[boom_job] == "failed"
+        for job in jobs:
+            if job != boom_job:
+                assert statuses[job] == "succeeded"
 
-    def test_both_jobs_attempted_when_second_fails(self, registry, data_dir):
-        calls = []
-
-        def nowgoal_ok():
-            calls.append("nowgoal_snapshot")
-            return {"input_count": 1, "output_count": 1}
-
-        def fotmob_boom():
-            calls.append("fotmob_snapshot")
-            raise RuntimeError("模拟 FotMob 失败(如缺 THORDATA_PROXY)")
-
-        runner.register_job("nowgoal_snapshot", fn=nowgoal_ok, max_attempts=1)
-        runner.register_job("fotmob_snapshot", fn=fotmob_boom, max_attempts=1)
-
-        rc, results = poll_wrapper.run_all()
-        assert calls == ["nowgoal_snapshot", "fotmob_snapshot"]
-        assert rc == 1
-        statuses = {r["job"]: r["status"] for r in results}
-        assert statuses["nowgoal_snapshot"] == "succeeded"
-        assert statuses["fotmob_snapshot"] == "failed"
-
-    def test_both_succeed_gives_zero_exit_code(self, registry, data_dir):
-        runner.register_job("nowgoal_snapshot", fn=lambda: {"input_count": 0, "output_count": 0})
-        runner.register_job("fotmob_snapshot", fn=lambda: {"input_count": 0, "output_count": 0})
-        rc, results = poll_wrapper.run_all()
+    @pytest.mark.parametrize("group_name", sorted(group_runner.JOB_GROUPS))
+    def test_all_succeed_gives_zero_exit_code(self, group_name, registry, data_dir):
+        for job in group_runner.JOB_GROUPS[group_name]:
+            runner.register_job(job, fn=lambda: {"input_count": 0, "output_count": 0}, max_attempts=1)
+        rc, results = group_runner.run_group(group_name)
         assert rc == 0
         assert all(r["status"] == "succeeded" for r in results)
 
-    def test_skipped_status_does_not_count_as_failure(self, registry, data_dir, monkeypatch):
-        """run_job 返回 skipped(如幂等键已成功过)时,poll_wrapper 不应把它当
+    @pytest.mark.parametrize("group_name", sorted(group_runner.JOB_GROUPS))
+    def test_skipped_status_does_not_count_as_failure(self, group_name, registry, data_dir, monkeypatch):
+        """run_job 返回 skipped(如幂等键已成功过)时,group_runner 不应把它当
         失败——只有 failed/locked 才应该让整体退出码非零。"""
 
         def fake_run_job(job_name, idempotency_key=None, force=False):
             return {"run_id": "x", "status": "skipped", "attempt": 1, "error_summary": None}
 
-        monkeypatch.setattr(poll_wrapper, "run_job", fake_run_job)
-        rc, results = poll_wrapper.run_all()
+        monkeypatch.setattr(group_runner, "run_job", fake_run_job)
+        rc, results = group_runner.run_group(group_name)
         assert rc == 0
         assert all(r["status"] == "skipped" for r in results)
+
+    def test_cli_group_flag_dispatches_to_run_group(self, registry, data_dir, monkeypatch):
+        seen = []
+
+        def fake_run_group(name):
+            seen.append(name)
+            return 0, []
+
+        monkeypatch.setattr(group_runner, "run_group", fake_run_group)
+        rc = group_runner.main(["--group", "derive"])
+        assert rc == 0
+        assert seen == ["derive"]
+
+    def test_cli_rejects_unknown_group(self):
+        with pytest.raises(SystemExit):
+            group_runner.main(["--group", "not-a-real-group"])
+
+
+class TestGatesIndependentOfOtherTimers:
+    """七定时器拓扑里最重要的正确性属性:allwin-gates(pipeline_gates)是
+    只读告警,必须完全独立于其它任何定时器这一轮的成败——它不再是
+    DEFAULT_CHAIN 链尾、不再经过 run_chain() 的 cascade-skip,而是自己独立
+    的定时器,直接 `runner --job pipeline_gates`,和其它任何 group_runner
+    调用之间没有共享的锁/进程内状态/CLI 标志。"""
+
+    def test_pipeline_gates_runs_after_upstream_group_job_fails(self, registry, data_dir):
+        def model_predict_boom():
+            raise RuntimeError("模拟 allwin-postmatch 本轮 model_predict 崩溃")
+
+        for job in group_runner.JOB_GROUPS["postmatch"]:
+            if job == "model_predict":
+                runner.register_job(job, fn=model_predict_boom, max_attempts=1)
+            else:
+                runner.register_job(job, fn=lambda: {"input_count": 0, "output_count": 0}, max_attempts=1)
+
+        rc, results = group_runner.run_group("postmatch")
+        assert rc == 1
+        statuses = {r["job"]: r["status"] for r in results}
+        assert statuses["model_predict"] == "failed"
+
+        gates_calls = []
+
+        def gates_ok():
+            gates_calls.append("pipeline_gates")
+            return {"input_count": 1, "output_count": 0, "meta": {"level": "OK"}}
+
+        runner.register_job("pipeline_gates", fn=gates_ok, max_attempts=1)
+
+        res = runner.run_job("pipeline_gates")
+        assert gates_calls == ["pipeline_gates"], (
+            "上游 allwin-postmatch 这一轮出现失败之后,allwin-gates 自己独立的下一次 "
+            "tick 必须仍然真正执行 pipeline_gates,而不是被任何跨定时器状态跳过"
+        )
+        assert res["status"] == "succeeded"
+
+    def test_pipeline_gates_runs_after_upstream_job_is_locked(self, registry, data_dir, monkeypatch):
+        """`locked`(文件锁被占用)和 `failed` 在 run_chain() 里被同等处理会
+        级联跳过——但 pipeline_gates 现在完全不经过 run_chain(),独立
+        runner.run_job() 调用不受任何其它任务当前是否持锁影响。"""
+
+        def slow_job():
+            return {"input_count": 0, "output_count": 0}
+
+        runner.register_job("core_silver_build", fn=slow_job, max_attempts=1)
+
+        lock_path = runner._acquire_lock("core_silver_build")
+        assert lock_path is not None
+        try:
+            res = runner.run_job("core_silver_build")
+            assert res["status"] == "locked"
+
+            gates_calls = []
+
+            def gates_ok():
+                gates_calls.append("pipeline_gates")
+                return {"input_count": 1, "output_count": 0, "meta": {"level": "OK"}}
+
+            runner.register_job("pipeline_gates", fn=gates_ok, max_attempts=1)
+            gates_res = runner.run_job("pipeline_gates")
+            assert gates_calls == ["pipeline_gates"]
+            assert gates_res["status"] == "succeeded"
+        finally:
+            runner._release_lock(lock_path)
 
 
 class TestSystemdUnitTopology:
     """静态检查(bash -n 已在部署脚本测试里覆盖;这里检查 systemd 单元文件本身
     的关键指令是否存在)。真实 systemd-analyze verify:本机无 systemd,UNVERIFIED。"""
 
-    def test_poll_service_uses_wrapper_not_two_execstart_lines(self):
-        content = (SYSTEMD_DIR / "allwin-poll.service").read_text()
-        execstart_lines = [l for l in content.splitlines() if l.strip().startswith("ExecStart=")]
-        assert len(execstart_lines) == 1, (
-            f"应只有一条 ExecStart=(用 poll_wrapper 顺序执行两任务),实际: {execstart_lines}"
+    @pytest.mark.parametrize("filename", [
+        "allwin-worker.service", "allwin-worker.timer",
+        "allwin-poll.service", "allwin-poll.timer",
+    ])
+    def test_old_worker_and_poll_units_removed(self, filename):
+        assert not (SYSTEMD_DIR / filename).exists(), (
+            f"{filename} 应已被 7 个新独立定时器取代删除,不是保留/清空"
         )
-        assert "poll_wrapper" in execstart_lines[0]
 
-    def test_worker_service_uses_periodic_flag(self):
-        content = (SYSTEMD_DIR / "allwin-worker.service").read_text()
-        assert "--periodic" in content, "周期性 worker 链必须带 --periodic,避免重复调度 snapshot 任务"
+    @pytest.mark.parametrize("unit,job_name", [
+        ("allwin-odds.service", "nowgoal_snapshot"),
+        ("allwin-lineup.service", "fotmob_snapshot"),
+        ("allwin-fixtures.service", "schedule_sync_multi"),
+        ("allwin-gates.service", "pipeline_gates"),
+    ])
+    def test_single_job_timers_invoke_runner_job_directly(self, unit, job_name):
+        content = (SYSTEMD_DIR / unit).read_text()
+        execstart = [l for l in content.splitlines() if l.strip().startswith("ExecStart=")]
+        assert len(execstart) == 1, f"{unit} 应只有一条 ExecStart=,实际: {execstart}"
+        assert "backend.worker.runner" in execstart[0]
+        assert f"--job {job_name}" in execstart[0]
+        assert "group_runner" not in execstart[0]
+
+    @pytest.mark.parametrize("unit,group_name", [
+        ("allwin-postmatch.service", "postmatch"),
+        ("allwin-derive.service", "derive"),
+        ("allwin-maintenance.service", "maintenance"),
+    ])
+    def test_multi_job_timers_invoke_group_runner(self, unit, group_name):
+        content = (SYSTEMD_DIR / unit).read_text()
+        execstart = [l for l in content.splitlines() if l.strip().startswith("ExecStart=")]
+        assert len(execstart) == 1, (
+            f"应只有一条 ExecStart=(用 group_runner 顺序执行组内任务),实际: {execstart}"
+        )
+        assert "backend.worker.group_runner" in execstart[0]
+        assert f"--group {group_name}" in execstart[0]
+
+    def test_gates_service_has_no_cross_unit_dependency(self):
+        """allwin-gates 必须是独立失败域:不能在自己的 unit 文件里依赖/等待
+        任何其它 allwin-* 管道单元——它是"出问题时最需要它跑"的只读告警。"""
+        content = (SYSTEMD_DIR / "allwin-gates.service").read_text()
+        for other in ("allwin-postmatch", "allwin-derive", "allwin-fixtures",
+                      "allwin-odds", "allwin-lineup", "allwin-maintenance",
+                      "allwin-worker", "allwin-poll"):
+            assert other not in content, (
+                f"allwin-gates.service 不得提到 {other}:质量门必须独立于其它单元的成败"
+            )
 
     @pytest.mark.parametrize("unit", [
-        "allwin-poll.service", "allwin-worker.service",
+        "allwin-odds.service", "allwin-lineup.service", "allwin-fixtures.service",
+        "allwin-postmatch.service", "allwin-derive.service", "allwin-gates.service",
+        "allwin-maintenance.service",
         "allwin-api.service", "allwin-web.service", "allwin-backup.service",
         "allwin-opscheck.service", "allwin-digest.service",
     ])
@@ -157,26 +241,46 @@ class TestSystemdUnitTopology:
         for directive in ("NoNewPrivileges=true", "PrivateTmp=true", "ProtectSystem=full", "UMask="):
             assert directive in content, f"{unit} 缺少加固指令: {directive}"
 
-    @pytest.mark.parametrize("unit,expect_timeout_stop", [
-        ("allwin-poll.service", True),
-        ("allwin-worker.service", True),
-        ("allwin-api.service", True),
-        ("allwin-web.service", True),
-        ("allwin-backup.service", True),
-        ("allwin-opscheck.service", True),
-        ("allwin-digest.service", True),
+    @pytest.mark.parametrize("unit", [
+        "allwin-odds.service", "allwin-lineup.service", "allwin-fixtures.service",
+        "allwin-postmatch.service", "allwin-derive.service", "allwin-gates.service",
+        "allwin-maintenance.service",
+        "allwin-api.service", "allwin-web.service", "allwin-backup.service",
+        "allwin-opscheck.service", "allwin-digest.service",
     ])
-    def test_timeout_directives_present(self, unit, expect_timeout_stop):
+    def test_timeout_directives_present(self, unit):
         content = (SYSTEMD_DIR / unit).read_text()
         assert "TimeoutStartSec=" in content, f"{unit} 缺少 TimeoutStartSec"
-        if expect_timeout_stop:
-            assert "TimeoutStopSec=" in content, f"{unit} 缺少 TimeoutStopSec"
+        assert "TimeoutStopSec=" in content, f"{unit} 缺少 TimeoutStopSec"
 
-    def test_poll_timer_and_worker_timer_intervals_documented(self):
-        poll_timer = (SYSTEMD_DIR / "allwin-poll.timer").read_text()
-        worker_timer = (SYSTEMD_DIR / "allwin-worker.timer").read_text()
-        assert "OnUnitActiveSec=5min" in poll_timer
-        assert "OnUnitActiveSec=15min" in worker_timer
+    @pytest.mark.parametrize("unit", [
+        "allwin-odds.service", "allwin-lineup.service", "allwin-fixtures.service",
+        "allwin-postmatch.service", "allwin-derive.service", "allwin-gates.service",
+        "allwin-maintenance.service",
+    ])
+    def test_new_units_use_shared_env_file_and_user(self, unit):
+        content = (SYSTEMD_DIR / unit).read_text()
+        assert "EnvironmentFile=/opt/allwin/shared/.env" in content
+        assert "User=allwin" in content
+        assert "Group=allwin" in content
+        assert "[Install]" in content and "WantedBy=multi-user.target" in content
+
+    @pytest.mark.parametrize("unit,expected", [
+        ("allwin-odds.timer", "OnUnitActiveSec=5min"),
+        ("allwin-lineup.timer", "OnUnitActiveSec=5min"),
+        ("allwin-fixtures.timer", "OnUnitActiveSec=30min"),
+        ("allwin-postmatch.timer", "OnUnitActiveSec=30min"),
+        ("allwin-derive.timer", "OnUnitActiveSec=30min"),
+        ("allwin-gates.timer", "OnUnitActiveSec=30min"),
+    ])
+    def test_timer_intervals_documented(self, unit, expected):
+        content = (SYSTEMD_DIR / unit).read_text()
+        assert expected in content
+
+    def test_maintenance_timer_is_daily_and_persistent(self):
+        content = (SYSTEMD_DIR / "allwin-maintenance.timer").read_text()
+        assert "OnCalendar=" in content
+        assert "Persistent=true" in content
 
     def test_opscheck_units(self):
         """opscheck:30 分钟节奏、--json --notify、WARN/CRITICAL 退出码不算 unit 失败。"""

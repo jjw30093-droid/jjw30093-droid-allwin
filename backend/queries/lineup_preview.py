@@ -32,7 +32,7 @@ from typing import Any
 
 from backend.queries.league_stats import _player_i18n_map
 
-_EMPTY_SIDE = {"team_id": None, "formation": None, "starters": [], "subs": []}
+_EMPTY_SIDE = {"team_id": None, "formation": None, "coach": None, "starters": [], "subs": []}
 
 
 def _translate_players(players: list[dict], i18n: dict) -> list[dict]:
@@ -51,6 +51,11 @@ def _translate_side(side: dict, i18n: dict) -> dict:
     side = dict(side)
     side["starters"] = _translate_players(side.get("starters") or [], i18n)
     side["subs"] = _translate_players(side.get("subs") or [], i18n)
+    # coach 绝不经过 _translate_players:教练 id 与球员 id 的命名空间无法证明
+    # 互斥,一次碰撞会把某位教练悄悄改名成某个球员(D3 钉住)。显式赋值(而不是
+    # 依赖上面 dict(side) 的浅拷贝顺带带过来)是为了让旧快照(键缺失)与新快照
+    # (键存在但值为 None)返回统一形状——都是 "coach": None,不回填猜测值。
+    side["coach"] = side.get("coach")
     return side
 
 

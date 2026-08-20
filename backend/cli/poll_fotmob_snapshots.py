@@ -5,12 +5,17 @@
   裁判/天气,见下),全部共用同一 observed_at 与 poll_run_id;
 - payload 不变(hash 相同)不重复落库(ingest 层 hash-diff);
 - FotMob 不声明阵容/伤停更新时间 → source_updated_at 恒 NULL;
-- 采集窗口与频率同赔率(2–72h 15min / 0–2h 5min),poll_state 持久化节流;
+- 采集窗口与到期判断走 poll_windows.poll_decision()/cadence_fotmob_lineup(按
+  league_id 查表):cadence 窗口 72h,T-72h..T-24h 每 24h,T-24h..watch-window-start
+  每 12h,watch-window-start..T-0 每 5 分钟到底(BIG-5=T-1.5h,其余联赛=T-1.25h),
+  poll_state 持久化节流;候选池宽度独立于 cadence 窗口,为
+  FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS(168h),只为让"首次发现即采"结构上可达;
 - 真实抓取需 THORDATA_PROXY;离线用 --offline-payload 验证同一条代码链路。
 
---write-match-details(裁判/天气赛前数据能力实测,本轮任务):
+--write-match-details(裁判/天气/场馆赛前数据能力,2026-08-20 补充场馆与天气描述):
 - 用同一份已经抓到的 payload 定向 UPDATE dim_match 的 Referee/Temperature/
-  Wind_Speed 三列,不新发第二次请求,不碰 status/kickoff/比分等其它 16 列;
+  Wind_Speed/Venue_Name/Venue_City/Venue_Country/Weather_Description 七列,
+  不新发第二次请求,不碰 status/kickoff/比分等其它列;
 - 新值为空时不覆盖已知旧值(COALESCE),不用一次解析缺失把已知数据抹成 NULL;
 - 不会写 lineupType='predicted' 的预测阵容进 fact_match_lineup(那是
   ingest_match.py 的职责边界,赛前跑它会把预测阵容与赛后确认阵容混为一谈)。
@@ -38,10 +43,10 @@ from backend.ingest.odds_snapshots import (
     record_source_health,
 )
 from backend.ingest.poll_windows import (
+    FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS,
     SOURCE_FOTMOB_SNAPSHOT,
-    is_due,
     mark_polled,
-    required_interval_seconds,
+    poll_decision,
     upcoming_precise_matches,
 )
 from backend.providers.fotmob_snapshots import (
@@ -52,8 +57,19 @@ from backend.providers.fotmob_snapshots import (
 )
 
 
+_MATCH_DETAILS_COLUMNS = (
+    "Referee",
+    "Temperature",
+    "Wind_Speed",
+    "Venue_Name",
+    "Venue_City",
+    "Venue_Country",
+    "Weather_Description",
+)
+
+
 def _write_match_details(conn_core_rw, match_id: int, details: dict) -> bool:
-    """COALESCE 式定向更新:只在新值非空时覆盖 Referee/Temperature/Wind_Speed,
+    """COALESCE 式定向更新:只在新值非空时覆盖 _MATCH_DETAILS_COLUMNS 这几列,
     绝不覆盖其它列。返回是否至少有一个字段是非空值(供上层汇总统计)。"""
     with tx(conn_core_rw):
         conn_core_rw.execute(
@@ -61,12 +77,16 @@ def _write_match_details(conn_core_rw, match_id: int, details: dict) -> bool:
             UPDATE dim_match
             SET Referee = COALESCE(?, Referee),
                 Temperature = COALESCE(?, Temperature),
-                Wind_Speed = COALESCE(?, Wind_Speed)
+                Wind_Speed = COALESCE(?, Wind_Speed),
+                Venue_Name = COALESCE(?, Venue_Name),
+                Venue_City = COALESCE(?, Venue_City),
+                Venue_Country = COALESCE(?, Venue_Country),
+                Weather_Description = COALESCE(?, Weather_Description)
             WHERE Match_ID = ?
             """,
-            (details.get("Referee"), details.get("Temperature"), details.get("Wind_Speed"), match_id),
+            (*(details.get(k) for k in _MATCH_DETAILS_COLUMNS), match_id),
         )
-    return any(details.get(k) is not None for k in ("Referee", "Temperature", "Wind_Speed"))
+    return any(details.get(k) is not None for k in _MATCH_DETAILS_COLUMNS)
 
 
 def _snapshot_one(
@@ -80,7 +100,8 @@ def _snapshot_one(
     """单场:payload → 阵容 + 两队伤停,共用 observed_at/poll_run_id。
 
     conn_core_rw 非 None 时,额外用同一份 payload 定向更新 dim_match 的
-    Referee/Temperature/Wind_Speed(--write-match-details,见模块 docstring)。
+    Referee/Temperature/Wind_Speed/Venue_*/Weather_Description
+    (--write-match-details,见模块 docstring)。
     """
     mid = int(match_row["Match_ID"])
     counts = {"inserted": 0, "skipped": 0, "match_details_written": False}
@@ -125,6 +146,7 @@ def run_snapshot_poll(
         "window_candidates": 0,
         "due_matches": 0,
         "not_due_skipped": 0,
+        "out_of_window_skipped": 0,
         "snapshots_inserted": 0,
         "snapshots_skipped": 0,
         "match_details_written": 0,
@@ -143,28 +165,42 @@ def run_snapshot_poll(
                 ).fetchone()
                 for mid in match_ids
             ]
-            targets = [(r, True) for r in rows if r is not None]
+            targets = [(r, None) for r in rows if r is not None]
         else:
-            candidates = upcoming_precise_matches(conn_core, now)
+            candidates = upcoming_precise_matches(
+                conn_core, now, window_hours=FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS
+            )
             summary["window_candidates"] = len(candidates)
             targets = []
             for c in candidates:
-                interval = required_interval_seconds(
-                    c["kickoff_at_utc"], c["kickoff_precision"], c["kickoff_source"], now
+                state_row = conn_odds.execute(
+                    "SELECT last_polled_at FROM poll_state WHERE source=? AND subject=?",
+                    (SOURCE_FOTMOB_SNAPSHOT, str(c["Match_ID"])),
+                ).fetchone()
+                last_polled_at = state_row["last_polled_at"] if state_row is not None else None
+                decision = poll_decision(
+                    SOURCE_FOTMOB_SNAPSHOT, c["kickoff_at_utc"], c["kickoff_precision"],
+                    c["kickoff_source"], last_polled_at, now, league_id=c["League_ID"],
                 )
-                if interval is None:
+                if not decision.due:
+                    # 候选池(168h)比 cadence 窗口(72h)宽,窗外未到"首次发现即采"
+                    # 的场次(tier is None)与窗内被正常节流的场次(tier 非 None)
+                    # 是两件不同的事,必须分开计数——否则 168h 池下大多数窗外
+                    # 场次会无处归属(window_candidates ≈ 99,due ≈ 2,
+                    # not_due ≈ 5,~92 场既不 due 也不计入 not_due_skipped)。
+                    if decision.tier is not None:
+                        summary["not_due_skipped"] += 1
+                    else:
+                        summary["out_of_window_skipped"] += 1
                     continue
-                due = is_due(conn_odds, SOURCE_FOTMOB_SNAPSHOT, c["Match_ID"], interval, now)
-                if not due:
-                    summary["not_due_skipped"] += 1
-                    continue
-                targets.append((c, True))
+                targets.append((c, decision.tier))
 
         failures = 0
         t0 = time.monotonic()
-        for row, _ in targets:
+        for row, tier in targets:
             mid = int(row["Match_ID"])
             summary["due_matches"] += 1
+            ok = True
             try:
                 if offline_payloads is not None:
                     payload = offline_payloads.get(str(mid))
@@ -181,9 +217,11 @@ def run_snapshot_poll(
                     summary["match_details_written"] += 1
             except Exception as exc:  # noqa: BLE001 — 采集边界:单场失败继续其余
                 failures += 1
+                ok = False
                 summary["failures"].append(f"match {mid}: {type(exc).__name__}: {exc}")
             finally:
-                mark_polled(conn_odds, SOURCE_FOTMOB_SNAPSHOT, mid, now, poll_run_id)
+                mark_polled(conn_odds, SOURCE_FOTMOB_SNAPSHOT, mid, now, poll_run_id,
+                            tier=tier, ok=ok)
         if targets:
             record_source_health(
                 conn_odds, "fotmob_snapshot", ok=failures == 0,
@@ -226,7 +264,8 @@ def main(argv=None) -> int:
     )
     print(f"[poll_fotmob_snapshots] mode={summary['mode']} now={summary['now']}")
     print(f"  窗口候选: {summary['window_candidates']},本轮抓取: {summary['due_matches']},"
-          f"未到期跳过: {summary['not_due_skipped']}")
+          f"窗内节流跳过: {summary['not_due_skipped']},窗外未到发现跳过: "
+          f"{summary['out_of_window_skipped']}")
     print(f"  快照: 落库 {summary['snapshots_inserted']} 条,hash 未变跳过 {summary['snapshots_skipped']} 条")
     if args.write_match_details:
         print(f"  裁判/天气: {summary['match_details_written']}/{summary['due_matches']} 场写入了至少一个非空字段")

@@ -1,12 +1,13 @@
 /**
  * /matches 列表页移动端信息架构重排(P3.B,2026-08-16)。
  *
- * 真实回归:390px 视口下所有筛选控件(状态/时间/内容/联赛/赛季/日期/球队搜索)
+ * 真实回归:390px 视口下所有筛选控件(状态/时间/联赛/赛季/日期/球队搜索)
  * 默认全部展开摊平渲染,第一场比赛要滑到 y≈495px 才出现。
+ * (2026-08-20:「内容」筛选组——全部/已有分析/已有赔率——已移除,不再展示。)
  *
  * 关键断言:
  * - 低频筛选(状态、赛季、日期、球队搜索)收进默认折叠的 <details> "更多筛选",
- *   不占首屏空间;高频筛选(时间、内容、联赛)留在主筛选行始终可见;
+ *   不占首屏空间;高频筛选(时间、联赛)留在主筛选行始终可见;
  * - 折叠区展开后提交筛选仍是纯 GET 表单 + hidden 字段回传其它已选筛选值
  *   (无 JS 也可用这个既有特性不能丢);
  * - 比赛行按开球日期(北京时间,缺失 kickoff 时退回 date_utc)分组,组间插入
@@ -132,16 +133,15 @@ describe("更多筛选折叠(低频筛选默认不占首屏空间)", () => {
     expect(scoped.getByLabelText("球队")).not.toBeNull();
   });
 
-  it("时间/内容/联赛三组主筛选留在 details 之外,始终可见", () => {
+  it("时间/联赛两组主筛选留在 details 之外,始终可见(2026-08-20 移除「内容」筛选)", () => {
     const { container } = renderList({});
     const details = container.querySelector("details")!;
     expect(within(container).getByText("时间")).not.toBeNull();
     expect(within(container).getByText("联赛")).not.toBeNull();
-    expect(within(container).getByText("内容")).not.toBeNull();
-    // 三组主筛选标签本身不应该出现在 details 内部
+    expect(within(container).queryByText("内容")).toBeNull();
+    // 两组主筛选标签本身不应该出现在 details 内部
     expect(within(details).queryByText("时间")).toBeNull();
     expect(within(details).queryByText("联赛")).toBeNull();
-    expect(within(details).queryByText("内容")).toBeNull();
   });
 
   it("已经显式选择了更多筛选里的条件(如 status=finished)时,details 默认展开,不把用户已选筛选藏起来", () => {
@@ -226,5 +226,115 @@ describe("权限口径修正(2026-08-16):LeagueInfo 不再有 entitlement/access
     });
     expect(container.textContent).not.toMatch(/登录后查看/);
     expect(container.textContent).not.toMatch(/完整赔率与概率/);
+  });
+});
+
+/**
+ * 赛果视图(2026-08-19,「赛果」入口 + 向过去的时间窗)。
+ *
+ * 真实缺陷两条:
+ * 1. 时间 chip 每个都硬编码 `status:"upcoming"`——用户好不容易切到「已完赛」,
+ *    点一下任意时间 chip 就被弹回赛程,等于赛果里根本没有时间筛选;
+ * 2. 时间 chip 全是向未来的(今天/明天/未来三天/未来七天/全部未来),对赛果
+ *    毫无意义:除「今天」外每一个配 status=finished 都恒为 0 场。
+ *
+ * 修法是让时间 chip 按 status 分叉,且不改变 chip 行数与行高——移动端首屏
+ * 第一场比赛的 y 坐标已经只剩 25px 余量(见 e2e/matches-mobile-first-screen),
+ * 多加任何一行都会顶穿那条验收。
+ */
+describe("赛果视图:时间 chip 按状态分叉,且不再把用户打回赛程", () => {
+  function timeChipRow(container: HTMLElement) {
+    const label = Array.from(container.querySelectorAll("span")).find(
+      (s) => s.textContent === "时间",
+    );
+    return label!.parentElement!;
+  }
+
+  it("status=upcoming 时是原来那五个向未来的 chip(既有行为不许动)", () => {
+    const { container } = renderList({});
+    const labels = Array.from(timeChipRow(container).querySelectorAll("a")).map(
+      (a) => a.textContent,
+    );
+    expect(labels).toEqual(["今天", "明天", "未来三天", "未来七天", "全部未来"]);
+  });
+
+  it("status=finished 时换成向过去的 chip,且数量不变(首屏预算不许被顶穿)", () => {
+    const { container } = renderList({ filters: { status: "finished", window: "all" } });
+    const labels = Array.from(timeChipRow(container).querySelectorAll("a")).map(
+      (a) => a.textContent,
+    );
+    expect(labels).toEqual(["今天", "昨天", "近三天", "近七天", "全部赛果"]);
+    expect(labels).toHaveLength(5);
+  });
+
+  it("赛果的「今天」复用既有的 today —— 它本来就是北京自然日、天然双向,不另造 token", () => {
+    const { container } = renderList({ filters: { status: "finished", window: "all" } });
+    const today = Array.from(timeChipRow(container).querySelectorAll("a")).find(
+      (a) => a.textContent === "今天",
+    )!;
+    expect(today.getAttribute("href")).toContain("window=today");
+  });
+
+  it("时间 chip 保留当前状态,不再硬编码 status=upcoming(这是本次修的 bug)", () => {
+    const { container } = renderList({ filters: { status: "finished", window: "all" } });
+    const hrefs = Array.from(timeChipRow(container).querySelectorAll("a")).map((a) =>
+      a.getAttribute("href"),
+    );
+    hrefs.forEach((href) => {
+      expect(href).toContain("status=finished");
+      expect(href).not.toContain("status=upcoming");
+    });
+  });
+
+  it("赛程侧的时间 chip 仍然不带 status 参数(upcoming 是默认值,省略即可)", () => {
+    const { container } = renderList({});
+    Array.from(timeChipRow(container).querySelectorAll("a")).forEach((a) => {
+      expect(a.getAttribute("href")).not.toContain("status=");
+    });
+  });
+});
+
+/**
+ * 空态出口:选了一个"已经过去的日期"却停在赛程视图(2026-08-19)。
+ *
+ * 真实缺陷(生产实测):/matches?date=2026-08-16 渲染出一块没有任何解释的
+ * 白板,而那天真实有 31 场已完赛比赛。日期表单的 hidden 字段把
+ * status=upcoming 一起回传,date ∧ 未开赛 对一个过去的日期恒为空。
+ *
+ * 光把 window 放宽还不够(那只解决了三个 AND 里的一个),status 这一半必须
+ * 由空态给出出口:如实说明"这天的比赛已经结束了",并给一个到同日赛果的链接。
+ * 不是自动改写用户的筛选——那会让 URL 与界面显示的筛选状态不一致。
+ */
+describe("空态:日期已过去但停在赛程视图时,给出到当天赛果的出口", () => {
+  it("date + status=upcoming + 0 场 → 出现指向同一天赛果的链接", () => {
+    const { container } = renderList({
+      matches: [],
+      filters: { date: "2026-08-16", status: "upcoming" },
+    });
+    const link = Array.from(container.querySelectorAll("a")).find((a) =>
+      a.getAttribute("href")?.includes("status=finished"),
+    );
+    expect(link).toBeTruthy();
+    expect(link!.getAttribute("href")).toContain("date=2026-08-16");
+    expect(container.textContent).toMatch(/已经结束|赛果/);
+  });
+
+  it("已经在赛果视图下的 0 场不再重复给这个出口(那是真的没有比赛)", () => {
+    const { container } = renderList({
+      matches: [],
+      filters: { date: "2026-08-16", status: "finished", window: "all" },
+    });
+    expect(container.textContent).not.toMatch(/已经结束了/);
+  });
+
+  it("没有选日期的 0 场保持原样(不凭空推销赛果)", () => {
+    const { container } = renderList({ matches: [], filters: { league: 223 } });
+    // 只看空态框内部:更多筛选里的「已完赛」状态 chip 本来就带 status=finished,
+    // 它是常设筛选控件,不是这条空态出口。
+    const emptyBox = Array.from(container.querySelectorAll("div")).find((d) =>
+      d.textContent?.startsWith("没有符合当前筛选条件的比赛"),
+    )!;
+    expect(emptyBox).toBeTruthy();
+    expect(emptyBox.querySelectorAll("a")).toHaveLength(0);
   });
 });

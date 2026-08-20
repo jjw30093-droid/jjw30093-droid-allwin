@@ -11,10 +11,22 @@
  *
  * 修复方式:两处请求都加上服务端 opt-in 的 `boost=free_predicted`
  * (backend/api/routes_public.py::list_matches),让服务端在完整候选窗口内
- * (不受 limit 截断)把这场比赛顶进 limit=8 截断线以内。这里只验证"请求确实
+ * (不受 limit 截断)把这场比赛顶进截断线以内。这里只验证"请求确实
  * 带上了这个参数"——服务端一侧的确定性选场行为由
  * tests/backend/test_matches_season_and_odds_filter.py::
  * TestHomepageHeroBoostFreePredicted 覆盖。
+ *
+ * 2026-08-19 候选池 `limit=8` → `limit=70`(下面两处断言同步改)。
+ * 这不是放松断言,是**这两条断言原本钉住的实现细节被有意改掉了**:重点位
+ * 改成"24 小时内 + 强强对话优先"(lib/homepage.ts::selectHomepageMatches)后,
+ * 8 场候选结构性不够用——一场晚间的 Big6 内战完全可能排在第 15 位而进不了池,
+ * 本需求在最该生效的周末失灵。
+ *
+ * 70 对齐的是**滚动 24h 窗口**容量而非自然日峰值:门槛 (now, now+24h] 会横跨
+ * 两个自然日,对生产 3798 场未来赛程实测,最密集的滚动窗口有 70 场,按日峰值
+ * (49 场)取 50 会让约 20 场结构性进不了候选池。上限是后端 Query(le=200)。
+ * `boost=free_predicted` 这个真正的判据一字未动,两条断言的核心目的
+ * (SSR 与客户端刷新用同一套请求参数)也没变。
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,7 +39,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const emptyMatchList = {
-  limit: 8,
+  limit: 50,
   offset: 0,
   season: null,
   available_seasons: [],
@@ -51,14 +63,14 @@ describe("fetchHomeData(HomeMatchExperienceLive.tsx,浏览器挂载后刷新)", 
     vi.resetModules();
   });
 
-  it("重点位候选请求(window=7d&limit=8)必须带 boost=free_predicted", async () => {
+  it("重点位候选请求(window=7d&limit=70)必须带 boost=free_predicted", async () => {
     const calls: string[] = [];
     stubFetchCollectingUrls(calls);
 
     const { fetchHomeData } = await import("@/components/home/HomeMatchExperienceLive");
     await fetchHomeData();
 
-    const heroCall = calls.find((u) => u.includes("window=7d") && u.includes("limit=8"));
+    const heroCall = calls.find((u) => u.includes("window=7d") && u.includes("limit=70"));
     expect(heroCall).toBeDefined();
     expect(heroCall).toContain("boost=free_predicted");
   });
@@ -89,7 +101,7 @@ describe("getHomePageData(app/page.tsx,SSR 匿名口径初始数据)", () => {
     const { getHomePageData } = await import("@/app/page");
     await getHomePageData();
 
-    const heroCall = calls.find((u) => u.includes("window=7d") && u.includes("limit=8"));
+    const heroCall = calls.find((u) => u.includes("window=7d") && u.includes("limit=70"));
     expect(heroCall).toBeDefined();
     expect(heroCall).toContain("boost=free_predicted");
   });

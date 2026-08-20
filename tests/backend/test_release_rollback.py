@@ -315,10 +315,16 @@ class TestCopyModelArtifacts:
     def test_copies_artifact_into_fresh_release_dir(self, tmp_path):
         app_root = _setup_app_root(tmp_path)
         expected_bytes = (app_root / "shared" / "models" / "wdl_baseline_params.pkl").read_bytes()
+        fake_bin = _ensure_fake_systemctl_sudo(tmp_path)
+        # 测试沙箱没有真实 allwin 系统组,chgrp 会失败——只验证拷贝内容本身,
+        # sudo chgrp/chmod 的调用参数由 test_copy_chgrp_and_chmod_target_
+        # copied_artifact_via_sudo 单独验证。
+        (fake_bin / "sudo").write_text('#!/bin/sh\nexit 0\n')
+        (fake_bin / "sudo").chmod(0o755)
         r = _run(
             f'{SOURCE_RELEASE}; preflight; do_rsync; copy_model_artifacts; '
             f'echo "RELEASE_DIR=$RELEASE_DIR"',
-            _base_env(app_root),
+            _base_env(app_root, tmp_path),
         )
         assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
         release_dir = Path(next(l for l in r.stdout.splitlines() if l.startswith("RELEASE_DIR="))
@@ -326,6 +332,40 @@ class TestCopyModelArtifacts:
         copied = release_dir / "backend" / "models" / "artifacts" / "wdl_baseline_params.pkl"
         assert copied.exists(), "copy_model_artifacts 必须把模型参数文件放进新 release 目录"
         assert copied.read_bytes() == expected_bytes, "拷贝内容必须与 shared/models/ 源文件字节一致"
+
+    def test_copy_chgrp_and_chmod_target_copied_artifact_via_sudo(self, tmp_path):
+        """2026-08-18 真实生产事故:plain cp 不带 -p,新文件属组是运行 release.sh
+        的部署用户(ubuntu)的默认组,不是 allwin——线上 allwin-postmatch.service
+        以 User=allwin 运行,model_predict 读这个文件时 PermissionError(mode
+        640、group=ubuntu,allwin 用户不在 ubuntu 组,拿到的是"其它用户"权限位,
+        本例中是 0)。同 fix_next_permissions 的先例(.next 缓存目录属组问题),
+        显式 chgrp+chmod 到 allwin 组,不依赖 cp 的默认行为。"""
+        app_root = _setup_app_root(tmp_path)
+        env = _base_env(app_root, tmp_path)
+        fake_bin = _ensure_fake_systemctl_sudo(tmp_path)
+        log_file = tmp_path / "sudo_calls_artifact.log"
+        # 记录调用参数即可,不真的执行(测试沙箱里没有 allwin 系统组)——同
+        # TestFixNextPermissions 对 sudo chgrp 的验证方式一致。
+        (fake_bin / "sudo").write_text(f'#!/bin/sh\necho "$@" >> "{log_file}"\nexit 0\n')
+        (fake_bin / "sudo").chmod(0o755)
+
+        r = _run(
+            f'{SOURCE_RELEASE}; preflight; do_rsync; copy_model_artifacts; '
+            f'echo "RELEASE_DIR=$RELEASE_DIR"',
+            env,
+        )
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        release_dir = Path(next(l for l in r.stdout.splitlines() if l.startswith("RELEASE_DIR="))
+                            .split("=", 1)[1])
+        copied = release_dir / "backend" / "models" / "artifacts" / "wdl_baseline_params.pkl"
+        assert copied.exists()
+        calls = log_file.read_text().splitlines()
+        assert any(c.startswith("chgrp allwin ") and c.endswith(str(copied)) for c in calls), (
+            f"未见预期的 sudo chgrp allwin 调用: {calls}"
+        )
+        assert any(c.startswith("chmod g+r ") and c.endswith(str(copied)) for c in calls), (
+            f"未见预期的 sudo chmod g+r 调用: {calls}"
+        )
 
     def test_do_build_calls_copy_model_artifacts(self, tmp_path):
         """do_build 必须自动包含这一步,不能只靠手动调用——否则每次发布又会
@@ -350,6 +390,89 @@ do_build
         # 用 || true 让脚本即使后续步骤失败也不掩盖 marker 是否写入。
         r = _run(script + " || true", _base_env(app_root))
         assert marker.exists(), f"do_build 必须调用 copy_model_artifacts:{r.stdout}\n{r.stderr}"
+
+
+class TestCandidateSmokeProcessCleanup:
+    """2026-08-20 真实生产发现:candidate_smoke() 里
+    `( cd ... && . .env && VAR=val uvicorn ... ) & smoke_pid=$!` 捕获的是这个
+    复合命令背后的子 shell PID,不一定是 uvicorn 自己的 PID——bash 在"cd &&
+    source 文件 && VAR=val cmd"这类多语句子 shell 上不保证把最后一条命令尾调用
+    优化成 exec 替换,子 shell 可能会再 fork 一个真正跑 uvicorn 的孙进程。
+    `kill "$smoke_pid"` 杀掉的是子 shell 本身,不传导给已经独立存在的孙进程——
+    孙进程随即被重新挂到 init(PPID=1),继续占着 SMOKE_PORT 永久残留,直到人工
+    发现并手动 kill。2026-08-20 当天三次真实生产发布,每次都复现同一个残留
+    进程(`ps` 查到的 uvicorn 进程 PPID=1,存活超过发布完成后 30~57 分钟)。
+
+    修复:子 shell 最后一条命令前加 `exec`,让子 shell 进程自己被替换成
+    uvicorn(同一个 PID,不再多 fork 一层)——`kill "$smoke_pid"` 因此直接命中
+    真实进程,不留孤儿。
+    """
+
+    def _fake_uvicorn(self, release_dir: Path) -> Path:
+        """真实 uvicorn 的替身:监听 --port 指定的端口、对任何请求都回 200
+        (足够让 candidate_smoke() 的 healthz/readyz 轮询判定成功),启动时先把
+        自己的真实 PID 写进 SMOKE_PID_FILE——测试据此在 candidate_smoke() 返回
+        之后,独立于子 shell/进程树语义,直接检查这个 PID 是否还活着。"""
+        venv_bin = release_dir / ".venv" / "bin"
+        venv_bin.mkdir(parents=True, exist_ok=True)
+        fake = venv_bin / "uvicorn"
+        fake.write_text(
+            "#!/usr/bin/env python3\n"
+            "import http.server, os, sys\n"
+            "with open(os.environ['SMOKE_PID_FILE'], 'w') as f:\n"
+            "    f.write(str(os.getpid()))\n"
+            "args = sys.argv[1:]\n"
+            "port = 8001\n"
+            "for i, a in enumerate(args):\n"
+            "    if a == '--port':\n"
+            "        port = int(args[i + 1])\n"
+            "class H(http.server.BaseHTTPRequestHandler):\n"
+            "    def do_GET(self):\n"
+            "        self.send_response(200); self.end_headers()\n"
+            "    def log_message(self, *a):\n"
+            "        pass\n"
+            "http.server.HTTPServer(('127.0.0.1', port), H).serve_forever()\n"
+        )
+        fake.chmod(0o755)
+        return fake
+
+    def test_candidate_smoke_leaves_no_orphaned_process_on_success(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        release_dir = app_root / "releases" / "fakesha000000"
+        self._fake_uvicorn(release_dir)
+        smoke_port = _free_port()
+        pid_file = tmp_path / "smoke.pid"
+
+        script = f'''
+{SOURCE_RELEASE}
+RELEASE_DIR="{release_dir}"
+SMOKE_PORT={smoke_port}
+SMOKE_RETRIES=50
+SMOKE_INTERVAL=0.2
+candidate_smoke
+echo "CANDIDATE_SMOKE_EXIT=$?"
+'''
+        env = _base_env(app_root, tmp_path, SMOKE_PID_FILE=str(pid_file))
+        r = _run(script, env, timeout=30)
+        assert "CANDIDATE_SMOKE_EXIT=0" in r.stdout, f"{r.stdout}\n{r.stderr}"
+        assert pid_file.exists(), f"假 uvicorn 必须先写入自己的 PID: {r.stdout}\n{r.stderr}"
+        pid = int(pid_file.read_text().strip())
+
+        # candidate_smoke() 已经返回,真实进程必须已经被杀掉,不能残留占用端口
+        # ——修复前这里会一直存活到测试超时,因为 kill 的是子 shell 而不是它。
+        for _ in range(30):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            import time
+            time.sleep(0.1)
+        else:
+            pytest.fail(
+                f"candidate_smoke() 返回后,假 uvicorn 进程(pid={pid})仍然存活——"
+                "这正是真实生产复现的孤儿进程 bug:kill 的是子 shell 的 PID,"
+                "不是真正跑服务的进程。"
+            )
 
 
 class TestFailureOrdering:

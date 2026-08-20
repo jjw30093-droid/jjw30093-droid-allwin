@@ -1,0 +1,12 @@
+# 每 30 分钟触发一次派生数据构建(allwin-derive.service)。
+# P4 会加真正的水位守卫;P3 阶段先固定节奏,no-op 重跑代价可接受。
+[Unit]
+Description=Run allwin derived data build every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

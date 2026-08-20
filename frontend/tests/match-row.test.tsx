@@ -1,15 +1,11 @@
 /**
- * MatchRow 渲染测试(用户用真实数据复现:95/95 场 upcoming 比赛的
- * sync_state=UNAVAILABLE,列表上却完全看不到任何提示——第77行的条件
- * 只判断了 "STALE",从未处理 "UNAVAILABLE",UNAVAILABLE 被静默吞掉)。
+ * MatchRow 渲染测试。
  *
- * 关键断言:
- * - sync_state="UNAVAILABLE" 必须渲染出可见文字提示(不是空白);
- * - sync_state="STALE" 的原有提示行为不能回归;
- * - odds_coverage_tier="full_timeline" 且 odds_freshness_state="STALE" 时,
- *   不能无条件宣称"完整走势"——必须带过期限定语(不能出现裸的"完整走势");
- * - odds_coverage_tier="full_timeline" 且 odds_freshness_state="FRESH" 时,
- *   "完整走势"文案照常显示(不回归)。
+ * 2026-08-20:sync_state/odds_coverage_tier 两行内部运维口径提示(此前分别
+ * 经历过"UNAVAILABLE 被静默吞掉""过期数据被写死成完整走势"两次真实 bug
+ * 修复)已按站长要求整行删除——两句话字面上容易读成互相矛盾,对普通用户
+ * 没有实际信息量。本文件保留权限口径(requires_login 已删除字段)与"两行
+ * 提示彻底不再渲染"两组测试,历史 bug 相关的具体文案断言已随功能一起移除。
  */
 
 import { cleanup, render, screen } from "@testing-library/react";
@@ -78,71 +74,42 @@ describe("MatchRow 权限口径修正(2026-08-16):requires_login 字段已从后
   });
 });
 
-describe("MatchRow sync_state 提示(bug1:UNAVAILABLE 曾被静默吞掉)", () => {
-  it('sync_state="UNAVAILABLE" 时渲染可见的文字提示', () => {
-    render(<MatchRow match={baseMatch({ sync_state: "UNAVAILABLE" })} />);
-    // product-status.ts syncStateLabel() 的既有正确翻译,不应该被重新造轮子
-    expect(screen.getByText("部分数据暂不可用")).not.toBeNull();
+describe("MatchRow 不再渲染 sync_state/odds_coverage_tier 提示行(2026-08-20 站长要求整行删除)", () => {
+  // 此前这里有两组测试分别守着 sync_state("部分数据暂不可用"等)与
+  // odds_coverage_tier("赔率:完整走势"等)两行文案的具体渲染规则——两句话
+  // 字面上容易读成互相矛盾,对普通用户没有实际信息量,已被整行删除
+  // (不是重新措辞/合并,是彻底不再渲染),测试改为断言"这些内部口径字段
+  // 不管取什么值都不应该出现任何相关文字",防止将来被误加回来。
+  it("sync_state 无论 FRESH/STALE/UNAVAILABLE,都不渲染任何相关提示文字", () => {
+    for (const state of ["FRESH", "STALE", "UNAVAILABLE"] as const) {
+      const { unmount } = render(
+        <MatchRow
+          match={baseMatch({
+            sync_state: state,
+            data_updated_at: "2026-08-19T10:00:00Z",
+            next_planned_sync_at: "2026-08-20T18:00:00Z",
+          })}
+        />,
+      );
+      expect(screen.queryByText("数据已更新")).toBeNull();
+      expect(screen.queryByText("数据等待刷新")).toBeNull();
+      expect(screen.queryByText("部分数据暂不可用")).toBeNull();
+      unmount();
+    }
   });
 
-  it('sync_state="STALE" 时原有提示行为不回归', () => {
-    render(
-      <MatchRow
-        match={baseMatch({
-          sync_state: "STALE",
-          data_updated_at: "2026-08-19T10:00:00Z",
-          next_planned_sync_at: "2026-08-20T18:00:00Z",
-        })}
-      />,
-    );
-    expect(screen.getByText("数据等待刷新")).not.toBeNull();
-    expect(screen.getByText(/等待计划采集/)).not.toBeNull();
-  });
-
-  it('sync_state="FRESH" 时不渲染 sync 提示行(保持行干净)', () => {
-    render(<MatchRow match={baseMatch({ sync_state: "FRESH" })} />);
-    expect(screen.queryByText("数据已更新")).toBeNull();
-  });
-});
-
-describe("MatchRow 赔率覆盖文案(bug2:过期数据被写死成完整走势)", () => {
-  it('full_timeline + freshness=STALE 时不得出现裸的"完整走势",必须带过期限定语', () => {
-    render(
-      <MatchRow
-        match={baseMatch({
-          odds_coverage_tier: "full_timeline",
-          odds_freshness_state: "STALE",
-          odds_last_observed_at: "2026-08-10T08:00:00Z",
-        })}
-      />,
-    );
-    expect(screen.queryByText("赔率:完整走势")).toBeNull();
-    expect(screen.queryByText(/^赔率:完整走势$/)).toBeNull();
-    // 必须能看到一个明确带过期语义的提示(具体措辞不锁死,但必须存在)
-    expect(screen.getByText(/过期|已过期|停止更新|最后观测|最后更新/)).not.toBeNull();
-  });
-
-  it('full_timeline + freshness=FRESH 时"完整走势"文案照常显示(不回归)', () => {
-    render(
-      <MatchRow
-        match={baseMatch({
-          odds_coverage_tier: "full_timeline",
-          odds_freshness_state: "FRESH",
-        })}
-      />,
-    );
-    expect(screen.getByText("赔率:完整走势")).not.toBeNull();
-  });
-
-  it("open_close_only 维持现状逻辑,不受 freshness 字段影响", () => {
-    render(
-      <MatchRow
-        match={baseMatch({
-          odds_coverage_tier: "open_close_only",
-          odds_freshness_state: "STALE",
-        })}
-      />,
-    );
-    expect(screen.getByText("赔率:初盘与临场")).not.toBeNull();
+  it("odds_coverage_tier 无论哪个档位,都不渲染任何「赔率:」文案", () => {
+    for (const tier of ["full_timeline", "open_close_only"] as const) {
+      const { unmount } = render(
+        <MatchRow
+          match={baseMatch({
+            odds_coverage_tier: tier,
+            odds_freshness_state: "FRESH",
+          })}
+        />,
+      );
+      expect(screen.queryByText(/^赔率:/)).toBeNull();
+      unmount();
+    }
   });
 });

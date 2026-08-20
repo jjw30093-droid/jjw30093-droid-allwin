@@ -19,6 +19,7 @@ import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { SHOT_OUTCOME_ZH, SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
+import { FootballPitchBackground } from "./FootballPitchBackground";
 import styles from "./ShotMapChart.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
@@ -315,10 +316,7 @@ export function ShotMapChart({
         <span className={styles.legendAway}>{awayName}(攻向左)</span>
       </div>
       <div className={styles.pitchWrap}>
-        <div className={styles.halfLine} aria-hidden />
-        <div className={styles.centerCircle} aria-hidden />
-        <div className={`${styles.box} ${styles.boxLeft}`} aria-hidden />
-        <div className={`${styles.box} ${styles.boxRight}`} aria-hidden />
+        <FootballPitchBackground />
         {plotted.length === 0 && (
           <p className={styles.noMatch}>当前筛选条件下没有射门。</p>
         )}

@@ -1,0 +1,36 @@
+# NowGoal 赔率快照(oneshot,由 allwin-odds.timer 每 5 分钟触发)。
+# PIPELINE_REDESIGN_V2 P3:单任务独立定时器,取代旧 allwin-poll.service 里
+# 和 fotmob_snapshot 共享的那一半——两者拆开后各自只有一个定时器负责,
+# 不再需要 poll_wrapper 那种"顺序执行两个任务、汇总退出码"的包装,也不会
+# 再和其它任务抢 data/locks/nowgoal_snapshot.lock。
+#
+# 这里的 5 分钟只是"到期判断"节奏,不代表每场比赛每 5 分钟都真的请求
+# NowGoal——真实请求由 poll_decision() 按每场距开球时间分档节流(CLAUDE.md
+# §6.3):首次发现即采;T-72h..T-24h 每 24h;T-24h..T-6h 每 6h;T-6h..T-0
+# 每 1h;last_call 在 T-15min 内强制补 1 枪。5 分钟粒度是为了 last_call 能
+# 准确落在 T-15min 附近,不被更粗的 tick 拖后。
+#
+# 安装:cp allwin-odds.service allwin-odds.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-odds.timer
+# 手动跑一次:systemctl start allwin-odds.service
+[Unit]
+Description=allwin NowGoal odds snapshot (nowgoal_snapshot, due-check every 5 minutes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.runner --job nowgoal_snapshot
+TimeoutStartSec=1200
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

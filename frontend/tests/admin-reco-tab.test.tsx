@@ -7,11 +7,18 @@
  *
  * 覆盖点(任务书要求的最小集合):
  * - 筛选参数变化时正确带上新的查询请求;
- * - 发布按钮点击后不立即触发网络请求,必须先经过 window.confirm 二次确认;
+ * - 发布按钮点击后不立即触发网络请求,必须先经过站内二次确认面板;
  * - 编辑表单提交调用的是既有 PATCH /admin/reco/slips/{id},不是新端点;
  * - 待确认标记(needs_review)只在 needs_review=true 时渲染;
  * - 预览面板正确调用 GET /admin/reco/slips/{id}/preview,并把会员可见字段
  *   与仅后台可见字段区分展示。
+ *
+ * 2026-08-19:发布二次确认从 window.confirm 换成站内内联面板(与既有
+ * 结算/作废面板同一套交互约定)——真实用户报告在手机上点"发布"没反应,
+ * 排查发现是原生 confirm() 弹窗被忽略/划掉,请求根本没发出去,且没有任何
+ * 页面反馈。原生弹窗依赖浏览器/系统行为,不同环境表现不一致;站内面板是
+ * 站点自己完全可控的 UI,点"确认发布"才真正发请求,点"取消"就地收起,
+ * 不依赖 window.confirm 这个不可靠的浏览器 API。
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -165,21 +172,44 @@ describe("筛选栏(状态 + 日期区间)", () => {
   });
 });
 
-describe("发布二次确认", () => {
-  it("点击「发布」不立即调用发布接口——先弹确认,取消则不请求,确认后才请求", async () => {
+describe("发布二次确认(站内面板,2026-08-19 起不再用 window.confirm)", () => {
+  it("点击「发布」不立即调用发布接口——先展开站内确认面板,不请求网络", async () => {
     const slip = baseSlip({ id: "slip-publish", status: "draft" });
     const calls = mockFetch({ slips: { total: 1, slips: [slip] } });
     render(<RecoTab />);
     await screen.findByText(/测试推荐单/);
 
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     fireEvent.click(screen.getByRole("button", { name: "发布" }));
 
-    expect(confirmSpy).toHaveBeenCalled();
+    // 面板展开,带上标题以便核对是哪一条(与生产事故复现一致:多条精选同屏时
+    // 不能点错行却看不出点的是哪条)。
+    await screen.findByText(/确认发布推荐单「测试推荐单」/);
     expect(calls.some((c) => c.url.includes("/publish"))).toBe(false);
+  });
 
-    confirmSpy.mockReturnValue(true);
+  it('点"取消"就地收起面板,不发请求(与既有作废/结算面板同一套交互)', async () => {
+    const slip = baseSlip({ id: "slip-publish", status: "draft" });
+    const calls = mockFetch({ slips: { total: 1, slips: [slip] } });
+    render(<RecoTab />);
+    await screen.findByText(/测试推荐单/);
+
     fireEvent.click(screen.getByRole("button", { name: "发布" }));
+    await screen.findByText(/确认发布推荐单/);
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByText(/确认发布推荐单/)).toBeNull());
+    expect(calls.some((c) => c.url.includes("/publish"))).toBe(false);
+  });
+
+  it('面板里点"确认发布"才真正调用发布接口', async () => {
+    const slip = baseSlip({ id: "slip-publish", status: "draft" });
+    const calls = mockFetch({ slips: { total: 1, slips: [slip] } });
+    render(<RecoTab />);
+    await screen.findByText(/测试推荐单/);
+
+    fireEvent.click(screen.getByRole("button", { name: "发布" }));
+    await screen.findByText(/确认发布推荐单/);
+    fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
     await waitFor(() =>
       expect(calls.some((c) => c.method === "POST" && c.url.includes("/slip-publish/publish"))).toBe(true),
@@ -214,8 +244,9 @@ describe("发布二次确认", () => {
     render(<RecoTab />);
     await screen.findByText(/测试推荐单/);
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "发布" }));
+    await screen.findByText(/确认发布推荐单/);
+    fireEvent.click(screen.getByRole("button", { name: "确认发布" }));
 
     await screen.findByText(/以下腿缺乏真实盘口溯源/);
   });

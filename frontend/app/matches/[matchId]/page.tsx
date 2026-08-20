@@ -13,7 +13,7 @@ import {
 } from "@/components/matches/MatchDetailBody";
 import { MemberMatchDetail } from "@/components/matches/MemberMatchDetail";
 import { LEAGUE_ZH } from "@/components/matches/zh";
-import { returnLabelFor, sanitizeReturnTo } from "@/lib/match-links";
+import { relatedMatchesQuery, returnLabelFor, sanitizeReturnTo } from "@/lib/match-links";
 import styles from "./match-detail.module.css";
 
 /**
@@ -96,15 +96,24 @@ export default async function MatchDetailPage({
 
   const m = detail.match;
   const [analysis, report, preview, related] = await Promise.all([
-    serverGetOptional<AnalysisBundle>(`/api/v1/matches/${idNum}/analysis`).catch(() => null),
+    // revalidate: 120(2026-08-19 性能修复)——此前没有 revalidate,落到
+    // cache:"no-store",每次都真回源(占该端点耗时的大头,详见
+    // backend/queries/teams.py::team_display_for 的修复说明),而它只喂
+    // 折叠起来的「数据来源与说明」区块,与 detail/preview 同档刷新完全够用。
+    serverGetOptional<AnalysisBundle>(`/api/v1/matches/${idNum}/analysis`, {
+      revalidate: 120,
+    }).catch(() => null),
     serverGetOptional<MatchReportResponse>(`/api/v1/matches/${idNum}/report`, {
       revalidate: 300, // 完赛事实不再变化,可安心 ISR;未完赛响应为 available=false
     }).catch(() => null),
     serverGetOptional<MatchPreviewResponse>(`/api/v1/matches/${idNum}/preview`, {
       revalidate: 120, // 两队历史聚合随赛程推进变化,与 detail 同档刷新
     }).catch(() => null),
+    // 只用于算"上一场/下一场"两个 match_id(见下方 relatedIndex),query 串
+    // 收口到 lib/match-links.ts::relatedMatchesQuery——与 MemberMatchDetail.tsx
+    // 的客户端兜底路径共用同一个函数,不允许出现第二套拼接逻辑。
     serverGetOptional<MatchListResponse>(
-      `/api/v1/matches?league_id=${m.league_id}&status=upcoming&window=7d&limit=200`,
+      `/api/v1/matches?${relatedMatchesQuery(m.league_id)}`,
       { revalidate: 60 },
     ).catch(() => null),
   ]);

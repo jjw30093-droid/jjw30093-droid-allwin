@@ -77,7 +77,7 @@ AWS 东京 Nginx
         ├── /api/v1/*  → FastAPI 127.0.0.1:8000
         └── 其他路径   → Next.js 127.0.0.1:3000
 
-Python Worker / systemd timer
+Python Worker / systemd timers（按任务拆分为多个独立定时器，§13）
         ├── FotMob 采集与聚合
         ├── NowGoal 快照
         ├── 预测生成、锁定、赛后结算
@@ -211,13 +211,51 @@ canonical 比赛实体必须区分：
 
 ### 6.3 赔率与赛前信息快照
 
-- Worker 每 5 分钟触发一次到期判断，不代表所有比赛每 5 分钟都请求数据源。
-- 只有具有精确 `kickoff_at_utc` 的比赛才允许轮询，采集节奏分三档：
-  - **首次发现即采**：该 (来源, 比赛) 尚无任何采集记录时，不论距开球多远都立即采集一次；
-    小联赛可能要到赛前 4–5 天才真的有盘口，这一枪拿不到数据属正常，不是失败告警；
-  - 距开球 2–72 小时：同一来源和比赛至少间隔 15 分钟；
-  - 距开球 0–2 小时：同一来源和比赛至少间隔 5 分钟；
-  - 已开球比赛是否继续采集由明确的 in-play 任务决定，不能继续伪装为赛前采集。
+只有具有精确 `kickoff_at_utc` 的比赛才允许赛前轮询；已开球比赛是否继续采集由
+明确的 in-play 任务决定，不能继续伪装为赛前采集。以下三条是所有来源共同遵守
+的节奏**下限**（各来源可以在其上分级更密，但不得比这条更稀，`backend/ingest/
+poll_windows.py` 的代码注释同样把这三条标注为下限）：
+
+- **首次发现即采**：该 (来源, 比赛/联赛) 在持久化的到期状态里尚无任何采集
+  记录时，不论距开球多远都立即采集一次；小联赛可能要到赛前 4–5 天才真的有
+  盘口，这一枪拿不到数据属正常，不是失败告警；
+- 距开球 2–72 小时：同一来源和比赛至少间隔 15 分钟；
+- 距开球 0–2 小时：同一来源和比赛至少间隔 5 分钟。
+
+多个 systemd 定时器各自按自己的频率触发"到期判断"（定时器触发 ≠ 真的发起了
+一次外部请求；调度拓扑见 §13）；真正是否请求数据源、间隔多久，统一由
+`backend/ingest/poll_windows.py` 按来源查表决定。当前按来源实现的分级表（均
+满足上面三条下限，只是在窗口内部分得更细）：
+
+- **NowGoal 赔率**（`CADENCE_NOWGOAL_ODDS`，`allwin-odds.timer` 每 5 分钟触发
+  到期判断）：距开球 72h–24h 每 24 小时一次；24h–6h 每 6 小时一次；6h–0h 每
+  1 小时一次；另加距开球 ≤15 分钟仍未在窗内轮询过时强制补采一次
+  （`last_call`，用于把 `FINAL` 快照尽量拉近开球时刻）；首次发现即采同上。
+- **FotMob 阵容/伤停**（`cadence_fotmob_lineup(league_id)`，`allwin-lineup.timer`
+  每 5 分钟触发到期判断）：节奏窗口为开球前 72 小时，窗内三档——T-72h 到
+  T-24h 每 24 小时一次；T-24h 到"观察窗起点"每 12 小时一次；观察窗起点到
+  开球每 5 分钟一次，且**不做早停**（真正判定"官方已确认首发"从而可以提前
+  停止追问的逻辑属于 P5，尚未实现——当前是老实地全程每 5 分钟采到开球）。
+  观察窗起点：五大联赛（英超 47 / 西甲 87 / 意甲 55 / 德甲 54 / 法甲 53）为
+  开球前 1.5 小时，其余已接入联赛为开球前 1.25 小时。**候选池宽度独立于
+  节奏窗口**，为 168 小时（`FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS`，与
+  NowGoal 的 `DISCOVERY_WINDOW_HOURS` 同构）——候选池必须严格宽于节奏窗口，
+  否则本节第一条"首次发现即采"下限对该来源结构性不可达；168 小时以外的
+  比赛一生只补采一枪，采完即被持久化的到期状态挡住，不会无界重复。
+  "首次发现即采"这条下限对 FotMob 阵容在 168 小时以内可达，以外仍不可达
+  （与 NowGoal 同一近似，不是完全满足"不论距开球多远"）。
+- **赛后完赛数据补全**（`fotmob_incremental_multi`，`allwin-postmatch.timer`
+  每 30 分钟触发；这是赛后而非赛前信息，节奏与上面两条的赛前下限无关，单列
+  于此是因为同属"到期判断"这一套机制）：不是固定周期节流，而是事件驱动——
+  一个联赛内存在至少一场 `status != 'Finish'` 且已过开球 2.5 小时的比赛即
+  视为该联赛到期，立即补抓；没有这种比赛时仍保留 6 小时兜底档。为防止
+  FotMob 数据源永远不把某场比赛翻成 `Finish` 而导致该联赛无限期每轮都到期，
+  单场比赛的"仍未解决"检查次数上限为 20 次（约 kickoff+12.5h），达到上限后
+  停止对该场比赛单独触发到期、记录耗尽原因，并发一次 CRITICAL 告警，不静默
+  丢弃（`backend/ingest/postmatch_retry.py`）。
+
+其余落库规则：
+
 - 轮询到期状态必须可持久化或由最后一次 poll run 可靠推导，进程重启不能造成无界重复采集。
 - 只有 canonical payload hash 相对上一条发生变化才落库。
 - `market_phase` 必须由来源状态、精确 kickoff 和观察时间共同判定；信息不足时使用 `unknown`，不得仅按自然日判断。
@@ -619,7 +657,8 @@ MVP Studio 提供：
 
 ## 13. Worker 与任务调度
 
-不引入 Celery。使用一个轻量 Worker、SQLite `job_runs` 和 systemd timers。
+不引入 Celery。使用一个轻量 Worker（`backend/worker/runner.py`）、SQLite
+`job_runs` 记录每个任务的全生命周期，配合多个 systemd timers 触发。
 
 任务必须支持：
 
@@ -633,11 +672,41 @@ MVP Studio 提供：
 - 错误摘要；
 - 从指定步骤重跑。
 
-核心任务链至少包含：
+调度拓扑：没有任何定时器周期性触发"整条任务链"。每个任务只属于一个独立的
+systemd 定时器，各自失败域互不影响——一个任务失败或被文件锁挡住，不会级联
+跳过与它无关的其它任务；级联跳过（依赖检查）只保留给下面手动全链重跑时使用。
+调度共 7 个定时器：4 个单任务定时器直接 `runner --job <name>`；3 个"任务组"
+定时器用 `backend/worker/group_runner.py --group <name>` 顺序尝试组内每个
+任务，任一任务失败不阻止组内其余任务被尝试，整体退出码只在组内出现
+failed/locked 时非零：
+
+- `allwin-odds`（每 5 分钟触发到期判断）→ `nowgoal_snapshot`；
+- `allwin-lineup`（每 5 分钟触发到期判断）→ `fotmob_snapshot`；
+- `allwin-fixtures`（每 30 分钟）→ `schedule_sync_multi`；
+- `allwin-gates`（每 30 分钟）→ `pipeline_gates`（质量门，故意独立于其它任何
+  定时器的成败，发现问题只通过告警表达，不通过任务失败表达）；
+- `allwin-postmatch`（每 30 分钟，任务组）→ `fotmob_incremental_multi` →
+  `core_silver_build` → `model_predict` → `prediction_register` →
+  `postmatch_settle` → `reco_auto_settle`；
+- `allwin-derive`（每 30 分钟，任务组）→ `odds_silver_build` →
+  `analysis_bundle_build`；
+- `allwin-maintenance`（每天 04:00 Asia/Shanghai，任务组）→
+  `entity_resolution` → `metrics_rebuild`。
+
+以上 7 个定时器合起来的任务集合必须恰好等于下面手动全链的全部任务，不多不
+少、不重复调度（`tests/backend/test_job_order.py` 校验这条不变量）。另有
+独立的 `allwin-digest.timer`（每天 23:30 Asia/Shanghai，`--key <北京日期>`
+幂等）调度 `daily_digest`，它和 `silver_build`（`core_silver_build` 的兼容
+别名）一样，是注册在 Worker 里但不挂在任何链式定时器上的任务。
+
+`--chain`（`DEFAULT_CHAIN`）现在只是人工全量重跑/故障排查用的手动逃生舱，
+生产没有任何定时器再周期性调用它；裸 `--chain` 仍按顺序执行、某步
+failed/locked 后续步骤记 skipped（依赖检查）、`--from <step>` 支持从中间
+步骤重跑：
 
 ```text
-schedule_sync
-→ fotmob_incremental
+schedule_sync_multi
+→ fotmob_incremental_multi
 → nowgoal_snapshot
 → fotmob_snapshot
 → entity_resolution
@@ -647,8 +716,13 @@ schedule_sync
 → prediction_register
 → analysis_bundle_build
 → postmatch_settle
+→ reco_auto_settle
 → metrics_rebuild
+→ pipeline_gates
 ```
+
+`pipeline_gates` 必须排在最后：它用告警表达发现的问题，不通过任务失败表达，
+没有下游需要被级联跳过。
 
 具体任务可以在实现中合并，但以下能力不得只是 `optional` 模块探测占位：
 

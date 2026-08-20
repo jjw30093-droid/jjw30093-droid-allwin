@@ -18,7 +18,6 @@ from backend.cli.poll_fotmob_snapshots import run_snapshot_poll
 from backend.cli.poll_nowgoal import run_due_poll
 from backend.db.connections import connect_ro, connect_rw
 from backend.db.util import normalize_utc_iso
-from backend.ingest.poll_windows import required_interval_seconds
 from backend.silver.odds_moves import final_pre_match_snapshot
 from backend.studio.bundle import build_analysis_bundle
 
@@ -34,10 +33,12 @@ def _iso(dt: datetime) -> str:
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
 T0 = _iso(NOW)
 T0_PLUS_5MIN = _iso(NOW + timedelta(minutes=5))
-T1 = _iso(NOW + timedelta(minutes=20))          # 20 分钟 → 第二轮 due(见下)
-# NowGoal 五段节流(Phase 4)下:距开球 2.5h 落在 1–3h 档(间隔 1200s=20 分钟)。
-# T0 首轮 due;T0+5min(300s)节流;T0+20min(1200s)到期——保持本用例
-# "先节流再到期"的原意。FotMob 快照仍用旧两档(2.5h→900s),f1/f2 同样 due。
+T1 = _iso(NOW + timedelta(hours=1))             # 1 小时 → 第二轮 due(见下)
+T2 = _iso(NOW + timedelta(hours=1, minutes=5))  # T1+5min → watch 档(300s)再次 due
+# NowGoal 三段节流(PIPELINE_REDESIGN_V2 P1)下:距开球 2.5h 落在 T-6h..T-0 档
+# (间隔 3600s=1 小时)。T0 首轮 due;T0+5min(300s)节流;T0+1h(3600s)到期——
+# 保持本用例"先节流再到期"的原意。League_ID=47(英超,BIG-5)驱动 FotMob 阵容
+# watch-window-start=T-1.5h;T1=kickoff-1.5h 恰好跨进 5 分钟档,f1/f2 同样 due。
 KICKOFF = NOW + timedelta(hours=2, minutes=30)
 KICKOFF_ISO = _iso(KICKOFF)
 # NowGoal 日程行内 kickoff 字段本身是 UTC(2026-07-21 真实 titan_id=2912218 交叉
@@ -75,10 +76,14 @@ def _fixture_file(tmp_path, name: str, latest_home: str) -> str:
     return str(p)
 
 
-def _fm_payload(formation: str, home_sidelined: list[str]) -> dict:
+def _fm_payload(formation: str, home_sidelined: list[str], home_coach_id: int = 501) -> dict:
+    """home_coach_id 默认恒定(501)——两轮常规调用(T0/T1)教练不变,只有 formation/
+    伤停按参数变化。test_full_chain 的第三轮显式传入不同 id 单独隔离"只换教练"
+    这一种变化(Fix 2 / C2 的链路镜像)。"""
     return {"content": {"lineup": {
         "homeTeam": {
             "id": HOME_ID, "formation": formation,
+            "coach": {"id": home_coach_id, "name": f"Coach {home_coach_id}"},
             "starters": [{"id": 1, "name": "A"}], "subs": [],
             "unavailable": [
                 {"id": 90 + i, "name": n, "unavailability": {"type": "injury"}}
@@ -87,6 +92,7 @@ def _fm_payload(formation: str, home_sidelined: list[str]) -> dict:
         },
         "awayTeam": {
             "id": AWAY_ID, "formation": "4-4-2",
+            "coach": {"id": 601, "name": "Away Coach"},
             "starters": [{"id": 2, "name": "B"}], "subs": [], "unavailable": [],
         },
     }}}
@@ -130,42 +136,6 @@ class TestNormalizeUtcIso:
     def test_garbage_is_none(self):
         assert normalize_utc_iso("Tue, May 19, 2026") is None
         assert normalize_utc_iso(None) is None
-
-
-class TestPollWindows:
-    """required_interval_seconds 现走统一验证器(precision+source+显式时区),
-    不再只判断字符串是否含 'T'。"""
-
-    EXACT = "exact"
-    SRC = "fotmob:fixtures"
-
-    def test_interval_far_and_near(self):
-        now = _iso(NOW)
-        assert required_interval_seconds(
-            _iso(NOW + timedelta(hours=24)), self.EXACT, self.SRC, now) == 900
-        assert required_interval_seconds(
-            _iso(NOW + timedelta(hours=1)), self.EXACT, self.SRC, now) == 300
-
-    def test_out_of_window(self):
-        now = _iso(NOW)
-        assert required_interval_seconds(
-            _iso(NOW + timedelta(hours=80)), self.EXACT, self.SRC, now) is None   # >72h
-        assert required_interval_seconds(
-            _iso(NOW - timedelta(minutes=1)), self.EXACT, self.SRC, now) is None  # 已开球
-        assert required_interval_seconds(None, self.EXACT, self.SRC, now) is None        # 无 kickoff
-        assert required_interval_seconds("2026-08-21", self.EXACT, self.SRC, now) is None  # 仅日期
-
-    def test_missing_provenance_never_due(self):
-        """新增:precision 非 exact、缺来源、naive 时间,即使 kickoff_at_utc 形似有效
-        也一律不满足采集窗口(不再靠字符串形状判断)。"""
-        now = _iso(NOW)
-        future = _iso(NOW + timedelta(hours=24))
-        assert required_interval_seconds(future, "date_only", self.SRC, now) is None
-        assert required_interval_seconds(future, "exact", None, now) is None
-        assert required_interval_seconds(
-            (NOW + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S"),  # naive,无 Z
-            self.EXACT, self.SRC, now,
-        ) is None
 
 
 class TestUpcomingPreciseMatchesAndMarketPhase:
@@ -405,6 +375,26 @@ class TestOfflinePipelineE2E:
         r2 = run_odds_silver()
         assert r2 == {"odds_moves_inserted": 0, "event_moves_inserted": 0,
                       "cooccurrence_inserted": 0}
+
+        # ── 第三轮 FotMob(T2):只改主教练,阵型/首发/伤停均与第二轮完全相同
+        # (C2 test_coach_change_emits_a_described_lineup_change 的链路镜像:
+        # 单元测试直接调 _lineup_change_summary,这里走完整 bronze→silver 链路)
+        f3 = run_snapshot_poll(
+            now_iso=T2,
+            offline_payloads={str(MATCH_ID): _fm_payload("4-2-3-1", ["Saka"], home_coach_id=502)},
+        )
+        assert f3["snapshots_inserted"] == 1     # 只有 lineup 变了(教练);两队伤停 hash 不变
+        assert f3["snapshots_skipped"] == 2
+        r3 = run_odds_silver()
+        assert r3["event_moves_inserted"] == 1   # 只有一条新 lineup_change(教练变化)
+        lineup_move_3 = conn_odds.execute(
+            "SELECT detail_json FROM silver_event_moves"
+            " WHERE event_type='lineup_change' AND fotmob_match_id=?"
+            " ORDER BY id DESC LIMIT 1",
+            (MATCH_ID,),
+        ).fetchone()
+        detail3 = json.loads(lineup_move_3["detail_json"])
+        assert detail3 == {"home": {"coach": {"prev": "Coach 501", "new": "Coach 502"}}}
 
         # FINAL:kickoff 前最后一条 pre_match 快照 = v2(需完整 provenance 三元组)
         fin = final_pre_match_snapshot(

@@ -19,53 +19,18 @@
   font-weight: 600;
 }
 
-/* 球场底(线条画在 CSS 层,与图表 0..105/0..68 逻辑坐标 1:1 对齐:
- * 图表 grid 四边距为 0,轴范围即球场边界) */
+/* 球场底图是 FootballPitchBackground(SVG),铺满本容器,与图表 0..105/0..68
+ * 逻辑坐标 1:1 对齐(图表 grid 四边距为 0,轴范围即球场边界;SVG viewBox
+ * 同样是 "0 0 105 68",两者共用同一个坐标域,不需要额外换算)。 */
 .pitchWrap {
   position: relative;
   width: 100%;
   aspect-ratio: 105 / 68; /* 图表挂载前占位同一纵横比,挂载后与图表像素高一致 */
-  background: var(--surface-2);
+  /* 兜底色,SVG 铺满后理论上不可见,只防极端情况(SVG 加载失败)下露白。 */
+  background: #276e42;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-}
-
-.halfLine {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  border-left: 1px solid var(--border);
-}
-
-.centerCircle {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 17%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 1px solid var(--border);
-  border-radius: 50%;
-}
-
-.box {
-  position: absolute;
-  top: 21%;
-  bottom: 21%;
-  width: 15.7%;
-  border: 1px solid var(--border);
-}
-
-.boxLeft {
-  left: 0;
-  border-left: none;
-}
-
-.boxRight {
-  right: 0;
-  border-right: none;
 }
 
 .chart {

@@ -23,7 +23,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from backend.queries.teams import display_name_for_team, team_display_map
+from backend.queries.teams import display_name_for_team, team_display_for
 
 WINDOW = 5
 
@@ -163,10 +163,16 @@ def league_style_views(
     有效点(x、y 都非空)不足 4 支球队时,该视角仍然返回(点集可能很小甚至为
     空)——是否禁用交给调用方按 §4 的门槛判断,本函数只如实聚合。
     """
-    display = team_display_map(conn_core)
     fastbreak = _fastbreak_share_by_team(conn_core, league_id, before_date, window)
 
-    out: list[dict[str, Any]] = []
+    # 2026-08-19 性能修复:先把三个视角各自的 points_map 都算出来,再用它们
+    # team_id 的并集去查译名——team_display_map() 每次都全扫 dim_match
+    # (33,868 行)求全部 304 支球队的译名,而这里最多只用得上一个联赛的
+    # 十几到二十支球队。改成两遍循环(先聚合、再拼名字)是为了让
+    # team_display_for 的收窄范围与"最终真的会用到的 team_id"完全一致,
+    # 不猜、不用 fact_league_table 这类可能覆盖不全的替代来源。
+    view_points: list[tuple[dict[str, Any], dict[int, dict[str, Any]]]] = []
+    all_team_ids: set[int] = set()
     for view in _TEAM_STAT_VIEWS:
         if view["id"] == "xg-for-against":
             points_map = _xg_for_against_points(conn_core, league_id, before_date, window)
@@ -179,7 +185,13 @@ def league_style_views(
             points_map = _team_stat_points(
                 conn_core, league_id, before_date, "accurate_crosses", "touches_opp_box", window
             )
+        view_points.append((view, points_map))
+        all_team_ids.update(points_map.keys())
 
+    display = team_display_for(conn_core, all_team_ids)
+
+    out: list[dict[str, Any]] = []
+    for view, points_map in view_points:
         points = []
         for team_id, xy in points_map.items():
             points.append({

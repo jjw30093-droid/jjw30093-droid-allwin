@@ -30,12 +30,11 @@ from backend.db import migrate
 from backend.db.connections import connect_rw
 from backend.db.util import utc_now_iso
 from backend.ingest.poll_windows import (
-    INTERVAL_FAR_SECONDS,
+    CADENCE_NOWGOAL_ODDS,
     SOURCE_NOWGOAL_ODDS,
     SOURCE_NOWGOAL_SCHEDULE,
-    is_due,
     mark_polled,
-    required_interval_seconds,
+    poll_decision,
 )
 from backend.providers import nowgoal
 from backend.schedules.pagination import inspect_known_pagination
@@ -73,10 +72,6 @@ class LeagueConfig:
     identity_verified: bool
     identity_evidence: str
     content_horizon_days: int
-    odds_far_interval_seconds: int
-    odds_near_interval_seconds: int
-    odds_high_frequency_hours: int
-    odds_near_hours: int
     capabilities: tuple[str, ...]
     fresh_enabled: bool
     verified_match_xrefs: dict[int, str]
@@ -97,10 +92,6 @@ LEAGUES: dict[str, LeagueConfig] = {
         identity_verified=True,
         identity_evidence="live FotMob 2026 response and exact NowGoal match mapping",
         content_horizon_days=7,
-        odds_far_interval_seconds=900,
-        odds_near_interval_seconds=300,
-        odds_high_frequency_hours=72,
-        odds_near_hours=2,
         capabilities=("fixtures", "standings", "team_form", "xg", "1x2", "ah", "ou"),
         fresh_enabled=True,
         verified_match_xrefs={5104968: "2912857"},
@@ -122,10 +113,6 @@ LEAGUES: dict[str, LeagueConfig] = {
         identity_verified=True,
         identity_evidence="live FotMob 2026 response previously retained in the MVP audit",
         content_horizon_days=7,
-        odds_far_interval_seconds=900,
-        odds_near_interval_seconds=300,
-        odds_high_frequency_hours=72,
-        odds_near_hours=2,
         capabilities=("fixtures", "standings", "team_form", "xg", "1x2", "ah", "ou"),
         fresh_enabled=False,
         verified_match_xrefs={},
@@ -144,10 +131,6 @@ LEAGUES: dict[str, LeagueConfig] = {
         identity_verified=True,
         identity_evidence="live FotMob 2026 response previously retained in the MVP audit",
         content_horizon_days=7,
-        odds_far_interval_seconds=900,
-        odds_near_interval_seconds=300,
-        odds_high_frequency_hours=72,
-        odds_near_hours=2,
         capabilities=("fixtures", "standings", "team_form", "xg", "1x2", "ah", "ou"),
         fresh_enabled=False,
         verified_match_xrefs={},
@@ -638,46 +621,52 @@ def _nowgoal_odds(
     return records, path
 
 
+_ODDS_TIER_PHASE = {
+    "checkpoint_72h": "T_MINUS_72H_TO_24H",
+    "checkpoint_24h": "T_MINUS_24H_TO_6H",
+    "checkpoint_6h": "T_MINUS_6H_TO_KICKOFF",
+    "last_call": "LAST_CALL",
+}
+
+
 def _poll_decision(
     kickoff_at_utc: str,
     *,
     now_iso: str,
-    has_observation: bool,
     conn: sqlite3.Connection,
     match_id: int,
 ) -> dict:
-    kickoff = _parse_utc(kickoff_at_utc)
-    now = _parse_utc(now_iso)
-    seconds = (kickoff - now).total_seconds()
-    if seconds <= 0:
-        return {"due": False, "phase": "CLOSED", "next_due_at": None}
-    interval = required_interval_seconds(
-        kickoff_at_utc,
-        "exact",
-        "fotmob:league_fixture",
-        now_iso,
+    """薄封装:唯一决策权威是 poll_windows.poll_decision(),不再自行重算窗口/
+    间隔(PIPELINE_REDESIGN_V2 P1,收敛掉本文件曾经独立的两档到期逻辑)。"""
+    row = conn.execute(
+        "SELECT last_polled_at FROM poll_state WHERE source=? AND subject=?",
+        (SOURCE_NOWGOAL_ODDS, str(match_id)),
+    ).fetchone()
+    last_polled_at = row["last_polled_at"] if row is not None else None
+    decision = poll_decision(
+        SOURCE_NOWGOAL_ODDS, kickoff_at_utc, "exact", "fotmob:league_fixture",
+        last_polled_at, now_iso,
     )
-    if interval is None:
-        if not has_observation:
-            return {"due": True, "phase": "INITIAL_LOW_FREQUENCY", "next_due_at": now_iso}
+    if decision.reason in ("kicked_off", "no_exact_kickoff"):
+        return {"due": False, "phase": "CLOSED", "next_due_at": None}
+    if decision.reason == "first_discovery_out_of_window":
+        return {"due": True, "phase": "INITIAL_LOW_FREQUENCY", "next_due_at": now_iso}
+    if decision.reason == "out_of_window_or_kicked_off":
+        kickoff = _parse_utc(kickoff_at_utc)
         return {
             "due": False,
             "phase": "WAITING_FOR_72H_WINDOW",
             "next_due_at": _utc_iso(kickoff - timedelta(hours=72)),
         }
-    due = is_due(conn, SOURCE_NOWGOAL_ODDS, str(match_id), interval, now_iso)
-    row = conn.execute(
-        "SELECT last_polled_at FROM poll_state WHERE source=? AND subject=?",
-        (SOURCE_NOWGOAL_ODDS, str(match_id)),
-    ).fetchone()
-    next_due = now if row is None else _parse_utc(row["last_polled_at"]) + timedelta(
-        seconds=interval
-    )
+    next_due_at = now_iso
+    if not decision.due:
+        next_due = _parse_utc(last_polled_at) + timedelta(seconds=decision.interval_seconds)
+        next_due_at = _utc_iso(next_due)
     return {
-        "due": due,
-        "phase": "T_MINUS_2H_TO_KICKOFF" if interval == 300 else "T_MINUS_72H_TO_2H",
-        "interval_seconds": interval,
-        "next_due_at": now_iso if due else _utc_iso(next_due),
+        "due": decision.due,
+        "phase": _ODDS_TIER_PHASE[decision.tier],
+        "interval_seconds": decision.interval_seconds,
+        "next_due_at": next_due_at,
     }
 
 
@@ -742,7 +731,6 @@ def due_status(
             decision = _poll_decision(
                 row["kickoff_at_utc"],
                 now_iso=now,
-                has_observation=count > 0,
                 conn=odds,
                 match_id=row["Match_ID"],
             )
@@ -939,27 +927,9 @@ def run_fresh(
         if mapped is None:
             continue
         with connect_rw("odds") as odds_conn:
-            # provider='nowgoal':这里查的是"之前有没有给这场比赛映射过 nowgoal
-            # titan_id",不加过滤会读到别的 provider(如 kbisai)的
-            # provider_match_id,把它误当 titan_id 去查/写 bronze_ng_odds_snap。
-            xref = odds_conn.execute(
-                "SELECT provider_match_id FROM dim_match_xref WHERE fotmob_match_id=? AND provider='nowgoal'",
-                (candidate["match_id"],),
-            ).fetchone()
-            previous_titan = str(xref["provider_match_id"]) if xref else None
-            has_observation = (
-                odds_conn.execute(
-                    """SELECT EXISTS(
-                         SELECT 1 FROM bronze_ng_odds_snap
-                         WHERE provider_match_id=? AND market='1x2')""",
-                    (previous_titan or str(mapped["titan_id"]),),
-                ).fetchone()[0]
-                == 1
-            )
             decision = _poll_decision(
                 candidate["kickoff_at_utc"],
                 now_iso=observed_at,
-                has_observation=has_observation,
                 conn=odds_conn,
                 match_id=candidate["match_id"],
             )
@@ -1145,8 +1115,10 @@ def run_fresh(
         "content_horizon_days": config.content_horizon_days,
         "odds_policy": {
             "over_72h": "one initial observation only",
-            "t_minus_72h_to_2h_seconds": INTERVAL_FAR_SECONDS,
-            "t_minus_2h_to_kickoff_seconds": 300,
+            "t_minus_72h_to_24h_seconds": CADENCE_NOWGOAL_ODDS.tiers[2][1],
+            "t_minus_24h_to_6h_seconds": CADENCE_NOWGOAL_ODDS.tiers[1][1],
+            "t_minus_6h_to_kickoff_seconds": CADENCE_NOWGOAL_ODDS.tiers[0][1],
+            "last_call_seconds": CADENCE_NOWGOAL_ODDS.last_call_seconds,
             "in_play": "excluded",
         },
         "odds_polled": odds_polled,

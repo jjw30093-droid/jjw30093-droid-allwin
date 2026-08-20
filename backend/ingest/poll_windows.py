@@ -15,6 +15,12 @@ kickoff_at_utc 是否非空或字符串是否含 'T'。已开球不再属于赛�
 (进程重启不得无界重复采集)。
 
 Worker/systemd 每 5 分钟触发一次到期判断;真正是否请求数据源由本模块决定。
+
+FotMob 阵容/伤停另有独立的分档表(cadence_fotmob_lineup,见下):cadence 窗口
+72 小时,候选池宽度独立于 cadence 窗口、为 168 小时——候选池必须严格宽于
+cadence 窗口,否则"首次发现即采"分支结构性不可达(2026-08-18 之前候选池与
+cadence 窗口同为 24 小时,该分支对阵容不可达,是当时 99 场未来比赛零阵容
+快照的根因之一)。
 """
 
 import sqlite3
@@ -39,8 +45,17 @@ SOURCE_FOTMOB_INCREMENTAL = "fotmob_incremental"  # 完赛增量节流键(subjec
 # 使 15 分钟 chain 反复触发赛程 job 也不会真去多打 FotMob(16 联赛 × 4 次/天)。
 FIXTURE_SYNC_INTERVAL_SECONDS = 21600
 # 完赛增量(scheduler.step1)同一节流:每联赛 6 小时,替代旧"单联赛被 15 分钟
-# chain 反复触发约 96 次/天"的行为(数据管道重建 Phase 6 去硬编码)。
+# chain 反复触发约 96 次/天"的行为(数据管道重建 Phase 6 去硬编码)。此常量
+# PIPELINE_REDESIGN_V2 P4 起降级为"兜底档"(见 league_stale_unresolved_match_ids
+# 与事件驱动到期条件),不再是唯一到期判据。
 INCREMENTAL_SYNC_INTERVAL_SECONDS = 21600
+
+# 赛后完赛增量事件驱动到期阈值(PIPELINE_REDESIGN_V2 P4,CLAUDE.md 站长要求
+# "赛后 4-5 小时内补全"):kickoff + 本值 < now 且 status != 'Finish' 视为
+# "该结束却仍未结束",使所在联赛立即到期,不必等满 6h 兜底档。配合 30 分钟
+# 一次的 allwin-postmatch 定时器,完赛数据最迟约 kickoff+3h 落地(2.5h 阈值
+# + 至多 30 分钟发现延迟),留出安全余量。
+POSTMATCH_STALE_THRESHOLD_HOURS = 2.5
 
 
 @dataclass(frozen=True)
@@ -56,24 +71,64 @@ class PollCadence:
     last_call_seconds: int | None = None
 
 
-# 旧两档:2–72h 每 15 分钟、0–2h 每 5 分钟。字节等价于历史行为,供 FotMob 快照/日程沿用。
+# 旧两档:2–72h 每 15 分钟、0–2h 每 5 分钟。日程发现节流(SOURCE_NOWGOAL_SCHEDULE)
+# 仍沿用;FotMob 阵容/伤停已改用下方按联赛查表的 cadence_fotmob_lineup。
 CADENCE_LEGACY = PollCadence(
     "legacy", WINDOW_HOURS, ((NEAR_HOURS, INTERVAL_NEAR_SECONDS), (WINDOW_HOURS, INTERVAL_FAR_SECONDS)))
 
-# NowGoal 赔率五段递进(数据管道重建 Phase 4,用户确认的节奏):
-#   72/48/24/12h 检查点 → 12h起每小时 → 3h起每20分 → 1h起每10分 → T-15min last_call。
+# NowGoal 赔率三段递进(PIPELINE_REDESIGN_V2 P1,站长确认的节奏):
+#   72h起每24h → 24h起每6h → 6h起每1h → T-15min last_call 强制补一枪。
 #   逐档 ≥ §6.3 下限(2–72h≥900s、0–2h≥300s),无需改 §6.3 数值。
 CADENCE_NOWGOAL_ODDS = PollCadence(
     "nowgoal_odds", WINDOW_HOURS,
-    tiers=((1, 600), (3, 1200), (12, 3600), (24, 43200), (48, 86400), (72, 86400)),
+    tiers=((6, 3600), (24, 21600), (72, 86400)),
     last_call_seconds=900,
 )
 
 CADENCE_BY_SOURCE = {
     SOURCE_NOWGOAL_ODDS: CADENCE_NOWGOAL_ODDS,
-    SOURCE_FOTMOB_SNAPSHOT: CADENCE_LEGACY,      # 阵容/伤停快照:节奏一字不改
     SOURCE_NOWGOAL_SCHEDULE: CADENCE_LEGACY,
 }
+
+# FotMob 阵容/伤停(PIPELINE_REDESIGN_V2 P1 引入,2026-08-18 修复候选池全零覆盖
+# 事故时改为三档):cadence 窗口 72h(T-72h..T-24h 每 24h;T-24h..watch-window-
+# start 每 12h;watch-window-start..T-0 每 5 分钟到底,无早停——真正的"确认阵容
+# 探测"是 P5 的事,这里先老实全程 5 分钟)。候选池宽度独立于 cadence 窗口、为
+# 168h(FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS,与 NowGoal 的
+# DISCOVERY_WINDOW_HOURS=168 同构),只为让"首次发现即采"这一档结构上可达——
+# 168h 外的比赛一生最多补采一次,采完即被 poll_state 挡住,不会无界重复。
+#
+# 2026-08-18 之前:候选池宽度与 cadence 窗口曾经都是同一个常量
+# FOTMOB_LINEUP_DISCOVERY_HOURS=24(discovery 收窄到 T-24h,声称"24h 前没有
+# 阵容意义上的东西可采")。这句话已被真实网络探测推翻(T-77.5h 仍返回带 11
+# 首发+9 替补+教练的 lastStarting11),且候选池=cadence 窗口使 poll_decision()
+# 的 first_discovery 分支(只在 s > window_hours*3600 时触发)对阵容结构性
+# 不可达——是当时 99 场未来比赛(最近一场 T-38.5h)零阵容快照的主因。
+BIG5_LEAGUE_IDS = frozenset({47, 87, 55, 54, 53})
+
+FOTMOB_LINEUP_WINDOW_HOURS = 72                    # cadence 窗口
+FOTMOB_LINEUP_PRE_WATCH_UPPER_HOURS = 24           # 12h 档上界
+FOTMOB_LINEUP_FAR_INTERVAL_SECONDS = 86400         # 72h-24h:每 24h
+FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS = 43200   # 24h-watch:每 12h(不变)
+FOTMOB_LINEUP_WATCH_INTERVAL_SECONDS = 300         # watch-T0:每 5 分钟(不变)
+FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS = 168         # 候选池,独立于 cadence 窗口
+
+# watch-window-start(小时,进入后转 5 分钟节奏)按联赛查表,不是单一硬编码常量——
+# 站长明确说以后可能要给具体联赛单独调(如欧战 42/73/10216 目前落回默认档)。
+FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS_DEFAULT = 1.25
+FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS = {league_id: 1.5 for league_id in BIG5_LEAGUE_IDS}
+
+
+def cadence_fotmob_lineup(league_id: int | None) -> PollCadence:
+    watch_hours = FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS.get(
+        league_id, FOTMOB_LINEUP_WATCH_WINDOW_START_HOURS_DEFAULT
+    )
+    return PollCadence(
+        "fotmob_lineup", FOTMOB_LINEUP_WINDOW_HOURS,
+        tiers=((watch_hours, FOTMOB_LINEUP_WATCH_INTERVAL_SECONDS),
+               (FOTMOB_LINEUP_PRE_WATCH_UPPER_HOURS, FOTMOB_LINEUP_PRE_WATCH_INTERVAL_SECONDS),
+               (FOTMOB_LINEUP_WINDOW_HOURS, FOTMOB_LINEUP_FAR_INTERVAL_SECONDS)),
+    )   # last_call_seconds 保持 None:阵容没有 FINAL/收盘语义,不照抄赔率的 last_call
 
 
 def _tier_interval(cadence: PollCadence, seconds_to_kickoff: float) -> int:
@@ -87,35 +142,12 @@ def _parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def required_interval_seconds(
-    kickoff_at_utc: str | None,
-    kickoff_precision: str | None,
-    kickoff_source: str | None,
-    now_iso: str,
-) -> int | None:
-    """该比赛当前所需的最小采集间隔;不满足统一精确性验证 / 已开球 / >72h → None。
-
-    唯一真源 normalize_exact_kickoff——不再自行判断字符串是否含 'T'。
-    """
-    normalized = normalize_exact_kickoff(kickoff_at_utc, kickoff_precision, kickoff_source)
-    if normalized is None:
-        return None
-    delta = _parse_iso(normalized) - _parse_iso(now_iso)
-    seconds = delta.total_seconds()
-    if seconds <= 0:
-        return None                      # 已开球:赛前采集停止
-    if seconds > WINDOW_HOURS * 3600:
-        return None
-    if seconds <= NEAR_HOURS * 3600:
-        return INTERVAL_NEAR_SECONDS
-    return INTERVAL_FAR_SECONDS
-
-
 @dataclass(frozen=True)
 class PollDecision:
     due: bool
     tier: str | None       # 命中的档("le_1h"/"le_3h"/.../"checkpoint_72h"/"last_call"/None)
     reason: str
+    interval_seconds: int | None = None
 
 
 _NOT_DUE_OUT_OF_WINDOW = PollDecision(False, None, "out_of_window_or_kicked_off")
@@ -128,13 +160,20 @@ def poll_decision(
     kickoff_source: str | None,
     last_polled_at: str | None,
     now_iso: str,
+    league_id: int | None = None,
 ) -> PollDecision:
-    """按来源节奏(CADENCE_BY_SOURCE)判定是否到期,含临场 last_call 强制。
+    """按来源节奏判定是否到期,含临场 last_call 强制。
 
+    FotMob 阵容(SOURCE_FOTMOB_SNAPSHOT)按 league_id 查表取 cadence(BIG-5 与
+    其它联赛 watch-window-start 不同),其余来源仍走 CADENCE_BY_SOURCE 静态表。
     重启安全:仅依据持久化的 last_polled_at 与 kickoff 重算,不加列、不存内存状态。
     同一 now_iso 重放:第一次 due 后 mark_polled 写入 last_polled_at,第二次必 not_due。
     """
-    cadence = CADENCE_BY_SOURCE.get(source, CADENCE_LEGACY)
+    cadence = (
+        cadence_fotmob_lineup(league_id)
+        if source == SOURCE_FOTMOB_SNAPSHOT
+        else CADENCE_BY_SOURCE.get(source, CADENCE_LEGACY)
+    )
     normalized = normalize_exact_kickoff(kickoff_at_utc, kickoff_precision, kickoff_source)
     if normalized is None:
         return PollDecision(False, None, "no_exact_kickoff")
@@ -159,17 +198,17 @@ def poll_decision(
     lc = cadence.last_call_seconds
     if lc is not None and s <= lc:
         if last_polled_at is None:
-            return PollDecision(True, "last_call", "last_call_never_polled")
+            return PollDecision(True, "last_call", "last_call_never_polled", lc)
         s_last = (kickoff - _parse_iso(last_polled_at)).total_seconds()
         if s_last > lc:
-            return PollDecision(True, "last_call", "last_call_crossed_window")
+            return PollDecision(True, "last_call", "last_call_crossed_window", lc)
 
     if last_polled_at is None:
-        return PollDecision(True, tier, "first_poll")
+        return PollDecision(True, tier, "first_poll", interval)
     elapsed = (_parse_iso(now_iso) - _parse_iso(last_polled_at)).total_seconds()
     if elapsed >= interval:
-        return PollDecision(True, tier, f"interval_{interval}s_elapsed")
-    return PollDecision(False, tier, f"throttled_{interval}s")
+        return PollDecision(True, tier, f"interval_{interval}s_elapsed", interval)
+    return PollDecision(False, tier, f"throttled_{interval}s", interval)
 
 
 def _tier_name(cadence: PollCadence, s: float) -> str:
@@ -229,6 +268,41 @@ def mark_polled(
                VALUES (?, ?, ?, ?, ?, ?)""",
             (source, str(subject), now_iso, tier, 1 if ok else 0, poll_run_id),
         )
+
+
+def league_stale_unresolved_match_ids(
+    conn_core: sqlite3.Connection,
+    league_id: int,
+    now_iso: str,
+    threshold_hours: float = POSTMATCH_STALE_THRESHOLD_HOURS,
+) -> set[int]:
+    """该联赛里"kickoff + threshold_hours < now 但 status != 'Finish'"的比赛
+    (PIPELINE_REDESIGN_V2 P4 事件驱动到期信号)。
+
+    SQL 先按 status/kickoff_precision/kickoff_source 粗筛,真正的精确性验证
+    仍经 normalize_exact_kickoff(同 upcoming_precise_matches 的纪律,CLAUDE.md
+    §6.2.1)——没有可验证精确开球时间的比赛不参与判定,不得推断补零。
+    """
+    rows = conn_core.execute(
+        """SELECT Match_ID, kickoff_at_utc, kickoff_precision, kickoff_source
+           FROM dim_match
+           WHERE League_ID=? AND status != 'Finish'
+             AND kickoff_precision='exact' AND kickoff_source IS NOT NULL
+             AND kickoff_at_utc IS NOT NULL""",
+        (league_id,),
+    ).fetchall()
+    now = _parse_iso(now_iso)
+    stale: set[int] = set()
+    for r in rows:
+        normalized = normalize_exact_kickoff(
+            r["kickoff_at_utc"], r["kickoff_precision"], r["kickoff_source"]
+        )
+        if normalized is None:
+            continue
+        elapsed_hours = (now - _parse_iso(normalized)).total_seconds() / 3600.0
+        if elapsed_hours > threshold_hours:
+            stale.add(int(r["Match_ID"]))
+    return stale
 
 
 def upcoming_precise_matches(

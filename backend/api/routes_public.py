@@ -270,7 +270,13 @@ def list_matches(
     # 自然年赛季联赛(挪超/瑞超)是 "2026" 形式,所以放宽到两种写法都接受。
     season: str | None = Query(None, pattern=r"^\d{4}(/\d{4})?$"),
     status: str | None = Query(None, pattern="^(upcoming|finished)$"),
-    window: str | None = Query(None, pattern="^(today|tomorrow|3d|7d|all)$"),
+    # 向过去的窗口(2026-08-19):yesterday/past3d/past7d 是"赛果"视图用的,
+    # 与 today/tomorrow/3d/7d 一一对称(语义见 q_matches._window_bounds)。
+    # today 本来就是北京自然日、天然双向,「今天赛果」用 today&status=finished
+    # 即可,刻意不另造 token。
+    window: str | None = Query(
+        None, pattern="^(today|tomorrow|3d|7d|all|yesterday|past3d|past7d)$"
+    ),
     content: str | None = Query(None, pattern="^(analysis|odds|shots)$"),
     # 首页重点位确定性选场(2026-08-16):default limit 分页天然只看"前 N 条
     # API 原始顺序",完整候选窗口里更靠后的比赛永远没机会被选中,哪怕它才是
@@ -320,29 +326,13 @@ def list_matches(
     # (bronze_legacy_odds_summary,直接以 fotmob_match_id 为键)。只算前者会漏掉
     # 8,336 场只有两点摘要的比赛——它们在比赛详情页确实能看到赔率,
     # 却被 content=odds 筛选排除,属于筛选口径与实际可见内容不一致。
-    try:
-        odds_match_ids = {
-            int(row[0])
-            for row in conn_odds.execute(
-                """SELECT DISTINCT x.fotmob_match_id
-                     FROM dim_match_xref x
-                     JOIN bronze_ng_odds_snap b
-                       ON b.provider_match_id=x.provider_match_id
-                    WHERE x.provider='nowgoal'
-                      AND x.review_status IN ('auto_ok','confirmed')"""
-            )
-        }
-    except sqlite3.OperationalError:
-        odds_match_ids = set()
-    try:
-        odds_match_ids |= {
-            int(row[0])
-            for row in conn_odds.execute(
-                "SELECT DISTINCT fotmob_match_id FROM bronze_legacy_odds_summary"
-            )
-        }
-    except sqlite3.OperationalError:
-        pass
+    #
+    # 2026-08-19 性能修复:这两个集合与下面 D8 给每场标 odds_coverage_tier
+    # 要用的 full_set/legacy_set 是同一 JOIN 条件的同一条 SQL——原先在这里
+    # 和 D8 各自独立查一遍(生产实测重复这一遍 32ms)。提到这里查一次、两处
+    # 复用,逻辑不变,只是不再算两遍。
+    full_set, legacy_set = q_odds.odds_coverage_sets(conn_odds)
+    odds_match_ids = full_set | legacy_set
     # content=shots:双方球队都有历史射门数据 → 赛前射门分布图画得出来。
     # 与 analysis(已发布预测)/odds(有赔率)并列的第三种"这场有东西可看"判据,
     # 且是当前唯一大面积成立的一种(实测未来 7 天 38/77 场,而 analysis 为 0)。
@@ -359,15 +349,23 @@ def list_matches(
     # 首页/列表页胜平负概率条:同一批次一次查询算出全部比赛,不逐场请求
     # (N+1 会拖垮一页 20 场的列表)。2026-08-16 起恒返回最新快照,不再对
     # 匿名施加 1 小时延迟(与 /matches/{id}/odds 端点同步解除)。
-    win_prob_by_match = q_odds.latest_1x2_by_match(conn_odds)
+    #
     # boost=free_predicted(2026-08-16 首页重点位确定性选场):在完整候选窗口内
     # (不受 limit 截断)确定性地找出"已有发布概率"的比赛,顶进 ORDER BY 最高
     # 优先级——保证首页重点位不会因为"前 limit 条恰好都没有算出概率"而找不到
     # 真正满足条件的比赛。查询参数名沿用旧值 free_predicted(不改前端契约),
     # 但 2026-08-16 起访问权不再与联赛挂钩,不再需要按联赛过滤。
-    free_predicted_match_ids: set[int] = (
-        set(win_prob_by_match.keys()) if boost == "free_predicted" else set()
-    )
+    #
+    # 2026-08-19 性能修复:只有 boost=free_predicted 才需要"完整候选窗口内
+    # 确定性地找"这个语义,必须在分页前对全站算一遍(生产实测 104ms)。其余
+    # 请求(占绝大多数)只需要给"这一页"的比赛标概率,等 list_matches() 分页
+    # 返回后再按这一页的 match_id 收窄查询即可——延后到下面 D8。
+    if boost == "free_predicted":
+        win_prob_by_match = q_odds.latest_1x2_by_match(conn_odds)
+        free_predicted_match_ids: set[int] = set(win_prob_by_match.keys())
+    else:
+        win_prob_by_match = None  # 分页后按本页 match_id 收窄计算,见下方 D8
+        free_predicted_match_ids = set()
     result = q_matches.list_matches(
         conn,
         visible_league_ids,
@@ -385,12 +383,17 @@ def list_matches(
         offset=offset,
     )
     result["matches"] = [_with_content_status(match) for match in result["matches"]]
-    # D8:逐场标注赔率覆盖档位(集合每请求算一次,不逐行查库);
-    # full_timeline 优先于 open_close_only(同场两者皆有时按更高档展示)。
-    full_set, legacy_set = q_odds.odds_coverage_sets(conn_odds)
+    # D8:逐场标注赔率覆盖档位;full_set/legacy_set 已在上面算过一次并复用,
+    # 不重新查(2026-08-19 起不再是"每请求批量算一次"的独立第二次调用)。
+    #
     # P1.1:coverage_tier 只回答"有没有过数据",这两个字段回答"数据新不新"——
-    # 同样每请求批量算一次,不逐场比赛单独查(N+1)。
-    odds_last_observed = q_odds.odds_last_observed_by_match(conn_odds)
+    # 同样每请求批量算一次,不逐场比赛单独查(N+1);2026-08-19 起收窄到本页
+    # 真正返回的 match_id(见 odds_last_observed_by_match 的 match_ids 参数),
+    # 不再为全站 737K 条快照做 GROUP BY。
+    page_match_ids = {match["match_id"] for match in result["matches"]}
+    odds_last_observed = q_odds.odds_last_observed_by_match(conn_odds, match_ids=page_match_ids)
+    if win_prob_by_match is None:
+        win_prob_by_match = q_odds.latest_1x2_by_match(conn_odds, match_ids=page_match_ids)
     for match in result["matches"]:
         mid = match["match_id"]
         match["odds_coverage_tier"] = (
@@ -436,16 +439,21 @@ def match_detail(
     _require_known_league(m["league_id"])
     response.headers["Cache-Control"] = PUBLIC_CACHE_SHORT if m["league_id"] in ANON_CACHEABLE else NO_STORE
     m = _with_content_status(m)
-    # 与列表路由同一口径的赔率覆盖档位(速览卡"状态完整度"用)
-    full_set, legacy_set = q_odds.odds_coverage_sets(conn_odds)
+    # 单场端点用单场版查询(2026-08-19 性能修复):odds_coverage_sets()/
+    # odds_last_observed_by_match() 是给列表路由"一次算全部、避免 N+1"用的,
+    # 这里只需要这一场比赛的结果,不该为它遍历全站 737K 条快照——
+    # odds_coverage_for_match/odds_last_observed_for_match 与整表版逐位等价
+    # (同一 JOIN 条件、同一 review_status 门槛),见
+    # tests/backend/test_odds_single_match_scoped.py。
+    full_hit, legacy_hit = q_odds.odds_coverage_for_match(conn_odds, match_id)
     m["odds_coverage_tier"] = (
-        "full_timeline" if match_id in full_set
-        else "open_close_only" if match_id in legacy_set
+        "full_timeline" if full_hit
+        else "open_close_only" if legacy_hit
         else "none"
     )
     # P1.1:与列表路由同一口径的赔率新鲜度(coverage_tier 只回答"有没有过数据",
     # 这两个字段回答"数据新不新")。
-    last_observed = q_odds.odds_last_observed_by_match(conn_odds).get(match_id)
+    last_observed = q_odds.odds_last_observed_for_match(conn_odds, match_id)
     m["odds_last_observed_at"] = last_observed
     m["odds_freshness_state"] = q_odds.classify_odds_freshness(last_observed)
     home_form = q_matches.recent_form(conn, m["home"]["team_id"], m["date_utc"])

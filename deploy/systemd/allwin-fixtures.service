@@ -1,0 +1,31 @@
+# 赛程同步(oneshot,由 allwin-fixtures.timer 每 30 分钟触发)。
+# schedule_sync_multi 内部已有 6h/联赛节流,30 分钟 tick 反复触发不会多打
+# FotMob;这是整个管道依赖图唯一的根节点(其余任务读的是它落库的赛程),
+# 单独一个定时器意味着它的成败不会被任何下游任务的失败影响,也不会去
+# 影响下游——下游各自的定时器读到的永远是"数据库里现有的东西"。
+# 需要 THORDATA_PROXY 住宅代理。
+#
+# 安装:cp allwin-fixtures.service allwin-fixtures.timer 到 /etc/systemd/system/
+#       systemctl daemon-reload → systemctl enable --now allwin-fixtures.timer
+# 手动跑一次:systemctl start allwin-fixtures.service
+[Unit]
+Description=allwin fixture schedule sync (schedule_sync_multi, every 30 minutes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.worker.runner --job schedule_sync_multi
+TimeoutStartSec=1200
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

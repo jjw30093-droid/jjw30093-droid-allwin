@@ -31,6 +31,7 @@ import { CooccurrenceSection } from "@/components/matches/CooccurrenceSection";
 import { MarketCardsSection } from "@/components/matches/MarketCardsSection";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { MatchHeaderPre } from "@/components/matches/MatchHeaderPre";
+import { MatchInfoCard } from "@/components/matches/MatchInfoCard";
 import { MatchHeaderFinished } from "@/components/matches/MatchHeaderFinished";
 import { MatchTabs } from "@/components/matches/MatchTabs";
 import { MatchPreTabs } from "@/components/matches/MatchPreTabs";
@@ -39,6 +40,7 @@ import { MatchStatsSection } from "@/components/matches/MatchStatsSection";
 import { MatchShotsSection } from "@/components/matches/MatchShotsSection";
 import { MatchEventsSection } from "@/components/matches/MatchEventsSection";
 import { MatchDataTabs } from "@/components/matches/MatchDataTabs";
+import { ChartWithSummary } from "@/components/matches/ChartWithSummary";
 import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSection";
 import { TeamStyleQuadrant } from "@/components/matches/TeamStyleQuadrant";
 import { AttackChainSection } from "@/components/matches/AttackChainSection";
@@ -101,6 +103,7 @@ function HighlightsGroup({
 }) {
   return (
     <>
+      <MatchInfoCard match={detail.match} />
       {!finished && <QuickView detail={detail} />}
       <section className={styles.section}>
         <SectionTitle>数据倾向</SectionTitle>
@@ -135,19 +138,27 @@ function attackSourceNote(rows: AttackSourceRow[]): string {
   return `${top.label}每脚效率最高,平均 xG ${((top.xg as number) / top.shots).toFixed(3)}/脚。`;
 }
 
-/** 数据 tab:近期表现(两队各一张卡)→ 阵容/风格/球员三个子 tab。 */
+/** 数据 tab:近期表现(两队各一张卡)→ 阵容/风格/球员/射门四个子 tab。 */
 function DataGroup({
   detail,
   preview,
+  analysis,
 }: {
   detail: MatchDetailResponse;
   preview: MatchPreviewResponse | null;
+  analysis: AnalysisBundle | null;
 }) {
   const m = detail.match;
   const homeName = m.home.name;
   const awayName = m.away.name;
   const homeTeamId = m.home.team_id;
   const awayTeamId = m.away.team_id;
+  // 两队各自最近 5 场(同联赛口径优先)射门分布,后端已算好、拼进
+  // /analysis 的 chart_specs(backend/studio/bundle.py)——组件本身早就写好
+  // (ChartWithSummary + SpecChart 的 shot_map_explorer 分支),此前只是没有
+  // 任何页面把这个 tab 接上,不是数据/组件缺失。两队都没有覆盖时诚实展示
+  // 空态,不假装有数据。
+  const shotMapSpec = analysis?.chart_specs.find((c) => c.type === "shot_map_explorer") ?? null;
 
   return (
     <section className={styles.section}>
@@ -161,6 +172,7 @@ function DataGroup({
               homeName={homeName}
               awayName={awayName}
               lineupType={preview.lineups.lineup_type ?? null}
+              source={preview.lineups.source ?? null}
               observedAt={preview.lineups.observed_at ?? null}
               home={preview.lineups.home ?? null}
               away={preview.lineups.away ?? null}
@@ -233,6 +245,19 @@ function DataGroup({
                 ]}
               />
             </>
+          }
+          shots={
+            shotMapSpec ? (
+              <figure className={styles.chartCard}>
+                <ChartWithSummary
+                  spec={shotMapSpec}
+                  titleClassName={styles.chartTitle}
+                  summaryClassName={styles.chartSummary}
+                />
+              </figure>
+            ) : (
+              <p className={styles.emptyText}>两队近期都没有可用的射门数据。</p>
+            )
           }
         />
       )}
@@ -329,7 +354,7 @@ function OverviewPanel({
   return (
     <>
       <HighlightsGroup idNum={idNum} detail={detail} finished={finished} />
-      <DataGroup detail={detail} preview={preview} />
+      <DataGroup detail={detail} preview={preview} analysis={analysis} />
       <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
     </>
   );
@@ -372,8 +397,13 @@ export function MatchDetailBody({
             <Link href={`/matches/${previousMatch.match_id}`}>上一场</Link>
           )}
           {nextMatch && <Link href={`/matches/${nextMatch.match_id}`}>下一场</Link>}
-          <Link href="/matches?status=upcoming&window=7d" className={styles.contextNavWide}>
-            查看本周其他比赛
+          {/* 已完赛比赛不该把用户送回"未来七天赛程"——那是另一个语境。
+              指向赛果视图,用户能接着看别的已完赛比赛。 */}
+          <Link
+            href={finished ? "/matches?status=finished" : "/matches?status=upcoming&window=7d"}
+            className={styles.contextNavWide}
+          >
+            {finished ? "查看更多赛果" : "查看本周其他比赛"}
           </Link>
         </span>
       </nav>
@@ -440,7 +470,7 @@ export function MatchDetailBody({
       ) : (
         <MatchPreTabs
           highlights={<HighlightsGroup idNum={idNum} detail={detail} finished={finished} />}
-          data={<DataGroup detail={detail} preview={preview} />}
+          data={<DataGroup detail={detail} preview={preview} analysis={analysis} />}
           odds={<OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />}
         />
       )}

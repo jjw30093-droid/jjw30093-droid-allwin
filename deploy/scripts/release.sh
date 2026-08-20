@@ -186,10 +186,18 @@ fix_next_permissions() {
 # 同一模式:不随 release 增删,跨 release 复用),每次发布显式拷贝进新
 # release 目录。2026-08-17 真实发现:此前所有 release 都缺这个文件,
 # model_predict 从未在生产成功跑过一次,只是没有定时器触发过才没暴露。
+# 2026-08-18 真实生产事故(首次装上 allwin-postmatch.timer 后立即暴露):
+# 裸 cp 不带 -p,新文件属组是运行本脚本的部署用户(ubuntu)的默认组,不是
+# allwin——线上服务以 User=allwin 运行,读这份文件时 PermissionError(mode
+# 640、group=ubuntu,allwin 用户不在 ubuntu 组,落到"其它用户"权限位,此处
+# 恰好是 0)。同 fix_next_permissions 的先例,显式 chgrp+chmod 到 allwin 组,
+# 不依赖 cp 的默认行为。
 copy_model_artifacts() {
   mkdir -p "$RELEASE_DIR/backend/models/artifacts"
-  cp "$SHARED_DIR/models/wdl_baseline_params.pkl" \
-     "$RELEASE_DIR/backend/models/artifacts/wdl_baseline_params.pkl"
+  local dest="$RELEASE_DIR/backend/models/artifacts/wdl_baseline_params.pkl"
+  cp "$SHARED_DIR/models/wdl_baseline_params.pkl" "$dest"
+  sudo chgrp allwin "$dest"
+  sudo chmod g+r "$dest"
 }
 
 # ── 阶段 2b:依赖 + 前端构建 + 浏览器产物门禁 ─────────────────────────
@@ -236,11 +244,23 @@ do_backup_and_migrate() {
 candidate_smoke() {
   log "候选 API 冒烟(127.0.0.1:$SMOKE_PORT)"
   local smoke_ok=0 smoke_pid=""
+  # 2026-08-20 真实生产发现:uvicorn 前面必须加 exec。子 shell 里
+  # "cd && . 文件 && VAR=val cmd" 这条链子如果不用 exec 收尾,bash 不保证把
+  # 子 shell 尾调用优化成进程替换——子 shell 会再 fork 一个真正跑 uvicorn 的
+  # 孙进程,`smoke_pid=$!` 拿到的是子 shell 自己的 PID,不是 uvicorn 的。下面
+  # `kill "$smoke_pid"` 杀的因此是子 shell,孙进程随即被重新挂到 init
+  # (PPID=1)继续占用 SMOKE_PORT,永久残留——2026-08-20 当天三次真实生产发布
+  # 都复现了同一个残留进程,且残留期间进程仍持有子 shell 继承来的 stdout/
+  # stderr,导致外层等待这次发布输出的调用方(SSH 会话/subprocess.communicate)
+  # 一并挂起,直到人工发现并手动 kill 掉这个孤儿。exec 让子 shell 进程自己被
+  # uvicorn 替换(同一个 PID,不再多 fork 一层),`kill "$smoke_pid"` 因此直接
+  # 命中真实进程,不留孤儿(见 tests/backend/test_release_rollback.py::
+  # TestCandidateSmokeProcessCleanup,用真实假 uvicorn 复现过修复前的挂起)。
   (
     cd "$RELEASE_DIR" \
     && set -a && . "$SHARED_DIR/.env" && set +a \
     && ALLWIN_DATA_DIR="$SHARED_DIR/data" \
-       "$RELEASE_DIR/.venv/bin/uvicorn" backend.api.app:app --host 127.0.0.1 --port "$SMOKE_PORT"
+       exec "$RELEASE_DIR/.venv/bin/uvicorn" backend.api.app:app --host 127.0.0.1 --port "$SMOKE_PORT"
   ) & smoke_pid=$!
   # 即便脚本本身被中途打断(Ctrl-C/SIGTERM),候选进程也不能变成孤儿常驻。
   # shellcheck disable=SC2064 -- 故意在设置时就展开 $smoke_pid,不是等 trap 触发时才展开

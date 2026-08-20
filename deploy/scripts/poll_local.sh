@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# 本地(macOS)赛前采集轮询包装脚本 —— deploy/systemd/allwin-poll.service 的
-# launchd 等价物。这台机器没有 systemd,deploy/systemd/*.timer 无法运行,
-# 用 launchd 复刻同一语义:高频触发"到期判断",真正是否请求数据源完全交给
-# backend/ingest/poll_windows.py 的 poll_state 节流决定(CLAUDE.md §6.3)。
+# 本地(macOS)赛前采集轮询包装脚本 —— deploy/systemd/allwin-odds.service +
+# allwin-lineup.service 的 launchd 等价物。PIPELINE_REDESIGN_V2 P3 起
+# nowgoal_snapshot/fotmob_snapshot 各自是独立的 5 分钟定时器(不再共用同一个
+# systemd unit/poll_wrapper 包装),这台机器没有 systemd,
+# deploy/systemd/*.timer 无法运行,用 launchd 复刻同一语义:高频触发
+# "到期判断",真正是否请求数据源完全交给 backend/ingest/poll_windows.py 的
+# poll_state 节流决定(CLAUDE.md §6.3)。
+#
+# 两个任务各自独立调用、各自的退出码互不影响对方是否被尝试——两条独立的
+# shell 调用天然不会像 systemd 单条 ExecStart= 顺序执行那样"一个非零退出
+# 阻止下一条",不需要再用 group_runner 那种"顺序执行+汇总退出码"包装
+# (那是给同一个 systemd unit 里塞多个任务时才需要的补救)。
 #
 # 触发间隔特意设为 60 秒而不是 300 秒:is_due() 用 elapsed >= interval_seconds
 # 判定,mark_polled() 存的是"本轮启动后"的时刻;若触发间隔本身就等于节流阈值
@@ -11,7 +19,6 @@
 # 阈值不变,才能让节流阈值本身就是精确值,不被触发抖动污染。
 #
 # 用法(手动一次性调用,便于验证):bash deploy/scripts/poll_local.sh
-# launchd 用法见同目录 com.allwin.poll.plist。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -35,6 +42,9 @@ PY="$ROOT/.venv/bin/python"
 {
   echo "== $(date -u +%Y-%m-%dT%H:%M:%SZ) poll_local tick =="
   rc=0
-  "$PY" -m backend.worker.poll_wrapper || rc=$?
-  echo "-- exit=$rc --"
+  "$PY" -m backend.worker.runner --job nowgoal_snapshot || rc=$?
+  echo "-- nowgoal_snapshot exit=$rc --"
+  rc2=0
+  "$PY" -m backend.worker.runner --job fotmob_snapshot || rc2=$?
+  echo "-- fotmob_snapshot exit=$rc2 --"
 } >> "$LOG_FILE" 2>&1

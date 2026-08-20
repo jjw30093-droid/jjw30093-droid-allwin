@@ -72,6 +72,118 @@ def test_odds_fresh_init(tmp_path):
     assert ODDS_TABLES <= _tables(db)
 
 
+def test_odds_fresh_init_includes_lineup_type_column(tmp_path):
+    """PIPELINE_REDESIGN_V2 P2:全新库也要有可索引的 lineup_type 列(不是只有
+    升级场景才补)。"""
+    db = tmp_path / "odds.db"
+    migrate.apply_all("odds", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(bronze_fm_lineup_snap)")}
+    assert "lineup_type" in cols
+    idx_names = {r[1] for r in conn.execute("PRAGMA index_list(bronze_fm_lineup_snap)")}
+    assert "idx_fm_lineup_type" in idx_names
+    conn.close()
+
+
+def test_lineup_snap_type_column_and_backfill(tmp_path):
+    """PIPELINE_REDESIGN_V2 P2:bronze_fm_lineup_snap.lineup_type 落成可索引列,
+    从既有行的 payload_json 回填,不为无法确定的行编造默认值。
+
+    真实分布(2026-08-17 实测,data/odds.db 228 行):payload 缺 lineup_type
+    键=154、lastStarting11=57、predicted(source=enetpulse)=16、
+    standard(source=null)=1。这里各取一条代表性行(payload_json 结构原样取自
+    真实抓取样本)验证回填口径,并证明重跑不改已回填的值、不为缺失键的行
+    编造默认值。
+    """
+    staged = tmp_path / "staged_migrations"
+    staged.mkdir()
+    src = migrate.MIGRATIONS_ROOT / "odds"
+    pre_0009 = [(v, name, path) for v, name, path in migrate.migration_files(src) if v <= 8]
+    assert pre_0009 and pre_0009[-1][0] == 8, "0008 必须存在,否则本升级场景前提不成立"
+    for _, name, path in pre_0009:
+        shutil.copyfile(path, staged / name)
+
+    db = tmp_path / "odds.db"
+    migrate.apply_all("odds", db_file=db, migrations_dir=staged, quiet=True)
+
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(bronze_fm_lineup_snap)")}
+    assert "lineup_type" not in cols  # 升级场景前提:0009 之前确实没有这列
+
+    ROWS = [
+        # (fotmob_match_id, payload_json, expected lineup_type after backfill)
+        (9001,
+         '{"away":{"formation":"3-4-3","starters":[],"subs":[],"team_id":2},'
+         '"home":{"formation":"4-1-4-1","starters":[],"subs":[],"team_id":1}}',
+         None),
+        (9002,
+         '{"away":{"formation":"3-4-2-1","starters":[],"subs":[],"team_id":2},'
+         '"home":{"formation":"4-4-2","starters":[],"subs":[],"team_id":1},'
+         '"lineup_type":"lastStarting11","source":"lastStartingLineups"}',
+         "lastStarting11"),
+        (9003,
+         '{"away":{"formation":"4-5-1","starters":[],"subs":[],"team_id":2},'
+         '"home":{"formation":"3-4-3","starters":[],"subs":[],"team_id":1},'
+         '"lineup_type":"predicted","source":"enetpulse"}',
+         "predicted"),
+        (9004,
+         '{"away":{"formation":null,"starters":[],"subs":[],"team_id":2},'
+         '"home":{"formation":null,"starters":[],"subs":[],"team_id":1},'
+         '"lineup_type":"standard","source":null}',
+         "standard"),
+    ]
+    for mid, payload_json, _expected in ROWS:
+        conn.execute(
+            """INSERT INTO bronze_fm_lineup_snap
+               (fotmob_match_id, payload_json, payload_hash, source_updated_at,
+                observed_at, ingested_at, poll_run_id)
+               VALUES (?, ?, ?, NULL, '2026-08-04T00:00:00Z', '2026-08-04T00:00:01Z', 'seed')""",
+            (mid, payload_json, f"hash-{mid}"),
+        )
+    conn.commit()
+    conn.close()
+
+    applied = migrate.apply_all("odds", db_file=db, quiet=True)
+    # 不带 migrations_dir 时从真实目录(非 staged 副本)接着应用——staged 只到
+    # 0008,真实目录此时还有 0009(lineup_type)与 0010(PIPELINE_REDESIGN_V2 P4
+    # 的 postmatch_retry_state,与本测试主题无关但同样待应用)两个未应用版本。
+    assert applied == 2
+
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(bronze_fm_lineup_snap)")}
+    assert "lineup_type" in cols
+
+    def _lineup_types():
+        return {
+            r[0]: r[1]
+            for r in conn.execute(
+                "SELECT fotmob_match_id, lineup_type FROM bronze_fm_lineup_snap"
+                " WHERE poll_run_id='seed'"
+            )
+        }
+
+    expected = {mid: exp for mid, _, exp in ROWS}
+    assert _lineup_types() == expected
+
+    # 幂等性 1:直接重跑同一条回填 UPDATE(不经过 migration ledger)——已回填的
+    # 行不能被改写,仍然缺失键的行继续是 NULL(不能第二次跑就冒出编造值),不报错。
+    before = _lineup_types()
+    conn.execute(
+        "UPDATE bronze_fm_lineup_snap SET lineup_type = json_extract(payload_json, '$.lineup_type')"
+        " WHERE lineup_type IS NULL"
+    )
+    conn.commit()
+    assert _lineup_types() == before
+
+    # 幂等性 2:migration runner 自身重跑(走 ledger)不重复应用、不报错。
+    assert migrate.apply_all("odds", db_file=db, quiet=True) == 0
+    assert _lineup_types() == before
+
+    idx_names = {r[1] for r in conn.execute("PRAGMA index_list(bronze_fm_lineup_snap)")}
+    assert "idx_fm_lineup_type" in idx_names
+    conn.close()
+
+
 def test_second_run_idempotent(tmp_path):
     db = tmp_path / "platform.db"
     first = migrate.apply_all("platform", db_file=db, quiet=True)

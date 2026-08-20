@@ -1,0 +1,12 @@
+# 每 5 分钟触发一次 FotMob 阵容/伤停到期判断(allwin-lineup.service)。
+# 真实请求节奏由 poll_state 节流(CADENCE_FOTMOB_LINEUP),进程重启不重复采集。
+[Unit]
+Description=Run allwin FotMob lineup/sideline snapshot every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
