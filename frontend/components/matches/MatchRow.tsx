@@ -10,7 +10,6 @@ import { buildMatchHref } from "@/lib/match-links";
 import { LocalTime } from "./LocalTime";
 import { WinProbabilityBar } from "./WinProbabilityBar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { syncStateLabel } from "@/lib/product-status";
 import { STATUS_ZH } from "./zh";
 import styles from "./MatchRow.module.css";
 
@@ -72,54 +71,11 @@ export function MatchRow({
         />
         <span>{match.away.name}</span>
       </span>
-      {/* 内部字段名(MARKET_BASELINE)、观测点数、统一模糊标签不再逐行输出;
-          STALE 保留可行动的醒目提示;UNAVAILABLE 曾被这个条件静默吞掉——
-          95/95 场 upcoming 比赛全部 UNAVAILABLE 却在列表上完全看不到提示,
-          现在两者都可见,但 UNAVAILABLE 走更克制的次要文字样式(见 CSS),
-          不做成和 STALE 一样醒目的警告。 */}
-      {(match.sync_state === "STALE" || match.sync_state === "UNAVAILABLE") && (
-        <span className={styles.syncLine} data-state={match.sync_state}>
-          <b>{syncStateLabel(match.sync_state)}</b>
-          {match.sync_state === "STALE" && (
-            <>
-              {match.data_updated_at && (
-                <>
-                  {" · 更新于 "}
-                  <LocalTime iso={match.data_updated_at} />
-                </>
-              )}
-              {` · ${match.next_planned_sync_at ? "等待计划采集" : "正在等待采集恢复"}`}
-            </>
-          )}
-        </span>
-      )}
-      {/* 赔率覆盖徽标(D8):区分完整走势与两点摘要,不再把两档混为一谈;
-          tier 未计算(联赛 fixtures 端点)或 none 时不渲染,保持行的干净。
-          full_timeline 且 odds_freshness_state=STALE 时不能无条件宣称
-          "完整走势"——那是旧数据,必须带过期限定语和最后观测时间;
-          UNAVAILABLE 或字段缺失(旧后端未下发)维持原文案,不在本次范围内。 */}
-      {(match.odds_coverage_tier === "full_timeline" ||
-        match.odds_coverage_tier === "open_close_only") && (
-        <span className={styles.oddsTier} data-tier={match.odds_coverage_tier}>
-          {match.odds_coverage_tier === "full_timeline" &&
-          match.odds_freshness_state === "STALE" ? (
-            <>
-              赔率:完整走势(已过期
-              {match.odds_last_observed_at && (
-                <>
-                  {" · 最后观测 "}
-                  <LocalTime iso={match.odds_last_observed_at} />
-                </>
-              )}
-              )
-            </>
-          ) : match.odds_coverage_tier === "full_timeline" ? (
-            "赔率:完整走势"
-          ) : (
-            "赔率:初盘与临场"
-          )}
-        </span>
-      )}
+      {/* 2026-08-20 站长要求删除:sync_state("部分数据暂不可用"等)与
+          odds_coverage_tier("赔率:完整走势"等)两行内部运维口径文案——两句
+          话字面上容易读成互相矛盾("数据不可用"紧跟"赔率完整"),对普通用户
+          没有实际信息量,直接从行内移除;字段本身仍在 MatchSummary 里,
+          只是这个组件不再消费。 */}
       {match.win_probability && (
         <span className={styles.probRow}>
           <WinProbabilityBar probability={match.win_probability} compact />
