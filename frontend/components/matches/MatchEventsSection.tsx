@@ -5,7 +5,7 @@
  */
 
 import type { MatchReportResponse } from "@/lib/api-v1";
-import { CARD_ZH, MATCH_EVENT_ZH } from "@/components/matches/zh";
+import { CARD_ZH, HALF_KIND_ZH, MATCH_EVENT_ZH } from "@/components/matches/zh";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import styles from "./MatchEventsSection.module.css";
 
@@ -33,6 +33,7 @@ function eventText(e: ReportEvent): string {
     case "Goal":
       return [
         e.player_name ?? "",
+        e.is_own_goal ? "(乌龙球)" : "",
         e.assist_player_name ? `(助攻:${e.assist_player_name})` : "",
       ].filter(Boolean).join(" ");
     case "Card":
@@ -69,9 +70,14 @@ export function MatchEventsSection({
         <ol className={styles.timeline}>
           {events.map((e) => {
             if (e.event_type === "Half") {
+              // half_kind 区分中场(HT)/全场(FT)/加时赛结束(AET)——此前
+              // 硬编码显示"半场",终场那一行也写成"半场",与页头"全场"比分
+              // 自相矛盾。来源未给出可辨识值时(理论上不会发生,全库
+              // halfStrShort 无 NULL)用中性的"阶段结束",不再猜是哪一种。
               return (
                 <li key={e.event_index} className={styles.separator}>
-                  半场{e.home_score != null && e.away_score != null
+                  {HALF_KIND_ZH[e.half_kind ?? ""] ?? "阶段结束"}
+                  {e.home_score != null && e.away_score != null
                     ? ` ${e.home_score}–${e.away_score}`
                     : ""}
                 </li>
@@ -104,6 +110,11 @@ export function MatchEventsSection({
             );
           })}
         </ol>
+      )}
+      {events.some((e) => e.is_own_goal) && (
+        <p className={styles.note}>
+          乌龙球按受益方(得分的一队)归队;球员名是把球踢进本方球门的对方球员。
+        </p>
       )}
     </section>
   );

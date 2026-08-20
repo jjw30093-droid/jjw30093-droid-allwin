@@ -92,6 +92,15 @@ export const CARD_ZH: Record<string, string> = {
   YellowRed: "两黄变红",
 };
 
+/** fact_match_events 的 Half 标记细分(2026-08-21 修复:此前时间线终场
+ * 分隔行也硬编码显示"半场",与全场结束互相矛盾)。"全场"是本站既有词汇
+ * (MatchHeaderFinished.tsx 的比分下方就写"全场")。 */
+export const HALF_KIND_ZH: Record<string, string> = {
+  HT: "中场",
+  FT: "全场",
+  AET: "加时赛结束",
+};
+
 export const SHOT_OUTCOME_ZH: Record<string, string> = {
   Goal: "进球",
   AttemptSaved: "被扑出",

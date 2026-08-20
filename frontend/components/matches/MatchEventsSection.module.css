@@ -117,3 +117,9 @@
     display: none; /* 窄屏砍列:左右边框色已区分主客,不缩字号 */
   }
 }
+
+.note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
