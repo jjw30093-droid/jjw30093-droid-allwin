@@ -1,9 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { fetchLeagueNameZh, fetchWdlPredictions, type WdlLiveMatch, type WdlMatch } from "@/lib/api";
+import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { buildMatchHref } from "@/lib/match-links";
 import { ApiError } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
+import { formatDateZh as formatDateZhShared } from "@/components/matches/zh";
 import styles from "./wdl-predictions.module.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  return leagueSectionMetadata(id, "WDL 概率卡", "赛前主胜/平局/客胜概率卡片。");
+}
 
 // 两种 JSON 形状物理上互斥(见 lib/api.ts 顶部说明;2026-08-16 起后端已把
 // 三态 upcoming/live+locked/live+unlocked 简化为两态 upcoming/live,不再有
@@ -30,12 +42,14 @@ function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
+/** 本 legacy DTO(LegacyWdlUpcomingMatch/LegacyWdlLiveMatch)只有 UTC 自然日
+ * `date` 字段,没有精确 kickoff_at_utc——不像比赛详情页那样能换算北京自然日
+ * (见 components/matches/zh.ts::matchDayZh 的说明),所以这里只复用共享的
+ * 纯格式化 formatDateZh(不再维护第二份字符串切片实现),不宣称这是精确的
+ * 北京时间开幕日。 */
 function formatDateZh(dateStr: string | null): string {
   if (!dateStr) return "";
-  const parts = dateStr.split("-");
-  if (parts.length !== 3) return dateStr;
-  const [, m, d] = parts;
-  return `${parseInt(m, 10)}月${parseInt(d, 10)}日`;
+  return formatDateZhShared(dateStr);
 }
 
 // 在 7 天有效期内(availability='live')且已算出完整概率:呈现"概率分布"

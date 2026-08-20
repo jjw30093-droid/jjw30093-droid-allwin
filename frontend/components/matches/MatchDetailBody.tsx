@@ -53,7 +53,7 @@ import {
   GoalkeeperSection,
   KeyPlayersSection,
 } from "@/components/matches/MatchDataModules";
-import { formatDateZh } from "@/components/matches/zh";
+import { matchDayZh } from "@/components/matches/zh";
 import styles from "@/app/matches/[matchId]/match-detail.module.css";
 
 export type AnalysisBundle = GetJson<"/api/v1/matches/{match_id}/analysis">;
@@ -305,7 +305,17 @@ function OddsGroup({
             <div>
               <dt>赛季</dt>
               <dd>
-                {m.season} 赛季 · 比赛日 {formatDateZh(m.date_utc)}
+                {(() => {
+                  const day = matchDayZh(m.kickoff_at_utc, m.date_utc);
+                  return (
+                    <>
+                      {m.season} 赛季 · 比赛日 {day.text}
+                      {day.isBeijing
+                        ? "(按北京时间的开球日计)"
+                        : "(来源只提供了比赛日期、没有开球时刻,此处按 UTC 自然日显示,不折算北京时间)"}
+                    </>
+                  );
+                })()}
               </dd>
             </div>
             {finished && (

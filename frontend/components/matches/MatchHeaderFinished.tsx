@@ -7,12 +7,13 @@ import { FollowButton } from "@/components/matches/FollowButton";
 import { LeagueBadge } from "@/components/matches/LeagueBadge";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { LEAGUE_ZH, formatDateZh } from "@/components/matches/zh";
+import { LEAGUE_ZH, matchDayZh } from "@/components/matches/zh";
 import type { MatchDetailResponse } from "@/lib/api-v1";
 import styles from "./MatchHeaderFinished.module.css";
 
 export function MatchHeaderFinished({ detail }: { detail: MatchDetailResponse }) {
   const match = detail.match;
+  const day = matchDayZh(match.kickoff_at_utc, match.date_utc);
 
   return (
     <header className={styles.card}>
@@ -52,7 +53,7 @@ export function MatchHeaderFinished({ detail }: { detail: MatchDetailResponse })
       </div>
 
       <p className={styles.dateLine}>
-        {match.season} 赛季 · {formatDateZh(match.date_utc)}
+        {match.season} 赛季 · {day.text}{day.isBeijing ? "(北京时间)" : "(UTC 日期)"}
         {detail.data_updated_at && (
           <>
             {" · 数据更新于 "}

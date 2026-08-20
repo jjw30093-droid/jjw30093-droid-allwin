@@ -274,6 +274,22 @@ export function beijingDateKey(iso: string): string | null {
   return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
 }
 
+/** 比赛日展示日期。有精确 kickoff 时换算成**北京自然日**;来源只给了日期
+ * (kickoff_at_utc 为 NULL,§6.2.1 的合法情况)时如实返回 UTC 自然日,并用
+ * isBeijing=false 告诉调用方——绝不凭空 +8h 造一个北京日。措辞留给调用方
+ * (页头要简洁、技术细节区可以啰嗦),这里只负责"换算 + 如实告知换没换成"。
+ * 判据与 MatchListLive.tsx 的 matchDateKey() 完全一致,不另造第二套。 */
+export function matchDayZh(
+  kickoffAtUtc: string | null | undefined,
+  dateUtc: string,
+): { text: string; isBeijing: boolean } {
+  if (kickoffAtUtc) {
+    const key = beijingDateKey(kickoffAtUtc);
+    if (key) return { text: formatDateZh(key), isBeijing: true };
+  }
+  return { text: formatDateZh(dateUtc), isBeijing: false };
+}
+
 const WEEKDAY_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 /** "2026-08-16" → "8月16日 周日"——/matches 列表按天分组的小标题。

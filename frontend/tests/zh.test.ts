@@ -4,6 +4,7 @@ import {
   formatBeijingDateTime,
   formatBeijingZh,
   formatDateHeadingZh,
+  matchDayZh,
   MARKET_FIELDS,
   MARKET_ZH,
 } from "@/components/matches/zh";
@@ -41,6 +42,39 @@ describe("北京时间格式化", () => {
 
   it("无时区后缀的裸时间戳按 UTC 处理(与后端 normalize_utc_iso 约定一致)", () => {
     expect(formatBeijingDateTime("2026-08-07T17:00:00")).toBe("2026-08-08 01:00");
+  });
+});
+
+// 2026-08 修复:比赛详情页曾直接用 date_utc(UTC 自然日)当"比赛日"展示,
+// 19:00Z 开球换算成北京时间已经是次日,导致页头和"数据来源与说明"折叠区
+// 显示两个不同日期。matchDayZh 是唯一正确入口,判据与
+// MatchListLive.tsx::matchDateKey() 完全一致。
+describe("matchDayZh(比赛日展示,§6.2.1 精确度纪律)", () => {
+  it("精确 kickoff 跨天时换算成北京自然日,isBeijing=true", () => {
+    // 2026-08-10T19:00:00Z = 北京 2026-08-11 03:00,与 date_utc(8/10)不同天,
+    // 真实复现过的样本形状(赫尔城 vs 曼联同类问题)。
+    const r = matchDayZh("2026-08-10T19:00:00Z", "2026-08-10");
+    expect(r).toEqual({ text: "2026年8月11日", isBeijing: true });
+  });
+
+  it("精确 kickoff 不跨天时仍走换算路径", () => {
+    const r = matchDayZh("2026-08-08T02:30:00Z", "2026-08-08");
+    expect(r).toEqual({ text: "2026年8月8日", isBeijing: true });
+  });
+
+  it("kickoff_at_utc 为 null(§6.2.1 合法情况)回退 date_utc,isBeijing=false——不得凭空 +8h", () => {
+    const r = matchDayZh(null, "2026-08-21");
+    expect(r).toEqual({ text: "2026年8月21日", isBeijing: false });
+  });
+
+  it("kickoff_at_utc 缺省(undefined)同样回退 date_utc", () => {
+    const r = matchDayZh(undefined, "2026-08-21");
+    expect(r).toEqual({ text: "2026年8月21日", isBeijing: false });
+  });
+
+  it("kickoff_at_utc 是 date-only 字符串(防御性,理论上不应发生)时同样回退,不硬换算", () => {
+    const r = matchDayZh("2026-08-21", "2026-08-21");
+    expect(r).toEqual({ text: "2026年8月21日", isBeijing: false });
   });
 });
 
