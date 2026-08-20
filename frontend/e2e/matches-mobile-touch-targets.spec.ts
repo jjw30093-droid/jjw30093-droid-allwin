@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test";
  * 至少 44×44px。真实回归(改前):
  * - MatchRow.module.css `.syncLine[data-state="UNAVAILABLE"]` 显式写死
  *   font-size:11px,低于 12px 下限;
- * - matches.module.css 的筛选 chip(时间/内容/联赛)、`.filterBtn`
+ * - matches.module.css 的筛选 chip(时间/联赛)、`.filterBtn`
  *   (筛选/搜索提交按钮)、`.moreFiltersSummary`("更多筛选"折叠触发器)
  *   触控区实测远小于 44px(chip ≈31.5px 高,summary ≈19.5px 高)。
  *
@@ -58,7 +58,7 @@ test("MatchRow: 主客队名与开球时间(核心信息)不低于 14px 正文�
   expect(awaySize).toBeGreaterThanOrEqual(14);
 });
 
-test('/matches 筛选 chip("时间/内容/联赛")触控区至少 44×44px', async ({
+test('/matches 筛选 chip("时间/联赛")触控区至少 44×44px', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });

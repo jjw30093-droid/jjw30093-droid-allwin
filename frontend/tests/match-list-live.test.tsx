@@ -1,12 +1,13 @@
 /**
  * /matches 列表页移动端信息架构重排(P3.B,2026-08-16)。
  *
- * 真实回归:390px 视口下所有筛选控件(状态/时间/内容/联赛/赛季/日期/球队搜索)
+ * 真实回归:390px 视口下所有筛选控件(状态/时间/联赛/赛季/日期/球队搜索)
  * 默认全部展开摊平渲染,第一场比赛要滑到 y≈495px 才出现。
+ * (2026-08-20:「内容」筛选组——全部/已有分析/已有赔率——已移除,不再展示。)
  *
  * 关键断言:
  * - 低频筛选(状态、赛季、日期、球队搜索)收进默认折叠的 <details> "更多筛选",
- *   不占首屏空间;高频筛选(时间、内容、联赛)留在主筛选行始终可见;
+ *   不占首屏空间;高频筛选(时间、联赛)留在主筛选行始终可见;
  * - 折叠区展开后提交筛选仍是纯 GET 表单 + hidden 字段回传其它已选筛选值
  *   (无 JS 也可用这个既有特性不能丢);
  * - 比赛行按开球日期(北京时间,缺失 kickoff 时退回 date_utc)分组,组间插入
@@ -132,16 +133,15 @@ describe("更多筛选折叠(低频筛选默认不占首屏空间)", () => {
     expect(scoped.getByLabelText("球队")).not.toBeNull();
   });
 
-  it("时间/内容/联赛三组主筛选留在 details 之外,始终可见", () => {
+  it("时间/联赛两组主筛选留在 details 之外,始终可见(2026-08-20 移除「内容」筛选)", () => {
     const { container } = renderList({});
     const details = container.querySelector("details")!;
     expect(within(container).getByText("时间")).not.toBeNull();
     expect(within(container).getByText("联赛")).not.toBeNull();
-    expect(within(container).getByText("内容")).not.toBeNull();
-    // 三组主筛选标签本身不应该出现在 details 内部
+    expect(within(container).queryByText("内容")).toBeNull();
+    // 两组主筛选标签本身不应该出现在 details 内部
     expect(within(details).queryByText("时间")).toBeNull();
     expect(within(details).queryByText("联赛")).toBeNull();
-    expect(within(details).queryByText("内容")).toBeNull();
   });
 
   it("已经显式选择了更多筛选里的条件(如 status=finished)时,details 默认展开,不把用户已选筛选藏起来", () => {

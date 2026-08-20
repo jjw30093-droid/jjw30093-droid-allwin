@@ -210,27 +210,6 @@ export function MatchListLive({
           ))}
         </div>
         <div className={styles.chipRow}>
-          <span className={styles.chipLabel}>内容</span>
-          <Link
-            href={buildMatchesHref(filters, { content: undefined, page: 1 })}
-            className={content == null ? styles.chipActive : styles.chip}
-          >
-            全部
-          </Link>
-          <Link
-            href={buildMatchesHref(filters, { content: "analysis", page: 1 })}
-            className={content === "analysis" ? styles.chipActive : styles.chip}
-          >
-            已有分析
-          </Link>
-          <Link
-            href={buildMatchesHref(filters, { content: "odds", page: 1 })}
-            className={content === "odds" ? styles.chipActive : styles.chip}
-          >
-            已有赔率
-          </Link>
-        </div>
-        <div className={styles.chipRow}>
           <span className={styles.chipLabel}>联赛</span>
           <Link
             href={buildMatchesHref(filters, { league: undefined, page: 1 })}
