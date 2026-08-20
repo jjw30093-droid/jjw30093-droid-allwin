@@ -46,9 +46,11 @@
 
 .stalePill {
   padding: 2px 8px;
-  border: 1px solid var(--loss);
+  /* "数据已过期"是 STALE(等待更新),不是真实错误——CLAUDE.md §11.2 用橙,
+   * 与 app/page.module.css 首页新鲜度提示同一条规则、同一次修正。 */
+  border: 1px solid var(--pending);
   border-radius: var(--r-pill);
-  color: var(--loss);
+  color: var(--pending);
   font-size: 10.5px;
   font-weight: 700;
   white-space: nowrap;

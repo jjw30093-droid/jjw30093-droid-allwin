@@ -750,18 +750,30 @@
   gap: 4px;
 }
 
-/* FRESH/STALE/UNAVAILABLE 三态指示,颜色语义与 MatchRow.module.css
- * 的 .syncLine[data-state] 保持一致(同一套 sync_state 词汇,同一套配色)。 */
+/* 新鲜度四态配色,语义按 CLAUDE.md §11.2:
+ *   绿=已更新 / 橙=等待更新 / 红=真实不可用 / 灰=辅助说明(无 state)。
+ * 2026-08-21 修正两处:STALE 此前是 --loss(把"在等"说成"出错",§11.2 逐字
+ * 点名不许用红色),UNAVAILABLE 此前是灰色(真实不可用才是红色的正当场景)——
+ * 两者相对规则是互换的。基础规则设成灰而不是绿,是因为 data-state 为 null
+ * (syncStateLabel 的"赛前数据"分支)时 [data-state=...] 属性选择器不命中,
+ * 此前 fall through 到本规则被渲染成绿色,宣称了来源从未断言过的新鲜度。
+ * 注:原注释"与 MatchRow.module.css 的 .syncLine[data-state] 保持一致"已
+ * 过时——那条规则随 MatchRow.tsx 删除 sync_state 提示一并消失,本文件现在
+ * 是这三个状态唯一的样式点。 */
 .freshnessState {
+  color: var(--ink-3);
+}
+
+.freshnessItem[data-state="FRESH"] .freshnessState {
   color: var(--win);
 }
 
 .freshnessItem[data-state="STALE"] .freshnessState {
-  color: var(--loss);
+  color: var(--pending);
 }
 
 .freshnessItem[data-state="UNAVAILABLE"] .freshnessState {
-  color: var(--ink-3);
+  color: var(--loss);
 }
 
 @media (min-width: 900px) {

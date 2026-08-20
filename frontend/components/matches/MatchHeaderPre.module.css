@@ -49,8 +49,10 @@
 }
 
 .stalePill {
-  border-color: var(--loss);
-  color: var(--loss);
+  /* "数据已过期"是 STALE(等待更新),不是真实错误——CLAUDE.md §11.2 用橙,
+   * 与 app/page.module.css 首页新鲜度提示同一条规则、同一次修正。 */
+  border-color: var(--pending);
+  color: var(--pending);
 }
 
 .matchup {

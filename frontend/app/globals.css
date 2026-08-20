@@ -48,6 +48,9 @@
   --win: #287851;
   --loss: #b83b2d;
   --draw: #706c64;
+  /* 等待更新 / 临近开球(CLAUDE.md §11.2 的"橙")。此前全站没有橙色 token,
+   * "数据等待刷新""数据已过期"被迫用 --loss,把"在等"说成了"出错"。 */
+  --pending: #9c5510;
   /* league qualification (real FotMob qual_color) */
   --q-ucl: #2ad572;
   --q-uel: #0046a7;
@@ -112,6 +115,7 @@ html[data-theme="dark"] {
   --win: #68c994;
   --loss: #ef7865;
   --draw: #aaa79f;
+  --pending: #f0a23c;
   --rate-elite: #45b9af;
   --rate-good: #39716f;
   --rate-mid: #173039;
