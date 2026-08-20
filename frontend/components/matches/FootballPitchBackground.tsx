@@ -14,15 +14,19 @@
  * 改成贴边界画一条加粗线代替,不牺牲对齐正确性。PitchFormation 用这个朝向
  * (两队合画在一块横向球场上,主队攻右、客队攻左)。
  *
- * `orientation="portrait"`:viewBox "0 0 68 105",单队竖版全场(球门在 y=0
- * 一端,门将在这一端;若整队画在球场另一端见下)。ProjectedLineupSection
- * 用这个朝向(单队分行摆位,不含 ECharts,没有坐标对齐约束,可以自由选真实
- * 竖版比例——因此容器的 aspect-ratio 也应改成真实的 68/105,不能沿用旧的
- * 近似值 5/7,否则 SVG 的 preserveAspectRatio="none" 会把球场轻微压扁/拉宽)。
- * 禁区弧线两个方向的 sweep-flag 不是把 landscape 的 x/y 直接对调就对——
- * x↔y 互换是一次镜像(手性反转),原样搬会让罚球弧朝禁区里面鼓包而不是朝外,
- * 已用独立脚本逐点模拟验证过 near/far 两端弧线的真实落点(而不是仅凭手算
- * 三角函数),下方 sweep 值均已验证正确。
+ * `orientation="portrait"`:viewBox "0 52.5 68 52.5"——真实半场(2026-08-20
+ * 由全场改半场:ProjectedLineupSection 一次只画一队,球场另一端(禁区/球门)
+ * 从来没有球员站在那,画出来是纯装饰,站长要求改成真实半场,参照球队战术板
+ * 惯例)。裁到只保留禁区/小禁区/罚球点/罚球弧/球门在 y=105 这一端(门将真正
+ * 所在的那一端,见 ProjectedLineupSection.tsx 的 `column-reverse` 布局——
+ * 门将天然贴容器底部,与这一端的球门对齐),半场线 + 半个中圈落在 viewBox
+ * 顶边——与真实半场战术图的观感一致(禁区在下,中线在上)。容器的
+ * aspect-ratio 应为真实的 68/52.5(≈1.295:1,比全场版更宽更矮),不能沿用
+ * 全场时代的 68/105。
+ * 禁区弧线的 sweep-flag 不是把 landscape 的 x/y 直接对调就对——x↔y 互换是
+ * 一次镜像(手性反转),原样搬会让罚球弧朝禁区里面鼓包而不是朝外,已用独立
+ * 脚本逐点模拟验证过真实落点(而不是仅凭手算三角函数),下方 sweep 值已验证
+ * 正确。
  *
  * 真实比例来源(与 miaomiaodi.cc `FormationPitch.tsx`/`FotmobFinalClient.tsx`
  * 的 PitchLines、miaomiaodi.vip `InteractiveShotMap.tsx` 独立核对一致):
@@ -146,41 +150,32 @@ function LandscapePitch() {
   );
 }
 
-/** 竖版单队全场(viewBox "0 0 68 105")。球门分别在 y=0("近端")与 y=105
- * ("远端"),两端禁区互为上下镜像。禁区弧线的 sweep-flag 不是把 landscape
- * 直接转置——转置是镜像、会反转手性,近端/远端各自的 sweep 值都用独立脚本
- * 逐点模拟验证过朝外鼓包(而不是仅凭三角函数手算),见模块顶部注释。 */
+/** 竖版单队半场(viewBox "0 52.5 68 52.5")。只画球门真正所在的 y=105 这一端
+ * ——半场线 + 半个中圈落在顶边,禁区/小禁区/罚球点/罚球弧/球门在底边,四个
+ * 角球弧只保留 y=105 这一端的两个(y=0 端完全在 viewBox 之外,画出来也不会
+ * 显示,不留这段死代码)。禁区弧线的 sweep-flag 不是转置 landscape 的坐标就
+ * 对——转置是镜像、会反转手性,已用独立脚本逐点模拟验证过朝外鼓包(而不是
+ * 仅凭三角函数手算),见模块顶部注释。 */
 function PortraitPitch() {
   return (
     <svg
-      viewBox="0 0 68 105"
+      viewBox="0 52.5 68 52.5"
       preserveAspectRatio="none"
       aria-hidden
       style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
     >
       {mowStripesPortrait()}
 
-      {/* 外边界 */}
+      {/* 外边界(只有左右两条边线 + 底边球门线落在可见范围内,上边是半场线,
+          不是真实球场边界,所以不额外画一条容易和半场线混淆的横线) */}
       <rect x={0} y={0} width={68} height={105} fill="none" stroke={LINE} strokeWidth={0.4} />
       {/* 半场线 */}
       <line x1={0} y1={52.5} x2={68} y2={52.5} stroke={LINE} strokeWidth={0.4} />
-      {/* 中圈 + 中点 */}
+      {/* 中圈(半场只露出朝向禁区的那半个弧) + 中点 */}
       <circle cx={34} cy={52.5} r={ARC_R} fill="none" stroke={LINE} strokeWidth={0.4} />
       <circle cx={34} cy={52.5} r={0.35} fill={LINE} />
 
-      {/* 近端禁区(球门在 y=0) */}
-      <rect x={BOX_Y0} y={0} width={BOX_H} height={BOX_W} fill="none" stroke={LINE} strokeWidth={0.4} />
-      <rect x={GOAL_BOX_Y0} y={0} width={GOAL_BOX_H} height={GOAL_BOX_W} fill="none" stroke={LINE} strokeWidth={0.4} />
-      <circle cx={34} cy={SPOT_X} r={0.35} fill={LINE} />
-      <path
-        d={`M ${ARC_X1.toFixed(3)} ${BOX_W} A ${ARC_R} ${ARC_R} 0 0 1 ${ARC_X0.toFixed(3)} ${BOX_W}`}
-        fill="none"
-        stroke={LINE}
-        strokeWidth={0.4}
-      />
-      <line x1={GOAL_Y0} y1={0} x2={GOAL_Y1} y2={0} stroke={LINE} strokeWidth={1.3} strokeLinecap="round" />
-
-      {/* 远端禁区(球门在 y=105,近端上下镜像) */}
+      {/* 禁区(球门在 y=105) */}
       <rect x={BOX_Y0} y={105 - BOX_W} width={BOX_H} height={BOX_W} fill="none" stroke={LINE} strokeWidth={0.4} />
       <rect x={GOAL_BOX_Y0} y={105 - GOAL_BOX_W} width={GOAL_BOX_H} height={GOAL_BOX_W} fill="none" stroke={LINE} strokeWidth={0.4} />
       <circle cx={34} cy={105 - SPOT_X} r={0.35} fill={LINE} />
@@ -192,9 +187,7 @@ function PortraitPitch() {
       />
       <line x1={GOAL_Y0} y1={105} x2={GOAL_Y1} y2={105} stroke={LINE} strokeWidth={1.3} strokeLinecap="round" />
 
-      {/* 四角角球弧 */}
-      <path d="M 1 0 A 1 1 0 0 1 0 1" fill="none" stroke={LINE_SOFT} strokeWidth={0.35} />
-      <path d="M 67 0 A 1 1 0 0 0 68 1" fill="none" stroke={LINE_SOFT} strokeWidth={0.35} />
+      {/* 两个角球弧(y=105 这一端) */}
       <path d="M 1 105 A 1 1 0 0 0 0 104" fill="none" stroke={LINE_SOFT} strokeWidth={0.35} />
       <path d="M 67 105 A 1 1 0 0 1 68 104" fill="none" stroke={LINE_SOFT} strokeWidth={0.35} />
     </svg>

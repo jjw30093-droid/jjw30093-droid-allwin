@@ -109,10 +109,11 @@
 .pitch {
   position: relative;
   width: 100%;
-  /* 真实 FIFA 竖版比例 68:105(宽:长),不再是旧的近似值 5:7——球场底图
-   * 换成真实比例 SVG 后,容器比例也应跟着改成真实值,否则
-   * preserveAspectRatio="none" 会把球场轻微压扁/拉宽。 */
-  aspect-ratio: 68 / 105;
+  /* 真实 FIFA 半场比例 68:52.5(宽:长)——2026-08-20 由全场改半场(单队
+   * 从来不会同时出现在球场两端,画全场只是把另一端的空禁区当装饰),容器
+   * 比例跟着 FootballPitchBackground 的新 viewBox "0 52.5 68 52.5" 改,
+   * 否则 preserveAspectRatio="none" 会把球场轻微压扁/拉宽。 */
+  aspect-ratio: 68 / 52.5;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;

@@ -351,7 +351,7 @@ describe("球场底图(2026-08-20,参照 miaomiaodi.cc:真实球场标记替换�
     { id: 30, name: "MID1", shirt_number: "3", pos_x: 0.375, pos_y: 0.485 },
   ];
 
-  it("有真实站位坐标时画竖版真实球场(viewBox 0 0 68 105),不再是旧的 4 个装饰 span", () => {
+  it("有真实站位坐标时画竖版真实半场(viewBox 0 52.5 68 52.5),不再是旧的 4 个装饰 span", () => {
     const { container } = render(
       <ProjectedLineupSection
         {...BASE_PROPS}
@@ -361,7 +361,8 @@ describe("球场底图(2026-08-20,参照 miaomiaodi.cc:真实球场标记替换�
     );
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
-    expect(svg?.getAttribute("viewBox")).toBe("0 0 68 105");
+    // 2026-08-20 由全场改半场:球场另一端从来没有球员站在那,画出来是纯装饰。
+    expect(svg?.getAttribute("viewBox")).toBe("0 52.5 68 52.5");
     // 旧的装饰 span 类名不应再出现
     expect(container.querySelector('[class*="pitchLine"]')).toBeNull();
     expect(container.querySelector('[class*="pitchCircle"]')).toBeNull();
