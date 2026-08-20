@@ -135,17 +135,18 @@ def match_market_cards(
     league_id: int,
     before_date: str,
 ) -> list[dict]:
-    """两队都不够历史(matches_considered=0)时,仍然为每个市场返回一张
-    data_quality='no_history' 的卡——前端据此渲染"该联赛历史数据补采中",
-    不是把整个市场卡列表砍掉,页面结构保持稳定。
+    """只返回罚牌(yellow_cards)/角球(corners)两张卡——大小球(goals)从
+    MARKETS 全集里过滤掉,见下方循环(2026-08-20 站长要求收窄「数据倾向」
+    板块)。两队都不够历史(matches_considered=0)时,仍然为每个保留的市场
+    返回一张 data_quality='no_history' 的卡——前端据此渲染"该联赛历史数据
+    补采中",不是把整个市场卡列表砍掉,页面结构保持稳定。
 
-    盘口线来源(line_source):goals(大小球)/corners(角球)在这场比赛真的
-    抓到 NowGoal 实时盘口(latest_market_line)时,直接用真实盘口线(而不是
-    统计参考线)——calibration 表按 (market, league_id, line) 精确匹配,
-    真实线命中已标定档位就显示真实命中率,没命中就诚实降级
-    data_quality='no_calibration'(不为了凑一个能打星的档位悄悄换回统计线)。
-    yellow_cards(罚牌)在 NowGoal 上完全没有对应市场,line_source 恒为
-    "statistical"。
+    盘口线来源(line_source):corners(角球)在这场比赛真的抓到 NowGoal
+    实时盘口(latest_market_line)时,直接用真实盘口线(而不是统计参考线)
+    ——calibration 表按 (market, league_id, line) 精确匹配,真实线命中已
+    标定档位就显示真实命中率,没命中就诚实降级 data_quality='no_calibration'
+    (不为了凑一个能打星的档位悄悄换回统计线)。yellow_cards(罚牌)在
+    NowGoal 上完全没有对应市场,line_source 恒为 "statistical"。
     """
     home = team_recent_profile(
         conn_core, home_id, before_date=before_date, n=WINDOW, scope="same_league", league_id=league_id
@@ -156,6 +157,12 @@ def match_market_cards(
 
     cards: list[dict] = []
     for market in MARKETS.values():
+        # 2026-08-20 站长要求:「数据倾向」板块只保留罚牌/角球,大小球(goals)
+        # 不展示——calibrate_markets.py 的离线标定仍然照常算 goals(不改
+        # MARKETS 本体,保留今后复用的可能性),只在这一层(唯一消费方)按
+        # market.key 过滤,不影响 market_calibration 表或标定任务本身。
+        if market.key == "goals":
+            continue
         h = home["metrics"].get(market.predictor_key, {"for": {"avg": None, "n": 0}})
         a = away["metrics"].get(market.predictor_key, {"for": {"avg": None, "n": 0}})
         h_avg, a_avg = h["for"]["avg"], a["for"]["avg"]

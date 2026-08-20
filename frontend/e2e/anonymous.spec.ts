@@ -250,21 +250,26 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
   await page.goto(`/matches/${id}`);
   await expect(page.getByRole("heading", { name: "数据倾向" })).toBeVisible();
 
-  // 三张卡都要出现,标签与盘口线是硬编码的市场定义,不随数据变化
+  // 两张卡都要出现(2026-08-20 站长要求「数据倾向」板块只保留罚牌/角球,
+  // 大小球不展示——backend/queries/market_cards.py::match_market_cards
+  // 过滤掉了 goals),标签与盘口线是硬编码的市场定义,不随数据变化。
+  await expect(page.getByRole("heading", { name: "大小球" })).toHaveCount(0);
   for (const [label, line] of [
     ["罚牌", "3.5"],
-    ["大小球", "2.5"],
     ["角球", "9.5"],
   ] as const) {
     await expect(page.getByRole("heading", { name: label })).toBeVisible();
     await expect(page.getByText(`盘口线 ${line}`)).toBeVisible();
   }
 
-  // 罚牌/大小球在种子数据上是有效信号(★★),必须渲染倾向结论(2026-08-14
+  // 罚牌在种子数据上是有效信号(★★,偏大),必须渲染倾向结论(2026-08-14
   // 重设计:结论区是"偏大/偏小"大字 + "数据倾向"小字说明两个独立元素,
-  // 不再是"数据倾向:偏大"一句话),且明确不是投注建议措辞。
+  // 不再是"数据倾向:偏大"一句话),且明确不是投注建议措辞。此前"偏小"
+  // 断言来自已被移除的大小球卡(种子数据里唯一显示偏小的市场),角球在
+  // 种子数据上不单调、没有方向(见下方断言),移除大小球后页面上不应再有
+  // 任何"偏小"文案。
   await expect(page.getByText("偏大")).toBeVisible();
-  await expect(page.getByText("偏小")).toBeVisible();
+  await expect(page.getByText("偏小")).toHaveCount(0);
   await expect(page.getByText("数据倾向").first()).toBeVisible();
   // "推荐"不检测——"推荐待发布"是 QuickView 的合法状态文案,不是投注推荐,
   // 检测那个词会和自己的功能打架;真正禁止的措辞是"必胜"/"稳赚"/"红单"。

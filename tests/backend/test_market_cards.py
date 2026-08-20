@@ -138,6 +138,16 @@ def market_fixture(data_dir):
 
 
 class TestMatchMarketsRoute:
+    def test_goals_market_excluded_only_cards_and_corners_returned(self, app, market_fixture):
+        """2026-08-20 站长要求:「数据倾向」板块只保留罚牌/角球,大小球
+        (goals)不展示。calibrate_markets.py 的 MARKETS 全集仍然定义了
+        goals(离线标定不受影响,只是这个端点不再把它拼进卡片),所以这里
+        直接断言返回的 market 集合恰好是 {yellow_cards, corners},而不是
+        单纯断言"goals 不存在"——后者漏不掉"某个市场被误删"这类回归。"""
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9500/markets").json()
+        assert {c["market"] for c in body["cards"]} == {"yellow_cards", "corners"}
+
     def test_free_league_ok_with_calibrated_card(self, app, market_fixture):
         client = TestClient(app)
         r = client.get("/api/v1/matches/9500/markets")
@@ -196,11 +206,10 @@ class TestMatchMarketsRoute:
         assert corners["signal_grade"] == "★★"
         assert corners["lean"] == "over"
 
-        # goals 真实盘口线 2.75 也生效(line_source 赋值先于 data_quality 判断,
-        # 两队历史没造 expected_goals,预估值算不出来,但线本身必须是真实值)。
-        goals = by_market["goals"]
-        assert goals["line_source"] == "market"
-        assert goals["line"] == pytest.approx(2.75)
+        # goals(大小球)不在返回的卡片里(2026-08-20 站长要求「数据倾向」
+        # 板块只保留罚牌/角球)——9503 造的 ou 真实盘口快照本身仍然存在于
+        # odds.db,只是这个端点不再把它拼进卡片,不需要在这里断言它。
+        assert "goals" not in by_market
 
         # yellow_cards 在 NowGoal 上没有真实市场(§见 market_cards.py 头注),
         # 恒为统计参考线,不受本场造的真实盘口影响。
@@ -366,7 +375,9 @@ class TestMarketCardLinesArray:
 
     def test_extra_team_stat_driver_keys_present_per_market(self, app, market_fixture):
         """Fix 3:折叠区补充已算好但被丢弃的高阶指标,零新查询——纯 driver_keys
-        清单扩充。三个市场各自应该出现计划里列的新增 key。"""
+        清单扩充。两个市场(罚牌/角球,大小球不再展示,见上方
+        test_real_market_line_used_when_odds_present 的注释)各自应该出现
+        计划里列的新增 key。"""
         client = TestClient(app)
         body = client.get("/api/v1/matches/9500/markets").json()
         by_market = {c["market"]: c for c in body["cards"]}
@@ -374,6 +385,5 @@ class TestMarketCardLinesArray:
         def keys_of(market_key):
             return {row["key"] for row in by_market[market_key]["driver_factors"]}
 
-        assert {"expected_goals_on_target", "big_chance_missed", "shots_inside_box"} <= keys_of("goals")
         assert {"tackles", "duel_won"} <= keys_of("yellow_cards")
         assert {"shots_outside_box", "shot_blocks"} <= keys_of("corners")
