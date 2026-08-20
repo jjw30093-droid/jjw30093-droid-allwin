@@ -41,6 +41,17 @@ from schema import (
 
 OU_THRESHOLDS = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
 TOUCHES_OPP_BOX_SEASONS = {"2024/2025", "2025/2026"}
+
+# 2026-08-20 次级联赛回填:这些 (League_ID, Season) 只故意采集了赛季最后
+# 10 轮(升级球队近期数据回填,不是完整赛季),season 级聚合(场均值、
+# 大小球分布、进球时间分桶等)按 10/N 场算出来会被当成"本赛季"数字展示,
+# 且英冠(48)有自己的公开联赛页——不产出这些赛季级 silver 行,让这批
+# 比赛只服务 recent_form 等逐场滚动窗口。跑单场采集的 --skip-season-tables
+# 已经让 fact_league_table 对这个分区保持空,league_stats.py 的
+# avg_expected_goals_conceded LEFT JOIN 因此天然拿 NULL,不会跟这里的部分
+# 场次均值拼出两个分母的同一行——但 silver_team_season_stats 本身不查
+# fact_league_table,所以这条跳过仍然必须显式加,两处防线不能互相替代。
+PARTIAL_SEASON_PARTITIONS = {(48, "2025/2026")}
 MINUTE_BUCKETS = [
     ("0-15", 0, 15),
     ("16-30", 16, 30),
@@ -288,9 +299,16 @@ def build_silver() -> None:
         print(f"待聚合 (League_ID, Season): {seasons}")
 
         for league_id, season in seasons:
-            matches = _matches(conn, league_id, season)
-
-            team_rows = build_team_season_stats(conn, league_id, season, matches)
+            if (league_id, season) in PARTIAL_SEASON_PARTITIONS:
+                print(
+                    f"跳过 silver 赛季级聚合(部分赛季,非完整赛季数据): "
+                    f"league_id={league_id} season={season!r}"
+                )
+                matches = []
+                team_rows = []
+            else:
+                matches = _matches(conn, league_id, season)
+                team_rows = build_team_season_stats(conn, league_id, season, matches)
             conn.execute(
                 "DELETE FROM silver_team_season_stats WHERE League_ID = ? AND Season = ?",
                 (league_id, season),
@@ -329,7 +347,13 @@ def build_silver() -> None:
                 conn, "silver_score_distribution", SILVER_SCORE_DISTRIBUTION_COLUMNS, score_rows
             )
 
-            bucket_rows = build_goal_minute_buckets(conn, league_id, season)
+            # build_goal_minute_buckets 直接查 Bronze(不吃 matches 参数),
+            # 上面的 matches=[] 短路对它不生效,必须单独判断跳过——否则这张表
+            # 会绕过 PARTIAL_SEASON_PARTITIONS,悄悄产出这个分区的真实分桶数据。
+            bucket_rows = (
+                [] if (league_id, season) in PARTIAL_SEASON_PARTITIONS
+                else build_goal_minute_buckets(conn, league_id, season)
+            )
             conn.execute(
                 "DELETE FROM silver_goal_minute_buckets WHERE League_ID = ? AND Season = ?",
                 (league_id, season),

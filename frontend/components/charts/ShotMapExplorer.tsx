@@ -98,6 +98,16 @@ const GOAL_LINE_X = 105;
 const HALF_WAY_X = 52.5;
 const PITCH_WIDTH = 68;
 
+/** 默认展示"同联赛"口径;该球队同联赛内没有历史射门时(如刚升级的球队,
+ * 只有原联赛的数据),自动退回"全部赛事"口径——避免默认视图对着一支
+ * 有真实覆盖率的球队显示"0/0 场",让用户误以为这场比赛没有可视化内容。 */
+function preferredScopeFor(data: ShotMapData, teamId: number): Scope {
+  const sets = data.recent_sets[String(teamId)];
+  if (sets?.same_league?.matched_games) return "same_league";
+  if (sets?.all_covered?.matched_games) return "all_covered";
+  return "same_league";
+}
+
 export function filterShotRows(
   data: ShotMapData,
   teamId: number,
@@ -236,7 +246,7 @@ function ShotMapExplorerReady({
 }) {
   const isExport = renderMode === "export";
   const [teamId, setTeamId] = useState(data.teams[0].team_id);
-  const [scope, setScope] = useState<Scope>("same_league");
+  const [scope, setScope] = useState<Scope>(() => preferredScopeFor(data, data.teams[0].team_id));
   const [mode, setMode] = useState<Mode>("created");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
@@ -384,6 +394,7 @@ function ShotMapExplorerReady({
 
   function changeTeam(nextTeamId: number) {
     setTeamId(nextTeamId);
+    setScope(preferredScopeFor(data, nextTeamId));
     setSelectedMatchId(null);
   }
 
