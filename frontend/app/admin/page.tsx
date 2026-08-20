@@ -94,6 +94,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
   const [grantDays, setGrantDays] = useState(30);
   const [grantNotes, setGrantNotes] = useState("");
   const [revokeSubId, setRevokeSubId] = useState("");
+  const [revokeSubConfirm, setRevokeSubConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (q: string) => {
@@ -103,7 +104,10 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
         `/api/v1/admin/users?query=${encodeURIComponent(q)}&limit=100`,
       );
       setData(r);
-      setMsg(null);
+      // 只清掉旧的错误提示,不动成功提示——onGrant 成功后会立即 await load()
+      // 刷新列表,如果这里无条件 setMsg(null),"已开通:订阅 ID xxx(撤销时
+      // 需要此订阅 ID)"会在渲染前就被抹掉,admin 永远看不到订阅 ID。
+      setMsg((m) => (m?.kind === "err" ? null : m));
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "用户列表加载失败") });
     } finally {
@@ -128,12 +132,11 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
   }, [plans]);
 
   const onGrant = async (userId: string) => {
-    if (
-      !window.confirm(
-        `确认为用户 ${shortId(userId)} 开通 ${grantPlan} × ${grantDays} 天?`,
-      )
-    )
-      return;
+    // 不再用 window.confirm——原生弹窗在部分浏览器/系统环境下会被忽略/划掉,
+    // 请求根本不会发出且页面没有任何反馈(2026-08-19 起同款问题已在"发布
+    // 推荐单"改过一次;这里的"确认开通"点击没反应是同一根因,见下方
+    // grantFor 展开表单已经是第一次确认,这里去掉的是多余的第二次确认,
+    // 不是去掉确认本身)。
     setBusy(true);
     try {
       const r = await clientFetch<GrantResp>(`/api/v1/admin/users/${userId}/grant`, {
@@ -157,7 +160,6 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
   const onRevokeSub = async () => {
     const sid = revokeSubId.trim();
     if (!sid) return;
-    if (!window.confirm(`确认撤销订阅 ${sid}?该用户对应权益立即失效。`)) return;
     setBusy(true);
     try {
       await clientFetch(`/api/v1/admin/subscriptions/${encodeURIComponent(sid)}/revoke`, {
@@ -166,6 +168,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
       });
       setMsg({ kind: "ok", text: `订阅 ${sid} 已撤销` });
       setRevokeSubId("");
+      setRevokeSubConfirm(false);
       await load(query);
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "撤销失败") });
@@ -199,16 +202,42 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
           className={styles.input}
           placeholder="订阅 ID(见开通结果或审计日志)"
           value={revokeSubId}
-          onChange={(e) => setRevokeSubId(e.target.value)}
+          onChange={(e) => {
+            setRevokeSubId(e.target.value);
+            setRevokeSubConfirm(false);
+          }}
         />
-        <button
-          type="button"
-          className={styles.btnDanger}
-          disabled={busy || !revokeSubId.trim()}
-          onClick={onRevokeSub}
-        >
-          撤销订阅
-        </button>
+        {revokeSubConfirm ? (
+          <>
+            <span className={styles.dim}>
+              确认撤销订阅 {revokeSubId.trim()}?该用户对应权益立即失效。
+            </span>
+            <button
+              type="button"
+              className={styles.btnDanger}
+              disabled={busy}
+              onClick={onRevokeSub}
+            >
+              {busy ? "撤销中…" : "确认撤销"}
+            </button>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              onClick={() => setRevokeSubConfirm(false)}
+            >
+              取消
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className={styles.btnDanger}
+            disabled={busy || !revokeSubId.trim()}
+            onClick={() => setRevokeSubConfirm(true)}
+          >
+            撤销订阅
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -486,6 +515,13 @@ function PredictionsTab() {
   const [retractFor, setRetractFor] = useState<string | null>(null);
   const [retractReason, setRetractReason] = useState("");
   const [lockOnPublish, setLockOnPublish] = useState(true);
+  // "发布"/"锁定"/"批量发布"此前用 window.confirm 二次确认,原生弹窗在部分
+  // 浏览器/系统环境下会被忽略/划掉、请求根本不发出且页面没有任何反馈——
+  // 与下方"撤回"早就用的站内 retractFor 面板同一根因,统一改成站内面板。
+  const [actionConfirmFor, setActionConfirmFor] = useState<
+    { id: string; action: "publish" | "lock" } | null
+  >(null);
+  const [publishUpcomingConfirm, setPublishUpcomingConfirm] = useState(false);
   const [editFor, setEditFor] = useState<string | null>(null);
   const [editHomeWin, setEditHomeWin] = useState("");
   const [editDraw, setEditDraw] = useState("");
@@ -510,12 +546,12 @@ function PredictionsTab() {
     void Promise.resolve().then(() => load(statusFilter));
   }, [load, statusFilter]);
 
-  const act = async (
-    id: string,
-    action: "publish" | "lock",
-    confirmText: string,
-  ) => {
-    if (!window.confirm(confirmText)) return;
+  const actionConfirmText = (action: "publish" | "lock", id: string) =>
+    action === "publish"
+      ? `确认发布预测 ${shortId(id)}?`
+      : `确认锁定预测 ${shortId(id)}?锁定后即计入公开正式战绩;仍可通过"编辑"修正,修正会留下公开可查的记录。`;
+
+  const act = async (id: string, action: "publish" | "lock") => {
     setBusyId(id);
     setMsg(null);
     try {
@@ -524,6 +560,7 @@ function PredictionsTab() {
         body: {},
       });
       setMsg({ kind: "ok", text: `操作成功:${action} ${shortId(id)}` });
+      setActionConfirmFor(null);
       await load(statusFilter);
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "操作失败") });
@@ -538,12 +575,6 @@ function PredictionsTab() {
       setMsg({ kind: "err", text: "撤回原因至少 2 个字符" });
       return;
     }
-    if (
-      !window.confirm(
-        `确认撤回预测 ${shortId(id)}?撤回将保留在公开记录中,不可物理删除。`,
-      )
-    )
-      return;
     setBusyId(id);
     setMsg(null);
     try {
@@ -608,12 +639,6 @@ function PredictionsTab() {
   };
 
   const onPublishUpcoming = async () => {
-    if (
-      !window.confirm(
-        `确认批量发布所有未开球的 draft 预测?${lockOnPublish ? "(发布后立即锁定)" : ""}`,
-      )
-    )
-      return;
     setBusyId("publish-upcoming");
     setMsg(null);
     try {
@@ -628,6 +653,7 @@ function PredictionsTab() {
               .join("、")}`
           : "";
       setMsg({ kind: r.failed.length > 0 ? "err" : "ok", text: `已发布 ${r.published} 条${failText}` });
+      setPublishUpcomingConfirm(false);
       await load(statusFilter);
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "批量发布失败") });
@@ -667,14 +693,37 @@ function PredictionsTab() {
           />
           发布后锁定
         </label>
-        <button
-          type="button"
-          className={styles.btnPrimary}
-          disabled={busyId === "publish-upcoming"}
-          onClick={onPublishUpcoming}
-        >
-          {busyId === "publish-upcoming" ? "发布中…" : "批量发布未开球 draft"}
-        </button>
+        {publishUpcomingConfirm ? (
+          <>
+            <span className={styles.dim}>
+              确认批量发布所有未开球的 draft 预测?{lockOnPublish ? "(发布后立即锁定)" : ""}
+            </span>
+            <button
+              type="button"
+              className={styles.btnPrimary}
+              disabled={busyId === "publish-upcoming"}
+              onClick={onPublishUpcoming}
+            >
+              {busyId === "publish-upcoming" ? "发布中…" : "确认发布"}
+            </button>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              onClick={() => setPublishUpcomingConfirm(false)}
+            >
+              取消
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            disabled={busyId === "publish-upcoming"}
+            onClick={() => setPublishUpcomingConfirm(true)}
+          >
+            批量发布未开球 draft
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -739,34 +788,66 @@ function PredictionsTab() {
                   </td>
                   <td>
                     <div className={styles.inlineForm}>
-                      {p.status === "draft" && (
-                        <button
-                          type="button"
-                          className={styles.btnGhost}
-                          disabled={busyId === p.id}
-                          onClick={() =>
-                            act(p.id, "publish", `确认发布预测 ${shortId(p.id)}?`)
-                          }
-                        >
-                          发布
-                        </button>
-                      )}
-                      {p.status === "published" && (
-                        <button
-                          type="button"
-                          className={styles.btnGhost}
-                          disabled={busyId === p.id}
-                          onClick={() =>
-                            act(
-                              p.id,
-                              "lock",
-                              `确认锁定预测 ${shortId(p.id)}?锁定后即计入公开正式战绩;仍可通过"编辑"修正,修正会留下公开可查的记录。`,
-                            )
-                          }
-                        >
-                          锁定
-                        </button>
-                      )}
+                      {p.status === "draft" &&
+                        (actionConfirmFor?.id === p.id && actionConfirmFor.action === "publish" ? (
+                          <>
+                            <span className={styles.dim}>{actionConfirmText("publish", p.id)}</span>
+                            <button
+                              type="button"
+                              className={styles.btnPrimary}
+                              disabled={busyId === p.id}
+                              onClick={() => void act(p.id, "publish")}
+                            >
+                              确认发布
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.btnGhost}
+                              onClick={() => setActionConfirmFor(null)}
+                            >
+                              取消
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.btnGhost}
+                            disabled={busyId === p.id}
+                            onClick={() => setActionConfirmFor({ id: p.id, action: "publish" })}
+                          >
+                            发布
+                          </button>
+                        ))}
+                      {p.status === "published" &&
+                        (actionConfirmFor?.id === p.id && actionConfirmFor.action === "lock" ? (
+                          <>
+                            <span className={styles.dim}>{actionConfirmText("lock", p.id)}</span>
+                            <button
+                              type="button"
+                              className={styles.btnPrimary}
+                              disabled={busyId === p.id}
+                              onClick={() => void act(p.id, "lock")}
+                            >
+                              确认锁定
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.btnGhost}
+                              onClick={() => setActionConfirmFor(null)}
+                            >
+                              取消
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.btnGhost}
+                            disabled={busyId === p.id}
+                            onClick={() => setActionConfirmFor({ id: p.id, action: "lock" })}
+                          >
+                            锁定
+                          </button>
+                        ))}
                       {editFor === p.id ? (
                         <div className={styles.inlineForm}>
                           <input
@@ -883,6 +964,11 @@ function XrefTab() {
   const [msg, setMsg] = useState<Msg>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  // window.confirm 在部分浏览器/系统环境下会被忽略/划掉,点击没反应且请求
+  // 根本不发出——改用站内二次确认面板(与本文件其它 Tab 同款修法)。
+  const [confirmFor, setConfirmFor] = useState<{ id: number; action: "confirm" | "reject" } | null>(
+    null,
+  );
 
   const load = useCallback(async (status: string) => {
     setLoading(true);
@@ -904,7 +990,6 @@ function XrefTab() {
 
   const review = async (id: number, action: "confirm" | "reject") => {
     const label = action === "confirm" ? "确认" : "驳回";
-    if (!window.confirm(`确认${label}映射 #${id}?操作会写入审计日志。`)) return;
     setBusyId(id);
     setMsg(null);
     try {
@@ -913,6 +998,7 @@ function XrefTab() {
         body: {},
       });
       setMsg({ kind: "ok", text: `映射 #${id} 已${label}` });
+      setConfirmFor(null);
       await load(statusFilter);
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, `${label}失败`) });
@@ -991,24 +1077,48 @@ function XrefTab() {
                     </span>
                   </td>
                   <td>
-                    <div className={styles.inlineForm}>
-                      <button
-                        type="button"
-                        className={styles.btnGhost}
-                        disabled={busyId === x.id}
-                        onClick={() => review(x.id, "confirm")}
-                      >
-                        确认
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.btnDanger}
-                        disabled={busyId === x.id}
-                        onClick={() => review(x.id, "reject")}
-                      >
-                        驳回
-                      </button>
-                    </div>
+                    {confirmFor?.id === x.id ? (
+                      <div className={styles.inlineForm}>
+                        <span className={styles.dim}>
+                          确认{confirmFor.action === "confirm" ? "确认" : "驳回"}映射 #{x.id}?
+                          操作会写入审计日志。
+                        </span>
+                        <button
+                          type="button"
+                          className={confirmFor.action === "confirm" ? styles.btnPrimary : styles.btnDanger}
+                          disabled={busyId === x.id}
+                          onClick={() => void review(x.id, confirmFor.action)}
+                        >
+                          {busyId === x.id ? "处理中…" : "确认"}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.btnGhost}
+                          onClick={() => setConfirmFor(null)}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.inlineForm}>
+                        <button
+                          type="button"
+                          className={styles.btnGhost}
+                          disabled={busyId === x.id}
+                          onClick={() => setConfirmFor({ id: x.id, action: "confirm" })}
+                        >
+                          确认
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.btnDanger}
+                          disabled={busyId === x.id}
+                          onClick={() => setConfirmFor({ id: x.id, action: "reject" })}
+                        >
+                          驳回
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -2117,6 +2227,10 @@ export function AccessTab() {
   const [revokeFor, setRevokeFor] = useState<string | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
   const [busyGrantId, setBusyGrantId] = useState<string | null>(null);
+  // "确认授权"此前直接用 window.confirm 二次确认,原生弹窗在部分浏览器/
+  // 系统环境下会被忽略/划掉、请求根本不发出且页面没有任何反馈——真实
+  // admin 报告点击没反应,与本文件其它 Tab 同一根因,改用站内二次确认面板。
+  const [grantConfirm, setGrantConfirm] = useState(false);
 
   const loadGrants = useCallback(async () => {
     setLoadingGrants(true);
@@ -2146,10 +2260,6 @@ export function AccessTab() {
       setMsg({ kind: "err", text: "请先选择用户和推荐单" });
       return;
     }
-    if (
-      !window.confirm(`确认为用户「${grantUser.label}」开通「${grantSlip.label}」的每日精选查看权限?`)
-    )
-      return;
     setBusy(true);
     setMsg(null);
     try {
@@ -2161,6 +2271,7 @@ export function AccessTab() {
       setGrantUser(null);
       setGrantSlip(null);
       setNote("");
+      setGrantConfirm(false);
       await loadGrants();
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "授权失败") });
@@ -2206,11 +2317,28 @@ export function AccessTab() {
             type="button"
             className={styles.btnPrimary}
             disabled={busy || !grantUser || !grantSlip}
-            onClick={onGrant}
+            onClick={() => setGrantConfirm(true)}
           >
-            {busy ? "提交中…" : "确认授权"}
+            授权
           </button>
         </div>
+        {grantConfirm && grantUser && grantSlip && (
+          <div className={styles.formRow}>
+            <span className={styles.dim}>
+              确认为用户「{grantUser.label}」开通「{grantSlip.label}」的每日精选查看权限?
+            </span>
+            <button type="button" className={styles.btnPrimary} disabled={busy} onClick={onGrant}>
+              {busy ? "提交中…" : "确认授权"}
+            </button>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              onClick={() => setGrantConfirm(false)}
+            >
+              取消
+            </button>
+          </div>
+        )}
       </div>
 
       <div className={styles.toolbar}>

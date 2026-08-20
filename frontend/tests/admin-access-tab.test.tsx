@@ -1,9 +1,12 @@
 /**
  * Admin「精选授权」Tab 表单交互(2026-08-16,取代旧的全局 reco:daily/
- * daily_picks 布尔权益)。
+ * daily_picks 布尔权益;2026-08-21 起"确认授权"从 window.confirm 改成站内
+ * 二次确认面板——原生弹窗在部分浏览器/系统环境下会被忽略/划掉,真实 admin
+ * 报告点击没反应)。
  *
  * 覆盖:
- * - 搜索并选择用户 + 推荐单后提交授权,请求体是 {user_id, slip_id, note};
+ * - 搜索并选择用户 + 推荐单后,点击"授权"展开站内确认面板,点击"确认授权"
+ *   才真正提交,请求体是 {user_id, slip_id, note};
  * - 撤销走"点击撤销 → 展开原因输入 → 确认撤销"的二次确认交互(与页面里
  *   其它高风险操作——如推荐单作废——同一套交互模式,不是 window.confirm)。
  */
@@ -93,7 +96,6 @@ describe("精选授权:提交新授权", () => {
       ],
     });
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<AccessTab />);
 
     const userInput = screen.getByPlaceholderText("搜索用户(昵称 / 用户 ID)");
@@ -109,11 +111,17 @@ describe("精选授权:提交新授权", () => {
     fireEvent.click(slipOption);
 
     await waitFor(() =>
-      expect((screen.getByRole("button", { name: "确认授权" }) as HTMLButtonElement).disabled).toBe(
+      expect((screen.getByRole("button", { name: "授权" }) as HTMLButtonElement).disabled).toBe(
         false,
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "确认授权" }));
+    // 第一次点击只展开站内确认面板,不应该立即发出请求。
+    fireEvent.click(screen.getByRole("button", { name: "授权" }));
+    expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/access-grants"))).toBe(false);
+
+    // "确认授权"只在展开确认面板后才出现,证明真的是两步确认。
+    const confirmBtn = await screen.findByRole("button", { name: "确认授权" });
+    fireEvent.click(confirmBtn);
 
     await waitFor(() =>
       expect(

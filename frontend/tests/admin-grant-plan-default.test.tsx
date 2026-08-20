@@ -85,8 +85,8 @@ describe("Admin 用户管理:授权表单不得默认选中已下架的 pro 套�
 
     // 刻意不触碰下拉框,直接提交——这是最容易暴露"内部状态仍是硬编码默认值"
     // 的路径(下拉框视觉上可能显示第一个真实选项,但受控组件的 state 才是
-    // 真正提交的值)。
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    // 真正提交的值)。"确认开通"本身就是 grantFor 展开后的第二步确认,
+    // 不再经 window.confirm(2026-08-21 起去掉这层不可靠的原生弹窗)。
     screen.getByText("确认开通").click();
 
     await waitFor(() => expect(grantCalls.length).toBeGreaterThan(0));
