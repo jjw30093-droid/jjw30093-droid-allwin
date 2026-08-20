@@ -4,11 +4,19 @@ import { useMemo, useState } from "react";
 import type { EChartsOption, LineSeriesOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
+import { SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
 import styles from "./ShotMapExplorer.module.css";
 
 type Scope = "same_league" | "all_covered";
 type Mode = "created" | "conceded";
 type OutcomeFilter = "all" | "on_target" | "goal";
+type HalfFilter = "all" | "first" | "second";
+
+/** 与 ShotMapChart 同一份"竞彩用户会主动筛"的情境/部位子集(库里情境有 8
+ * 种,身体部位另有"其他部位",这里只列最常筛的几个,保持两个射门图的
+ * 筛选口径一致)。 */
+const SITUATION_CHIPS = ["FromCorner", "SetPiece", "FreeKick", "FastBreak", "Penalty"];
+const BODY_PARTS = ["LeftFoot", "RightFoot", "Header"];
 
 type Shot = {
   shot_id: string;
@@ -16,6 +24,7 @@ type Shot = {
   player_id: string | null;
   team_id: number;
   minute: number | null;
+  period: string | null;
   x: number;
   y: number;
   xg: number | null;
@@ -115,15 +124,22 @@ export function filterShotRows(
   mode: Mode,
   outcome: OutcomeFilter,
   matchId?: number,
+  situations: string[] = [],
+  bodyPart: string | null = null,
+  half: HalfFilter = "all",
 ): Shot[] {
   const matchIds = new Set(data.recent_sets[String(teamId)]?.[scope]?.match_ids ?? []);
   return data.shots.filter((shot) => {
     if (!matchIds.has(shot.match_id)) return false;
     if (matchId !== undefined && shot.match_id !== matchId) return false;
     if (mode === "created" ? shot.team_id !== teamId : shot.team_id === teamId) return false;
-    if (outcome === "goal") return shot.outcome === "Goal";
-    if (outcome === "on_target")
-      return shot.outcome === "Goal" || shot.outcome === "AttemptSaved";
+    if (outcome === "goal" && shot.outcome !== "Goal") return false;
+    if (outcome === "on_target" && shot.outcome !== "Goal" && shot.outcome !== "AttemptSaved")
+      return false;
+    if (situations.length > 0 && !situations.includes(shot.situation ?? "")) return false;
+    if (bodyPart && shot.shot_type !== bodyPart) return false;
+    if (half === "first" && shot.period !== "FirstHalf") return false;
+    if (half === "second" && shot.period !== "SecondHalf") return false;
     return true;
   });
 }
@@ -249,6 +265,9 @@ function ShotMapExplorerReady({
   const [scope, setScope] = useState<Scope>(() => preferredScopeFor(data, data.teams[0].team_id));
   const [mode, setMode] = useState<Mode>("created");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
+  const [half, setHalf] = useState<HalfFilter>("all");
+  const [situations, setSituations] = useState<string[]>([]);
+  const [bodyPart, setBodyPart] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
   const team = data.teams.find((item) => item.team_id === teamId) ?? data.teams[0];
   const coverage = data.recent_sets[String(teamId)]?.[scope];
@@ -268,8 +287,11 @@ function ShotMapExplorerReady({
         mode,
         outcome,
         selectedMatchId ?? undefined,
+        situations,
+        bodyPart,
+        half,
       ),
-    [data, teamId, scope, mode, outcome, selectedMatchId],
+    [data, teamId, scope, mode, outcome, selectedMatchId, situations, bodyPart, half],
   );
   const summary = useMemo(() => summarizeShotRows(rows), [rows]);
 
@@ -403,6 +425,17 @@ function ShotMapExplorerReady({
     setSelectedMatchId(null);
   }
 
+  function toggleSituation(key: string) {
+    setSituations((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  const detailFiltered = situations.length > 0 || bodyPart !== null || half !== "all";
+  function resetDetailFilters() {
+    setSituations([]);
+    setBodyPart(null);
+    setHalf("all");
+  }
+
   return (
     <div className={styles.explorer}>
       <div className={styles.reportHeader}>
@@ -497,6 +530,55 @@ function ShotMapExplorerReady({
                 {label}
               </button>
             ))}
+          </div>
+          <div className={styles.chips}>
+            {([
+              ["all", "全场"],
+              ["first", "上半场"],
+              ["second", "下半场"],
+            ] as Array<[HalfFilter, string]>).map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={half === value ? styles.chipActive : undefined}
+                aria-pressed={half === value}
+                onClick={() => setHalf(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className={styles.filterRow}>
+          <span className={styles.filterLabel}>射门方式</span>
+          <div className={styles.chips}>
+            {SITUATION_CHIPS.map((key) => (
+              <button
+                type="button"
+                key={key}
+                className={situations.includes(key) ? styles.chipActive : undefined}
+                aria-pressed={situations.includes(key)}
+                onClick={() => toggleSituation(key)}
+              >
+                {SHOT_SITUATION_ZH[key] ?? key}
+              </button>
+            ))}
+            {BODY_PARTS.map((key) => (
+              <button
+                type="button"
+                key={key}
+                className={bodyPart === key ? styles.chipActive : undefined}
+                aria-pressed={bodyPart === key}
+                onClick={() => setBodyPart(bodyPart === key ? null : key)}
+              >
+                {SHOT_TYPE_ZH[key] ?? key}
+              </button>
+            ))}
+            {detailFiltered && (
+              <button type="button" className={styles.reset} onClick={resetDetailFilters}>
+                重置
+              </button>
+            )}
           </div>
         </div>
       </div>

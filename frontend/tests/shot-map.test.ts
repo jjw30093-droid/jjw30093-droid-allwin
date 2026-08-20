@@ -26,6 +26,7 @@ const data = {
       player_id: "p1",
       team_id: 1,
       minute: 10,
+      period: "FirstHalf",
       x: 90,
       y: 30,
       xg: 0.2,
@@ -39,11 +40,12 @@ const data = {
       player_id: "p2",
       team_id: 2,
       minute: 20,
+      period: "FirstHalf",
       x: 98,
       y: 34,
       xg: 0.4,
       outcome: "Goal",
-      situation: "RegularPlay",
+      situation: "Penalty",
       shot_type: "LeftFoot",
     },
     {
@@ -51,7 +53,8 @@ const data = {
       match_id: 11,
       player_id: "p3",
       team_id: 1,
-      minute: 30,
+      minute: 78,
+      period: "SecondHalf",
       x: 80,
       y: 20,
       xg: 0.1,
@@ -94,6 +97,34 @@ describe("recent shot-map filters", () => {
     expect(
       filterShotRows(data, 1, "all_covered", "created", "all", 10).map(
         (shot) => shot.shot_id,
+      ),
+    ).toEqual(["a"]);
+  });
+
+  it("支持按射门方式、身体部位、上下半场筛选", () => {
+    expect(
+      filterShotRows(data, 1, "all_covered", "created", "all", undefined, ["Penalty"]).map(
+        (s) => s.shot_id,
+      ),
+    ).toEqual([]);
+    expect(
+      filterShotRows(data, 1, "all_covered", "conceded", "all", undefined, ["Penalty"]).map(
+        (s) => s.shot_id,
+      ),
+    ).toEqual(["b"]);
+    expect(
+      filterShotRows(data, 1, "all_covered", "created", "all", undefined, [], "Header").map(
+        (s) => s.shot_id,
+      ),
+    ).toEqual(["c"]);
+    expect(
+      filterShotRows(data, 1, "all_covered", "created", "all", undefined, [], null, "second").map(
+        (s) => s.shot_id,
+      ),
+    ).toEqual(["c"]);
+    expect(
+      filterShotRows(data, 1, "all_covered", "created", "all", undefined, [], null, "first").map(
+        (s) => s.shot_id,
       ),
     ).toEqual(["a"]);
   });
