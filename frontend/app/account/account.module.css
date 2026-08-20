@@ -195,11 +195,16 @@ a.listMain:hover {
 
 .sessionItem {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
   border-top: 1px solid var(--border);
+}
+
+.sessionItem .confirmPanel {
+  flex-basis: 100%;
 }
 
 .sessionItem:first-child {
@@ -266,6 +271,26 @@ a.listMain:hover {
 .btnDanger:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.confirmPanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+}
+
+.confirmPanel p {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 200px;
+  font-size: 13px;
+  color: var(--ink-2);
 }
 
 .skeleton,

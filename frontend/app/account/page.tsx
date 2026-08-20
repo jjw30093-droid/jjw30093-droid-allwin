@@ -61,6 +61,12 @@ export default function AccountPage() {
   const [planNames, setPlanNames] = useState<Record<string, string>>({});
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // 二次确认改用站内面板,不用 window.confirm——原生弹窗在部分浏览器/内嵌
+  // webview(微信内置浏览器等)里会被静默忽略或自动划掉,点击后请求根本
+  // 不会发出且页面没有任何反馈,和"没反应"没有区别(参照 admin 页
+  // publishConfirmFor 同一次真实用户报告后的修复)。
+  const [revokeConfirmFor, setRevokeConfirmFor] = useState<string | null>(null);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
 
   const load = useCallback(async () => {
     setState({ phase: "loading" });
@@ -111,7 +117,7 @@ export default function AccountPage() {
   }, [state.phase]);
 
   const onRevokeSession = async (sessionId: string) => {
-    if (!window.confirm("确认撤销该会话?对应设备将立即退出登录。")) return;
+    setRevokeConfirmFor(null);
     setBusyId(sessionId);
     setActionMsg(null);
     try {
@@ -129,7 +135,7 @@ export default function AccountPage() {
   };
 
   const onLogout = async () => {
-    if (!window.confirm("确认退出登录?")) return;
+    setLogoutConfirm(false);
     setBusyId("logout");
     try {
       await logout();
@@ -203,12 +209,24 @@ export default function AccountPage() {
         <button
           type="button"
           className={styles.btnGhost}
-          onClick={onLogout}
+          onClick={() => setLogoutConfirm((v) => !v)}
           disabled={busyId === "logout"}
         >
           {busyId === "logout" ? "退出中…" : "退出登录"}
         </button>
       </div>
+
+      {logoutConfirm && (
+        <div className={styles.confirmPanel}>
+          <p>确认退出登录?</p>
+          <button type="button" className={styles.btnPrimary} onClick={onLogout}>
+            确认退出
+          </button>
+          <button type="button" className={styles.btnGhost} onClick={() => setLogoutConfirm(false)}>
+            取消
+          </button>
+        </div>
+      )}
 
       {actionMsg && <p className={styles.actionMsg}>{actionMsg}</p>}
 
@@ -466,10 +484,29 @@ export default function AccountPage() {
                     type="button"
                     className={styles.btnDanger}
                     disabled={busyId === s.id}
-                    onClick={() => onRevokeSession(s.id)}
+                    onClick={() => setRevokeConfirmFor(revokeConfirmFor === s.id ? null : s.id)}
                   >
                     {busyId === s.id ? "撤销中…" : "撤销"}
                   </button>
+                )}
+                {revokeConfirmFor === s.id && (
+                  <div className={styles.confirmPanel}>
+                    <p>确认撤销该会话?对应设备将立即退出登录。</p>
+                    <button
+                      type="button"
+                      className={styles.btnDanger}
+                      onClick={() => onRevokeSession(s.id)}
+                    >
+                      确认撤销
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnGhost}
+                      onClick={() => setRevokeConfirmFor(null)}
+                    >
+                      取消
+                    </button>
+                  </div>
                 )}
               </li>
             ))}
