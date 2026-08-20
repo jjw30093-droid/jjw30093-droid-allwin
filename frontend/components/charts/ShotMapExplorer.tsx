@@ -96,6 +96,20 @@ export function officialOnTargetSum(
   return { value: covered > 0 ? sum : null, covered, total: matchIds.length };
 }
 
+/** 官方口径射正来自 fact_team_match_stats 的整场球队统计,库里**没有**半场/
+ * 情境/身体部位维度,构造上不可能响应这三个筛选。因此只要用户动了任何一个
+ * 子筛选,就必须退回逐次射门口径(summarizeShotRows),否则统计格的数字会和
+ * 场上画出的点自相矛盾(如"上半场射门31次却射正21次"这种语义上不可能的组合)。
+ * ⚠️ 新增任何射门子筛选,必须同时加进这个判定,否则会重现 2026-08 的这个缺陷。 */
+export function officialOnTargetApplies(
+  outcome: OutcomeFilter,
+  half: HalfFilter,
+  situations: string[],
+  bodyPart: string | null,
+): boolean {
+  return outcome === "all" && half === "all" && situations.length === 0 && bodyPart === null;
+}
+
 export type ShotSummary = {
   shots: number;
   onTarget: number;
@@ -295,16 +309,18 @@ function ShotMapExplorerReady({
   );
   const summary = useMemo(() => summarizeShotRows(rows), [rows]);
 
-  // 官方口径射正只在"全部"结果视角下替换显示值——用户主动筛"射正"/"进球"
-  // 时,统计格的四个数字要和场上实际画出的点一致(否则会出现"格子写 23,
-  // 场上却画着 41 个点"这种新的自相矛盾),此时退回逐次射门口径。
   const official = useMemo(() => {
     const matchIds = selectedMatchId != null ? [selectedMatchId] : (coverage?.match_ids ?? []);
     return officialOnTargetSum(data, matchIds, teamId, mode);
   }, [data, teamId, mode, selectedMatchId, coverage]);
+  // 官方口径射正只在没有任何射门子筛选(结果/半场/情境/身体部位)生效时替换
+  // 显示值——用户主动筛这些维度时,统计格的数字要和场上实际画出的点一致,
+  // 否则会出现"格子写 23,场上却画着 41 个点"这种自相矛盾,此时退回逐次射门口径。
+  // 判定逻辑见 officialOnTargetApplies() 的完整警告注释。
+  const noSubFilter = officialOnTargetApplies(outcome, half, situations, bodyPart);
   const onTargetDisplay =
-    outcome === "all" && official.value != null ? official.value : summary.onTarget;
-  const onTargetIsOfficial = outcome === "all" && official.value != null;
+    noSubFilter && official.value != null ? official.value : summary.onTarget;
+  const onTargetIsOfficial = noSubFilter && official.value != null;
 
   const option = useMemo<EChartsOption>(
     () => ({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { officialOnTargetSum } from "@/components/charts/ShotMapExplorer";
+import { officialOnTargetApplies, officialOnTargetSum } from "@/components/charts/ShotMapExplorer";
 
 // 最小可用的 ShotMapData fixture:两支球队各打了两场,team 1 主场对 team 2、
 // team 1 客场对 team 3。official_stats 覆盖三支球队在这几场的官方口径。
@@ -64,5 +64,33 @@ describe("officialOnTargetSum(官方口径射正)", () => {
   it("单场(selectedMatchId 场景)按同样逻辑工作", () => {
     const r = officialOnTargetSum(data, [100], 1, "created");
     expect(r).toEqual({ value: 5, covered: 1, total: 1 });
+  });
+});
+
+describe("officialOnTargetApplies(官方射正是否可用于当前筛选)", () => {
+  it("全默认(无任何子筛选)时官方口径可用", () => {
+    expect(officialOnTargetApplies("all", "all", [], null)).toBe(true);
+  });
+
+  it("结果筛选(射正/进球)生效时不可用", () => {
+    expect(officialOnTargetApplies("on_target", "all", [], null)).toBe(false);
+    expect(officialOnTargetApplies("goal", "all", [], null)).toBe(false);
+  });
+
+  it("半场筛选生效时不可用——官方统计没有半场维度", () => {
+    expect(officialOnTargetApplies("all", "first", [], null)).toBe(false);
+    expect(officialOnTargetApplies("all", "second", [], null)).toBe(false);
+  });
+
+  it("射门情境筛选生效时不可用——官方统计没有情境维度", () => {
+    expect(officialOnTargetApplies("all", "all", ["Penalty"], null)).toBe(false);
+  });
+
+  it("身体部位筛选生效时不可用——官方统计没有身体部位维度", () => {
+    expect(officialOnTargetApplies("all", "all", [], "Header")).toBe(false);
+  });
+
+  it("多个子筛选同时生效仍不可用", () => {
+    expect(officialOnTargetApplies("on_target", "first", ["Penalty"], "Header")).toBe(false);
   });
 });
