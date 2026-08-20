@@ -262,7 +262,6 @@ function CardHeader({
 
 function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
   const { match } = card;
-  const oddsObservedAt = match.win_probability?.observed_at ?? null;
 
   return (
     <article className={styles.featuredCard} data-testid="featured-match-card">
@@ -288,20 +287,10 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
 
         <div className={styles.pairProbCol}>
           <p className={styles.pairProbTitle}>胜平负概率</p>
+          {/* 2026-08-20 站长要求删除:数据来源折算说明与赔率覆盖档位两行,
+              所有比赛都不再展示——WinProbabilityBar 本身保留。 */}
           {match.win_probability ? (
-            <>
-              <WinProbabilityBar probability={match.win_probability} size="lg" />
-              <p className={styles.pairSourceLine}>
-                Bet365 赔率去水折算 · 采集于{" "}
-                {oddsObservedAt && <LocalTime iso={oddsObservedAt} />}
-              </p>
-              {match.odds_coverage_tier === "full_timeline" && (
-                <p className={styles.pairTierLine}>该场有完整赔率走势</p>
-              )}
-              {match.odds_coverage_tier === "open_close_only" && (
-                <p className={styles.pairTierLine}>该场只有开盘/收盘两点</p>
-              )}
-            </>
+            <WinProbabilityBar probability={match.win_probability} size="lg" />
           ) : (
             <p className={styles.pairEmptyNote}>本场暂无赔率数据,无法折算胜平负概率。</p>
           )}
