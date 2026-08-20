@@ -1,3 +1,9 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
 .btn,
 .btnOn {
   flex: none;
@@ -15,7 +21,80 @@
   cursor: pointer;
 }
 
+.btn:disabled,
+.btnOn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .btnOn {
   border-color: var(--brand-teal);
   color: var(--brand-teal);
+}
+
+/* 未登录点击后的站内引导面板(与 account 页 .confirmPanel 同一视觉语言;
+   绝对定位挂在按钮下方,不挤动头部布局) */
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(320px, 88vw);
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}
+
+.panelText {
+  flex: 1 1 100%;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.panelLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  background: var(--brand-teal);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.panelDismiss {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.error {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(280px, 88vw);
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--loss);
+  border-radius: var(--r-control);
+  color: var(--loss);
+  font-size: 12px;
 }

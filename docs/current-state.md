@@ -3976,11 +3976,23 @@ CI=1 npm run e2e                        → 17 passed(修复前同套件 3 faile
 首页的模型公开战绩大区块撤下(/track-record 完整保留,快捷入口改名
 "模型公开记录")。
 
-### 35.4 关注比赛(首版本地)
+### 35.4 关注比赛(2026-08-21 起真实写后端)
 
-`lib/followed-matches.ts`(localStorage,上限 20 场)+ 详情页
-FollowButton + 首页 FollowedMatches(无关注时整个模块不渲染;匿名
-无权限联赛如实跳过)。与登录用户的服务端收藏 /api/v1/favorites 互不影响。
+- 已登录:详情页 FollowButton 经 `lib/favorites.ts` 真实写
+  /api/v1/favorites(POST/DELETE,CSRF 双提交)。**绝不乐观翻转**——
+  pending → 服务端确认成功才翻转,失败显式报错保持原状态;未登录点击
+  展开站内登录引导面板(带编码 next 回跳),不再本地假成功。
+- 匿名:`lib/followed-matches.ts`(localStorage,上限 20 场)继续作为
+  匿名用户的本地列表;首页 FollowedMatches 匿名时回退读它(老用户的
+  本地关注不消失)。
+- 一次性迁移:登录后 `loadFavorites()` 把本地 id 倒序(最旧先)串行 POST
+  到服务端;只有确认 2xx 的 id 才从 localStorage 移除(本地列表即重试
+  队列),迁移中 401 整体中止零删除;后端 INSERT OR IGNORE 幂等。
+- 账户页"关注的比赛"逐场取公开详情补队名(不再渲染裸 比赛 #id),
+  登出时 resetFavoritesCache()。API 字段名保持 favorites(§10.3)。
+- 测试:tests/backend/test_favorites.py(三端点契约,12 例)、
+  frontend/tests/follow-button.test.tsx、favorites-migration.test.ts、
+  followed-recent-finished.test.tsx(服务端/本地双分支)。
 
 ### 35.5 详情页降噪(数据与顺序不变,只调展示)
 
@@ -4007,7 +4019,8 @@ CI=1 npm run e2e                        → 17 passed(首页断言按新结构�
   计数条与重点卡结论必须在首屏、本周比赛不含重点场、今日精选/推荐记录可见)
 浏览器实测(375×812,E2E 种子库):首屏=计数条+重点卡;今日精选/
   近30天推荐记录诚实空态;详情页关注按钮 → localStorage → 首页
-  "我关注的比赛"完整闭环;控制台无错误
+  "我关注的比赛"完整闭环(当时的首版本地实现;2026-08-21 起已登录改走
+  服务端,见 §35.4);控制台无错误
 ```
 
 ### 35.7 已知限制 / 未做(如实)

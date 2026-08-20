@@ -7,7 +7,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ApiError, apiErrorMessage, clientFetch, getMe, logout, type GetJson } from "@/lib/api-v1";
+import {
+  ApiError,
+  apiErrorMessage,
+  clientFetch,
+  getMe,
+  logout,
+  type GetJson,
+  type MatchDetailResponse,
+} from "@/lib/api-v1";
+import { resetFavoritesCache } from "@/lib/favorites";
 import styles from "./account.module.css";
 
 /* ── 类型:从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3) ── */
@@ -56,6 +65,9 @@ export default function AccountPage() {
   const [state, setState] = useState<PageState>({ phase: "loading" });
   const [favorites, setFavorites] = useState<FavoritesResponse | null>(null);
   const [favError, setFavError] = useState<string | null>(null);
+  // 关注列表只存 match_id,渲染裸 "比赛 #123" 对用户没有信息量——逐场取
+  // 公开详情补队名(与首页 FollowedMatches 同一写法);取不到的场次退回裸 id。
+  const [favNames, setFavNames] = useState<Record<number, string>>({});
   const [recoAccess, setRecoAccess] = useState<MyAccessResponse | null>(null);
   const [recoAccessError, setRecoAccessError] = useState<string | null>(null);
   const [planNames, setPlanNames] = useState<Record<string, string>>({});
@@ -100,8 +112,21 @@ export default function AccountPage() {
   useEffect(() => {
     if (state.phase !== "ready") return;
     clientFetch<FavoritesResponse>("/api/v1/favorites")
-      .then(setFavorites)
-      .catch((e) => setFavError(apiErrorMessage(e, "收藏列表加载失败")));
+      .then(async (r) => {
+        setFavorites(r);
+        const entries = await Promise.all(
+          r.favorites.slice(0, 20).map((f) =>
+            clientFetch<MatchDetailResponse>(`/api/v1/matches/${f.match_id}`)
+              .then(
+                (d) =>
+                  [f.match_id, `${d.match.home.name} vs ${d.match.away.name}`] as const,
+              )
+              .catch(() => null),
+          ),
+        );
+        setFavNames(Object.fromEntries(entries.filter((e) => e != null)));
+      })
+      .catch((e) => setFavError(apiErrorMessage(e, "关注列表加载失败")));
     clientFetch<MyAccessResponse>("/api/v1/reco/my-access")
       .then(setRecoAccess)
       .catch((e) => setRecoAccessError(apiErrorMessage(e, "每日精选授权记录加载失败")));
@@ -139,6 +164,8 @@ export default function AccountPage() {
     setBusyId("logout");
     try {
       await logout();
+      // 关注状态的模块级缓存按会话失效(登出后不能继续把用户当已登录)
+      resetFavoritesCache();
       window.location.assign("/");
     } catch (e) {
       setActionMsg(apiErrorMessage(e, "退出失败,请重试"));
@@ -166,7 +193,7 @@ export default function AccountPage() {
         <h1 className={styles.title}>账户中心</h1>
         <section className={styles.card}>
           <p className={styles.note}>
-            尚未登录。登录后可使用收藏、每日精选历史战绩查看、精选授权状态查询等
+            尚未登录。登录后可使用关注比赛、每日精选历史战绩查看、精选授权状态查询等
             账户功能;首次微信扫码会自动创建账号。
           </p>
           <Link className={styles.btnPrimary} href="/login?next=/account">
@@ -430,23 +457,25 @@ export default function AccountPage() {
         <p className={styles.note}>{account.recovery.note}</p>
       </section>
 
-      {/* 收藏 */}
+      {/* 关注(API 字段名仍是 favorites,宪法 §10.3 不为改词重命名契约) */}
       <section className={styles.card}>
-        <h2 className={styles.cardTitle}>收藏的比赛</h2>
+        <h2 className={styles.cardTitle}>关注的比赛</h2>
         {favError ? (
           <p className={styles.errText}>{favError}</p>
         ) : favorites === null ? (
           <SectionSkeleton />
         ) : favorites.favorites.length === 0 ? (
-          <p className={styles.empty}>暂无收藏。在比赛详情页可收藏关注的比赛。</p>
+          <p className={styles.empty}>
+            暂无关注。在比赛详情页点「☆ 关注比赛」,这里就会同步显示。
+          </p>
         ) : (
           <ul className={styles.list}>
             {favorites.favorites.map((f) => (
               <li key={f.match_id} className={styles.listItem}>
                 <Link className={styles.listMain} href={`/matches/${f.match_id}`}>
-                  比赛 #{f.match_id}
+                  {favNames[f.match_id] ?? `比赛 #${f.match_id}`}
                 </Link>
-                <span className={styles.dim}>收藏于 {fmtLocal(f.created_at)}</span>
+                <span className={styles.dim}>关注于 {fmtLocal(f.created_at)}</span>
               </li>
             ))}
           </ul>

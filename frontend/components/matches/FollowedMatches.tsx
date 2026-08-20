@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * 首页「我关注的比赛」:读取浏览器本地关注列表(lib/followed-matches),
- * 逐场拉取公开详情渲染简短行。没有关注时整个模块不渲染(不占首屏)。
- * 匿名无权限的联赛(401/403)如实跳过,不渲染半残行。
+ * 首页「我关注的比赛」:已登录读服务端关注(lib/favorites,含 localStorage
+ * 一次性迁移);匿名回退浏览器本地列表(lib/followed-matches)——从不登录
+ * 的老用户的关注绝不能因为这次改造凭空消失。逐场拉取公开详情渲染简短行,
+ * 没有关注时整个模块不渲染(不占首屏)。取数失败的场次如实跳过,不渲染半残行。
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clientFetch, type MatchDetailResponse } from "@/lib/api-v1";
+import { loadFavorites } from "@/lib/favorites";
 import { getFollowedMatchIds } from "@/lib/followed-matches";
 import { LEAGUE_ZH } from "@/components/matches/zh";
 import { LocalTime } from "@/components/matches/LocalTime";
@@ -18,12 +20,16 @@ type Row = MatchDetailResponse["match"];
 
 export function FollowedMatches() {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [serverBacked, setServerBacked] = useState(false);
 
   useEffect(() => {
     // 经微任务回调触发,effect 体内不同步 setState(react-hooks/set-state-in-effect)
     let cancelled = false;
     void Promise.resolve().then(async () => {
-      const ids = getFollowedMatchIds();
+      const state = await loadFavorites().catch(() => null);
+      const authed = state?.authenticated === true;
+      const ids = authed ? state.ids : getFollowedMatchIds();
+      if (!cancelled) setServerBacked(authed);
       if (ids.length === 0) {
         if (!cancelled) setRows([]);
         return;
@@ -81,7 +87,11 @@ export function FollowedMatches() {
           </li>
         ))}
       </ul>
-      <p className={styles.hint}>关注保存在本机浏览器;在比赛详情页可关注/取消。</p>
+      <p className={styles.hint}>
+        {serverBacked
+          ? "关注已保存到账号,换设备登录也能看到;在比赛详情页可关注/取消。"
+          : "关注暂存在本机浏览器;登录后自动同步到账号。在比赛详情页可关注/取消。"}
+      </p>
     </section>
   );
 }

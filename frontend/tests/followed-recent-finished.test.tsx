@@ -47,16 +47,32 @@ function match(over: Partial<MatchSummary> = {}): MatchSummary {
   } as MatchSummary;
 }
 
-function stubFetch(m: MatchSummary) {
+function stubFetch(m: MatchSummary, favorites: { status: number; ids?: number[] } = { status: 401 }) {
   const headers = new Headers();
   headers.set("content-type", "application/json");
   vi.stubGlobal(
     "fetch",
-    // clientFetch 打的是 /api/v1/matches/{id},响应形状是 MatchDetailResponse
-    // ({match, ...}),组件取的是 d.match。
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ match: m }), { status: 200, headers }),
-    ),
+    // URL 路由的 stub:FollowedMatches 现在会先打 /api/v1/favorites 判定
+    // 登录态(默认 401 = 匿名 → 走 localStorage 回退,保持这组既有用例的
+    // 语义);/api/v1/matches/{id} 响应 MatchDetailResponse({match, ...})。
+    vi.fn((input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/v1/favorites")) {
+        const body =
+          favorites.status === 200
+            ? JSON.stringify({
+                favorites: (favorites.ids ?? []).map((id) => ({
+                  match_id: id,
+                  created_at: "2026-08-20T00:00:00Z",
+                })),
+              })
+            : JSON.stringify({ code: "HTTP_401", message: "需要登录", details: null });
+        return Promise.resolve(new Response(body, { status: favorites.status, headers }));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ match: m }), { status: 200, headers }),
+      );
+    }),
   );
 }
 
@@ -94,5 +110,25 @@ describe.each(CASES)("%s:已完赛的比赛显示比分而不是开球时间", (
     const { container } = render(<Comp />);
     await screen.findByText(/卡萨皮亚/);
     expect(container.textContent).not.toContain(" - ");
+  });
+});
+
+describe("FollowedMatches:登录态读服务端关注(2026-08-21 起)", () => {
+  it("favorites 返回 200 → 用服务端 id 列表渲染,忽略 localStorage", async () => {
+    window.localStorage.setItem("allwin-followed-matches", JSON.stringify([]));
+    stubFetch(match(), { status: 200, ids: [5887595] });
+    const { FollowedMatches } = await import("@/components/matches/FollowedMatches");
+    render(<FollowedMatches />);
+    expect(await screen.findByText("0 - 7")).toBeTruthy();
+    expect(screen.getByText(/关注已保存到账号/)).toBeTruthy();
+  });
+
+  it("favorites 返回 401(匿名)→ 回退 localStorage,老用户的本地关注不消失", async () => {
+    window.localStorage.setItem("allwin-followed-matches", JSON.stringify([5887595]));
+    stubFetch(match(), { status: 401 });
+    const { FollowedMatches } = await import("@/components/matches/FollowedMatches");
+    render(<FollowedMatches />);
+    expect(await screen.findByText("0 - 7")).toBeTruthy();
+    expect(screen.getByText(/关注暂存在本机浏览器/)).toBeTruthy();
   });
 });

@@ -1,7 +1,7 @@
 /**
- * 「关注比赛」首版:纯浏览器本地(localStorage),不写任何账号数据。
- * 已登录用户的服务端收藏(/api/v1/favorites)与此互不影响;后续如需合并,
- * 以服务端收藏为准迁移,本模块只做低成本的"稍后看"。
+ * 「关注比赛」的浏览器本地列表:匿名用户的关注存这里;登录后由
+ * lib/favorites.ts 迁移到服务端(/api/v1/favorites),迁移只删除已确认
+ * 写入成功的 id——本地列表同时充当迁移失败时的重试队列,绝不先删后写。
  */
 
 const KEY = "allwin-followed-matches";
@@ -24,6 +24,18 @@ export function getFollowedMatchIds(): number[] {
 
 export function isFollowed(matchId: number): boolean {
   return safeRead().includes(matchId);
+}
+
+/** 迁移成功后移除对应 id;列表清空时整个 key 删掉。写失败静默(隐私模式)。 */
+export function removeFollowedMatches(ids: number[]): void {
+  if (ids.length === 0) return;
+  const next = safeRead().filter((v) => !ids.includes(v));
+  try {
+    if (next.length === 0) window.localStorage.removeItem(KEY);
+    else window.localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    // 隐私模式等写入失败:静默,不阻塞页面
+  }
 }
 
 /** 返回切换后的关注状态(true=已关注)。 */
