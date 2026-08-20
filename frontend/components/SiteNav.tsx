@@ -22,8 +22,6 @@ const NAV_ITEMS = [
     mobile: false,
   },
   { href: "/reco", label: "每日精选", mobile: true },
-  { href: "/track-record", label: "模型战绩", mobile: false },
-  { href: "/about-model", label: "模型说明", mobile: false },
   { href: "/pricing", label: "权限说明", mobile: true },
   { href: "/about", label: "关于我们", mobile: true },
 ];
