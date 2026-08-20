@@ -12,9 +12,10 @@
   FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS(168h),只为让"首次发现即采"结构上可达;
 - 真实抓取需 THORDATA_PROXY;离线用 --offline-payload 验证同一条代码链路。
 
---write-match-details(裁判/天气赛前数据能力实测,本轮任务):
+--write-match-details(裁判/天气/场馆赛前数据能力,2026-08-20 补充场馆与天气描述):
 - 用同一份已经抓到的 payload 定向 UPDATE dim_match 的 Referee/Temperature/
-  Wind_Speed 三列,不新发第二次请求,不碰 status/kickoff/比分等其它 16 列;
+  Wind_Speed/Venue_Name/Venue_City/Venue_Country/Weather_Description 七列,
+  不新发第二次请求,不碰 status/kickoff/比分等其它列;
 - 新值为空时不覆盖已知旧值(COALESCE),不用一次解析缺失把已知数据抹成 NULL;
 - 不会写 lineupType='predicted' 的预测阵容进 fact_match_lineup(那是
   ingest_match.py 的职责边界,赛前跑它会把预测阵容与赛后确认阵容混为一谈)。
@@ -56,8 +57,19 @@ from backend.providers.fotmob_snapshots import (
 )
 
 
+_MATCH_DETAILS_COLUMNS = (
+    "Referee",
+    "Temperature",
+    "Wind_Speed",
+    "Venue_Name",
+    "Venue_City",
+    "Venue_Country",
+    "Weather_Description",
+)
+
+
 def _write_match_details(conn_core_rw, match_id: int, details: dict) -> bool:
-    """COALESCE 式定向更新:只在新值非空时覆盖 Referee/Temperature/Wind_Speed,
+    """COALESCE 式定向更新:只在新值非空时覆盖 _MATCH_DETAILS_COLUMNS 这几列,
     绝不覆盖其它列。返回是否至少有一个字段是非空值(供上层汇总统计)。"""
     with tx(conn_core_rw):
         conn_core_rw.execute(
@@ -65,12 +77,16 @@ def _write_match_details(conn_core_rw, match_id: int, details: dict) -> bool:
             UPDATE dim_match
             SET Referee = COALESCE(?, Referee),
                 Temperature = COALESCE(?, Temperature),
-                Wind_Speed = COALESCE(?, Wind_Speed)
+                Wind_Speed = COALESCE(?, Wind_Speed),
+                Venue_Name = COALESCE(?, Venue_Name),
+                Venue_City = COALESCE(?, Venue_City),
+                Venue_Country = COALESCE(?, Venue_Country),
+                Weather_Description = COALESCE(?, Weather_Description)
             WHERE Match_ID = ?
             """,
-            (details.get("Referee"), details.get("Temperature"), details.get("Wind_Speed"), match_id),
+            (*(details.get(k) for k in _MATCH_DETAILS_COLUMNS), match_id),
         )
-    return any(details.get(k) is not None for k in ("Referee", "Temperature", "Wind_Speed"))
+    return any(details.get(k) is not None for k in _MATCH_DETAILS_COLUMNS)
 
 
 def _snapshot_one(
@@ -84,7 +100,8 @@ def _snapshot_one(
     """单场:payload → 阵容 + 两队伤停,共用 observed_at/poll_run_id。
 
     conn_core_rw 非 None 时,额外用同一份 payload 定向更新 dim_match 的
-    Referee/Temperature/Wind_Speed(--write-match-details,见模块 docstring)。
+    Referee/Temperature/Wind_Speed/Venue_*/Weather_Description
+    (--write-match-details,见模块 docstring)。
     """
     mid = int(match_row["Match_ID"])
     counts = {"inserted": 0, "skipped": 0, "match_details_written": False}

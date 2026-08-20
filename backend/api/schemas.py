@@ -178,8 +178,36 @@ class TeamFormEntry(BaseModel):
     result: Literal["W", "D", "L"]
 
 
+class MatchDetailSummary(MatchSummary):
+    """详情页专属:在 MatchSummary 之上追加球场/天气/裁判字段(2026-08-20)。
+
+    刻意不加进 MatchSummary 本体——那会让 /api/v1/matches 列表响应里每张
+    卡片都多出这几个恒为 null 的字段(列表接口从不查询这些列,§10.3 契约
+    纪律要求"每个 operation 声明自己的成功响应模型",不是全站共用一个胖
+    DTO)。只有 /matches/{id} 详情端点用这个子类。
+
+    全部可空:Referee/Temperature/Wind_Speed 是 dim_match 基线列,产线覆盖
+    率分别约 71%/16%/16%(不是每场都有);Venue_*/Weather_Description 是本次
+    新增列,历史比赛无 FotMob 原始快照可回填,恒为 NULL。前端按字段各自
+    判空隐藏,不得为凑齐卡片而编造占位值。
+
+    temperature_c/wind_speed_kmh 的单位是摄氏度/公里每小时——FotMob 原始
+    payload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),
+    非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响
+    其它字段。
+    """
+
+    referee: Optional[str] = None
+    temperature_c: Optional[int] = None
+    wind_speed_kmh: Optional[int] = None
+    weather_description: Optional[str] = None
+    venue_name: Optional[str] = None
+    venue_city: Optional[str] = None
+    venue_country: Optional[str] = None
+
+
 class MatchDetailResponse(BaseModel):
-    match: MatchSummary
+    match: MatchDetailSummary
     data_updated_at: Optional[str] = None
     home_form: list[TeamFormEntry] = []
     away_form: list[TeamFormEntry] = []

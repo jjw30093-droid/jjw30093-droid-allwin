@@ -31,6 +31,7 @@ import { CooccurrenceSection } from "@/components/matches/CooccurrenceSection";
 import { MarketCardsSection } from "@/components/matches/MarketCardsSection";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { MatchHeaderPre } from "@/components/matches/MatchHeaderPre";
+import { MatchInfoCard } from "@/components/matches/MatchInfoCard";
 import { MatchHeaderFinished } from "@/components/matches/MatchHeaderFinished";
 import { MatchTabs } from "@/components/matches/MatchTabs";
 import { MatchPreTabs } from "@/components/matches/MatchPreTabs";
@@ -101,6 +102,7 @@ function HighlightsGroup({
 }) {
   return (
     <>
+      <MatchInfoCard match={detail.match} />
       {!finished && <QuickView detail={detail} />}
       <section className={styles.section}>
         <SectionTitle>数据倾向</SectionTitle>

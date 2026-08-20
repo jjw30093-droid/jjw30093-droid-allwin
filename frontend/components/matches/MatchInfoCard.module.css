@@ -1,0 +1,41 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.rows > div {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.rows dt {
+  flex: none;
+  width: 60px;
+  color: var(--ink-3);
+}
+
+.rows dd {
+  margin: 0;
+  color: var(--ink-2);
+}

@@ -52,6 +52,32 @@ def _row_to_summary(r, display) -> dict:
 }
 
 
+def _int_or_none(value) -> int | None:
+    """dim_match.Temperature/Wind_Speed 是 TEXT 列(采集端 str() 落库,§见
+    fotmob_client.parse_match_dim);容错解析,解析不出来就是 None,不硬转崩溃。"""
+    if value is None:
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _venue_weather_referee(r) -> dict:
+    """详情页专属字段(2026-08-20,MatchDetailSummary)。只在 match_by_id 合入,
+    不进 _row_to_summary——列表端点不需要,也不该为每张卡片多带这几列。"""
+    keys = r.keys()
+    return {
+        "referee": r["Referee"] if "Referee" in keys else None,
+        "temperature_c": _int_or_none(r["Temperature"] if "Temperature" in keys else None),
+        "wind_speed_kmh": _int_or_none(r["Wind_Speed"] if "Wind_Speed" in keys else None),
+        "weather_description": r["Weather_Description"] if "Weather_Description" in keys else None,
+        "venue_name": r["Venue_Name"] if "Venue_Name" in keys else None,
+        "venue_city": r["Venue_City"] if "Venue_City" in keys else None,
+        "venue_country": r["Venue_Country"] if "Venue_Country" in keys else None,
+    }
+
+
 def _iso_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -252,7 +278,7 @@ def match_by_id(conn: sqlite3.Connection, match_id: int) -> dict | None:
     if r is None:
         return None
     display = team_display_for(conn, {r["Home_Team_ID"], r["Away_Team_ID"]})
-    return _row_to_summary(r, display)
+    return {**_row_to_summary(r, display), **_venue_weather_referee(r)}
 
 
 def recent_form(

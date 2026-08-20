@@ -82,11 +82,18 @@ def test_real_prematch_payload_status_is_not_started(client):
     assert row["kickoff_at_utc"] == "2026-08-01T14:00:00Z"
     assert row["kickoff_precision"] == "exact"
     assert row["kickoff_source"] == "fotmob:match_details"
-    # 赛前数据能力实测(裁判/天气):同一份 payload 里两者都必须解析出来,
+    # 赛前数据能力实测(裁判/天气/场馆):同一份 payload 里都必须解析出来,
     # 不得因为改了 status 判定就顺带影响其它字段。
     assert row["Referee"] == "Mischa Kellerhals"
     assert row["Temperature"] == "18"
     assert row["Wind_Speed"] == "9"
+    # 场馆(content.matchFacts.infoBox.Stadium)与天气文字描述(2026-08-20):
+    # 此前完全未提取,现在补上——真实来源 description="Partly Cloudy/Wind"
+    # 比 defaultTitle="Windy" 信息量大,优先取 description。
+    assert row["Venue_Name"] == "Nye Fredrikstad Stadion"
+    assert row["Venue_City"] == "Fredrikstad"
+    assert row["Venue_Country"] == "Norway"
+    assert row["Weather_Description"] == "Partly Cloudy/Wind"
 
 
 @pytest.mark.parametrize(

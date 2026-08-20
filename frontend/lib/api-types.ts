@@ -2701,7 +2701,7 @@ export interface components {
         };
         /** MatchDetailResponse */
         MatchDetailResponse: {
-            match: components["schemas"]["MatchSummary"];
+            match: components["schemas"]["MatchDetailSummary"];
             /** Data Updated At */
             data_updated_at?: string | null;
             /**
@@ -2719,6 +2719,80 @@ export interface components {
              * @default false
              */
             reco_published: boolean;
+        };
+        /**
+         * MatchDetailSummary
+         * @description 详情页专属:在 MatchSummary 之上追加球场/天气/裁判字段(2026-08-20)。
+         *
+         *     刻意不加进 MatchSummary 本体——那会让 /api/v1/matches 列表响应里每张
+         *     卡片都多出这几个恒为 null 的字段(列表接口从不查询这些列,§10.3 契约
+         *     纪律要求"每个 operation 声明自己的成功响应模型",不是全站共用一个胖
+         *     DTO)。只有 /matches/{id} 详情端点用这个子类。
+         *
+         *     全部可空:Referee/Temperature/Wind_Speed 是 dim_match 基线列,产线覆盖
+         *     率分别约 71%/16%/16%(不是每场都有);Venue_*\/Weather_Description 是本次
+         *     新增列,历史比赛无 FotMob 原始快照可回填,恒为 NULL。前端按字段各自
+         *     判空隐藏,不得为凑齐卡片而编造占位值。
+         *
+         *     temperature_c/wind_speed_kmh 的单位是摄氏度/公里每小时——FotMob 原始
+         *     payload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),
+         *     非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响
+         *     其它字段。
+         */
+        MatchDetailSummary: {
+            /** Match Id */
+            match_id: number;
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season: string;
+            /** Date Utc */
+            date_utc: string;
+            /** Kickoff At Utc */
+            kickoff_at_utc?: string | null;
+            /** Round */
+            round?: string | null;
+            /** Status */
+            status: string;
+            home: components["schemas"]["TeamRef"];
+            away: components["schemas"]["TeamRef"];
+            /** Home Score */
+            home_score?: number | null;
+            /** Away Score */
+            away_score?: number | null;
+            /** Sync State */
+            sync_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
+            /** Data Updated At */
+            data_updated_at?: string | null;
+            /** Last Success Sync At */
+            last_success_sync_at?: string | null;
+            /** Next Planned Sync At */
+            next_planned_sync_at?: string | null;
+            /** Probability Source */
+            probability_source?: ("MODEL" | "MARKET_BASELINE" | "UNAVAILABLE") | null;
+            /** Odds Observation Count */
+            odds_observation_count?: number | null;
+            /** Odds Coverage Tier */
+            odds_coverage_tier?: ("full_timeline" | "open_close_only" | "none") | null;
+            /** Odds Last Observed At */
+            odds_last_observed_at?: string | null;
+            /** Odds Freshness State */
+            odds_freshness_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
+            win_probability?: components["schemas"]["WinProbabilityDTO"] | null;
+            /** Referee */
+            referee?: string | null;
+            /** Temperature C */
+            temperature_c?: number | null;
+            /** Wind Speed Kmh */
+            wind_speed_kmh?: number | null;
+            /** Weather Description */
+            weather_description?: string | null;
+            /** Venue Name */
+            venue_name?: string | null;
+            /** Venue City */
+            venue_city?: string | null;
+            /** Venue Country */
+            venue_country?: string | null;
         };
         /** MatchListResponse */
         MatchListResponse: {

@@ -135,6 +135,12 @@ DIM_MATCH_COLUMNS = [
     # kickoff_precision ∈ exact / date_only / unknown;kickoff_source 可空,不编造。
     ("kickoff_precision", "TEXT"),
     ("kickoff_source", "TEXT"),
+    # 场馆与天气描述(比赛详情"比赛信息"卡片);migrations/core/0004 补列。
+    # 历史比赛无原始快照可回填,恒为 NULL,不编造。
+    ("Venue_Name", "TEXT"),
+    ("Venue_City", "TEXT"),
+    ("Venue_Country", "TEXT"),
+    ("Weather_Description", "TEXT"),
 ]
 
 DIM_PLAYER_COLUMNS = [
