@@ -5,8 +5,13 @@ import { test, expect } from "@playwright/test";
  *
  * 360/390/430px 三个真实视口下验证:筛选栏、新建表单(真实比赛搜索)、
  * 已创建推荐单卡片、编辑面板、会员预览面板都不需要横向滚动就能完成操作;
- * 发布按钮点击后必须先经过 window.confirm 二次确认(真实浏览器原生对话框,
- * 不是 mock)。
+ * 发布按钮点击后必须先经过站内二次确认面板才真正发请求。
+ *
+ * 2026-08-19:发布确认从 window.confirm 换成站内内联面板——真实用户报告
+ * 在手机上点"发布"没反应,排查是浏览器原生 confirm() 弹窗被忽略/划掉,
+ * 请求根本没发出去,且没有任何页面反馈;原生弹窗依赖浏览器/系统行为,不同
+ * 环境表现不一致。这里改验证真实点击流程走的是站内面板,不再需要
+ * page.on("dialog") 挂原生对话框钩子。
  *
  * E2E 环境的 odds.db 每次重建为空表(tests/e2e/seed_e2e.py 顶部说明),
  * 没有真实 NowGoal 快照可选,因此这里创建的草稿会退回手动录入
@@ -110,25 +115,23 @@ for (const vp of VIEWPORTS) {
     await expectNoHorizontalScroll(page, vp.width);
     await card.getByRole("button", { name: "取消", exact: true }).click();
 
-    // 发布:必须先弹原生 confirm 二次确认,取消后不应该真的发布成功。
-    let dialogSeen = false;
-    page.once("dialog", async (dialog) => {
-      dialogSeen = true;
-      expect(dialog.type()).toBe("confirm");
-      await dialog.dismiss();
-    });
+    // 发布:必须先展开站内二次确认面板,取消后不应该真的发布成功。
     await card.getByRole("button", { name: "发布" }).click();
-    await page.waitForTimeout(300);
-    expect(dialogSeen).toBe(true);
+    await expect(card.getByText(/确认发布推荐单/)).toBeVisible();
+    await expectNoHorizontalScroll(page, vp.width);
+    await card.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(card.getByText(/确认发布推荐单/)).toHaveCount(0);
     // 取消后这张卡片自身的状态徽标仍是「草稿」,不应该变成「已发布」
     // (用 card 限定作用域——筛选下拉本身就有一个字面量是「已发布」的
     // <option>,不能拿全页文本判断)。
     await expect(card.getByText("已发布", { exact: true })).toHaveCount(0);
 
-    // 再次点击并接受确认——E2E 的 odds.db 是空表,手动录入/未选真实盘口的
-    // 腿会被后端拒绝发布,验证具体错误文案在窄屏下完整展示、不产生横向滚动。
-    page.once("dialog", (dialog) => dialog.accept());
+    // 再次点击并在面板里点"确认发布"——E2E 的 odds.db 是空表,手动录入/未选
+    // 真实盘口的腿会被后端拒绝发布,验证具体错误文案在窄屏下完整展示、不
+    // 产生横向滚动。
     await card.getByRole("button", { name: "发布" }).click();
+    await expect(card.getByText(/确认发布推荐单/)).toBeVisible();
+    await card.getByRole("button", { name: "确认发布" }).click();
     await expect(
       card.getByText(/已发布|缺乏真实盘口溯源/).first(),
     ).toBeVisible({ timeout: 10_000 });

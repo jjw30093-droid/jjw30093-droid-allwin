@@ -1313,10 +1313,12 @@ function matchCandidateLabel(m: RecoMatchCandidate): string {
 
 /**
  * 单条腿的比赛/赔率录入:比赛从真实比赛候选搜索选(替代自由文本描述);
- * 选定比赛后若抓到真实盘口(1x2/大小球/角球大小),赔率从真实选项里选,
+ * 选定比赛后若抓到真实盘口(1x2/大小球/角球大小/让球盘,2026-08-19 起让球盘
+ * 也纳入,见 backend/queries/odds.py::_OPTION_MARKETS),赔率从真实选项里选,
  * 不用手打数字——历史上手打的赔率数字没有任何东西保证它和真实盘口对得上。
- * 没有真实数据(未抓到 / AH 等未覆盖市场)时优雅退回原有自由文本三格,
- * 不因为"选不出来"就让这条腿没法录。
+ * 没有真实数据(未抓到 / 这四个市场之外的市场)时优雅退回原有自由文本三格,
+ * 不因为"选不出来"就让这条腿没法录。选项文案(如"主队让1.25球")完全由
+ * 后端产出,本组件不做任何按市场分支的渲染逻辑。
  */
 function LegRowEditor({
   leg, onChange, onRemove, removable,
@@ -1535,6 +1537,10 @@ export function RecoTab() {
   const [editLegsMode, setEditLegsMode] = useState(false);
   const [editLegs, setEditLegs] = useState<LegDraft[]>([]);
   const [publishErrors, setPublishErrors] = useState<Record<string, string>>({});
+  // 发布二次确认(2026-08-19 起站内面板,不再用 window.confirm——真实用户
+  // 报告在手机上点"发布"没反应,排查是原生弹窗被忽略/划掉,请求根本没发出,
+  // 且没有任何页面反馈。见下方 publish() 与 rowActions 的"发布"按钮。
+  const [publishConfirmFor, setPublishConfirmFor] = useState<string | null>(null);
 
   // 会员预览(GET /admin/reco/slips/{slip_id}/preview)
   const [previewFor, setPreviewFor] = useState<string | null>(null);
@@ -1609,20 +1615,23 @@ export function RecoTab() {
   /** 发布前二次确认——公开/付费内容一旦发布会员立即可见,不能一次误触
    * 就上线。后端(上一阶段新增)发布校验失败时,把具体错误文案(点名第几
    * 条腿缺乏真实溯源)原样展示给 admin,不是笼统的"操作失败"。 */
+  /** 二次确认已经在调用前经过站内 publishConfirmFor 面板(见 rowActions),
+   * 这里不再自己弹确认——window.confirm 依赖浏览器/系统原生弹窗,不同环境
+   * 表现不一致(真实用户在手机上点"发布"没反应,就是原生弹窗被忽略/划掉、
+   * 请求根本没发出去,且没有任何页面反馈)。 */
   const publish = async (s: RecoSlip) => {
-    if (!window.confirm(`确认发布推荐单「${s.title}」?发布后拥有精选权益的会员立即可见。`)) {
-      return;
-    }
     setBusyId(s.id);
     setPublishErrors((m) => ({ ...m, [s.id]: "" }));
     try {
       await clientFetch(`/api/v1/admin/reco/slips/${s.id}/publish`, { method: "POST", body: {} });
       setMsg({ kind: "ok", text: "已发布" });
+      setPublishConfirmFor(null);
       void load();
     } catch (e) {
       // 只在紧贴发布按钮的位置展示具体错误(见下方 publishErrors 渲染),
       // 不再重复走 MsgBar——避免同一条"点名第几条腿缺乏溯源"的错误文案在
-      // 页面上出现两次。
+      // 页面上出现两次。确认面板保持展开,让 admin 看得到这条错误紧挨着
+      // 发布按钮,而不是收起面板把错误信息带走。
       setPublishErrors((m) => ({ ...m, [s.id]: apiErrorMessage(e, "发布失败") }));
     } finally {
       setBusyId(null);
@@ -1886,7 +1895,11 @@ export function RecoTab() {
               <div className={styles.rowActions}>
                 {s.status === "draft" && (
                   <button className={styles.btnPrimary} disabled={busyId === s.id}
-                          onClick={() => void publish(s)}>发布</button>
+                          onClick={() =>
+                            setPublishConfirmFor(publishConfirmFor === s.id ? null : s.id)
+                          }>
+                    发布
+                  </button>
                 )}
                 {(s.status === "draft" || s.status === "published") && (
                   <button className={styles.btnGhost} disabled={busyId === s.id}
@@ -1911,6 +1924,22 @@ export function RecoTab() {
                           onClick={() => setVoidFor(voidFor === s.id ? null : s.id)}>作废</button>
                 )}
               </div>
+
+              {publishConfirmFor === s.id && (
+                <div className={styles.formRow} data-testid="publish-confirm-panel">
+                  <p>
+                    确认发布推荐单「{s.title}」?发布后拥有精选权益的会员立即可见。
+                  </p>
+                  <button className={styles.btnPrimary} disabled={busyId === s.id}
+                          onClick={() => void publish(s)}>
+                    确认发布
+                  </button>
+                  <button className={styles.btnGhost} disabled={busyId === s.id}
+                          onClick={() => setPublishConfirmFor(null)}>
+                    取消
+                  </button>
+                </div>
+              )}
 
               {publishErrors[s.id] && (
                 <p className={styles.msgErr}>{publishErrors[s.id]}</p>

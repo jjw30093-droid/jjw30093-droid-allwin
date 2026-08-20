@@ -4,7 +4,16 @@
 真实比赛/真实盘口对不上。本文件覆盖两个新端点:
 - GET /admin/reco/match-candidates:从真实 dim_match 选比赛,不再手打描述;
 - GET /admin/reco/match-candidates/{id}/odds-options:从真实 bronze_ng_odds_snap
-  选赔率(1x2/大小球/角球大小),不再手打数字;没有真实数据时诚实返回空列表。
+  选赔率(1x2/大小球/角球大小/让球盘),不再手打数字;没有真实数据时诚实返回
+  空列表。
+
+让球盘(ah,2026-08-19 新增)此前被排除在自动选项外(担心 admin 记反让球
+方向),但 docs/data-sources.md §2.5(2026-08-16)已经用 48 组精确配对 +
+2,834 组独立历史样本交叉验证过符号约定(line>0=主队让球/热门,line<0=客队
+让球/热门),backend/commands/reco_settlement_math.py::_resolve_ah 也已经在
+用这套约定做自动结算——本次只是把同一套已验证的约定接进选项列表,不引入
+新语义。选项文案刻意不用符号(不写"-0.5"/"+0.5"),直接写"让"/"受让"大白话,
+从根上避开当初怕记反的那个顾虑。
 """
 
 import json
@@ -183,6 +192,65 @@ class TestOddsOptionsContent:
 
         assert len(body["options"]) == 7   # 3 + 2 + 2,不多不少
 
+    def test_real_ah_options_home_favorite(self, app, data_dir, fresh_ip):
+        """line>0 = 主队让球/热门(docs/data-sources.md §2.5 验证结论)。
+        文案不写符号,直接写"让"/"受让",避免 admin 需要记住符号方向。"""
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "900010", 9001)
+        _seed_snap(conn_odds, "900010", "ah", {"home": 0.90, "line": 1.25, "away": 0.95})
+        conn_odds.commit()
+        conn_odds.close()
+
+        admin = _admin_client(app, fresh_ip)
+        body = admin.get("/api/v1/admin/reco/match-candidates/9001/odds-options").json()
+        by_selection = {(o["market"], o["selection"]): o for o in body["options"]}
+
+        home = by_selection[("ah", "主队让1.25球")]
+        away = by_selection[("ah", "客队受让1.25球")]
+        assert home["odds"] == 0.90
+        assert home["side"] == "home"
+        assert home["line"] == 1.25
+        assert away["odds"] == 0.95
+        assert away["side"] == "away"
+        assert away["line"] == 1.25
+        assert home["market_label"] == "让球盘"
+        assert len(body["options"]) == 2
+
+    def test_real_ah_options_away_favorite_matches_verified_real_match(
+        self, app, data_dir, fresh_ip
+    ):
+        """真实场次核对(docs/data-sources.md §2.5 引用的样本):Vålerenga(主)
+        1-2 Bodø/Glimt(客),line=-1.25(客队热门,让 1.25 球)——line<0 时
+        客队让球、主队受让,不是反过来。"""
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "900011", 9001)
+        _seed_snap(conn_odds, "900011", "ah", {"home": 0.85, "line": -1.25, "away": 1.00})
+        conn_odds.commit()
+        conn_odds.close()
+
+        admin = _admin_client(app, fresh_ip)
+        body = admin.get("/api/v1/admin/reco/match-candidates/9001/odds-options").json()
+        by_selection = {(o["market"], o["selection"]): o for o in body["options"]}
+
+        assert ("ah", "客队让1.25球") in by_selection
+        assert ("ah", "主队受让1.25球") in by_selection
+        assert by_selection[("ah", "客队让1.25球")]["side"] == "away"
+        assert by_selection[("ah", "客队让1.25球")]["line"] == -1.25
+        assert by_selection[("ah", "主队受让1.25球")]["side"] == "home"
+
+    def test_real_ah_options_pick_em(self, app, data_dir, fresh_ip):
+        """line=0(平手盘)不套"让"/"受让"措辞——那两个字对平手盘没有意义。"""
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "900012", 9001)
+        _seed_snap(conn_odds, "900012", "ah", {"home": 0.95, "line": 0, "away": 0.95})
+        conn_odds.commit()
+        conn_odds.close()
+
+        admin = _admin_client(app, fresh_ip)
+        body = admin.get("/api/v1/admin/reco/match-candidates/9001/odds-options").json()
+        selections = {o["selection"] for o in body["options"] if o["market"] == "ah"}
+        assert selections == {"主队(平手盘)", "客队(平手盘)"}
+
     def test_realtime_company_wins_over_legacy_backfill(self, app, data_dir, fresh_ip):
         """公司优先级同 latest_1x2_by_match:实时轮询 '8' 优先于历史回填 '281'。"""
         conn_odds = connect_rw("odds")
@@ -231,6 +299,24 @@ class TestOddsOptionsContent:
         markets = {o["market"] for o in body["options"]}
         assert "1x2" not in markets
         assert "ou" in markets
+
+    def test_incomplete_ah_payload_yields_no_options_for_that_market_only(
+        self, app, data_dir, fresh_ip
+    ):
+        """ah 缺 line 字段 → 整个 ah 市场跳过,1x2 不受影响(同上一条同一规则,
+        ah 是新加的市场,必须单独钉住,不能只靠 1x2/ou 那条覆盖)。"""
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "900013", 9001)
+        _seed_snap(conn_odds, "900013", "ah", {"home": 0.90, "away": 0.95})  # 缺 line
+        _seed_snap(conn_odds, "900013", "1x2", {"home": 1.85, "draw": 3.60, "away": 4.20})
+        conn_odds.commit()
+        conn_odds.close()
+
+        admin = _admin_client(app, fresh_ip)
+        body = admin.get("/api/v1/admin/reco/match-candidates/9001/odds-options").json()
+        markets = {o["market"] for o in body["options"]}
+        assert "ah" not in markets
+        assert "1x2" in markets
 
     def test_unresolved_xref_yields_empty(self, app, data_dir, fresh_ip):
         """review_status 非 auto_ok/confirmed 的映射不可信,不得当真实盘口用。"""

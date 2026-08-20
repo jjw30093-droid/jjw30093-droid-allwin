@@ -405,11 +405,20 @@ def latest_market_line(
 
 
 # admin「每日精选」录入用(2026-08-14):与其让 admin 手打赔率数字,不如直接从
-# 已经抓到的真实盘口里选——只覆盖三个"选项一句话能说清楚"的市场,AH 的让球
-# 方向(主队让/受让)容易记反且历史上出过反向 bug(见 nowgoal.py 主客反转归一
-# 注释),不纳入自动选项;这三个市场之外或没有真实数据时,admin 仍手动填写。
-_OPTION_MARKETS = ("1x2", "ou", "corners_ou")
-_OPTION_MARKET_LABEL_ZH = {"1x2": "胜平负", "ou": "大小球", "corners_ou": "角球大小"}
+# 已经抓到的真实盘口里选——覆盖"选项一句话能说清楚"的市场;这些市场之外或
+# 没有真实数据时,admin 仍手动填写。
+#
+# ah(2026-08-19 新增):原本因为"让球方向容易记反"被排除,但
+# docs/data-sources.md §2.5(2026-08-16)已用 48 组精确配对 + 三处独立历史
+# 文档(含 2,834 组样本)交叉验证过符号约定(line>0=主队让球/热门,line<0=
+# 客队让球/热门),backend/commands/reco_settlement_math.py::_resolve_ah 也
+# 已经在用这套约定做自动结算——现在只是把同一套已验证约定接进选项列表。
+# _market_option_selections 的 ah 分支刻意不用符号("-0.5"/"+0.5"),直接写
+# "让"/"受让"大白话,从根上避开当初怕记反的顾虑,不依赖 admin 记住符号方向。
+_OPTION_MARKETS = ("1x2", "ou", "corners_ou", "ah")
+_OPTION_MARKET_LABEL_ZH = {
+    "1x2": "胜平负", "ou": "大小球", "corners_ou": "角球大小", "ah": "让球盘",
+}
 
 
 def _market_option_selections(
@@ -440,13 +449,34 @@ def _market_option_selections(
             (f"大{unit}{line}", float(over), "over", float(line)),
             (f"小{unit}{line}", float(under), "under", float(line)),
         ]
+    if market == "ah":
+        line, home, away = flat.get("line"), flat.get("home"), flat.get("away")
+        if not all(isinstance(v, (int, float)) for v in (line, home, away)):
+            return []
+        line = float(line)
+        # 符号约定见 docs/data-sources.md §2.5:line>0=主队让球(热门),
+        # line<0=客队让球(热门),与 reco_settlement_math.py::_resolve_ah 的
+        # margin>line ⇒ home 赢盘、margin<line ⇒ away 赢盘完全对应
+        # (higher_side_wins={"home": True, "away": False})。文案直接写
+        # "让"/"受让",不写符号——admin 选中哪个字面意思就是哪个,不需要
+        # 反推符号方向。
+        if line > 0:
+            home_text, away_text = f"主队让{line}球", f"客队受让{line}球"
+        elif line < 0:
+            home_text, away_text = f"主队受让{-line}球", f"客队让{-line}球"
+        else:
+            home_text, away_text = "主队(平手盘)", "客队(平手盘)"
+        return [
+            (home_text, float(home), "home", line),
+            (away_text, float(away), "away", line),
+        ]
     return []
 
 
 def raw_market_options(
     conn_odds: sqlite3.Connection, fotmob_match_id: int
 ) -> list[dict[str, Any]]:
-    """单场三个市场(1x2/大小球/角球大小)的最新真实原始赔率选项。
+    """单场四个市场(1x2/大小球/角球大小/让球盘)的最新真实原始赔率选项。
 
     不去水、不算胜率——原样透出该公司最新一口价与公司名(admin 需要的是
     "这个数字来自哪家公司的真实报价",不是研究用的隐含概率)。公司优先级同
