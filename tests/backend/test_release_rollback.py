@@ -392,6 +392,89 @@ do_build
         assert marker.exists(), f"do_build 必须调用 copy_model_artifacts:{r.stdout}\n{r.stderr}"
 
 
+class TestCandidateSmokeProcessCleanup:
+    """2026-08-20 真实生产发现:candidate_smoke() 里
+    `( cd ... && . .env && VAR=val uvicorn ... ) & smoke_pid=$!` 捕获的是这个
+    复合命令背后的子 shell PID,不一定是 uvicorn 自己的 PID——bash 在"cd &&
+    source 文件 && VAR=val cmd"这类多语句子 shell 上不保证把最后一条命令尾调用
+    优化成 exec 替换,子 shell 可能会再 fork 一个真正跑 uvicorn 的孙进程。
+    `kill "$smoke_pid"` 杀掉的是子 shell 本身,不传导给已经独立存在的孙进程——
+    孙进程随即被重新挂到 init(PPID=1),继续占着 SMOKE_PORT 永久残留,直到人工
+    发现并手动 kill。2026-08-20 当天三次真实生产发布,每次都复现同一个残留
+    进程(`ps` 查到的 uvicorn 进程 PPID=1,存活超过发布完成后 30~57 分钟)。
+
+    修复:子 shell 最后一条命令前加 `exec`,让子 shell 进程自己被替换成
+    uvicorn(同一个 PID,不再多 fork 一层)——`kill "$smoke_pid"` 因此直接命中
+    真实进程,不留孤儿。
+    """
+
+    def _fake_uvicorn(self, release_dir: Path) -> Path:
+        """真实 uvicorn 的替身:监听 --port 指定的端口、对任何请求都回 200
+        (足够让 candidate_smoke() 的 healthz/readyz 轮询判定成功),启动时先把
+        自己的真实 PID 写进 SMOKE_PID_FILE——测试据此在 candidate_smoke() 返回
+        之后,独立于子 shell/进程树语义,直接检查这个 PID 是否还活着。"""
+        venv_bin = release_dir / ".venv" / "bin"
+        venv_bin.mkdir(parents=True, exist_ok=True)
+        fake = venv_bin / "uvicorn"
+        fake.write_text(
+            "#!/usr/bin/env python3\n"
+            "import http.server, os, sys\n"
+            "with open(os.environ['SMOKE_PID_FILE'], 'w') as f:\n"
+            "    f.write(str(os.getpid()))\n"
+            "args = sys.argv[1:]\n"
+            "port = 8001\n"
+            "for i, a in enumerate(args):\n"
+            "    if a == '--port':\n"
+            "        port = int(args[i + 1])\n"
+            "class H(http.server.BaseHTTPRequestHandler):\n"
+            "    def do_GET(self):\n"
+            "        self.send_response(200); self.end_headers()\n"
+            "    def log_message(self, *a):\n"
+            "        pass\n"
+            "http.server.HTTPServer(('127.0.0.1', port), H).serve_forever()\n"
+        )
+        fake.chmod(0o755)
+        return fake
+
+    def test_candidate_smoke_leaves_no_orphaned_process_on_success(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        release_dir = app_root / "releases" / "fakesha000000"
+        self._fake_uvicorn(release_dir)
+        smoke_port = _free_port()
+        pid_file = tmp_path / "smoke.pid"
+
+        script = f'''
+{SOURCE_RELEASE}
+RELEASE_DIR="{release_dir}"
+SMOKE_PORT={smoke_port}
+SMOKE_RETRIES=50
+SMOKE_INTERVAL=0.2
+candidate_smoke
+echo "CANDIDATE_SMOKE_EXIT=$?"
+'''
+        env = _base_env(app_root, tmp_path, SMOKE_PID_FILE=str(pid_file))
+        r = _run(script, env, timeout=30)
+        assert "CANDIDATE_SMOKE_EXIT=0" in r.stdout, f"{r.stdout}\n{r.stderr}"
+        assert pid_file.exists(), f"假 uvicorn 必须先写入自己的 PID: {r.stdout}\n{r.stderr}"
+        pid = int(pid_file.read_text().strip())
+
+        # candidate_smoke() 已经返回,真实进程必须已经被杀掉,不能残留占用端口
+        # ——修复前这里会一直存活到测试超时,因为 kill 的是子 shell 而不是它。
+        for _ in range(30):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            import time
+            time.sleep(0.1)
+        else:
+            pytest.fail(
+                f"candidate_smoke() 返回后,假 uvicorn 进程(pid={pid})仍然存活——"
+                "这正是真实生产复现的孤儿进程 bug:kill 的是子 shell 的 PID,"
+                "不是真正跑服务的进程。"
+            )
+
+
 class TestFailureOrdering:
     """用函数覆盖隔离每一段的顺序/失败语义,不需要真实 systemd/HTTP/venv/npm。"""
 
