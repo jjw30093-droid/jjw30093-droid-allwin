@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { serverGetOptional, type StandingsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { StandingsTable } from "@/components/league/StandingsTable";
@@ -8,9 +10,29 @@ import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import {
   TableTypeSwitcher,
   isTableType,
+  standingsHeading,
   type TableTypeKey,
 } from "@/components/league/TableTypeSwitcher";
 import styles from "./standings.module.css";
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ table_type?: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const { table_type: tableTypeParam } = await searchParams;
+  const tableType: TableTypeKey = isTableType(tableTypeParam) ? tableTypeParam : "all";
+  return leagueSectionMetadata(
+    id,
+    standingsHeading(tableType),
+    tableType === "xg"
+      ? "球队实际拿分与按 xG 应得分的差距榜。"
+      : "积分榜:排名、战绩、进失球与净胜球。",
+  );
+}
 
 // 已迁移到 /api/v1/leagues/{id}/standings(TeamRef 中文名解析在服务端)。
 // 2026-08-16 权限口径修正:全部联赛对任何人(含匿名)恒 200,服务端匿名
@@ -60,7 +82,7 @@ export default async function StandingsPage({
   // 显式选择(导航跨 tab 只带这个)——两者不能混用,否则一个 tab 的默认值会变成
   // 其它 tab 的显式选择,导致点导航跳到用户没选过的赛季(见 docs/data-plan.md)。
   const resolvedSeason = data?.season ?? seasonParam;
-  const heading = tableType === "xg" ? "xG 运气榜" : "排名榜";
+  const heading = standingsHeading(tableType);
 
   return (
     <main className={styles.page}>

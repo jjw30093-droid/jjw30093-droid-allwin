@@ -1,10 +1,21 @@
+import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { leagueSectionPath, serverGetOptional, type PlayersResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { PlayerBoards } from "@/components/league/PlayerBoards";
 import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./players.module.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  return leagueSectionMetadata(id, "球员数据榜", "射手榜、助攻榜等球员数据排行。");
+}
 
 // 已迁移到 /api/v1/leagues/{id}/players(2026-08-16 起对任何人恒含全部维度,
 // 服务端完成中文名解析与 top10 截取)。

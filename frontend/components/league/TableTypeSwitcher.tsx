@@ -24,6 +24,12 @@ export function isTableType(value: string | undefined): value is TableTypeKey {
   return TABLE_TYPES.some((t) => t.key === value);
 }
 
+/** standings 页 h1 与浏览器标签标题共用同一个判定,两者不可能漂移
+ * (page.tsx 的 h1 与 generateMetadata 都调这个函数)。 */
+export function standingsHeading(tableType: TableTypeKey): string {
+  return tableType === "xg" ? "xG 运气榜" : "排名榜";
+}
+
 export function TableTypeSwitcher({
   leagueId,
   season,

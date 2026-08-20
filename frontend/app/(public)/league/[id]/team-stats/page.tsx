@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { leagueSectionPath, serverGetOptional, type TeamStatsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { TeamStatsBoards } from "@/components/league/TeamStatsBoards";
@@ -6,6 +8,15 @@ import { TeamQuadrantChart } from "@/components/league/TeamQuadrantChart";
 import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./team-stats.module.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  return leagueSectionMetadata(id, "球队数据榜", "各项球队数据排行:进攻、防守、控球与 xG。");
+}
 
 // 已迁移到 /api/v1/leagues/{id}/team-stats(免费字段投影:射门/射正/控球/xG/xGOT;
 // 角球/红黄牌/零封/BTTS 是付费深度字段,响应里物理不存在,这里也没有)。

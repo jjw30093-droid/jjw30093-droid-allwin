@@ -1,10 +1,21 @@
+import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { leagueSectionPath, serverGetOptional, type GetJson } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { SeasonProfileCharts } from "@/components/league/SeasonProfileCharts";
 import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./overview.module.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  return leagueSectionMetadata(id, "赛季速览", "赛季进度、大小球分布与进球时间分桶等数据概况。");
+}
 
 type Profile = GetJson<"/api/v1/leagues/{league_id}/season-profile">;
 

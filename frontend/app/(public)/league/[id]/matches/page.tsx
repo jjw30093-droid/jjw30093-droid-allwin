@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
+import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { leagueSectionPath, serverGetOptional, type LeagueFixturesResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { FixtureRounds } from "@/components/league/FixtureRounds";
@@ -6,6 +8,15 @@ import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import { buildLeagueSeasonHref } from "@/lib/league-links";
 import styles from "./matches.module.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  return leagueSectionMetadata(id, "赛程与结果", "按轮次浏览赛程与已完赛结果。");
+}
 
 // 已迁移到 /api/v1/leagues/{id}/fixtures。赛程/结果是免费层展示形态,只有
 // 对阵/比分/日期/轮次/状态——概率是付费概率卡页的事,这里没有、也不该有。
