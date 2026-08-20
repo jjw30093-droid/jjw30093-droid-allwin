@@ -40,6 +40,7 @@ import { MatchStatsSection } from "@/components/matches/MatchStatsSection";
 import { MatchShotsSection } from "@/components/matches/MatchShotsSection";
 import { MatchEventsSection } from "@/components/matches/MatchEventsSection";
 import { MatchDataTabs } from "@/components/matches/MatchDataTabs";
+import { ChartWithSummary } from "@/components/matches/ChartWithSummary";
 import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSection";
 import { TeamStyleQuadrant } from "@/components/matches/TeamStyleQuadrant";
 import { AttackChainSection } from "@/components/matches/AttackChainSection";
@@ -137,19 +138,27 @@ function attackSourceNote(rows: AttackSourceRow[]): string {
   return `${top.label}每脚效率最高,平均 xG ${((top.xg as number) / top.shots).toFixed(3)}/脚。`;
 }
 
-/** 数据 tab:近期表现(两队各一张卡)→ 阵容/风格/球员三个子 tab。 */
+/** 数据 tab:近期表现(两队各一张卡)→ 阵容/风格/球员/射门四个子 tab。 */
 function DataGroup({
   detail,
   preview,
+  analysis,
 }: {
   detail: MatchDetailResponse;
   preview: MatchPreviewResponse | null;
+  analysis: AnalysisBundle | null;
 }) {
   const m = detail.match;
   const homeName = m.home.name;
   const awayName = m.away.name;
   const homeTeamId = m.home.team_id;
   const awayTeamId = m.away.team_id;
+  // 两队各自最近 5 场(同联赛口径优先)射门分布,后端已算好、拼进
+  // /analysis 的 chart_specs(backend/studio/bundle.py)——组件本身早就写好
+  // (ChartWithSummary + SpecChart 的 shot_map_explorer 分支),此前只是没有
+  // 任何页面把这个 tab 接上,不是数据/组件缺失。两队都没有覆盖时诚实展示
+  // 空态,不假装有数据。
+  const shotMapSpec = analysis?.chart_specs.find((c) => c.type === "shot_map_explorer") ?? null;
 
   return (
     <section className={styles.section}>
@@ -236,6 +245,19 @@ function DataGroup({
                 ]}
               />
             </>
+          }
+          shots={
+            shotMapSpec ? (
+              <figure className={styles.chartCard}>
+                <ChartWithSummary
+                  spec={shotMapSpec}
+                  titleClassName={styles.chartTitle}
+                  summaryClassName={styles.chartSummary}
+                />
+              </figure>
+            ) : (
+              <p className={styles.emptyText}>两队近期都没有可用的射门数据。</p>
+            )
           }
         />
       )}
@@ -332,7 +354,7 @@ function OverviewPanel({
   return (
     <>
       <HighlightsGroup idNum={idNum} detail={detail} finished={finished} />
-      <DataGroup detail={detail} preview={preview} />
+      <DataGroup detail={detail} preview={preview} analysis={analysis} />
       <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
     </>
   );
@@ -448,7 +470,7 @@ export function MatchDetailBody({
       ) : (
         <MatchPreTabs
           highlights={<HighlightsGroup idNum={idNum} detail={detail} finished={finished} />}
-          data={<DataGroup detail={detail} preview={preview} />}
+          data={<DataGroup detail={detail} preview={preview} analysis={analysis} />}
           odds={<OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />}
         />
       )}
