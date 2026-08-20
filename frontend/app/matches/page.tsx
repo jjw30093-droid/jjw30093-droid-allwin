@@ -55,12 +55,12 @@ export async function generateMetadata({
   const status = parseStatus((await searchParams).status);
   if (status === "finished") {
     return {
-      title: "赛果 — 欧赢 ALLWIN",
+      title: "赛果",
       description: "已结束比赛的比分与赛后数据:中文队名、最终比分,按开球时间由近及远。",
     };
   }
   return {
-    title: "比赛列表 — 欧赢 ALLWIN",
+    title: "比赛列表",
     description:
       "按日期、联赛、状态浏览比赛:中文队名、比分与 Bet365 赔率折算的胜平负概率。",
   };

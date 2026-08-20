@@ -5,7 +5,7 @@ import { serverGet, type LeagueInfo } from "@/lib/api-v1";
 import styles from "./leagues.module.css";
 
 export const metadata: Metadata = {
-  title: "联赛数据 — 欧赢 ALLWIN",
+  title: "联赛数据",
   description: "按真实数据可用状态浏览联赛排名、赛程与球队数据。",
 };
 

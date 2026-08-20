@@ -4,7 +4,7 @@ import { serverGet, type GetJson } from "@/lib/api-v1";
 import styles from "./pricing.module.css";
 
 export const metadata: Metadata = {
-  title: "访问权限说明 — 欧赢 ALLWIN",
+  title: "访问权限说明",
   description:
     "足球数据免费:登录即可查看全部联赛数据、模型完整概率与完整赔率时间线;赛前每日精选由站长为账号开通授权。",
 };

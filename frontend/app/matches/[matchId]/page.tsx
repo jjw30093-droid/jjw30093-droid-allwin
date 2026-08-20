@@ -37,10 +37,10 @@ export async function generateMetadata({
     `/api/v1/matches/${matchId}`,
     { revalidate: 300 },
   ).catch(() => null);
-  if (!detail) return { title: "比赛详情 — 欧赢 ALLWIN" };
+  if (!detail) return { title: "比赛详情" };
   const m = detail.match;
   return {
-    title: `${m.home.name} vs ${m.away.name} — 欧赢 ALLWIN`,
+    title: `${m.home.name} vs ${m.away.name}`,
     description: `${m.season} ${LEAGUE_ZH[m.league_id] ?? ""} 赛前分析:数据、模型概率与不确定性`,
   };
 }

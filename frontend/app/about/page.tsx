@@ -4,7 +4,7 @@ import Link from "next/link";
 import styles from "./about.module.css";
 
 export const metadata: Metadata = {
-  title: "关于我们 — 欧赢 ALLWIN",
+  title: "关于我们",
   description:
     "了解欧赢 ALLWIN 的足球数据来源、分析方式、内容工作流和合作方向。",
 };

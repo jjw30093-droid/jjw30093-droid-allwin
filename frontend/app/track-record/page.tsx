@@ -7,7 +7,7 @@ import { LocalTime } from "@/components/trust/LocalTime";
 import styles from "./track-record.module.css";
 
 export const metadata: Metadata = {
-  title: "公开战绩 — 欧赢 ALLWIN",
+  title: "公开战绩",
   description:
     "全部正式预测的公开记录:样本量、Accuracy、Brier、Log Loss、RPS,逐场展示预测概率与实际结果,不挑选、不删除。",
 };

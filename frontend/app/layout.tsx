@@ -17,7 +17,13 @@ const notoSansSC = Noto_Sans_SC({
 });
 
 export const metadata: Metadata = {
-  title: "欧赢 ALLWIN｜看数据，也看门道",
+  title: {
+    default: "欧赢 ALLWIN｜看数据，也看门道",
+    // 子路由段只需给出自己的短标题,后缀由这里统一追加——之前每个页面
+    // 各自手写 "— 欧赢 ALLWIN" 后缀,新页面很容易漏写(2026-08 QA 抽查
+    // 发现 6 个联赛子页 + /reco 浏览器标签页标题完全没设置)。
+    template: "%s — 欧赢 ALLWIN",
+  },
   description:
     "足球数据与比赛分析：赛程、状态、xG、赔率变化和公开记录，一场一场看。",
 };
