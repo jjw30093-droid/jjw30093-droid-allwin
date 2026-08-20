@@ -332,3 +332,54 @@ describe("ProjectedLineupSection observed_at 按北京时间呈现(H11)", () => 
     expect(container.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T[\d:]+Z/);
   });
 });
+
+describe("球场底图(2026-08-20,参照 miaomiaodi.cc:真实球场标记替换旧的 4 个装饰 span)", () => {
+  /** 复用上面 rowsFor 测试组同一份真实坐标 fixture——有真实坐标时才会真的
+   * 画球场(否则退化成纯名单),这里同时确认 FootballPitchBackground 以
+   * orientation="portrait" 接入,而不是误用了 landscape 默认值。 */
+  const shuffledStarters = [
+    { id: 5, name: "FW", shirt_number: "9", pos_x: 0.5, pos_y: 0.87 },
+    { id: 40, name: "MID4", shirt_number: "8", pos_x: 0.875, pos_y: 0.485 },
+    { id: 60, name: "DEF3", shirt_number: "6", pos_x: 0.79, pos_y: 0.292 },
+    { id: 99, name: "GK", shirt_number: "1", pos_x: 0.5, pos_y: 0.1 },
+    { id: 80, name: "AM2", shirt_number: "11", pos_x: 0.7, pos_y: 0.678 },
+    { id: 20, name: "MID2", shirt_number: "4", pos_x: 0.125, pos_y: 0.485 },
+    { id: 10, name: "DEF1", shirt_number: "2", pos_x: 0.21, pos_y: 0.292 },
+    { id: 50, name: "MID3", shirt_number: "7", pos_x: 0.625, pos_y: 0.485 },
+    { id: 15, name: "AM1", shirt_number: "10", pos_x: 0.3, pos_y: 0.678 },
+    { id: 70, name: "DEF2", shirt_number: "5", pos_x: 0.5, pos_y: 0.292 },
+    { id: 30, name: "MID1", shirt_number: "3", pos_x: 0.375, pos_y: 0.485 },
+  ];
+
+  it("有真实站位坐标时画竖版真实球场(viewBox 0 0 68 105),不再是旧的 4 个装饰 span", () => {
+    const { container } = render(
+      <ProjectedLineupSection
+        {...BASE_PROPS}
+        lineupType="lastStarting11"
+        home={{ team_id: 1, formation: "3-4-2-1", coach: null, subs: [], starters: shuffledStarters }}
+      />,
+    );
+    const svg = container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.getAttribute("viewBox")).toBe("0 0 68 105");
+    // 旧的装饰 span 类名不应再出现
+    expect(container.querySelector('[class*="pitchLine"]')).toBeNull();
+    expect(container.querySelector('[class*="pitchCircle"]')).toBeNull();
+    expect(container.querySelector('[class*="pitchBox"]')).toBeNull();
+    // 门将(id=99,pos_y 最小)与前锋(id=5,pos_y 最大)都真实渲染在球场上
+    expect(screen.getByText("GK")).not.toBeNull();
+    expect(screen.getByText("FW")).not.toBeNull();
+  });
+
+  it("旧快照(无站位坐标)时不画球场,退化为纯名单——不应误画一个错位的球场", () => {
+    const starters = shuffledStarters.map((p) => ({ ...p, pos_x: null, pos_y: null }));
+    const { container } = render(
+      <ProjectedLineupSection
+        {...BASE_PROPS}
+        lineupType="lastStarting11"
+        home={{ team_id: 1, formation: "3-4-2-1", coach: null, subs: [], starters }}
+      />,
+    );
+    expect(container.querySelector("svg")).toBeNull();
+  });
+});

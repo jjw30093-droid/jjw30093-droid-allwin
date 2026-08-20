@@ -30,6 +30,7 @@
 "use client";
 
 import { useState } from "react";
+import { FootballPitchBackground } from "./FootballPitchBackground";
 import styles from "./ProjectedLineupSection.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import { formatBeijingDateTime } from "./zh";
@@ -170,10 +171,7 @@ function Pitch({ side, isHome }: { side: LineupSide; isHome: boolean }) {
   }
   return (
     <div className={styles.pitch} data-side={isHome ? "home" : "away"}>
-      <span className={styles.pitchLine} aria-hidden />
-      <span className={styles.pitchHalf} aria-hidden />
-      <span className={styles.pitchCircle} aria-hidden />
-      <span className={styles.pitchBox} aria-hidden />
+      <FootballPitchBackground orientation="portrait" />
       <div className={styles.pitchRows}>
         {rows.map((row, ri) => (
           <div key={ri} className={styles.pitchRow}>

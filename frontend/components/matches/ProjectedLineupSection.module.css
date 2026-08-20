@@ -103,58 +103,22 @@
   opacity: 0.85;
 }
 
-/* ── 球场(竖版,按阵型分行)───────────────────── */
+/* ── 球场(竖版,按阵型分行;真实球场底图见 FootballPitchBackground,
+   orientation="portrait")───────────────────── */
 
 .pitch {
   position: relative;
   width: 100%;
-  aspect-ratio: 5 / 7;
+  /* 真实 FIFA 竖版比例 68:105(宽:长),不再是旧的近似值 5:7——球场底图
+   * 换成真实比例 SVG 后,容器比例也应跟着改成真实值,否则
+   * preserveAspectRatio="none" 会把球场轻微压扁/拉宽。 */
+  aspect-ratio: 68 / 105;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: repeating-linear-gradient(
-    180deg,
-    var(--surface-soft) 0 34px,
-    var(--surface-2) 34px 68px
-  );
-}
-
-.pitchLine,
-.pitchHalf,
-.pitchCircle,
-.pitchBox {
-  position: absolute;
-  border: 1px solid var(--border-strong);
-  opacity: 0.55;
-}
-
-.pitchLine {
-  inset: 8px;
-  border-radius: 3px;
-}
-
-.pitchHalf {
-  right: 8px;
-  left: 8px;
-  top: 50%;
-  border-width: 1px 0 0;
-}
-
-.pitchCircle {
-  left: 50%;
-  top: 50%;
-  width: 34%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-}
-
-.pitchBox {
-  right: 22%;
-  bottom: 8px;
-  left: 22%;
-  height: 13%;
-  border-bottom: none;
+  /* 兜底色,FootballPitchBackground 的 SVG 铺满整个容器,这个背景色理论上
+   * 永远不可见,留着只防极端情况(SVG 加载失败)下不至于露白。 */
+  background: #276e42;
 }
 
 .pitchRows {
@@ -186,28 +150,34 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--brand-teal);
+  border: none;
   border-radius: 50%;
   background: var(--brand-teal);
   color: #fff;
   font-size: 13px;
   font-weight: 700;
+  /* 球场底图固定是绿色(不随亮/暗主题切换,见 FootballPitchBackground.tsx
+   * 顶部注释),球衣需要一圈白色描边才能在草坪上稳定辨认,不依赖球衣本身
+   * 颜色跟草绿的对比度——与 PitchFormation.module.css 的 .shirt 同一惯例。 */
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
 }
 
 .pitch[data-side="away"] .dot {
-  border-color: var(--ink-3);
   background: var(--surface);
   color: var(--ink);
 }
 
-/* 名字压在球场纹理上会糊,垫一层高不透明度的面色 */
+/* 同上,球场固定为绿色,姓名不能用随主题变化的深色字——固定用近白色 + 描边
+ * 阴影,不管站点当前是浅色还是深色模式,球场上的字都要能读(与
+ * PitchFormation.module.css 的 .playerName 同一惯例)。 */
 .dotName {
   max-width: 74px;
   overflow: hidden;
   padding: 1px 4px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  color: var(--ink);
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 0 3px rgba(0, 0, 0, 0.35);
   font-size: 11px;
   line-height: 1.25;
   text-align: center;
