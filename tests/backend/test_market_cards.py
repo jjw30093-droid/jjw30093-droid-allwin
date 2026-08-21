@@ -40,17 +40,26 @@ def _seed_history(conn, team_id, league_id, *, start_date, n=10, corners=6, yc=3
         )
 
 
-def _seed_calibration(conn_platform, market, league_id, line, *, bucket_hit_rates):
-    """5 档,边界按 0/2/4/6/8/999 切,方便测试用小整数预估值精确落档。"""
+def _seed_calibration(conn_platform, market, league_id, line, *, bucket_hit_rates, graded=True):
+    """5 档,边界按 0/2/4/6/8/999 切,方便测试用小整数预估值精确落档。
+
+    graded=False 复刻真实生产的角球默认线 9.5:样本充足、hit_rate 是真实
+    数字,但外样本不单调(spread_pp/monotonic 数值本身在测试里不重要,
+    signal_grade=None 才是 market_cards.py 唯一读取的字段)——与"这条线
+    压根没有任何标定行"是两种不同的状态,后者 _bucket_lookup 直接返回 None。
+    """
     bounds = [None, 2.0, 4.0, 6.0, 8.0, None]
+    grade = "★★" if graded else None
+    spread = 20.0 if graded else 5.0
+    monotonic = 1 if graded else 0
     for i, hr in enumerate(bucket_hit_rates):
         conn_platform.execute(
             """INSERT INTO market_calibration
                (market, league_id, line, bucket_index, bucket_lower, bucket_upper,
                 hit_rate, sample_size, signal_grade, spread_pp, monotonic,
                 train_size, calibrated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 200, ?, 20.0, 1, 1000, '2026-01-01T00:00:00Z')""",
-            (market, league_id, line, i, bounds[i], bounds[i + 1], hr, "★★"),
+               VALUES (?, ?, ?, ?, ?, ?, ?, 200, ?, ?, ?, 1000, '2026-01-01T00:00:00Z')""",
+            (market, league_id, line, i, bounds[i], bounds[i + 1], hr, grade, spread, monotonic),
         )
 
 
@@ -228,6 +237,8 @@ class TestMatchMarketsRoute:
         assert corners["line"] == pytest.approx(11.5)
         assert corners["estimate"] == pytest.approx(11.0)
         assert corners["data_quality"] == "no_calibration"
+        # 11.5 不是整数,没有等价映射可用(11.5±0.5 都不是"同一件事"的半线)。
+        assert corners["calibration_line"] is None
         assert corners["signal_grade"] is None
         assert corners["lean"] is None
 
@@ -334,10 +345,13 @@ class TestMarketCardLinesArray:
         yc = {c["market"]: c for c in body["cards"]}["yellow_cards"]
         assert yc["calibrated_at"] == "2026-01-01T00:00:00Z"
 
-    def test_real_integer_line_reports_line_not_calibrated(self, app, market_fixture):
-        """真实盘口线 = 10.0,不在 corners.lines=[8.5, 9.5, 10.5] 内(真实角球
-        盘口常见整数线,Fix 6)——必须诚实标注"这条线根本不在已标定集合里"
-        这个原因,不能跟"线在集合内、但这次查不到档位"共用同一句笼统文案。"""
+    def test_real_integer_line_maps_to_calibrated_half_line(self, app, market_fixture):
+        """真实盘口线 = 10.0,不在 corners.lines=[8.5, 9.5, 10.5] 内,但角球是
+        计数型市场——X>10.0 与 X>10.5 完全等价(整数随机变量),10.5 已标定
+        (market_fixture 里 league_id=47 的 corners/10.5),所以 10.0 必须复用
+        10.5 档的真实回测结果,不能诚实降级成"未标定"(2026-08-21 整数线
+        等价映射修复;此前这里断言的是相反结果 data_quality=="no_calibration",
+        那正是站长报告"角球倾向恒为空"的根因之一)。"""
         conn_core = connect_rw("core")
         kickoff_date = (date.today() + timedelta(days=3)).isoformat()
         insert_match(conn_core, 9505, league_id=47, season="2025/2026", date=kickoff_date,
@@ -355,9 +369,85 @@ class TestMarketCardLinesArray:
         body = client.get("/api/v1/matches/9505/markets").json()
         corners = {c["market"]: c for c in body["cards"]}["corners"]
         assert corners["line_source"] == "market"
-        assert corners["line"] == pytest.approx(10.0)
+        assert corners["line"] == pytest.approx(10.0)          # 真实盘口线不变
+        assert corners["calibration_line"] == pytest.approx(10.5)  # 但查表用等价半线
+        assert corners["data_quality"] == "ok"
+        assert corners["signal_grade"] == "★★"
+        assert corners["hit_rate"] == pytest.approx(0.65)
+        assert corners["lean"] == "over"
+        # 折叠区"各盘口线回测"表也要把默认标记跟着换到生效线 10.5,不能仍然
+        # 挂在原始市场默认线 9.5 上(否则前端"上方结论只看默认线"的提示没有锚点)。
+        lines_by_value = {ln["line"]: ln for ln in corners["lines"]}
+        assert lines_by_value[10.5]["is_default"] is True
+        assert lines_by_value[9.5]["is_default"] is False
+
+    def test_real_integer_line_maps_to_ungraded_half_line(self, app, market_fixture):
+        """真实盘口线 = 9.0,等价映射到 9.5——但 9.5 在这套测试标定里从未定级
+        (market_fixture 只标了 corners@47@10.5)。必须映射成功、data_quality
+        仍是 "ok"(estimate/hit_rate 数字都在),但 signal_grade/lean 保持
+        None——等价映射不能凭空造出一个从未通过样本外单调性检验的信号。"""
+        conn_core = connect_rw("core")
+        kickoff_date = (date.today() + timedelta(days=3)).isoformat()
+        insert_match(conn_core, 9506, league_id=47, season="2025/2026", date=kickoff_date,
+                     home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
+        conn_core.commit()
+        conn_core.close()
+
+        # 复刻真实生产:corners@9.5 确实标定过(样本充足、hit_rate 有真实
+        # 数字),只是外样本不单调,signal_grade=None——不是"这条线从没标定过"。
+        conn_platform = connect_rw("platform")
+        _seed_calibration(conn_platform, "corners", 47, 9.5,
+                           bucket_hit_rates=[0.47, 0.46, 0.51, 0.49, 0.54], graded=False)
+        conn_platform.commit()
+        conn_platform.close()
+
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "830004", 9506)
+        _seed_odds_snap(conn_odds, "830004", "corners_ou", 9.0)
+        conn_odds.commit()
+        conn_odds.close()
+
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9506/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+        assert corners["line_source"] == "market"
+        assert corners["line"] == pytest.approx(9.0)
+        assert corners["calibration_line"] == pytest.approx(9.5)
+        assert corners["data_quality"] == "ok"
+        assert corners["estimate"] == pytest.approx(11.0)
+        assert corners["signal_grade"] is None
+        # 顶层 hit_rate 在"有标定但未定级"时仍是真实数字(与 lines[] 子表的
+        # B2 处理不同,见 market_cards.py::_bucket_lookup/_line_calibration
+        # 的注释)——前端靠 signal_grade/lean 是否为 None 决定要不要渲染倾向,
+        # 不是靠 hit_rate 是否为 None。
+        assert corners["hit_rate"] == pytest.approx(0.54)
+        assert corners["lean"] is None
+
+    def test_quarter_line_never_gets_integer_mapping(self, app, market_fixture):
+        """真实盘口线 = 9.25(四分之一线)——不是整数,X>9.25 与任何半线都不
+        等价,不能瞎猜映射;必须原样诚实降级为 no_calibration,
+        calibration_line 为 None。"""
+        conn_core = connect_rw("core")
+        kickoff_date = (date.today() + timedelta(days=3)).isoformat()
+        insert_match(conn_core, 9507, league_id=47, season="2025/2026", date=kickoff_date,
+                     home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
+        conn_core.commit()
+        conn_core.close()
+
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, "830005", 9507)
+        _seed_odds_snap(conn_odds, "830005", "corners_ou", 9.25)
+        conn_odds.commit()
+        conn_odds.close()
+
+        client = TestClient(app)
+        body = client.get("/api/v1/matches/9507/markets").json()
+        corners = {c["market"]: c for c in body["cards"]}["corners"]
+        assert corners["line"] == pytest.approx(9.25)
+        assert corners["calibration_line"] is None
         assert corners["data_quality"] == "no_calibration"
         assert corners["no_calibration_reason"] == "line_not_calibrated"
+        assert corners["lean"] is None
 
     def test_real_calibrated_line_still_resolves_bucket(self, app, market_fixture):
         """9503:真实盘口线 10.5 恰好是 corners.lines 的成员且已标定——回归钉,
@@ -369,6 +459,7 @@ class TestMarketCardLinesArray:
         corners = {c["market"]: c for c in body["cards"]}["corners"]
         assert corners["line_source"] == "market"
         assert corners["line"] == pytest.approx(10.5)
+        assert corners["calibration_line"] == pytest.approx(10.5)   # 本来就在集合内,无需映射
         assert corners["data_quality"] == "ok"
         assert corners["signal_grade"] == "★★"
         assert corners["hit_rate"] == pytest.approx(0.65)

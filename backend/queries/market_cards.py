@@ -79,8 +79,36 @@ def _bucket_lookup(
     return None
 
 
+def _calibration_line(market, line: float) -> float | None:
+    """真实/统计盘口线未必落在 market.lines(已标定线集合)里——最常见的是
+    真实盘口给整数线(10.0),而离线回测只跑了半线([8.5, 9.5, 10.5])。
+
+    角球/罚牌这两个市场卡的取值恒为非负整数(全库 fact_team_match_stats
+    28,506 行角球值逐行核实,0 例外),对整数随机变量 X 与整数线 L:
+        X > L  ⟺  X ≥ L+1  ⟺  X > L+0.5
+    所以整数线 L 与半线 L+0.5 的"过线"事件完全等价,L+0.5 档的样本外
+    命中率可以原样复用于 L——这是精确等价,不是估算、不是新标定、不需要
+    重跑 calibrate_markets.py。
+
+    仅当 line 恰好是整数、且 line+0.5 已经在 market.lines 里标定过时才
+    生效;四分之一线等非整数线没有这条等价关系,不做任何映射,继续走
+    no_calibration——不能瞎猜。
+
+    真实盘口线是整数时,本站按"是否超过该线"计算 hit_rate,不包含真实
+    盘口的走水(整数线打平退款)口径——前端需要如实披露这个差异
+    (calibration_line != line 时渲染说明)。
+    """
+    if line in market.lines:
+        return line
+    if line == int(line):
+        half = line + 0.5
+        if half in market.lines:
+            return half
+    return None
+
+
 def _line_calibration(
-    conn_platform: sqlite3.Connection, market_key: str, league_id: int, ln: float, default_line: float,
+    conn_platform: sqlite3.Connection, market_key: str, league_id: int, ln: float, effective_line: float,
     estimate: float,
 ) -> dict:
     """折叠区"本市场各盘口线的历史回测"一行:对 market.lines 里的某一条线
@@ -90,12 +118,17 @@ def _line_calibration(
     B2 落到数据层:signal_grade 为 None(该线从未标定过,或标定了但外样本
     不单调)时,hit_rate/sample_size 在这里就置 None——数字根本不下发到
     浏览器,不是"下发了但前端别渲染"。
+
+    is_default 与实际生效于顶层判定的 calibration_line(经 _calibration_line
+    整数等价映射后的线)比较,不是与 market.default_line 比较——否则真实
+    盘口给整数线(如 10.0)时,lines[] 里永远没有一行被标默认,前端"上方
+    结论只看默认线"的提示就没有锚点。
     """
     b = _bucket_lookup(conn_platform, market_key, league_id, ln, estimate)
     graded = bool(b and b["signal_grade"])
     return {
         "line": ln,
-        "is_default": ln == default_line,
+        "is_default": ln == effective_line,
         "signal_grade": b["signal_grade"] if b else None,
         "hit_rate": round(b["hit_rate"], 4) if graded else None,
         "sample_size": b["sample_size"] if graded else None,
@@ -185,6 +218,7 @@ def match_market_cards(
             "label": market.label,
             "line": line,
             "line_source": line_source,
+            "calibration_line": None,
             "estimate": None,
             "bucket_index": None,
             "hit_rate": None,
@@ -204,15 +238,25 @@ def match_market_cards(
             estimate = round(h_avg + a_avg, 2)
             card["estimate"] = estimate
 
+            # 整数盘口线等价映射(见 _calibration_line 文档字符串):真实/统计线
+            # 未必在 market.lines 里,但整数线在计数型市场上与相邻半线等价。
+            calibration_line = _calibration_line(market, line)
+            card["calibration_line"] = calibration_line
+
             # Fix 1:该市场全部已标定线(market.lines,不止默认线)各自查一遍
             # 档位——与下面结论区的判定完全独立的第二组查询,不影响、不参与
-            # data_quality/signal_grade/lean 的计算(B6:不换线)。
+            # data_quality/signal_grade/lean 的计算(B6:不换线)。is_default 与
+            # calibration_line(生效线)比较,不是与原始 line 比较。
             card["lines"] = [
-                _line_calibration(conn_platform, market.key, league_id, ln, line, estimate)
+                _line_calibration(conn_platform, market.key, league_id, ln, calibration_line, estimate)
                 for ln in market.lines
             ]
 
-            bucket = _bucket_lookup(conn_platform, market.key, league_id, line, estimate)
+            bucket = (
+                _bucket_lookup(conn_platform, market.key, league_id, calibration_line, estimate)
+                if calibration_line is not None
+                else None
+            )
             if bucket is not None:
                 card.update(
                     bucket_index=bucket["bucket_index"],
@@ -225,12 +269,13 @@ def match_market_cards(
                 )
             else:
                 card["data_quality"] = "no_calibration"
-                # Fix 6:线本身不在 market.lines(已标定线集合)里——多见于
-                # 真实盘口线是整数线(10.0/9.0/…)——与"线在集合内、但这次真的
-                # 查不到任何标定行"(理论上不该发生,保留原通用文案)是两种
-                # 不同的诚实降级,前端文案不应该混为一谈。
+                # Fix 6:线(经整数等价映射后仍)不在 market.lines(已标定线
+                # 集合)里——多见于真实盘口线是四分之一线,或整数+0.5 也没标定
+                # 过——与"线在集合内、但这次真的查不到任何标定行"(理论上不该
+                # 发生,保留原通用文案)是两种不同的诚实降级,前端文案不应该
+                # 混为一谈。
                 card["no_calibration_reason"] = (
-                    "line_not_calibrated" if line not in market.lines else "line_unresolved"
+                    "line_not_calibrated" if calibration_line is None else "line_unresolved"
                 )
 
         cards.append(card)

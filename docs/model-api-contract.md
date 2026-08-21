@@ -211,11 +211,29 @@ None` 时(该线从未标定过,或标定后外样本命中率不单调),`hit_ra
   `calibrated_at`(离线回测运行时间,UTC ISO)。没有查到任何档位时为
   `None`。
 - `no_calibration_reason`(仅 `data_quality="no_calibration"` 时非空):
-  `"line_not_calibrated"` = 当前使用的线根本不在该市场 `MarketDef.lines`
-  这个已标定线集合内(常见于真实盘口线是整数线,如角球 10.0/9.0/11.0/8.0,
-  而 `calibrate_markets.py` 只标定了半球线 8.5/9.5/10.5);
+  `"line_not_calibrated"` = 当前使用的线(经下方 `calibration_line` 整数
+  等价映射后)仍然不在该市场 `MarketDef.lines` 这个已标定线集合内;
   `"line_unresolved"` = 线本身在集合内,但这次查询没有返回任何标定行
   (理论上不该发生)。两者前端文案不同,不得合并成同一句通用提示。
+
+### 5.1 `calibration_line`:整数盘口线等价映射(2026-08-21)
+
+真实盘口线常见整数(角球 10.0/9.0/11.0/8.0),而 `calibrate_markets.py`
+只标定半线(8.5/9.5/10.5)——对计数型市场(取值恒为非负整数),整数线
+`L` 与半线 `L+0.5` 的"过线"事件精确等价(`X>L ⟺ X>L+0.5`),不需要重跑
+标定。`backend/queries/market_cards.py::_calibration_line()` 只在
+`line` 是整数、且 `line+0.5` 已在 `MarketDef.lines` 内标定过时才做映射;
+非整数(如四分之一线)不映射,原样走 `no_calibration`。
+
+`MarketCardDTO.calibration_line` 记录实际用于查 `market_calibration` 的线
+(`data_quality != "ok"` 时为 `None`)。结论区顶层字段(`signal_grade`/
+`hit_rate`/`lean` 等)与 `lines[]` 里 `is_default` 的判定都改用这条**生效
+线**,不是原始 `line`——`lines[]` 的独立性政策(上一节"默认线驱动结论")
+不受影响:映射只决定"用哪条已标定线的回测结果",不允许因为其它未生效的
+线定级更好看就换用。真实盘口整数线在实际市场通常存在走水(打平退款),
+本站 `hit_rate` 定义是 `P(总数>线)`,不包含走水口径——`calibration_line
+!= line` 时前端需要披露这个口径差异,不能让读者误以为两者是同一件事的
+不同精度版本。
 
 ## 附:2026-08-07 市场基线研究口径(研究态,非正式评估)
 

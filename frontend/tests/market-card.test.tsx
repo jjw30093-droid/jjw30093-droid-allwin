@@ -65,12 +65,29 @@ describe("MarketCard 结论区", () => {
       render(<MarketCard card={card} />);
       expect(screen.queryByText("偏大")).toBeNull();
       expect(screen.queryByText("偏小")).toBeNull();
-      expect(screen.getByText("暂无倾向")).not.toBeNull();
       expect(screen.getByText(/样本外测试中不够稳定/)).not.toBeNull();
       // hit_rate 的具体数值不应该被当结论展示出来
       expect(screen.queryByText(/51%/)).toBeNull();
+      // 2026-08-21:estimate 非空时,空白态不再放"暂无倾向"这种空话,改成
+      // 事实对比——两队合计与对比盘口线的差值(BASE.estimate=5.2,line=3.5)。
+      expect(screen.queryByText("暂无倾向")).toBeNull();
+      // "5.2" 在结论格与折叠区"两队近 10 场自身历史均值合计"里各出现一次,
+      // 两处都是真实内容,不是重复渲染。
+      expect(screen.getAllByText("5.2").length).toBeGreaterThan(0);
+      expect(screen.getByText("两队近10场合计")).not.toBeNull();
+      expect(screen.getByText(/\+1\.7/)).not.toBeNull();
+      expect(screen.getByText("对比盘口线")).not.toBeNull();
     },
   );
+
+  it("data_quality='ok' 但 signal_grade=null 且 estimate 也是 null 时,回退到旧的「暂无倾向」空态", () => {
+    // 理论上 data_quality='ok' 蕴含 estimate 非空(后端 market_cards.py 只在
+    // h_avg/a_avg 都非空时才判 ok),这里防御性覆盖一次契约意外被打破的情况。
+    const card: MarketCardData = { ...BASE, signal_grade: null, lean: null, estimate: null };
+    render(<MarketCard card={card} />);
+    expect(screen.getByText("暂无倾向")).not.toBeNull();
+    expect(screen.queryByText("两队近10场合计")).toBeNull();
+  });
 
   it("data_quality='no_calibration' 时展示'暂无历史回测数据'", () => {
     const card: MarketCardData = {
@@ -233,5 +250,31 @@ describe("MarketCard 折叠区:各线回测 + 对手侧 + 回测更新时间(数
     expect(
       screen.queryByText("该盘口线暂无历史回测数据,仅展示两队近期数据对比。"),
     ).toBeNull();
+  });
+
+  it("calibration_line 与 line 不同(整数线映射到半线)时,折叠区渲染等价说明", () => {
+    const card: MarketCardData = {
+      ...BASE,
+      market: "corners",
+      line: 10,
+      calibration_line: 10.5,
+      lines: [{ line: 10.5, is_default: true, signal_grade: "★", hit_rate: 0.55, sample_size: 180 }],
+    };
+    render(<MarketCard card={card} />);
+    expect(screen.getByText(/超过 10 个.*超过 10\.5 个.*同一件事/)).not.toBeNull();
+    expect(screen.getByText(/走水/)).not.toBeNull();
+  });
+
+  it("calibration_line 等于 line(未发生映射)时,不渲染等价说明", () => {
+    const card: MarketCardData = {
+      ...BASE,
+      market: "corners",
+      line: 10.5,
+      calibration_line: 10.5,
+      lines: [{ line: 10.5, is_default: true, signal_grade: "★", hit_rate: 0.55, sample_size: 180 }],
+    };
+    render(<MarketCard card={card} />);
+    expect(screen.queryByText(/同一件事/)).toBeNull();
+    expect(screen.queryByText(/走水/)).toBeNull();
   });
 });

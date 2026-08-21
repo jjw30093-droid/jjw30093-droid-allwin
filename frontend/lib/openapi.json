@@ -10539,6 +10539,17 @@
       ],
       "title": "Line Source"
      },
+     "calibration_line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Calibration Line"
+     },
      "estimate": {
       "anyOf": [
        {

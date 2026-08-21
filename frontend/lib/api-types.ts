@@ -2624,6 +2624,8 @@ export interface components {
              * @enum {string}
              */
             line_source: "market" | "statistical";
+            /** Calibration Line */
+            calibration_line?: number | null;
             /** Estimate */
             estimate?: number | null;
             /** Bucket Index */

@@ -676,6 +676,12 @@ class MarketCardDTO(BaseModel):
     # yellow_cards 恒为这档——NowGoal 没有罚牌市场)。前端必须区分展示,
     # 不能把统计参考线包装成"这场比赛的真实盘口"。
     line_source: Literal["market", "statistical"]
+    # 实际用于查 market_calibration 的线——corners/角球这类计数型市场,line
+    # 若是整数(如 10.0)而 market.lines 只标定了半线,则等价映射到 line+0.5
+    # (整数随机变量 X>L ⟺ X>L+0.5,精确等价,非估算)。等于 line 时说明未
+    # 映射;不等于 line 时前端需要披露"本卡采用哪条线的回测口径"。
+    # data_quality 不是 "ok" 时恒为 None。
+    calibration_line: Optional[float] = None
     # 两队各自历史均值之和(与 calibrate_markets.py 标定时的定义完全一致)。
     estimate: Optional[float] = None
     bucket_index: Optional[int] = None

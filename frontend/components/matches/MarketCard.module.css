@@ -126,6 +126,31 @@
   font-size: 11px;
 }
 
+/* 降级但有 estimate 时的"事实对比"格——只给数字,不给方向词,样式沿用
+   leanCellEmpty 的虚线弱化风格(明确区别于已定级的实底 .leanCell),但数字
+   本身用正常墨色(不是 --ink-3),因为这是真实数据,不是"暂无"。 */
+.factCell {
+  padding: 10px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+}
+
+.factValue {
+  display: block;
+  color: var(--ink);
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.factCaption {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
 .hitCell {
   padding: 10px 8px;
   border-radius: var(--r-card);

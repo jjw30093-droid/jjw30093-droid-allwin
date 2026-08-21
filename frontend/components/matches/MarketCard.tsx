@@ -35,6 +35,19 @@ function fmt(v: number | null | undefined, digits = 1): string {
   return v == null ? "—" : v.toFixed(digits);
 }
 
+/** 角球数是整数,真实盘口线常是整数(10.0)而回测只标定了半线(10.5)——
+ * X>10.0 与 X>10.5 完全等价(整数随机变量),本卡因此改用等价半线的回测
+ * 口径。calibration_line 等于 line 时说明没有发生映射,不渲染这段说明。 */
+function lineEquivalenceNote(card: MarketCardData): string | null {
+  const { calibration_line, line } = card;
+  if (calibration_line == null || calibration_line === line) return null;
+  return (
+    `本场盘口线是 ${line},实际取整数,「超过 ${line} 个」与「超过 ${calibration_line} 个」是同一件事,` +
+    `因此本卡采用 ${calibration_line} 线的回测口径。真实盘口在整数线上通常有走水(打平退款),` +
+    `本站只统计「是否超过该线」,不含走水口径。`
+  );
+}
+
 type Driver = MarketCardData["driver_factors"][number];
 
 /** 主客两份 driver_factors 按 key 对齐成一张表的行,而不是并排两张表。 */
@@ -127,6 +140,7 @@ export function MarketCard({ card }: { card: MarketCardData }) {
   // Fix 5:calibrated_at 恒为完整 UTC ISO 时间戳(从未是 date_only),这里仍然
   // 走 formatBeijingDateTime 的 null 分支防御一次,不假定后端字段永远合法。
   const calibratedAtZh = card.calibrated_at ? formatBeijingDateTime(card.calibrated_at) : null;
+  const equivalenceNote = lineEquivalenceNote(card);
 
   return (
     <section className={styles.card}>
@@ -148,26 +162,52 @@ export function MarketCard({ card }: { card: MarketCardData }) {
       </header>
 
       <div className={styles.verdictGrid}>
-        {degraded ? (
-          <div className={styles.leanCellEmpty}>
-            <span className={styles.leanEmptyValue}>暂无倾向</span>
-            <span className={styles.leanEmptyReason}>{degraded.cellNote}</span>
-          </div>
+        {degraded && card.estimate != null ? (
+          <>
+            {/* 没有可信倾向,但估算值和差值都是真实数字——只给事实对比,
+                不给方向词(2026-08-21 站长拍板:空白态别再放两个空话)。 */}
+            <div className={styles.factCell}>
+              <span className={`${styles.factValue} num`}>{card.estimate}</span>
+              <span className={styles.factCaption}>两队近10场合计</span>
+            </div>
+            <div className={styles.factCell}>
+              <span className={`${styles.factValue} num`}>
+                {card.estimate >= card.line ? "+" : "−"}
+                {Math.abs(card.estimate - card.line).toFixed(1)}
+              </span>
+              {/* 不再重复盘口线数字——已经在卡片头部"盘口线 {line}"展示过,
+                  这里重复会与页面上其它"盘口线 {line}"文案产生子串碰撞
+                  (E2E 断言按纯文本匹配)。 */}
+              <span className={styles.factCaption}>对比盘口线</span>
+            </div>
+          </>
+        ) : degraded ? (
+          <>
+            <div className={styles.leanCellEmpty}>
+              <span className={styles.leanEmptyValue}>暂无倾向</span>
+              <span className={styles.leanEmptyReason}>{degraded.cellNote}</span>
+            </div>
+            <div className={styles.hitCell}>
+              <span className={`${styles.hitValue} num`} data-empty="true">
+                —
+              </span>
+              <span className={styles.hitCaption}>历史命中率</span>
+            </div>
+          </>
         ) : (
-          <div className={styles.leanCell}>
-            <span className={`${styles.leanValue} num`}>{LEAN_ZH[card.lean ?? ""] ?? "—"}</span>
-            <span className={styles.leanCaption}>数据倾向</span>
-          </div>
+          <>
+            <div className={styles.leanCell}>
+              <span className={`${styles.leanValue} num`}>{LEAN_ZH[card.lean ?? ""] ?? "—"}</span>
+              <span className={styles.leanCaption}>数据倾向</span>
+            </div>
+            <div className={styles.hitCell}>
+              <span className={`${styles.hitValue} num`} data-empty={card.hit_rate == null ? "true" : undefined}>
+                {card.hit_rate == null ? "—" : `${(card.hit_rate * 100).toFixed(0)}%`}
+              </span>
+              <span className={styles.hitCaption}>历史命中率</span>
+            </div>
+          </>
         )}
-        <div className={styles.hitCell}>
-          <span
-            className={`${styles.hitValue} num`}
-            data-empty={degraded || card.hit_rate == null ? "true" : undefined}
-          >
-            {degraded || card.hit_rate == null ? "—" : `${(card.hit_rate * 100).toFixed(0)}%`}
-          </span>
-          <span className={styles.hitCaption}>历史命中率</span>
-        </div>
       </div>
 
       {degraded ? (
@@ -244,6 +284,7 @@ export function MarketCard({ card }: { card: MarketCardData }) {
         {card.lines.length > 0 && (
           <div className={styles.linesSection}>
             <h4 className={styles.subheading}>本市场各盘口线的历史回测</h4>
+            {equivalenceNote && <p className={styles.foldNote}>{equivalenceNote}</p>}
             <p className={styles.foldNote}>
               这是我们对该市场每条盘口线各自做过的离线回测记录,用于说明&ldquo;哪条线我们验证过、哪条没有&rdquo;。上方结论只看默认线,不因为别的线定级更好看就换线。
             </p>
