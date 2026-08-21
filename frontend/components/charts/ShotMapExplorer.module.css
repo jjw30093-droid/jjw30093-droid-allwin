@@ -50,17 +50,24 @@
   border-radius: 12px;
 }
 
+/* 曾用 44px/1fr/auto 三列 grid——"结果"行的第二个 chips 组(全场/上半场/
+   下半场)被挤进很窄的 auto 列,每个按钮被迫单独换行,整块面板异常拉长。
+   改回纯 flex-wrap(与单场 ShotMapChart.module.css 同款、已验证正常的写法):
+   label 和各组筛选按同一行流式排布,只有真的放不下才整体换行,不再有
+   某一组被单独挤到窄列里的问题。 */
 .filterRow {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 10px;
 }
 
 .filterLabel {
+  flex: 0 0 auto;
   color: var(--ink-2);
   font-size: 11px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .segmented {
