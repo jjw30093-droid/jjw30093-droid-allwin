@@ -578,14 +578,27 @@ def recent_shot_map_spec(
     if all_match_ids:
         ids = sorted(all_match_ids)
         placeholders = ",".join("?" for _ in ids)
-        for row in conn.execute(
+        match_rows = conn.execute(
             f"""SELECT Match_ID, League_ID, Date, Home_Team_ID, Away_Team_ID,
                       Home_Team_Name, Away_Team_Name
                  FROM dim_match
                 WHERE Match_ID IN ({placeholders})
                 ORDER BY Date DESC, Match_ID DESC""",
             ids,
-        ):
+        ).fetchall()
+        # team_display_for 是按需 scoped 查询,只覆盖点名传入的 team_id——
+        # 上面只传了 target 两队,近 N 场里的对手球队(如 Urawa Red Diamonds)
+        # 从未被点名,拿不到中文名,回退成 FotMob 英文名(比赛筛选栏"对
+        # Urawa Red Diamonds")。这里补扫这批比赛涉及的全部球队,一次性
+        # 把对手也纳入中文名映射。
+        opponent_ids = {
+            tid
+            for row in match_rows
+            for tid in (row["Home_Team_ID"], row["Away_Team_ID"])
+        }
+        if opponent_ids - display.keys():
+            display = {**display, **team_display_for(conn, opponent_ids)}
+        for row in match_rows:
             matches.append(
                 {
                     "match_id": int(row["Match_ID"]),
