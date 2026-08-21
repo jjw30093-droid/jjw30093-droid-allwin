@@ -62,6 +62,14 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+def _round2(v: float | None) -> float | None:
+    """赔率/盘口线业务上恒为两位小数;silver_match_odds.raw_* 偶发写入时的
+    浮点 ULP 噪声(如 1.9300000000000002,2026-08-21 真实用户报告,实测
+    asset_b_footballdata 25 行 / asset_b_nowgoal 121 行受影响)在这里清洗,
+    不是四舍五入丢精度。"""
+    return None if v is None else round(v, 2)
+
+
 def _to_float(v: Any) -> float | None:
     if v is None:
         return None
@@ -219,10 +227,10 @@ def asset_b_rows(db_path: Path, known_match_ids: set[int]) -> tuple[list[dict], 
                 "provider": str(r["provider"] or "unknown"),
                 "market": market,
                 "period": period,
-                "line": line,
-                "home_or_over": home,
-                "draw": _to_float(r["raw_draw"]) if market == "1x2" else None,
-                "away_or_under": away,
+                "line": _round2(line),
+                "home_or_over": _round2(home),
+                "draw": _round2(_to_float(r["raw_draw"])) if market == "1x2" else None,
+                "away_or_under": _round2(away),
                 "orientation_fixed": fixed,
                 "source_file": f"{db_path.name}:silver_match_odds",
             }

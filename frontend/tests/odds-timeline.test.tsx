@@ -225,6 +225,35 @@ describe("OddsTimeline open_close_only(§6.2:两点摘要绝不画走势图)", (
   });
 
   it(
+    "赔率数值带浮点 ULP 噪声时,显示成干净的两位小数(真实用户报告" +
+      " 2026-08-21:match 5125184 的 ah 市场 initial home_or_over 显示成" +
+      ' "1.9300000000000002")',
+    async () => {
+      mockOddsResponse({
+        match_id: 1,
+        available: true,
+        tier: "full",
+        coverage_tier: "open_close_only",
+        home_away_inverted: false,
+        observation_count: 0,
+        display_mode: "current_odds",
+        snapshots: [],
+        summary_points: [
+          {
+            market: "ah", period: "initial", source: "football_uk_jka", provider: "Bet365",
+            line: -0.25, home_or_over: 1.9300000000000002, draw: null, away_or_under: 1.88,
+          },
+        ],
+        note: "本场为历史存档赔率,仅有初盘与临场两个观测点,无完整走势时间线。",
+      });
+      render(<OddsTimeline matchId={1} />);
+      await waitFor(() => expect(screen.queryByText(/历史存档赔率/)).not.toBeNull());
+      expect(screen.getByText("1.93")).not.toBeNull();
+      expect(screen.queryByText(/1\.9300000000000002/)).toBeNull();
+    },
+  );
+
+  it(
     "同一公司出现在两个存档批次里、数值不同时,标出批次来源" +
       "(2026-08-12 修复:此前只显示 provider,两行「Bet365 / 临场」" +
       "看起来像未解释的重复,实际是港赔/欧赔两种格式的独立抓取)",

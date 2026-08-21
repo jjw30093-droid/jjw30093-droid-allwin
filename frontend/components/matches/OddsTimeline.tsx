@@ -38,6 +38,16 @@ function groupLabel(s: OddsSnapshot): string {
   return `${s.market}|${s.company_id}`;
 }
 
+/** 赔率/盘口线防御性去噪——不强行统一小数位数,只清掉存储层偶发的
+ * IEEE754 尾部误差(真实事故 2026-08-21:某场比赛显示"1.9300000000000002"。
+ * 干净值 3、-0.25 保持原样,不会被无端补零成"3.00"。后端
+ * backend/queries/odds.py::legacy_summary_points 已经在读侧做过同一处理,
+ * 这里是前端侧的第二道防线,防止任何未经过该函数的数据源把噪声带到页面。 */
+function cleanOddsNum(v: number | null | undefined): number | null {
+  if (v == null || Number.isNaN(v)) return null;
+  return Math.round(v * 100) / 100;
+}
+
 /** 嵌套 payload 的 initial/latest 原样拆开(不像 flatOddsGroup 那样只留一个)。 */
 function splitInitialLatest(
   payload: OddsSnapshot["payload"],
@@ -180,7 +190,7 @@ function OddsNumbers({ market, row }: { market: string; row: CompanyOddsRow }) {
       <div className={styles.numsGrid}>
         {fields.map((f) => (
           <div key={f.key} className={styles.numCell}>
-            <span className="num">{values?.[f.key] ?? "—"}</span>
+            <span className="num">{cleanOddsNum(values?.[f.key]) ?? "—"}</span>
             <span>{f.label}</span>
           </div>
         ))}
@@ -334,15 +344,15 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
                         <td>{periodZh[p.period] ?? p.period}</td>
                         {is1x2 ? (
                           <>
-                            <td className="num">{p.home_or_over}</td>
-                            <td className="num">{p.draw ?? "—"}</td>
-                            <td className="num">{p.away_or_under}</td>
+                            <td className="num">{cleanOddsNum(p.home_or_over)}</td>
+                            <td className="num">{cleanOddsNum(p.draw) ?? "—"}</td>
+                            <td className="num">{cleanOddsNum(p.away_or_under)}</td>
                           </>
                         ) : (
                           <>
-                            <td className="num">{p.home_or_over}</td>
-                            <td className="num">{p.line ?? "—"}</td>
-                            <td className="num">{p.away_or_under}</td>
+                            <td className="num">{cleanOddsNum(p.home_or_over)}</td>
+                            <td className="num">{cleanOddsNum(p.line) ?? "—"}</td>
+                            <td className="num">{cleanOddsNum(p.away_or_under)}</td>
                           </>
                         )}
                       </tr>
@@ -451,7 +461,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
               <td>{PHASE_ZH[snap.market_phase] ?? snap.market_phase}</td>
               {fields.map((f) => (
                 <td key={f.key} className="num">
-                  {g?.[f.key] != null ? g[f.key] : "—"}
+                  {cleanOddsNum(g?.[f.key]) ?? "—"}
                 </td>
               ))}
               <td>
@@ -478,8 +488,8 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
                       </td>
                       <td>{PHASE_ZH[row.marketPhase] ?? row.marketPhase}</td>
                       {fields.map((f) => {
-                        const cur = row.current?.[f.key];
-                        const init = row.initial?.[f.key];
+                        const cur = cleanOddsNum(row.current?.[f.key]);
+                        const init = cleanOddsNum(row.initial?.[f.key]);
                         return (
                           <td key={f.key} className="num">
                             {row.changed && init != null && cur != null

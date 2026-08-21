@@ -90,3 +90,46 @@ class TestBundleLegacyOdds:
         d = c.get("/api/v1/matches/8102/analysis").json()
         assert d["odds_coverage_tier"] == "none"
         assert d["odds_summary_points"] is None
+
+
+class TestLegacyOddsFloatNoise:
+    """真实用户报告(2026-08-21):赔率时间轴显示 "1.9300000000000002"。
+
+    根因是 bronze_legacy_odds_summary 的存量数据里,少数行在写入源头就带
+    IEEE754 ULP 噪声(与真实值偏差恒为 1-2 个 ULP,如 1.93 存成
+    1.9300000000000002)——数据已按 2 位小数一次性清洗过(见
+    backend.cli.fix_legacy_odds_float_noise),这里钉住 legacy_summary_points
+    的第二道防线:即便某一行仍然/再次带噪声,/odds 与 /analysis 两个端点
+    也必须把它清洗成两位小数再下发,不能把噪声原样透传给前端。
+    """
+
+    def test_odds_endpoint_cleans_float_noise(self, app, bundle_matches):
+        conn = connect_rw("odds")
+        conn.execute(
+            """UPDATE bronze_legacy_odds_summary
+                  SET home_or_over=1.9300000000000002
+                WHERE fotmob_match_id=8101 AND period='initial'"""
+        )
+        conn.commit()
+        conn.close()
+
+        c = TestClient(app)
+        d = c.get("/api/v1/matches/8101/odds").json()
+        points = d["summary_points"]
+        initial = next(p for p in points if p["period"] == "initial")
+        assert initial["home_or_over"] == 1.93
+
+    def test_analysis_bundle_cleans_float_noise(self, app, bundle_matches):
+        conn = connect_rw("odds")
+        conn.execute(
+            """UPDATE bronze_legacy_odds_summary
+                  SET home_or_over=1.9300000000000002
+                WHERE fotmob_match_id=8101 AND period='initial'"""
+        )
+        conn.commit()
+        conn.close()
+
+        c = TestClient(app)
+        d = c.get("/api/v1/matches/8101/analysis").json()
+        initial = next(p for p in d["odds_summary_points"] if p["period"] == "initial")
+        assert initial["home_or_over"] == 1.93

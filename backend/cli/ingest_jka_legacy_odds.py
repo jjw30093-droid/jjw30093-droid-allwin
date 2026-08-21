@@ -58,6 +58,14 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _round2(v: float | None) -> float | None:
+    """赔率/盘口线业务上恒为两位小数;源库(football_uk.db / archive JSON)偶发
+    写入时的浮点 ULP 噪声(如 1.9300000000000002,2026-08-21 真实用户报告)在
+    这里被清洗掉,不是四舍五入丢精度——只在 _row_ok() 硬闸判定之后应用,
+    不改变闸门本身依据的原始数值。"""
+    return None if v is None else round(v, 2)
+
+
 def _row_ok(market: str, home: float | None, draw: float | None,
             away: float | None, line: float | None) -> bool:
     """入库前逐行硬闸:复核报告为 0 违例,闸门保住这个不变量。"""
@@ -107,7 +115,8 @@ def load_refetch_rows() -> tuple[dict[int, list[dict]], set[int]]:
                     continue
                 rows.append({
                     "fotmob_match_id": mid, "market": market, "period": period,
-                    "line": line, "home_or_over": home, "draw": draw, "away_or_under": away,
+                    "line": _round2(line), "home_or_over": _round2(home),
+                    "draw": _round2(draw), "away_or_under": _round2(away),
                     "source": "nowgoal_archive_refetch",
                     "source_file": f"nowgoal_archive:titan_{rec.get('titan_id')}",
                 })
@@ -153,9 +162,10 @@ def load_fd_rows(refetch_ids: set[int]) -> tuple[dict[int, list[dict]], dict]:
             continue
         out.setdefault(mid, []).append({
             "fotmob_match_id": mid, "market": market, "period": period,
-            "line": line if market != "1x2" else None,
-            "home_or_over": home, "draw": draw if market == "1x2" else None,
-            "away_or_under": away,
+            "line": _round2(line) if market != "1x2" else None,
+            "home_or_over": _round2(home),
+            "draw": _round2(draw) if market == "1x2" else None,
+            "away_or_under": _round2(away),
             "source": "football_uk_jka",
             "source_file": "football_uk.db:silver_match_odds:footballdata",
         })

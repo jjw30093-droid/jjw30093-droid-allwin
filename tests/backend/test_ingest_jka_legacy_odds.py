@@ -109,6 +109,26 @@ def test_load_refetch_skips_null_sentinel(tmp_path: Path, monkeypatch) -> None:
     assert ah["line"] == -0.25
 
 
+def test_load_refetch_rows_cleans_float_noise(tmp_path: Path, monkeypatch) -> None:
+    """真实事故(2026-08-21):archive JSON 里偶发写入 IEEE754 ULP 噪声
+    (1.9300000000000002),前端赔率时间轴直接显示这串数字。写入
+    bronze_legacy_odds_summary 前必须清洗成两位小数。"""
+    d = tmp_path / "refetch"
+    d.mkdir()
+    (d / "live_nowgoal_results.json").write_text("{}")
+    (d / "adjudicate_results.json").write_text(json.dumps({
+        "5139869": {"titan_id": "8", "ah": {
+            "opening": {"home_or_over": 1.9300000000000002, "line": -0.25, "away_or_under": 1.88},
+        }},
+        "4410075": {},
+    }))
+    (d / "gap_hits.json").write_text("{}")
+    monkeypatch.setattr(cli, "REFETCH_DIR", d)
+    rows, _ = cli.load_refetch_rows()
+    ah = next(r for r in rows[5139869] if r["market"] == "ah")
+    assert ah["home_or_over"] == 1.93
+
+
 # ── 端到端:小型旧库 → 落库幂等 ──
 
 
@@ -171,3 +191,27 @@ def test_live_ingest_idempotent(odds_db: Path, small_old_db: Path,
     assert cli.main(["--live", "--db-path", str(odds_db), "--skip-backup"]) == 0
     out2 = json.loads(capsys.readouterr().out)
     assert out2["rows_inserted"] == 0
+
+
+def test_load_fd_rows_cleans_float_noise(tmp_path: Path, monkeypatch) -> None:
+    """旧库 silver_match_odds.raw_home 偶发就是浮点 ULP 噪声(实测
+    football_uk_jka 来源 1,764 行受影响),load_fd_rows 落库前必须清洗。"""
+    old = tmp_path / "football_uk.db"
+    conn = sqlite3.connect(str(old))
+    conn.executescript("""
+        CREATE TABLE dim_match (Match_ID INT PRIMARY KEY, League_ID INT,
+          Home_Team_Name TEXT, Away_Team_Name TEXT);
+        CREATE TABLE silver_match_odds (match_id INT, market TEXT, period TEXT,
+          source TEXT, raw_home REAL, raw_draw REAL, raw_away REAL, raw_line REAL);
+        INSERT INTO dim_match VALUES (5125184, 223, 'Chiba', 'Kawasaki');
+        INSERT INTO silver_match_odds VALUES
+          (5125184,'ah','opening','footballdata',1.9300000000000002,NULL,1.88,-0.25);
+    """)
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(cli, "OLD_DB", old)
+    monkeypatch.setattr(cli, "CORE_DB", old)
+
+    rows_by_mid, stats = cli.load_fd_rows(set())
+    ah = rows_by_mid[5125184][0]
+    assert ah["home_or_over"] == 1.93

@@ -164,6 +164,17 @@ def test_asset_b_ou_null_line_skipped_not_zeroed(tmp_path: Path) -> None:
     assert len(rows) == 1 and rows[0]["line"] == 2.5 and rows[0]["period"] == "initial"
 
 
+def test_asset_b_rows_cleans_float_noise(tmp_path: Path) -> None:
+    """真实事故(2026-08-21):silver_match_odds.raw_home 偶发写入时就带
+    IEEE754 ULP 噪声(1.9300000000000002),实测 asset_b_footballdata 25 行
+    / asset_b_nowgoal 121 行受影响。asset_b_rows 落库前必须清洗成两位小数。"""
+    db = _b_db(tmp_path, [
+        (100, "ah", "opening", "footballdata", "Bet365", -0.25, 1.9300000000000002, None, 1.88),
+    ])
+    rows, _ = asset_b_rows(db, {100})
+    assert rows[0]["home_or_over"] == 1.93
+
+
 def test_asset_b_period_mapping_and_unknown_match_filtered(tmp_path: Path) -> None:
     db = _b_db(tmp_path, [
         (100, "1x2", "opening", "footballdata", "Bet365", None, 2.0, 3.4, 3.8),

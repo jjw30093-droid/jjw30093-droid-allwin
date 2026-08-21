@@ -54,6 +54,24 @@ def normalize_odds_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+_ODDS_VALUE_KEYS = ("line", "home_or_over", "draw", "away_or_under")
+
+
+def _clean_odds_value(v: Any) -> Any:
+    """去掉浮点存储的尾部 ULP 噪声(如 1.9300000000000002),不是编造精度。
+
+    真实事故(2026-08-21):`bronze_legacy_odds_summary` 88,457 行里有 1,910 行
+    在写入源头(旧库 football_uk.db / Asset A/B 导入)就已经带上这类噪声——
+    实测每一行的偏差都恰好是 1–2 个 ULP(最大 4.44e-16),即"写入时算出的
+    浮点数不是十进制值最近邻的那个 double",不是真实盘口数字本身有争议。
+    这个数据源的赔率/盘口线在业务上恒为两位小数,round(v, 2) 对这批数据
+    是无损、无歧义的还原,不是四舍五入丢精度。
+    """
+    if v is None:
+        return None
+    return round(v, 2)
+
+
 def legacy_summary_points(
     conn_odds: sqlite3.Connection, fotmob_match_id: int
 ) -> list[dict[str, Any]]:
@@ -66,6 +84,10 @@ def legacy_summary_points(
 
     routes_public 的 /odds 端点与 studio/bundle 共用本函数,保证两处
     对同一场比赛看到完全相同的点集。表不存在(旧测试库)时返回空列表。
+
+    2026-08-21:出参统一过 _clean_odds_value——存量脏数据已单独用
+    scripts/backfill 清洗过一遍,这里是第二道防线,防止任何未来的导入
+    脚本再引入同类 ULP 噪声时,读侧还是把噪声原样透传给前端。
     """
     sql = (
         "SELECT market, period, source, provider, line,"
@@ -77,7 +99,11 @@ def legacy_summary_points(
         rows = conn_odds.execute(sql, (fotmob_match_id,)).fetchall()
     except sqlite3.OperationalError:
         return []
-    return [dict(r) for r in rows]
+    points = [dict(r) for r in rows]
+    for p in points:
+        for key in _ODDS_VALUE_KEYS:
+            p[key] = _clean_odds_value(p.get(key))
+    return points
 
 
 def odds_coverage_sets(conn_odds: sqlite3.Connection) -> tuple[set[int], set[int]]:
