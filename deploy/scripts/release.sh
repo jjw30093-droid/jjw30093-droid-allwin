@@ -362,14 +362,24 @@ cleanup_old_releases() {
   esac
   [ "$KEEP_RELEASES" -ge 1 ] || die "KEEP_RELEASES 必须 >= 1,当前值: $KEEP_RELEASES"
 
+  # 实测踩坑(2026-08-23):曾经当过 current 的 release,其 backend/**/__pycache__
+  # 是被以 allwin 用户运行的 systemd 服务(allwin-api/allwin-web)导入模块时写入的,
+  # 属主是 allwin、权限 700——部署账号 ubuntu 虽在 allwin 组但 700 对组内成员
+  # 完全不开放,plain rm -rf 会报 Permission denied。这一步发生在 business_smoke
+  # 通过、线上已经切到新 release 之后,清理失败不代表本次发布失败,不应该让
+  # set -e 把整个脚本判成非零退出、误导后续人工排查——因此这里改用 sudo 且
+  # 不让单个 release 的清理失败中断循环或整体脚本。
   ( cd "$RELEASES_DIR" && ls -1t | tail -n "+$((KEEP_RELEASES + 1))" | while read -r d; do
       [ -n "$d" ] || continue
       local target="$RELEASES_DIR/$d"
       _within_app_root "$target" || continue
       [ "$target" = "$RELEASE_DIR" ] && continue
       [ "$target" = "${PREVIOUS:-}" ] && continue
-      rm -rf "${RELEASES_DIR:?}/${d:?}"
-      log "清理旧 release: $d"
+      if sudo rm -rf "${RELEASES_DIR:?}/${d:?}"; then
+        log "清理旧 release: $d"
+      else
+        log "警告:清理旧 release 失败(不影响本次发布结果): $d"
+      fi
     done )
 }
 
