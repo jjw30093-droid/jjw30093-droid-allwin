@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { EChartsOption, LineSeriesOption } from "echarts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
+import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
 import styles from "./ShotMapExplorer.module.css";
 
 type Scope = "same_league" | "all_covered";
@@ -199,40 +200,6 @@ function isShotMapData(value: Record<string, unknown>): value is Record<string, 
   );
 }
 
-function pitchLine(data: Array<[number, number]>): LineSeriesOption {
-  return {
-    type: "line",
-    data,
-    symbol: "none",
-    silent: true,
-    animation: false,
-    lineStyle: {
-      color: "rgba(226, 247, 241, 0.76)",
-      width: 1.25,
-    },
-    emphasis: { disabled: true },
-    tooltip: { show: false },
-    z: 1,
-  };
-}
-
-function arcPoints(
-  centerY: number,
-  centerX: number,
-  radius: number,
-  startDegrees: number,
-  endDegrees: number,
-): Array<[number, number]> {
-  const points: Array<[number, number]> = [];
-  for (let degrees = startDegrees; degrees <= endDegrees; degrees += 4) {
-    const radians = (degrees * Math.PI) / 180;
-    points.push([
-      centerY + radius * Math.cos(radians),
-      centerX + radius * Math.sin(radians),
-    ]);
-  }
-  return points;
-}
 
 // 真实枚举只有 4 个值(Goal/AttemptSaved/Miss/Post,库内实测无 Blocked——
 // FotMob 把"被后卫封堵"也计入 AttemptSaved,见下),与
@@ -304,6 +271,21 @@ function ShotMapExplorerReady({
   const [situations, setSituations] = useState<string[]>([]);
   const [bodyPart, setBodyPart] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
+  const pitchWrapRef = useRef<HTMLDivElement>(null);
+  const [pitchChartHeight, setPitchChartHeight] = useState<number | null>(null);
+
+  // 按宽度维持球场纵横比(68:52.5,与 FootballPitchBackground portrait 的
+  // viewBox 一致),与 ShotMapChart.tsx 用 ResizeObserver 算高度的方式相同。
+  useEffect(() => {
+    const el = pitchWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (w > 0) setPitchChartHeight(Math.round((w * (GOAL_LINE_X - HALF_WAY_X)) / PITCH_WIDTH));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const team = data.teams.find((item) => item.team_id === teamId) ?? data.teams[0];
   const coverage = data.recent_sets[String(teamId)]?.[scope];
   const matchById = useMemo(
@@ -343,21 +325,28 @@ function ShotMapExplorerReady({
     noSubFilter && official.value != null ? official.value : summary.onTarget;
   const onTargetIsOfficial = noSubFilter && official.value != null;
 
+  // 2026-08-23 球场几何改为复用 FootballPitchBackground(portrait,viewBox
+  // "0 52.5 68 52.5")共享 SVG,不再手绘 pitchLine/arcPoints——此前手绘版本
+  // 与 ShotMapChart.tsx(单场射门图)的球场画法不一致(球门探出底线 2 米、
+  // 容器不锁长宽比导致中圈被拉成椭圆),同一个站两张射门图的球场看起来是
+  // 两套标准。坐标域因此收紧到与该 SVG viewBox 完全一致(x:[0,68] 对应
+  // PITCH_WIDTH,y:[HALF_WAY_X,GOAL_LINE_X] 对应真实半场),grid 归零边距,
+  // 1 米数据 = 1 个 SVG viewBox 单位,与容器 aspect-ratio 锁定配合,不再失真。
   const option = useMemo<EChartsOption>(
     () => ({
       backgroundColor: "transparent",
       animation: false,
-      grid: { left: 12, right: 12, top: 18, bottom: 14, containLabel: false },
+      grid: { left: 0, right: 0, top: 0, bottom: 0, containLabel: false },
       xAxis: {
         type: "value",
-        min: -2,
-        max: PITCH_WIDTH + 2,
+        min: 0,
+        max: PITCH_WIDTH,
         show: false,
       },
       yAxis: {
         type: "value",
-        min: HALF_WAY_X - 1,
-        max: GOAL_LINE_X + 4,
+        min: HALF_WAY_X,
+        max: GOAL_LINE_X,
         show: false,
       },
       tooltip: {
@@ -378,42 +367,6 @@ function ShotMapExplorerReady({
         },
       },
       series: [
-        pitchLine([
-          [0, HALF_WAY_X],
-          [0, GOAL_LINE_X],
-          [PITCH_WIDTH, GOAL_LINE_X],
-          [PITCH_WIDTH, HALF_WAY_X],
-          [0, HALF_WAY_X],
-        ]),
-        pitchLine([
-          [13.84, GOAL_LINE_X],
-          [13.84, 88.5],
-          [54.16, 88.5],
-          [54.16, GOAL_LINE_X],
-        ]),
-        pitchLine([
-          [24.84, GOAL_LINE_X],
-          [24.84, 99.5],
-          [43.16, 99.5],
-          [43.16, GOAL_LINE_X],
-        ]),
-        pitchLine([
-          [30.34, GOAL_LINE_X],
-          [30.34, 107],
-          [37.66, 107],
-          [37.66, GOAL_LINE_X],
-        ]),
-        pitchLine(arcPoints(34, 94, 9.15, 217, 323)),
-        pitchLine(arcPoints(34, HALF_WAY_X, 9.15, 0, 180)),
-        {
-          type: "scatter",
-          silent: true,
-          tooltip: { show: false },
-          data: [[34, 94]],
-          symbolSize: 4,
-          itemStyle: { color: "rgba(226, 247, 241, 0.9)" },
-          z: 2,
-        },
         {
           type: "scatter",
           data: rows.map((shot) => ({
@@ -672,14 +625,27 @@ function ShotMapExplorerReady({
           <span>{mode === "created" ? "本队进攻" : "对手进攻"}</span>
           <span>进攻方向 ↑</span>
         </div>
-        <EChart
-          option={option}
-          height={isExport ? height : Math.max(320, Math.min(height, 360))}
-          ariaSummary={ariaSummary}
-          className={styles.chartInner}
-          mode={renderMode}
-          showSummary={!isExport}
-        />
+        <div ref={pitchWrapRef} className={styles.pitchWrap}>
+          {/* SVG 原生按 y 增长向下画(y=105 球门在底边),ECharts 数值轴按
+              y 增长向上画(数据 y 越大越靠图表顶部)——两套系统 y 方向相反,
+              不翻转球场会导致球门画在底边、但射门点却按"y 越大越靠上"
+              画在顶边,图线和点对不上。scaleY(-1) 把整张 SVG 上下镜像,
+              让球门(数据 y=105)视觉上移到顶边,与"进攻方向 ↑"和 ECharts
+              的渲染方向一致。 */}
+          <div className={styles.pitchFlip}>
+            <FootballPitchBackground orientation="portrait" />
+          </div>
+          {pitchChartHeight != null && (
+            <EChart
+              option={option}
+              height={isExport ? height : pitchChartHeight}
+              ariaSummary={ariaSummary}
+              className={styles.chartInner}
+              mode={renderMode}
+              showSummary={!isExport}
+            />
+          )}
+        </div>
       </div>
 
       <div className={styles.legend} aria-label="射门图例">

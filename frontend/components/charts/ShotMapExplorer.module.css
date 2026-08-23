@@ -237,6 +237,32 @@
   letter-spacing: 0.06em;
 }
 
+/* 2026-08-23:与 ShotMapChart.tsx 共用同一套球场几何(FootballPitchBackground),
+   锁定真实半场纵横比(68:52.5)——此前这里没锁长宽比,容器高度被夹在
+   320-360px 之间、宽度随栅格自由伸缩,中圈被拉成椭圆、禁区比例失真。 */
+.pitchWrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 68 / 52.5;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.pitchFlip {
+  position: absolute;
+  inset: 0;
+  transform: scaleY(-1);
+}
+
+/* position:relative(而非默认 static)让这个正常流内的 div 成为"已定位
+   元素",与绝对定位的 .pitchFlip 处在同一套 stacking 规则下——同级已定位
+   元素按 DOM 顺序绘制,后出现的盖住先出现的,EChart(在 .pitchFlip 之后)
+   才会画在球场 SVG 上面而不是被草皮盖住(同 ShotMapChart.module.css 的
+   .chart 规则同一依据)。 */
+.chartInner {
+  position: relative;
+}
+
 .chartInner :global(.chart-summary) {
   margin: 0 -10px;
   padding: 10px 13px 11px;
