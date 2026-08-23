@@ -33,7 +33,7 @@ export default defineConfig({
     {
       // 生产构建跑 E2E:dev(Turbopack)在自动化浏览器下存在水合停滞问题,
       // 且 NEXT_PUBLIC_* 是构建期内联,必须带着 E2E 的 API 地址 build。
-      command: `NEXT_PUBLIC_API_BASE=${API} npm run build && NEXT_PUBLIC_API_BASE=${API} npx next start -p ${WEB_PORT}`,
+      command: `NEXT_PUBLIC_API_BASE=${API} NEXT_PUBLIC_SITE_URL=${WEB} npm run build && NEXT_PUBLIC_API_BASE=${API} npx next start -p ${WEB_PORT}`,
       url: WEB,
       reuseExistingServer: !process.env.CI,
       timeout: 300_000,

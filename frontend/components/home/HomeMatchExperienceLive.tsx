@@ -1,14 +1,19 @@
 "use client";
 
 /**
- * 首页"今晚/明天/未来7天"计数条 + 重点比赛 + 近期比赛。
+ * 首页重点比赛 + 今晚/明天/本周日期切换器 + 近期比赛。
  *
  * 2026-08-16 权限口径修正:后端对任何人(含匿名)恒返回完整比赛内容,
  * MatchSummary 不再有 `requires_login` 字段——此前"一张免费卡 + 一张锁定
  * 对照卡"并排展示的产品概念随之消失(不存在需要诚实展示"这场看不到概率"
  * 的锁定比赛了),改为单张重点比赛卡 + 近期比赛列表(见
- * lib/homepage.ts::selectFeaturedMatch)。数据更新条(赛程/赔率/推荐三条
- * 时间戳)仍收编在计数条卡内部。
+ * lib/homepage.ts::selectFeaturedMatch)。
+ *
+ * 2026-08-23 首页信息架构重排:原来的"数字 + 进度段 + 数据更新条"大计数条
+ * 占满首屏,用户要往下滚约 180px 才看到第一场真实比赛。重点比赛卡提到最前,
+ * 计数条瘦身成三个小 pill(日期切换器),数据更新条(FreshnessBlock)整块
+ * 挪去 app/page.tsx 里紧邻页脚的位置,不再是本组件的一部分——本组件不再
+ * 接收/渲染 freshness 数据。
  *
  * 和 MatchListLive(见 components/matches/MatchListLive.tsx)同一个根因、
  * 同一套修法:会话 cookie Path=/api/v1,Next RSC 读不到,所以首页服务端渲染
@@ -18,9 +23,6 @@
  * 这次客户端刷新实际只会在数据本身发生变化时才改变展示结果。
  *
  * 静默降级:刷新失败时保留 SSR 渲染的内容,不整块报错。
- *
- * 数据更新条(freshness)不参与这次客户端刷新:它是公开只读聚合,不随
- * 请求者身份变化,SSR 一次即可,没必要跟着登录状态重新拉。
  */
 
 import { useEffect, useState } from "react";
@@ -50,7 +52,6 @@ interface Props {
   initialFeatured: HomeMatchCard | null;
   initialSecondary: HomeMatchCard[];
   initialCounts: Counts;
-  initialFreshness: Freshness | null;
   initialErrored: boolean;
 }
 
@@ -96,9 +97,18 @@ export async function fetchHomeData(): Promise<{
   return { featured, secondary, counts };
 }
 
-/* ── 今晚/明天/未来7天计数条(时间轴式:数字 + 进度段 + 数据更新条) ── */
+/* ── 今晚/明天/本周日期切换器(2026-08-23 首页信息架构重排)────────
+ * 原来的大计数条(数字 + 进度段 + 数据更新条)占满首屏,用户要往下滚约
+ * 180px 才看到第一场真实比赛。改成一排小 pill,只保留"去哪看"这一个
+ * 功能;进度段(纯装饰)和数据更新条(见 FreshnessBlock)都已挪走。
+ *
+ * 三个 pill 仍然是整页跳转链接(而不是客户端筛选下面的"近期比赛"列表)——
+ * 页面目前只按"今晚/明天各 1 场"和"未来 7 天全部"三个粒度分别请求计数,
+ * 没有"今晚/明天各自的完整比赛列表"落到客户端,凭现有数据做不出无请求的
+ * 精确日期筛选;继续复用现成的 /matches?window=... 整页筛选,不为此新增
+ * 请求。 */
 
-function CountItem({
+function DateTab({
   label,
   count,
   href,
@@ -112,21 +122,16 @@ function CountItem({
 }) {
   const inner = (
     <>
-      <span className={styles.countLabel}>{label}</span>
-      <b className={`${styles.countNum} num`}>{count}</b>
-      <span className={styles.countUnit}>场{count > 0 && " ›"}</span>
+      <span>{label}</span>
+      <b className={`${styles.dateTabNum} num`}>{count}</b>
     </>
   );
   return count > 0 ? (
-    <Link
-      href={href}
-      className={styles.countItem}
-      data-highlight={highlight || undefined}
-    >
+    <Link href={href} className={styles.dateTab} data-highlight={highlight || undefined}>
       {inner}
     </Link>
   ) : (
-    <span className={styles.countItem} data-empty="true">
+    <span className={styles.dateTab} data-empty="true">
       {inner}
     </span>
   );
@@ -169,6 +174,20 @@ function FreshnessRow({
   );
 }
 
+function isDegraded(state: Freshness["schedule_state"]): boolean {
+  return state === "STALE" || state === "UNAVAILABLE";
+}
+
+/**
+ * 数据更新状态条。2026-08-23 首页信息架构重排:
+ * - 只关心赛程和赔率两条数据新鲜度——"推荐更新"是站长自己的发布节奏,不是
+ *   数据源是否卡住的信号,不再放进这个区块(会和真正的新鲜度指标混在一起,
+ *   反而让用户搞不清哪条在报警)。
+ * - 默认收进一行「数据更新:赛程 … · 赔率 …」;只有当赛程或赔率的状态是
+ *   STALE/UNAVAILABLE(真的该让用户知道)时才展开成逐行详情,保留下面
+ *   现成的橙/红语义配色。
+ * - 从首屏计数条挪到页面底部"常用入口"附近,不再占首屏空间。
+ */
 export function FreshnessBlock({ freshness }: { freshness: Freshness | null }) {
   // "今天"的判定依赖客户端此刻的北京日期,挂载前(含 SSR)先按 null 处理——
   // smartBeijingTime 在 todayKey===null 时回退到完整日期,SSR 与首次客户端
@@ -186,8 +205,26 @@ export function FreshnessBlock({ freshness }: { freshness: Freshness | null }) {
   }, []);
 
   if (!freshness) return null;
+
+  const degraded = isDegraded(freshness.schedule_state) || isDegraded(freshness.odds_state);
+
+  if (!degraded) {
+    return (
+      <p className={styles.freshnessLine} data-testid="freshness-line">
+        数据更新：赛程{" "}
+        <time dateTime={freshness.schedule_updated_at ?? undefined}>
+          {smartBeijingTime(freshness.schedule_updated_at, todayKey)}
+        </time>{" "}
+        · 赔率{" "}
+        <time dateTime={freshness.odds_updated_at ?? undefined}>
+          {smartBeijingTime(freshness.odds_updated_at, todayKey)}
+        </time>
+      </p>
+    );
+  }
+
   return (
-    <p className={styles.freshnessLine} data-testid="freshness-line">
+    <p className={styles.freshnessLine} data-testid="freshness-line" data-expanded="true">
       <FreshnessRow
         label="赛程更新"
         iso={freshness.schedule_updated_at}
@@ -198,12 +235,6 @@ export function FreshnessBlock({ freshness }: { freshness: Freshness | null }) {
         label="赔率更新"
         iso={freshness.odds_updated_at}
         state={freshness.odds_state}
-        todayKey={todayKey}
-      />
-      <FreshnessRow
-        label="推荐更新"
-        iso={freshness.reco_updated_at}
-        state={freshness.reco_state}
         todayKey={todayKey}
       />
     </p>
@@ -292,7 +323,7 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
           {match.win_probability ? (
             <WinProbabilityBar probability={match.win_probability} size="lg" />
           ) : (
-            <p className={styles.pairEmptyNote}>本场暂无赔率数据,无法折算胜平负概率。</p>
+            <p className={styles.pairEmptyNote}>这场还没抓到赔率，算不出概率。</p>
           )}
         </div>
       </div>
@@ -311,10 +342,13 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
 
 /* ── 近期比赛 ────────────────────────────────────────────── */
 
-// 单份列表最多渲染 7 张(桌面 4x2 网格的上限);<900px 两档(横滑 5 张 /
-// 640-899px 2x3 网格 5 张)靠纯 CSS 的 :nth-child 隐藏第 6、7 张卡实现,
-// 不为不同断点渲染两份重复 DOM(§落地清单:纯 CSS 媒体查询,不做 JS 测宽)。
-const SECONDARY_CARD_LIMIT = 7;
+// 2026-08-23 首页信息架构重排:横向滑动在 <900px 实测只有 5 张卡能被看到
+// (nth-child 隐藏了第 6、7 张,其余场次要横向拖才能看到)。改成 <900px 纵向
+// 单列列表后放宽到 15 张——secondary 本身已经是客户端拿到的未来 7 天全量
+// 候选池(~69 场),这里只是放宽渲染层的截断,不追加任何请求。
+// ≥900px 保持现状:page.module.css 的 :nth-child(n+8) 只在这一档把第 8 张
+// 及以后隐藏,4 列网格仍然只露 7 张,不需要 JS 按断点算不同的数字。
+const SECONDARY_CARD_LIMIT = 15;
 
 function SecondaryMatchCard({ card }: { card: HomeMatchCard }) {
   const { match } = card;
@@ -369,7 +403,7 @@ function ThisWeekSection({ cards, total }: { cards: HomeMatchCard[]; total: numb
         <h2 id="this-week-title">近期比赛</h2>
         {items.length > 0 && (
           <>
-            <span className={styles.secondaryHintMobile}>左右滑动 · 共 {total} 场</span>
+            <span className={styles.secondaryHintMobile}>共 {total} 场</span>
             <Link href="/matches" className={styles.secondaryHintDesktop}>
               全部 {total} 场 <span aria-hidden>→</span>
             </Link>
@@ -379,18 +413,22 @@ function ThisWeekSection({ cards, total }: { cards: HomeMatchCard[]; total: numb
       {items.length === 0 ? (
         <p className={styles.secondaryEmpty}>未来 7 天暂无其他已排期比赛。</p>
       ) : (
-        // 容器自身可横向滚动(<640px),body 不产生横向滚动条;640-899px 与
-        // ≥900px 两档改纯 CSS 网格(第 6、7 张卡 <900px 下用 :nth-child 隐藏)
-        <div className={styles.secondaryViewport}>
-          {items.map((card) => (
-            <SecondaryMatchCard key={card.match.match_id} card={card} />
-          ))}
+        // <900px:纵向单列列表,不再横向滚动;≥900px:纯 CSS 切回 4 列网格
+        // (page.module.css 用 :nth-child(n+8) 隐藏第 8 张及以后)。
+        <>
+          <div className={styles.secondaryViewport}>
+            {items.map((card) => (
+              <SecondaryMatchCard key={card.match.match_id} card={card} />
+            ))}
+          </div>
+          {/* 独立于列表/网格之外,不受 <900px 纵向列表或 ≥900px 4 列网格截断
+              影响,任何断点都能看到"查看全部"。 */}
           <Link href="/matches" className={styles.secondaryAll}>
             <strong>全部 {total} 场</strong>
             <span className={styles.secondaryAllHint}>按日期、联赛筛选</span>
             <span aria-hidden>→</span>
           </Link>
-        </div>
+        </>
       )}
     </section>
   );
@@ -402,7 +440,6 @@ export function HomeMatchExperienceLive({
   initialFeatured,
   initialSecondary,
   initialCounts,
-  initialFreshness,
   initialErrored,
 }: Props) {
   const [featured, setFeatured] = useState(initialFeatured);
@@ -439,23 +476,20 @@ export function HomeMatchExperienceLive({
 
   return (
     <>
+      {/* 重点比赛提到最前:此前"计数条 + 进度条 + 数据更新条"占满首屏,用户
+          要往下滚约 180px 才看到第一场真实比赛。 */}
+      <section className={styles.pairSection} aria-labelledby="hero-pair-title">
+        <header className={styles.pairSectionHead}>
+          <h2 id="hero-pair-title">重点比赛</h2>
+        </header>
+        <FeaturedMatchCard card={featured} />
+      </section>
+
       {counts && (
-        <div className={styles.countsBar}>
-          <div className={styles.countsRow} data-testid="match-counts-bar">
-            <CountItem label="今晚" count={counts.today} href="/matches?window=today" />
-            <CountItem label="明天" count={counts.tomorrow} href="/matches?window=tomorrow" />
-            <CountItem
-              label="未来 7 天"
-              count={counts.week}
-              href="/matches"
-              highlight
-            />
-          </div>
-          <div className={styles.countsProgress}>
-            <span className={counts.today > 0 ? styles.progressOn : styles.progressOff} />
-            <span className={counts.tomorrow > 0 ? styles.progressOn : styles.progressOff} />
-            <span className={counts.week > 0 ? styles.progressOn : styles.progressOff} />
-          </div>
+        <div className={styles.dateSwitcher} data-testid="match-counts-bar">
+          <DateTab label="今晚" count={counts.today} href="/matches?window=today" />
+          <DateTab label="明天" count={counts.tomorrow} href="/matches?window=tomorrow" />
+          <DateTab label="本周" count={counts.week} href="/matches" highlight />
           {counts.today === 0 && counts.tomorrow === 0 && (
             <p className={styles.countsFallback}>
               今晚和明天没有已排期的比赛。最近一场在{" "}
@@ -467,16 +501,8 @@ export function HomeMatchExperienceLive({
               。
             </p>
           )}
-          <FreshnessBlock freshness={initialFreshness} />
         </div>
       )}
-
-      <section className={styles.pairSection} aria-labelledby="hero-pair-title">
-        <header className={styles.pairSectionHead}>
-          <h2 id="hero-pair-title">重点比赛</h2>
-        </header>
-        <FeaturedMatchCard card={featured} />
-      </section>
 
       <ThisWeekSection cards={secondary} total={counts?.week ?? secondary.length} />
     </>

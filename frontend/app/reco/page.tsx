@@ -35,6 +35,7 @@ import {
   type GetJson,
   type MeResponse,
 } from "@/lib/api-v1";
+import { MARKET_ZH } from "@/components/matches/zh";
 import styles from "./reco.module.css";
 
 type DailyResp = GetJson<"/api/v1/reco/daily">;
@@ -48,14 +49,13 @@ const RESULT_ZH: Record<string, string> = {
   win: "命中", lose: "未中", push: "走水", half_win: "半赢", half_loss: "半输",
 };
 
-// 每日精选未授权状态固定文案(CLAUDE.md §5):未登录时按字面使用;已登录时
-// "登录后可查看当前权限状态"这半句不适用(用户此刻正在查看当前权限状态),
-// 调整为不出现"登录后查看"这类不通顺表述,但保留"需要单独授权"的核心意思。
-const LOCKED_NOTICE_ANON = "本场每日精选需要单独授权。登录后可查看当前权限状态。";
-const LOCKED_NOTICE_AUTHED = "本场每日精选需要单独授权,当前账号暂无查看权限。";
+// 每日精选未授权状态固定文案:未登录时是列表级别的说明,不针对某一场,
+// 不用"本场";已登录时改成针对具体这一场的措辞。
+const LOCKED_NOTICE_ANON = "每日精选按场开通，登录后能看到你有哪几场。";
+const LOCKED_NOTICE_AUTHED = "本场每日精选需要单独授权，当前账号暂无查看权限。";
 
 const SLIP_STATUS_ZH: Record<string, string> = {
-  published: "已发布(赛前)",
+  published: "已发布",
   settled: "已结算",
   voided: "已作废",
 };
@@ -152,7 +152,7 @@ function LegRow({ leg }: { leg: Slip["legs"][number] }) {
         ›
       </span>
       <span className={styles.legPick}>
-        {leg.market} · {leg.selection}
+        {MARKET_ZH[leg.market] ?? leg.market} · {leg.selection}
       </span>
       <span className={`${styles.legOdds} num`}>@{leg.odds.toFixed(2)}</span>
     </>
@@ -186,6 +186,10 @@ export function SlipCard({ slip }: { slip: Slip }) {
       </div>
 
       <div className={styles.slipBody}>
+        {tone === "void" && (
+          <p className={styles.voidNote}>这场后来作废了，不计入战绩。</p>
+        )}
+
         <div className={styles.metaLine}>
           <span className="num">{slip.slip_date}</span>
           <span>{slip.title}</span>
@@ -211,8 +215,7 @@ export function SlipCard({ slip }: { slip: Slip }) {
             </button>
             {editOpen && (
               <p className={styles.editDetail}>
-                本单修正 {slip.edit_count} 次,最近 {fmtDate(slip.last_edited_at)}。
-                人工内容允许修正,修正次数与时间公开留痕。
+                改过 {slip.edit_count} 次，最后一次 {fmtDate(slip.last_edited_at)}。
               </p>
             )}
           </div>
@@ -253,35 +256,40 @@ function resultBreakdownText(summary: NonNullable<TrackResp["summary"]>): string
 
 function SummaryRow({ summary }: { summary: NonNullable<TrackResp["summary"]> }) {
   return (
-    <section className={styles.summaryRow} aria-label="战绩汇总">
-      <div className={styles.summaryItem}>
-        <span className={`${styles.summaryNum} num`}>{summary.settled_count}</span>
-        <span className={styles.summaryLabel}>已结算</span>
-      </div>
-      <div className={styles.summaryItem}>
-        <span className={`${styles.summaryNum} num`}>{resultBreakdownText(summary)}</span>
-        <span className={styles.summaryLabel}>命中/未中/走水{(summary.half_win_count > 0 || summary.half_loss_count > 0) ? "(含四分之一盘半赢半输)" : ""}</span>
-      </div>
-      <div className={styles.summaryItem}>
-        <span className={`${styles.summaryNum} num`}>
-          {summary.hit_rate == null ? "—" : `${(summary.hit_rate * 100).toFixed(1)}%`}
-        </span>
-        <span className={styles.summaryLabel}>命中率(走水不计,半赢半输按半计)</span>
-      </div>
-      <div className={styles.summaryItem}>
-        <span className={`${styles.summaryNum} num`}>
-          {summary.net_units >= 0 ? "+" : ""}
-          {summary.net_units.toFixed(2)}
-        </span>
-        <span className={styles.summaryLabel}>净单位(1 单位/单)</span>
-      </div>
-      {summary.voided_count > 0 && (
+    <>
+      <section className={styles.summaryRow} aria-label="战绩汇总">
         <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>{summary.voided_count}</span>
-          <span className={styles.summaryLabel}>作废(单列,不计分母)</span>
+          <span className={`${styles.summaryNum} num`}>{summary.settled_count}</span>
+          <span className={styles.summaryLabel}>已结算</span>
         </div>
-      )}
-    </section>
+        <div className={styles.summaryItem}>
+          <span className={`${styles.summaryNum} num`}>{resultBreakdownText(summary)}</span>
+          <span className={styles.summaryLabel}>命中/未中/走水{(summary.half_win_count > 0 || summary.half_loss_count > 0) ? "（含四分之一盘半赢半输）" : ""}</span>
+        </div>
+        <div className={styles.summaryItem}>
+          <span className={`${styles.summaryNum} num`}>
+            {summary.hit_rate == null ? "—" : `${(summary.hit_rate * 100).toFixed(1)}%`}
+          </span>
+          <span className={styles.summaryLabel}>命中率</span>
+        </div>
+        <div className={styles.summaryItem}>
+          <span className={`${styles.summaryNum} num`}>
+            {summary.net_units >= 0 ? "+" : ""}
+            {summary.net_units.toFixed(2)}
+          </span>
+          <span className={styles.summaryLabel}>净单位</span>
+        </div>
+        {summary.voided_count > 0 && (
+          <div className={styles.summaryItem}>
+            <span className={`${styles.summaryNum} num`}>{summary.voided_count}</span>
+            <span className={styles.summaryLabel}>作废</span>
+          </div>
+        )}
+      </section>
+      <p className={styles.summaryNote}>
+        走水不算进去，半赢半输各算半场；每单按 1 单位算，作废的不计入命中率。
+      </p>
+    </>
   );
 }
 
@@ -357,8 +365,7 @@ function RecoBody() {
     <main className={styles.page}>
       <h1 className={styles.title}>每日精选</h1>
       <p className={styles.subtitle}>
-        每日人工推荐,战绩全程公开:命中、未中、走水与作废全部保留,不挑选、不隐藏。
-        推荐为个人分析观点,存在不确定性,不构成任何收益承诺。
+        每天人工出的推荐。中了没中都留在这儿，作废的也照样列出来。这是个人分析，判断会错。
       </p>
 
       <nav className={styles.tabs} aria-label="精选内容切换">
@@ -406,7 +413,7 @@ function RecoBody() {
                 <div className={styles.skeleton} />
               </div>
             ) : daily && daily.slips.length === 0 ? (
-              <p className={styles.empty}>近 30 天暂无推荐</p>
+              <p className={styles.empty}>这 {daily?.window_days ?? 30} 天还没发过推荐。</p>
             ) : (
               daily?.slips.map((s) =>
                 s.access_required ? (
@@ -422,21 +429,20 @@ function RecoBody() {
         <section>
           {trackErr && <p className={styles.errText}>{trackErr}</p>}
           {summary && <SummaryRow summary={summary} />}
-          <h2 className={styles.sectionTitle}>战绩归档({track?.total ?? 0})</h2>
+          <h2 className={styles.sectionTitle}>战绩归档（{track?.total ?? 0}）</h2>
           <p className={styles.archiveNote}>
-            全部已结算推荐公开可查,包括命中、未中、走水和作废记录。
-            结算后归档,人工内容允许修正,修正历史逐单标注;与
+            结算完的单子都在这儿，中没中都留着。改过的地方会在那张单子上标出来。
             <Link href="/track-record" className={styles.inlineLink}>
-              模型公开记录
+              模型预测
             </Link>
-            相互独立,口径不混用。
+            是另一套记录，两边不合并算。
           </p>
           {!track && !trackErr ? (
             <div className={styles.card} aria-busy="true">
               <div className={styles.skeleton} />
             </div>
           ) : track && track.slips.length === 0 ? (
-            <p className={styles.empty}>还没有已结算的推荐</p>
+            <p className={styles.empty}>还没有结算完的单子。</p>
           ) : (
             track?.slips.map((s) => <SlipCard key={s.id} slip={s} />)
           )}

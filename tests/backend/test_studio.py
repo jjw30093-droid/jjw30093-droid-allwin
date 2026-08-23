@@ -73,7 +73,10 @@ class TestBundle:
         assert b["subtitle_cues"] and b["bundle_hash"]
         assert r.headers["cache-control"] == "private, no-store"
         note = next(n for n in b["source_notes"] if n["kind"] == "probability_source")
-        assert "MODEL" in note["text"]
+        # 内部枚举值不得原样出现在用户可见文案里(CLAUDE.md §11.2);
+        # 必须换成中文标签"模型"。
+        assert "MODEL" not in note["text"]
+        assert "模型" in note["text"]
         assert "概率来自预测登记簿的已发布快照" in note["text"]
 
     def test_bundle_kickoff_precision_uncertainty_by_provenance(self, app, seeded, fresh_ip):
@@ -160,7 +163,11 @@ class TestBundle:
         # 2026-08-12 修复的真 bug:UNAVAILABLE 曾经落进"概率来自...已发布
         # 快照"分支,同一句话里自相矛盾(UNAVAILABLE = 没有快照)。
         note = next(n for n in b["source_notes"] if n["kind"] == "probability_source")
-        assert "UNAVAILABLE" in note["text"]
+        # 2026-08-23 修复的真 bug:生产实测发现这里把原始枚举值 UNAVAILABLE
+        # 原样显示给了用户(CLAUDE.md §11.2 禁止内部枚举值出现在用户界面);
+        # 必须换成中文标签"暂无"。
+        assert "UNAVAILABLE" not in note["text"]
+        assert "暂无" in note["text"]
         # 旧 bug 的确切措辞是"概率来自预测登记簿的已发布快照"(声称快照存在);
         # 新文案改成"暂无已发布的预测快照"(否定句),两者不能同时出现。
         assert "概率来自预测登记簿的已发布快照" not in note["text"]

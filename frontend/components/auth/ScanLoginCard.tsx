@@ -278,17 +278,17 @@ export function ScanLoginCard({
 
   const footnote =
     device.phase === "waiting" && isEnding
-      ? "有效期由后端 expires_at 决定(默认 5 分钟),前端不自行延长。"
+      ? "二维码 5 分钟内有效，过期点一下重新生成。"
       : device.phase === "waiting"
         ? env === "mobile"
           ? MOBILE_FOOTNOTE
           : PRIVACY_FOOTNOTE
         : device.phase === "claimed"
-          ? "已建立本站会话,正在返回刚才浏览的页面。"
+          ? "登录成功，正在回到刚才那页。"
           : device.phase === "expired"
-            ? "扫码请求有效期 5 分钟,过期后需要重新生成。"
+            ? "扫码请求有效期 5 分钟，过期后需要重新生成。"
             : device.phase === "error"
-              ? "同一错误连续出现时,可折叠展开管理员密码登录。"
+              ? "一直失败的话，刷新页面重试一次。"
               : null;
 
   // 进度条:idle 整条脉冲；claimed/error 走满；expired 归零；waiting/ending 按秒数走。

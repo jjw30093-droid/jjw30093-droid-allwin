@@ -14,6 +14,7 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import { ShotMapExplorer } from "@/components/charts/ShotMapExplorer";
 import { type ChartMode, scaleGrid, tokensFor } from "@/components/charts/chartMode";
+import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
 import type { components } from "@/lib/api-types";
 
 /**
@@ -23,18 +24,16 @@ import type { components } from "@/lib/api-types";
  */
 export type ChartSpec = components["schemas"]["BundleChartSpec"];
 
-const GOLD = "#d49e33";
-const INK2 = "#a79c87";
-const WIN = "#4e9a5b";
-const LOSS = "#c05437";
-const DRAW = "#8a8069";
-
-function probabilityBarOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
+function probabilityBarOption(
+  d: Record<string, unknown>,
+  mode: ChartMode,
+  c: ChartColors,
+): EChartsOption {
   const t = tokensFor(mode);
   const rows = [
-    { name: "主胜", value: Number(d.home), color: WIN },
-    { name: "平局", value: Number(d.draw), color: DRAW },
-    { name: "客胜", value: Number(d.away), color: LOSS },
+    { name: "主胜", value: Number(d.home), color: c.win },
+    { name: "平局", value: Number(d.draw), color: c.draw },
+    { name: "客胜", value: Number(d.away), color: c.loss },
   ];
   return {
     grid: scaleGrid({ left: 60, right: 40, top: 10, bottom: 10 }, mode),
@@ -45,7 +44,7 @@ function probabilityBarOption(d: Record<string, unknown>, mode: ChartMode): ECha
       inverse: true,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: INK2, fontSize: t.axisFont },
+      axisLabel: { color: c.ink2, fontSize: t.axisFont },
     },
     series: [
       {
@@ -55,7 +54,7 @@ function probabilityBarOption(d: Record<string, unknown>, mode: ChartMode): ECha
         label: {
           show: true,
           position: "right",
-          color: "#f3ecdc",
+          color: "#fff",
           fontSize: t.labelFont,
           formatter: ({ value }) => `${Math.round(Number(value) * 100)}%`,
         },
@@ -64,12 +63,16 @@ function probabilityBarOption(d: Record<string, unknown>, mode: ChartMode): ECha
   };
 }
 
-function xgCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOption {
+function xgCompareOption(
+  d: Record<string, unknown>,
+  mode: ChartMode,
+  c: ChartColors,
+): EChartsOption {
   const t = tokensFor(mode);
   const valueLabel = {
     show: t.alwaysShowValues,
     position: "right" as const,
-    color: "#f3ecdc",
+    color: "#fff",
     fontSize: t.labelFont,
     formatter: ({ value }: { value: unknown }) => Number(value).toFixed(2),
   };
@@ -77,23 +80,23 @@ function xgCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOp
     grid: scaleGrid({ left: 80, right: 40, top: 30, bottom: 24 }, mode),
     legend: {
       data: ["进攻 xG", "防守失 xG"],
-      textStyle: { color: INK2, fontSize: t.legendFont },
+      textStyle: { color: c.ink2, fontSize: t.legendFont },
       top: 0,
       itemHeight: Math.round(t.legendFont * 0.8),
       itemWidth: Math.round(t.legendFont * 1.6),
     },
-    xAxis: { type: "value", axisLabel: { color: INK2, fontSize: t.axisFont } },
+    xAxis: { type: "value", axisLabel: { color: c.ink2, fontSize: t.axisFont } },
     yAxis: {
       type: "category",
       data: [String(d.home_name), String(d.away_name)],
-      axisLabel: { color: INK2, fontSize: t.axisFont },
+      axisLabel: { color: c.ink2, fontSize: t.axisFont },
     },
     series: [
       {
         name: "进攻 xG",
         type: "bar",
         data: [Number(d.home_xg_for), Number(d.away_xg_for)],
-        color: GOLD,
+        color: c.teal,
         barWidth: Math.round(t.barWidth * 0.78),
         label: valueLabel,
       },
@@ -101,7 +104,7 @@ function xgCompareOption(d: Record<string, unknown>, mode: ChartMode): EChartsOp
         name: "防守失 xG",
         type: "bar",
         data: [Number(d.home_xg_against), Number(d.away_xg_against)],
-        color: LOSS,
+        color: c.loss,
         barWidth: Math.round(t.barWidth * 0.78),
         label: valueLabel,
       },
@@ -142,6 +145,7 @@ export function SpecChart({
   height?: number;
   mode?: ChartMode;
 }) {
+  const c = useChartColors();
   if (spec.type === "shot_map_explorer") {
     // 导出模式必须隐藏筛选控件 —— 截进 PNG 的按钮全是死的。
     return (
@@ -153,8 +157,8 @@ export function SpecChart({
     );
   }
   let option: EChartsOption | null = null;
-  if (spec.type === "probability_bar") option = probabilityBarOption(spec.data, mode);
-  else if (spec.type === "xg_compare") option = xgCompareOption(spec.data, mode);
+  if (spec.type === "probability_bar") option = probabilityBarOption(spec.data, mode, c);
+  else if (spec.type === "xg_compare") option = xgCompareOption(spec.data, mode, c);
   if (!option) return null;
   return <EChart option={option} height={height} ariaSummary={summarize(spec)} mode={mode} />;
 }

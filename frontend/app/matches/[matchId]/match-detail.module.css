@@ -1,12 +1,12 @@
 .page {
   max-width: 960px;
   margin: 0 auto;
-  padding: 32px 20px 64px;
+  padding: 32px var(--page-gutter) 64px;
 }
 @media (max-width: 640px) {
   .page {
     /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
-    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    padding-bottom: var(--bottom-nav-clearance);
   }
 }
 
@@ -76,17 +76,18 @@
   margin-bottom: 32px;
 }
 
-/* 区块标题:15px/900/--ink,左侧 3px×16px --brand-teal 竖条(2026-08-14
+/* 区块标题:--fs-h2/900/--ink,左侧 3px×16px --brand-teal 竖条(2026-08-14
  * 重设计,取代原来的 border-left+padding-left——效果类似但高度可控,
- * 不随标题文字的 line-height 拉伸)。CooccurrenceSection 组件自带同款
- * 独立副本(便于"无内容时整体隐藏"),两处保持视觉一致。 */
+ * 不随标题文字的 line-height 拉伸;2026-08-23 单栏重排统一到 --fs-h2,
+ * 与首页区块标题同一套字号变量)。CooccurrenceSection、MarketCardsSection
+ * 组件各自带同款独立副本(便于"无内容时整体隐藏"),三处保持视觉一致。 */
 .sectionTitle {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0 0 14px;
   color: var(--ink);
-  font-size: 15px;
+  font-size: var(--fs-h2);
   font-weight: 900;
 }
 
@@ -271,38 +272,12 @@
   line-height: 1.7;
 }
 
-.disclaimer {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 /* ── 响应式(手机第一优先:窄屏减列) ── */
 
 @media (max-width: 720px) {
   .formGrid {
     grid-template-columns: 1fr;
   }
-}
-
-/* ── 折叠数据说明 ─────────────────────────────────────── */
-
-.metaDetails {
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  padding: 12px 16px;
-  background: var(--surface);
-}
-
-.metaSummary {
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink-2);
-}
-
-.metaDetails[open] .metaSummary {
-  margin-bottom: 10px;
 }
 
 
@@ -324,10 +299,6 @@
   color: var(--brand-teal);
   font-weight: 700;
   text-decoration: none;
-}
-
-.quickRecoOff {
-  color: var(--ink-3);
 }
 
 .quickFormLine {

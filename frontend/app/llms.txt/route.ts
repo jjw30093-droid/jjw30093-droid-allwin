@@ -1,4 +1,4 @@
-import { ANON_LEAGUES, SITE_URL } from "@/lib/site";
+import { PUBLIC_LEAGUES, SITE_URL } from "@/lib/site";
 
 /**
  * /llms.txt — 面向 AI 爬虫的站点说明(llmstxt.org 约定)。
@@ -12,7 +12,7 @@ import { ANON_LEAGUES, SITE_URL } from "@/lib/site";
 export const dynamic = "force-static";
 
 function buildLlmsTxt(): string {
-  const leagueLines = ANON_LEAGUES.map(
+  const leagueLines = PUBLIC_LEAGUES.map(
     ({ id, nameZh }) =>
       `- [${nameZh}积分榜](${SITE_URL}/league/${id}/standings):${nameZh}最新积分榜与球队数据\n` +
       `- [${nameZh}赛程与比赛](${SITE_URL}/league/${id}/matches):赛程、比分与比赛数据入口`,
@@ -39,8 +39,6 @@ ${leagueLines}
 ## 说明
 
 - 概率与分析均为统计模型输出,存在不确定性,不构成任何形式的收益承诺。
-- 本清单为精选联赛入口;瑞典超/挪超/日职/韩K/澳超等其余已收录联赛同样
-  匿名可完整浏览,见上方「联赛导航」的完整列表。
 - 站内时间默认以北京时间(UTC+8)展示。
 `;
 }

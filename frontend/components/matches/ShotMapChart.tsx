@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
+import { useChartColors } from "@/components/charts/useChartColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { SHOT_OUTCOME_ZH, SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
 import { FootballPitchBackground } from "./FootballPitchBackground";
@@ -27,9 +28,6 @@ type Shot = MatchReport["shots"][number];
 
 const PITCH_LEN = 105;
 const PITCH_WID = 68;
-// 与 SpecCharts 同一套图表配色惯例(主=金,客=中性)
-const GOLD = "#d49e33";
-const INK2 = "#a79c87";
 
 function symbolSize(xg: number | null | undefined): number {
   return 7 + Math.min(1, xg ?? 0) * 22;
@@ -102,6 +100,7 @@ export function ShotMapChart({
   mode?: ChartMode;
 }) {
   const isExport = mode === "export";
+  const c = useChartColors();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [chartHeight, setChartHeight] = useState<number | null>(null);
   const [visible, setVisible] = useState(false);
@@ -194,8 +193,8 @@ export function ShotMapChart({
         shotTooltip((p as unknown as { data: { shot: Shot } }).data.shot),
     },
     series: [
-      { name: homeName, type: "scatter", data: seriesOf(true, GOLD) },
-      { name: awayName, type: "scatter", data: seriesOf(false, INK2) },
+      { name: homeName, type: "scatter", data: seriesOf(true, c.teal) },
+      { name: awayName, type: "scatter", data: seriesOf(false, c.navy) },
     ],
   };
 

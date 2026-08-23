@@ -176,6 +176,37 @@
   color: var(--ink-3);
 }
 
+.columnNote {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* 亚洲让球方向标签(主让/客让/平手),紧跟在盘口线数字后面。
+ * 12px 是用户可见文字下限(CLAUDE.md §11.2),不跟其它辅助小字一样压到 11px。 */
+.ahTag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+/* 手机端列裁剪:「阶段」「来源更新」两列在实测数据全为常量时收起,
+ * 值改到表格上方的 .columnNote 里说一次(见 OddsTimeline.tsx 的
+ * uniformPhase/sourceNeverDeclared 判据——数据不是常量时不会加这个
+ * class,列会照常显示,不强行砍真实差异)。 */
+@media (max-width: 640px) {
+  .mobileHideCol {
+    display: none;
+  }
+}
+
 /* ── 精简视图:初盘/最新标签 + 完整历史折叠 ────────────── */
 
 .pointTag {

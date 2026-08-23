@@ -14,30 +14,25 @@
 
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
+import { useChartColors, hexToRgba } from "@/components/charts/useChartColors";
 import type { GetJson } from "@/lib/api-v1";
 import styles from "./SeasonProfileCharts.module.css";
 
 type Profile = GetJson<"/api/v1/leagues/{league_id}/season-profile">;
 
-const GOLD = "#d49e33";
-const INK2 = "#a79c87";
-const WIN = "#4e9a5b";
-const LOSS = "#c05437";
-const DRAW = "#8a8069";
-
-const AXIS = { color: INK2, fontSize: 12 } as const;
-
 /* ── 1. 进球时段 ─────────────────────────────────────────── */
 
 function GoalMinutes({ rows }: { rows: Profile["goal_minutes"] }) {
+  const c = useChartColors();
+  const axis = { color: c.ink2, fontSize: 12 } as const;
   if (!rows?.length) return null;
   const peak = rows.reduce((a, b) => ((b.pct ?? 0) > (a.pct ?? 0) ? b : a));
   const option: EChartsOption = {
     grid: { left: 46, right: 16, top: 16, bottom: 28 },
-    xAxis: { type: "category", data: rows.map((r) => r.bucket), axisLabel: AXIS },
+    xAxis: { type: "category", data: rows.map((r) => r.bucket), axisLabel: axis },
     yAxis: {
       type: "value",
-      axisLabel: { ...AXIS, formatter: (v: number) => `${v}%` },
+      axisLabel: { ...axis, formatter: (v: number) => `${v}%` },
       splitLine: { lineStyle: { opacity: 0.15 } },
     },
     tooltip: {
@@ -55,14 +50,14 @@ function GoalMinutes({ rows }: { rows: Profile["goal_minutes"] }) {
         data: rows.map((r) => ({
           value: r.pct ?? 0,
           // 进球最集中的那一段高亮 —— 这就是这张图的"话题点"
-          itemStyle: { color: r.bucket === peak.bucket ? GOLD : INK2 },
+          itemStyle: { color: r.bucket === peak.bucket ? c.teal : c.ink2 },
         })),
         barWidth: "58%",
         label: {
           show: true,
           position: "top",
-          color: INK2,
-          fontSize: 11,
+          color: c.ink2,
+          fontSize: 12,
           formatter: ({ value }: { value: unknown }) => `${value}%`,
         },
       },
@@ -91,6 +86,8 @@ function GoalMinutes({ rows }: { rows: Profile["goal_minutes"] }) {
 const MAX_SCORE = 4; // 0-4 球之外合并进"其他",避免窄屏挤成马赛克
 
 function ScoreGrid({ rows }: { rows: Profile["score_distribution"] }) {
+  const c = useChartColors();
+  const axis = { color: c.ink2, fontSize: 12 } as const;
   if (!rows?.length) return null;
   const cells: { h: number; a: number; pct: number; count: number }[] = [];
   let other = { pct: 0, count: 0 };
@@ -104,30 +101,30 @@ function ScoreGrid({ rows }: { rows: Profile["score_distribution"] }) {
     }
   }
   const top = rows[0];
-  const maxPct = Math.max(...cells.map((c) => c.pct), 0.0001);
+  const maxPct = Math.max(...cells.map((cell) => cell.pct), 0.0001);
   const option: EChartsOption = {
     grid: { left: 46, right: 20, top: 26, bottom: 34 },
     xAxis: {
       type: "category",
       data: Array.from({ length: MAX_SCORE + 1 }, (_, i) => String(i)),
       name: "客队",
-      nameTextStyle: AXIS,
-      axisLabel: AXIS,
+      nameTextStyle: axis,
+      axisLabel: axis,
       splitArea: { show: true },
     },
     yAxis: {
       type: "category",
       data: Array.from({ length: MAX_SCORE + 1 }, (_, i) => String(i)),
       name: "主队",
-      nameTextStyle: AXIS,
-      axisLabel: AXIS,
+      nameTextStyle: axis,
+      axisLabel: axis,
       splitArea: { show: true },
     },
     tooltip: {
       confine: true,
       formatter: (p: unknown) => {
         const d = (p as { data: [number, number, number] }).data;
-        const cell = cells.find((c) => c.a === d[0] && c.h === d[1]);
+        const cell = cells.find((item) => item.a === d[0] && item.h === d[1]);
         return cell
           ? `${cell.h}–${cell.a}<br/>${cell.count} 场(占 ${cell.pct}%)`
           : "";
@@ -137,16 +134,16 @@ function ScoreGrid({ rows }: { rows: Profile["score_distribution"] }) {
       min: 0,
       max: maxPct,
       show: false,
-      inRange: { color: ["rgba(212,158,51,0.08)", GOLD] },
+      inRange: { color: [hexToRgba(c.teal, 0.08), c.teal] },
     },
     series: [
       {
         type: "heatmap",
-        data: cells.map((c) => [c.a, c.h, c.pct]),
+        data: cells.map((cell) => [cell.a, cell.h, cell.pct]),
         label: {
           show: true,
-          fontSize: 10,
-          color: "#2a1b06",
+          fontSize: 12,
+          color: "#fff",
           formatter: ({ value }: { value: unknown }) => {
             const v = (value as [number, number, number])[2];
             return v >= 3 ? `${v.toFixed(0)}%` : "";
@@ -181,20 +178,22 @@ function ScoreGrid({ rows }: { rows: Profile["score_distribution"] }) {
 /* ── 3. 大小球阈值 ───────────────────────────────────────── */
 
 function OverUnder({ rows }: { rows: Profile["over_under"] }) {
+  const c = useChartColors();
+  const axis = { color: c.ink2, fontSize: 12 } as const;
   if (!rows?.length) return null;
   const option: EChartsOption = {
     grid: { left: 56, right: 20, top: 30, bottom: 26 },
-    legend: { data: ["大球", "小球"], textStyle: AXIS, top: 0 },
+    legend: { data: ["大球", "小球"], textStyle: axis, top: 0 },
     xAxis: {
       type: "value",
       max: 100,
-      axisLabel: { ...AXIS, formatter: (v: number) => `${v}%` },
+      axisLabel: { ...axis, formatter: (v: number) => `${v}%` },
       splitLine: { lineStyle: { opacity: 0.15 } },
     },
     yAxis: {
       type: "category",
       data: rows.map((r) => `${r.threshold}`),
-      axisLabel: AXIS,
+      axisLabel: axis,
       inverse: true,
     },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
@@ -204,13 +203,13 @@ function OverUnder({ rows }: { rows: Profile["over_under"] }) {
         type: "bar",
         stack: "ou",
         data: rows.map((r) => r.over_pct ?? 0),
-        color: GOLD,
+        color: c.teal,
         barWidth: 16,
         label: {
           show: true,
           position: "insideLeft",
-          color: "#2a1b06",
-          fontSize: 11,
+          color: "#fff",
+          fontSize: 12,
           formatter: ({ value }: { value: unknown }) => `${Number(value).toFixed(0)}%`,
         },
       },
@@ -219,7 +218,7 @@ function OverUnder({ rows }: { rows: Profile["over_under"] }) {
         type: "bar",
         stack: "ou",
         data: rows.map((r) => r.under_pct ?? 0),
-        color: INK2,
+        color: c.ink2,
         barWidth: 16,
       },
     ],
@@ -250,11 +249,13 @@ function OverUnder({ rows }: { rows: Profile["over_under"] }) {
 /* ── 4. 主平客 + BTTS ────────────────────────────────────── */
 
 function OutcomeSplit({ summary }: { summary: Profile["summary"] }) {
+  const c = useChartColors();
+  const axis = { color: c.ink2, fontSize: 12 } as const;
   if (!summary) return null;
   const rows = [
-    { name: "主胜", value: summary.home_win_pct ?? 0, color: WIN },
-    { name: "平局", value: summary.draw_pct ?? 0, color: DRAW },
-    { name: "客胜", value: summary.away_win_pct ?? 0, color: LOSS },
+    { name: "主胜", value: summary.home_win_pct ?? 0, color: c.win },
+    { name: "平局", value: summary.draw_pct ?? 0, color: c.draw },
+    { name: "客胜", value: summary.away_win_pct ?? 0, color: c.loss },
   ];
   const option: EChartsOption = {
     grid: { left: 46, right: 34, top: 10, bottom: 10 },
@@ -265,7 +266,7 @@ function OutcomeSplit({ summary }: { summary: Profile["summary"] }) {
       inverse: true,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: AXIS,
+      axisLabel: axis,
     },
     series: [
       {
@@ -275,7 +276,7 @@ function OutcomeSplit({ summary }: { summary: Profile["summary"] }) {
         label: {
           show: true,
           position: "right",
-          color: INK2,
+          color: c.ink2,
           fontSize: 12,
           formatter: ({ value }: { value: unknown }) => `${Number(value).toFixed(1)}%`,
         },

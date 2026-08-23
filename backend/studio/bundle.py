@@ -23,6 +23,15 @@ from backend.studio.team_style import (
 
 BUNDLE_VERSION = "1"
 
+# probability_source 只在内部流转使用 MARKET_BASELINE/MODEL/UNAVAILABLE 这三个
+# 英文常量;任何拼进用户可见文案的地方都必须先查这张表换成中文,不能把原始
+# 枚举值原样输出(CLAUDE.md §11.2 明确禁止内部枚举值直接出现在用户界面)。
+PROBABILITY_SOURCE_LABELS = {
+    "MARKET_BASELINE": "市场基线",
+    "MODEL": "模型",
+    "UNAVAILABLE": "暂无",
+}
+
 
 def _form_summary(form: list[dict]) -> dict:
     w = sum(1 for f in form if f["result"] == "W")
@@ -383,12 +392,15 @@ def build_analysis_bundle(
                 # 三态各自独立成句,不能用二元 else 兜底——UNAVAILABLE 落进
                 # "概率来自已发布快照"分支曾经是自相矛盾的真 bug(既说
                 # UNAVAILABLE 又说有快照,2026-08-12 审计发现)。
+                # 标签一律查 PROBABILITY_SOURCE_LABELS,不直接拼原始枚举值
+                # (生产实测发现 UNAVAILABLE 原样显示给了用户,2026-08-23 修复)。
                 "text": (
-                    f"概率来源:{probability_source};版本:{model_version or '无'}。"
+                    f"概率来源：{PROBABILITY_SOURCE_LABELS[probability_source]}；"
+                    f"版本：{model_version or '无'}。"
                     + {
-                        "MARKET_BASELINE": "该值是 1X2 赔率去水结果,不是自有模型输出",
+                        "MARKET_BASELINE": "该值是 1X2 赔率去水结果，不是自有模型输出",
                         "MODEL": "概率来自预测登记簿的已发布快照",
-                        "UNAVAILABLE": "该场比赛暂无已发布的预测快照,本页不展示概率",
+                        "UNAVAILABLE": "这场比赛暂无已发布的预测快照，不展示概率",
                     }[probability_source]
                 ),
             },

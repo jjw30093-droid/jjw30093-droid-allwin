@@ -56,7 +56,7 @@ export function MatchHeaderPre({ match }: { match: MatchSummary }) {
               <LocalTime iso={match.kickoff_at_utc} fallback={match.date_utc} />
             </span>
             <span className={styles.countdown}>
-              北京时间 · <KickoffCountdown iso={match.kickoff_at_utc} variant="prefix" />
+              <KickoffCountdown iso={match.kickoff_at_utc} variant="prefix" showPrefixDot />
             </span>
           </>
         ) : (

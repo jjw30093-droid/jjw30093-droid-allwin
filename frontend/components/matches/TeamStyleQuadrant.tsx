@@ -11,94 +11,17 @@
  * 图表走全站唯一封装 components/EChart.tsx,ariaSummary 必填(CLAUDE.md §11.2)。
  */
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import { teamInitials } from "@/components/teams/TeamBadge";
+import { useChartColors } from "@/components/charts/useChartColors";
 import styles from "./MatchDataModules.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import type { components } from "@/lib/api-types";
 
 type StyleView = components["schemas"]["MatchPreviewStyleViewDTO"];
 type StylePoint = components["schemas"]["MatchPreviewStylePointDTO"];
-
-const THEME_CHANGE_EVENT = "allwin-theme-change";
-
-type ChartColors = {
-  teal: string;
-  navy: string;
-  ink2: string;
-  ink3: string;
-  grey: string;
-  surface: string;
-};
-
-/** SSR/首次渲染安全的字面量兜底(浅色值)——真实值在挂载后由 readChartColors() 覆盖。 */
-const FALLBACK_COLORS: ChartColors = {
-  teal: "#087e78",
-  navy: "#1d6f8b",
-  ink2: "#40535d",
-  ink3: "#5a6b73",
-  grey: "#b8c6c6",
-  surface: "#ffffff",
-};
-
-/**
- * ECharts canvas 不认 CSS 变量,必须读运行期解析值(同
- * components/matches/OddsTimeline.tsx 的既有做法)——而且不能直接读
- * --brand-navy:该 token 在深色模式下改写成 #061923,和深色模式的页面
- * 背景(#07161e)几乎同色,当"客队"高亮色会糊到看不见。这里改用
- * --brand-blue,深浅两色都是明确可辨识的中亮度蓝,专门作为图表第二
- * 强调色使用(该 token 此前在全站未被使用)。
- */
-function readChartColors(): ChartColors {
-  const style = getComputedStyle(document.documentElement);
-  const readVar = (name: string, fallback: string) =>
-    style.getPropertyValue(name).trim() || fallback;
-  return {
-    teal: readVar("--brand-teal", FALLBACK_COLORS.teal),
-    navy: readVar("--brand-blue", FALLBACK_COLORS.navy),
-    ink2: readVar("--ink-2", FALLBACK_COLORS.ink2),
-    ink3: readVar("--ink-3", FALLBACK_COLORS.ink3),
-    grey: readVar("--border-strong", FALLBACK_COLORS.grey),
-    surface: readVar("--surface", FALLBACK_COLORS.surface),
-  };
-}
-
-// useSyncExternalStore 要求 getSnapshot 在值未变时返回同一引用(Object.is),
-// 否则每次渲染都判定"变了"造成无限重渲染——模块级缓存 + 逐字段比较,
-// 只有主题真的切换时才产生新对象。
-let cachedColors: ChartColors | null = null;
-function getChartColorsSnapshot(): ChartColors {
-  const next = readChartColors();
-  if (
-    cachedColors &&
-    cachedColors.teal === next.teal &&
-    cachedColors.navy === next.navy &&
-    cachedColors.ink2 === next.ink2 &&
-    cachedColors.ink3 === next.ink3 &&
-    cachedColors.grey === next.grey &&
-    cachedColors.surface === next.surface
-  ) {
-    return cachedColors;
-  }
-  cachedColors = next;
-  return next;
-}
-
-function subscribeThemeChange(callback: () => void) {
-  window.addEventListener(THEME_CHANGE_EVENT, callback);
-  return () => window.removeEventListener(THEME_CHANGE_EVENT, callback);
-}
-
-/** 深浅色切换时重新解析 CSS 变量;服务端渲染与首帧水合前给字面量兜底。 */
-function useChartColors(): ChartColors {
-  return useSyncExternalStore(
-    subscribeThemeChange,
-    getChartColorsSnapshot,
-    () => FALLBACK_COLORS,
-  );
-}
 
 function usable(v: StyleView) {
   return v.points.filter((p) => p.x != null && p.y != null).length >= 4;

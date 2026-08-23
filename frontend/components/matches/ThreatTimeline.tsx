@@ -25,15 +25,12 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { tokensFor } from "@/components/charts/chartMode";
+import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import styles from "./ThreatTimeline.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type Shot = MatchReport["shots"][number];
-
-const GOLD = "#d49e33";
-const INK2 = "#a79c87";
-const GOAL = "#4e9a5b";
 
 /** 可选时间粒度。5 分钟接近逐分钟的观感,15 分钟适合窄屏/卡片。 */
 const BUCKETS = [5, 15] as const;
@@ -106,6 +103,7 @@ function buildOption(
   awayName: string,
   size: number,
   mode: ChartMode,
+  c: ChartColors,
 ): EChartsOption {
   const t = tokensFor(mode);
   const labels = buckets.map((b) => `${b.start}'`);
@@ -145,7 +143,7 @@ function buildOption(
     legend: {
       // 只列两队,不把"主队进球/客队进球"两个标记 series 放进图例(它们是注记不是维度)
       data: [homeName, awayName],
-      textStyle: { color: INK2, fontSize: t.legendFont },
+      textStyle: { color: c.ink2, fontSize: t.legendFont },
       top: 0,
       itemHeight: Math.round(t.legendFont * 0.8),
       itemWidth: Math.round(t.legendFont * 1.6),
@@ -176,7 +174,7 @@ function buildOption(
       type: "category",
       data: labels,
       axisLabel: {
-        color: INK2,
+        color: c.ink2,
         fontSize: t.axisFont,
         // 窄屏/大字号下只标整刻度,避免标签互相压叠
         interval: (index: number) => buckets[index].start % (size >= 15 ? 15 : 15) === 0,
@@ -187,7 +185,7 @@ function buildOption(
       type: "value",
       // 中线为轴:上正下负;刻度取绝对值,避免出现"-0.5 的 xG"这种读不通的标签
       axisLabel: {
-        color: INK2,
+        color: c.ink2,
         fontSize: t.axisFont,
         formatter: (v: number) => Math.abs(v).toFixed(1),
       },
@@ -199,7 +197,7 @@ function buildOption(
         type: "bar",
         stack: "threat",
         data: buckets.map((b) => b.homeXg),
-        color: GOLD,
+        color: c.teal,
         barCategoryGap: "20%",
       },
       {
@@ -207,7 +205,7 @@ function buildOption(
         type: "bar",
         stack: "threat",
         data: buckets.map((b) => -b.awayXg),
-        color: INK2,
+        color: c.navy,
         barCategoryGap: "20%",
       },
       ...(["home", "away"] as const).map((side) => ({
@@ -216,13 +214,13 @@ function buildOption(
         data: goalMarks(side),
         symbol: "circle",
         symbolSize: t.symbolSize + 4,
-        itemStyle: { color: GOAL, borderColor: "#fff", borderWidth: 2 },
+        itemStyle: { color: c.win, borderColor: "#fff", borderWidth: 2 },
         label: {
           show: true,
           // 主队柱向上 → 标签在上;客队柱向下 → 标签必须在下,否则挤向零线互相压叠
           position: side === "home" ? ("top" as const) : ("bottom" as const),
-          fontSize: Math.round(t.axisFont * 0.95),
-          color: GOAL,
+          fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
+          color: c.win,
           formatter: ({ name }: { name: string }) => name,
         },
         // 相邻时段的进球标签会横向碰撞;重叠时隐藏文字(绿点保留,信息不丢)
@@ -251,6 +249,7 @@ export function ThreatTimeline({
   const [size, setSize] = useState<BucketSize>(5);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
+  const c = useChartColors();
 
   useEffect(() => {
     if (mode === "export") return;
@@ -273,8 +272,8 @@ export function ThreatTimeline({
     [buckets, homeName, awayName, effectiveSize],
   );
   const option = useMemo(
-    () => buildOption(buckets, homeName, awayName, effectiveSize, mode),
-    [buckets, homeName, awayName, effectiveSize, mode],
+    () => buildOption(buckets, homeName, awayName, effectiveSize, mode, c),
+    [buckets, homeName, awayName, effectiveSize, mode, c],
   );
 
   if (buckets.length === 0) {

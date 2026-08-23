@@ -35,11 +35,11 @@
 }
 
 .finishedPill {
-  padding: 2px 8px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-pill);
-  background: var(--brand-lime);
-  color: #0d2c3d;
-  font-size: 10.5px;
+  color: var(--ink-2);
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }

@@ -359,6 +359,10 @@ BACKUP_KEEP=14                             # 本地保留备份份数
 # 前端 API 基址(单一真源 frontend/lib/api-base.ts,宪法 §10.3):
 # NEXT_PUBLIC_API_BASE=                    # 生产必须留空/不设:浏览器走同源相对 /api/v1
 INTERNAL_API_BASE=http://127.0.0.1:8000    # Next 服务端(RSC)运行期直连同机 FastAPI
+
+# 站点对外规范域名(单一真源 frontend/lib/site.ts),同为构建期内联变量,
+# 驱动 sitemap.xml / robots.txt / llms.txt 里的绝对 URL:
+NEXT_PUBLIC_SITE_URL=https://miaomiaodi.vip
 ```
 
 ## 10. 前端 API 基址与构建期环境(必读)
@@ -375,7 +379,10 @@ INTERNAL_API_BASE=http://127.0.0.1:8000    # Next 服务端(RSC)运行期直连�
 1. **`NEXT_PUBLIC_*` 是构建期内联**:`next build` 时写死进浏览器产物,systemd 的
    `EnvironmentFile` 运行期改它无效;改值必须重新 build(release.sh 已在 build 前
    `set -a; . shared/.env; set +a`)。它还必须在构建期与服务端运行期取值一致,
-   否则 SSR 与浏览器渲染出的链接不同(水合不一致)。生产两处都留空即可。
+   否则 SSR 与浏览器渲染出的链接不同(水合不一致)。生产 `NEXT_PUBLIC_API_BASE`
+   留空即可;`NEXT_PUBLIC_SITE_URL` 是第二个构建期内联变量(单一真源
+   `frontend/lib/site.ts`),生产必须显式设为 `https://miaomiaodi.vip`,否则
+   sitemap.xml/robots.txt/llms.txt 会回退到 `http://localhost:3000`。
 2. **`INTERNAL_API_BASE` 是运行期读取**:只在 Next 服务端进程可见,随 systemd
    环境调整即可生效,不进浏览器产物。
 3. **env 文件优先级**:`next build` 除 shell 环境变量外还会读取

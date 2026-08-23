@@ -9,15 +9,15 @@ export const metadata: Metadata = {
     "了解欧赢 ALLWIN 的足球数据来源、分析方式、内容工作流和合作方向。",
 };
 
-export default function AboutPage() {
-  const wechatName = process.env.NEXT_PUBLIC_WECHAT_MP_NAME?.trim();
-  const wechatQr = process.env.NEXT_PUBLIC_WECHAT_QR_CODE_URL?.trim();
+/** 与页脚 WechatFollowCard 同一张固定二维码,不走从未配置过的 NEXT_PUBLIC_* 变量。 */
+const WECHAT_QR_SRC = "/brand/wechat-mp-qr.png";
+const WECHAT_MP_NAME = "欧赢 ALLWIN";
 
+export default function AboutPage() {
   return (
     <main className={styles.page}>
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>ABOUT ALLWIN</p>
           <h1>关于我们</h1>
           <p className={styles.lead}>
             欧赢是一个面向中文足球用户的独立数据产品。我们把赛程、球队状态、
@@ -25,8 +25,7 @@ export default function AboutPage() {
             图卡和视频内容。
           </p>
           <p className={styles.origin}>
-            项目由长期服务一线足球用户的从业者发起。我们更关心一场比赛的数据
-            能不能讲清楚，而不是把任何判断说成确定结果。
+            做这个站的人自己看球。我们只负责把数据摆清楚，判断留给你。
           </p>
         </div>
         <figure className={styles.heroMedia}>
@@ -40,13 +39,11 @@ export default function AboutPage() {
           />
           <figcaption>
             视觉素材预览 · Getty Images / FIFA
-            <span>正式上线前需替换为已授权原图</span>
           </figcaption>
         </figure>
       </header>
 
       <section className={styles.section}>
-        <p className={styles.eyebrow}>WHAT WE DO</p>
         <h2>我们在做什么</h2>
         <div className={styles.grid}>
           <article>
@@ -69,7 +66,6 @@ export default function AboutPage() {
 
       <section className={styles.splitSection}>
         <div>
-          <p className={styles.eyebrow}>DATA & METHOD</p>
           <h2>数据从哪里来</h2>
         </div>
         <div className={styles.prose}>
@@ -91,7 +87,6 @@ export default function AboutPage() {
 
       <section className={styles.cooperate}>
         <div>
-          <p className={styles.eyebrow}>COOPERATION</p>
           <h2>合作联系</h2>
           <p>
             欢迎足球内容创作者、数据产品团队和有定制开发需求的企业联系。
@@ -99,18 +94,14 @@ export default function AboutPage() {
           </p>
         </div>
         <div className={styles.contact}>
-          <strong>{wechatName ? `微信公众号：${wechatName}` : "微信公众号"}</strong>
-          {wechatQr ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={wechatQr}
-              alt={`微信公众号 ${wechatName || ""} 二维码`}
-              width={148}
-              height={148}
-            />
-          ) : (
-            <span>公众号名称和二维码将在部署环境配置</span>
-          )}
+          <strong>微信公众号：{WECHAT_MP_NAME}</strong>
+          <Image
+            src={WECHAT_QR_SRC}
+            alt={`微信公众号 ${WECHAT_MP_NAME} 二维码`}
+            width={148}
+            height={148}
+            unoptimized
+          />
         </div>
       </section>
 

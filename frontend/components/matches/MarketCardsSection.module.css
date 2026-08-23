@@ -1,3 +1,32 @@
+/* 标题从父组件(match-detail.module.css::sectionTitle/.sectionBar)搬进来
+ * 的同款视觉——2026-08-23 单栏重排,标题与内容判空绑在一起,见组件注释。 */
+.section {
+  margin-bottom: 32px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: var(--fs-h2);
+  font-weight: 900;
+}
+
+.sectionBar {
+  flex: none;
+  width: 3px;
+  height: 16px;
+  background: var(--brand-teal);
+}
+
+.sectionNote {
+  margin: 0 0 14px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr;

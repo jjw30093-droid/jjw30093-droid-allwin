@@ -183,7 +183,7 @@ export function MatchListLive({
         当前筛选共 <span className="num">{total}</span> 场
       </span>
       {windowWidened && (
-        <p className={styles.widenNote}>未来 7 天暂无比赛,已自动展示全部未来赛程。</p>
+        <p className={styles.widenNote}>未来 7 天暂无比赛，已自动展示全部未来赛程。</p>
       )}
 
       {/* 筛选:纯 GET 表单 + 链接,无 JS 也可用。只有"时间/内容/联赛"三组
@@ -355,7 +355,7 @@ export function MatchListLive({
 
       {matches.length === 0 ? (
         <div className={styles.emptyBox}>
-          <p>没有符合当前筛选条件的比赛。</p>
+          <p>这几个条件凑一起，一场都没有。</p>
           {/* 选了一个已经过去的日期却停在赛程视图 = 恒空(date ∧ 未开赛)。
               这是"看不到已结束比赛"的第二条死路,而且白板不给任何解释。
               这里只给出口,不自动改写用户的筛选——静默改写会让 URL 与界面

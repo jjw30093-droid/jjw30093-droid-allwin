@@ -4,12 +4,13 @@ import { Suspense } from "react";
 import { serverGet, type TrackRecordResponse } from "@/lib/api-v1";
 import { buildMatchHref } from "@/lib/match-links";
 import { LocalTime } from "@/components/trust/LocalTime";
+import { formatPct } from "@/lib/format";
 import styles from "./track-record.module.css";
 
 export const metadata: Metadata = {
   title: "公开战绩",
   description:
-    "全部正式预测的公开记录:样本量、Accuracy、Brier、Log Loss、RPS,逐场展示预测概率与实际结果,不挑选、不删除。",
+    "全部正式预测的公开记录：样本量、Accuracy、Brier、Log Loss、RPS，逐场列出预测概率和实际比分，中了没中都在里面。",
 };
 
 const PAGE_SIZE = 50;
@@ -21,10 +22,6 @@ const OUTCOME_ZH: Record<string, string> = {
 };
 
 export type Sample = TrackRecordResponse["samples"][number];
-
-function pct(v: number): string {
-  return `${(v * 100).toFixed(1)}%`;
-}
 
 function fmt4(v: number | null | undefined): string | null {
   return typeof v === "number" && Number.isFinite(v) ? v.toFixed(4) : null;
@@ -46,8 +43,7 @@ function MetricCard({ label, value, unit }: { label: string; value: string; unit
 
 function MetricsRow({ data }: { data: TrackRecordResponse }) {
   const m = data.metrics ?? null;
-  const acc =
-    m && typeof m.accuracy === "number" ? `${(m.accuracy * 100).toFixed(1)}%` : null;
+  const acc = m && typeof m.accuracy === "number" ? formatPct(m.accuracy, 1) : null;
   return (
     <>
       <div className={styles.metricsGrid}>
@@ -69,14 +65,12 @@ function MetricsRow({ data }: { data: TrackRecordResponse }) {
           {data.retracted_count > 0 && (
             <>
               {" "}
-              · 含已撤回 <span className="num">{data.retracted_count}</span> 条(透明保留,不参与评估)
+              · 含已撤回 <span className="num">{data.retracted_count}</span> 条（保留展示，不算进评估）
             </>
           )}
         </p>
       ) : (
-        <p className={styles.metaLine}>
-          暂无离线评估结果——评估任务在正式样本完赛结算后离线运行,指标就绪后展示。
-        </p>
+        <p className={styles.metaLine}>还没算出指标。等这批比赛结算完就会出来。</p>
       )}
     </>
   );
@@ -89,18 +83,11 @@ function CriteriaCard() {
     <section className={styles.criteriaCard}>
       <h2 className={styles.criteriaTitle}>评估口径</h2>
       <ul className={styles.criteriaList}>
-        <li>
-          只统计<strong>正式样本</strong>:标记 official、已锁定(locked),且发布时间严格早于开球时间的赛前预测。
-        </li>
-        <li>默认展示全部正式样本,按开球时间排序,不设起止日期筛选,不挑选样本。</li>
-        <li>
-          预测锁定后仍可修正;每次修正都会留下公开可查的记录(次数、最近修正时间),
-          修正后的数值会体现在后续的评估指标中。
-        </li>
-        <li>撤回的预测保留在列表中并明确标注,不做物理删除。</li>
-        <li>
-          历史研发期预测因无法证明生成时间早于开球,只作 legacy 归档,不进入本页公开战绩。
-        </li>
+        <li>只算开球前就发出来、并且锁死不能改的预测。</li>
+        <li>全部按开球时间排，没有日期筛选，也不挑。</li>
+        <li>锁定之后还能改，但每次改都会记一笔——改了几次、最后一次什么时候，表格里都看得到。改完的数字会算进指标。</li>
+        <li>撤回的预测还在表里，会标出来，不删。</li>
+        <li>早期试跑的那批预测没法证明是开球前生成的，单独存着，不算进这张表。</li>
       </ul>
     </section>
   );
@@ -110,7 +97,9 @@ function CriteriaCard() {
 
 function ProbCell({ value, isTop }: { value: number; isTop: boolean }) {
   return (
-    <td className={`${styles.num} ${isTop ? styles.probTop : styles.probCell}`}>{pct(value)}</td>
+    <td className={`${styles.num} ${isTop ? styles.probTop : styles.probCell}`}>
+      {formatPct(value, 1)}
+    </td>
   );
 }
 
@@ -219,7 +208,7 @@ async function TrackRecordContent({ page }: { page: number }) {
       <div className={styles.errorBox}>
         <div className={styles.errorTitle}>数据暂时无法加载</div>
         <p>
-          后端 API 未响应,请稍后重试。
+          数据暂时取不到，请稍后再看。
           <br />
           <span className={styles.errorDetail}>
             {err instanceof Error ? err.message : String(err)}
@@ -234,13 +223,12 @@ async function TrackRecordContent({ page }: { page: number }) {
       <>
         <CriteriaCard />
         <div className={styles.emptyCard}>
-          <div className={styles.emptyTitle}>暂无符合口径的正式样本</div>
+          <div className={styles.emptyTitle}>暂时没有满足条件的正式样本</div>
           <p className={styles.emptyText}>
             {data.empty_reason ?? "正式样本 = 开球前生成、发布并锁定的预测。"}
           </p>
           <p className={styles.emptyText}>
-            正式预测流程启动后,每场赛前预测会在开球前锁定并登记;完赛结算后,这里将按时间顺序累计
-            <strong>全部</strong>记录——包括未命中的预测,不可删除、不可挑选。在此之前,本页不用任何演示数据填充。
+            正式预测还没开始跑。开跑之后，每场的预测会在开球前锁死，赛后按时间往这儿累加，看错的也照样留着。在那之前这里就是空的，不拿演示数据凑。
           </p>
         </div>
       </>
@@ -270,7 +258,7 @@ async function TrackRecordContent({ page }: { page: number }) {
     <>
       <MetricsRow data={data} />
       <p className={styles.metaLine}>
-        本页模型版本:<span className="num">{versionIds.join(" / ")}</span> · 本页覆盖开球区间{" "}
+        模型版本：<span className="num">{versionIds.join(" / ")}</span> · 覆盖开球区间{" "}
         <LocalTime utc={data.samples[data.samples.length - 1].kickoff_at_utc} mode="date" /> –{" "}
         <LocalTime utc={data.samples[0].kickoff_at_utc} mode="date" />
       </p>
@@ -334,9 +322,7 @@ export default async function TrackRecordPage({
       <div className={styles.header}>
         <h1 className={styles.title}>公开预测战绩</h1>
       </div>
-      <p className={styles.subtitle}>
-        全部正式预测的连续公开记录:预测在开球前锁定,赛后如实结算;命中与未中同样展示。
-      </p>
+      <p className={styles.subtitle}>每场预测都在开球前锁死，赛后照实结算。看对的看错的都在这张表里。</p>
       <Suspense key={page} fallback={<Skeleton />}>
         <TrackRecordContent page={page} />
       </Suspense>

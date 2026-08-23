@@ -66,12 +66,15 @@ type LineupPresentation = {
 /** predicted 且 source==="enetpulse":2026-08-18 真实探测确认这类名单的键集
  * 里根本没有 subs 键(上游结构性不下发),不是"这次观测没带"。 */
 const BENCH_EMPTY_ENETPULSE =
-  "第三方(Enetpulse)预测阵容只给出首发 11 人,数据源不随这类名单下发替补名单——这不是本站漏采,也不代表两队没有替补。开赛前会再次采集。";
+  "这类预测名单只有首发 11 人，本来就不带替补。开赛前会再拿一次。";
 
 /** 其余类型(含 lastStarting11,它平时是带替补的,真实探测与仓内 fixture
  * 都是 9 人)→ 这次观测确实没带,不是结构性缺失。 */
-const BENCH_EMPTY_GENERIC =
-  "这条快照里没有替补名单:数据源本次观测只给了首发。开赛前会再次采集。";
+const BENCH_EMPTY_GENERIC = "这次只拿到首发，没有替补。开赛前会再拿一次。";
+
+/** 三个未确认分支(predicted/lastStarting11/类型未知)notice 共同的收尾句,
+ * 抽到板块底部只渲染一次,避免同一句"请以官方公布为准"重复三遍。 */
+const OFFICIAL_NOTE = "官方名单一般在开赛前一小时出，到时以官方为准。";
 
 /**
  * lineup_type → 展示文案。三个互斥分支,不能合并成一个"确认/未确认"布尔值——
@@ -100,8 +103,7 @@ function describeLineup(lineupType: string | null, source: string | null): Lineu
     return {
       confirmed: false,
       tag: "预测阵容 · 第三方预测",
-      notice:
-        "这不是本场官方名单,也不是两队上一场的首发。数据源标注为第三方(Enetpulse)对本场比赛的预测阵容,可能与实际出场不同,请以官方公布为准。",
+      notice: "这份名单是第三方预测的，不是官方名单，也不是上一场首发。",
       pitchCaption: "预测阵容(第三方预测,非上一场首发)",
       benchEmpty,
     };
@@ -110,8 +112,7 @@ function describeLineup(lineupType: string | null, source: string | null): Lineu
     return {
       confirmed: false,
       tag: "预计首发 · 基于上一场",
-      notice:
-        "这不是本场官方名单。数据源给的是两队上一场的首发,不代表本场实际出场,请以官方公布为准。",
+      notice: "这是两队上一场的首发，本场不一定这么排。",
       pitchCaption: "预计首发(基于上一场)",
       benchEmpty,
     };
@@ -119,8 +120,7 @@ function describeLineup(lineupType: string | null, source: string | null): Lineu
   return {
     confirmed: false,
     tag: "预计首发 · 来源类型未知",
-    notice:
-      "这不是本场官方名单。数据源未标注这份名单的类型,无法确认它是上一场首发还是预测阵容,请以官方公布为准。",
+    notice: "数据源没说这份名单怎么来的，可能是上一场首发，也可能是预测。",
     pitchCaption: "预计首发(来源类型未知)",
     benchEmpty,
   };
@@ -218,7 +218,7 @@ function SidelinedCard({
         </p>
       ) : players.length === 0 ? (
         <p className={styles.emptyInline}>
-          数据源当前没有该队的伤停记录。这是「没有伤停」,不是「没有数据」—— 最近一次观测在 {observedAt}。
+          {observedAt} 查的时候这队没有伤停。是真没有，不是没查到。
         </p>
       ) : (
         <ul className={styles.sidelinedList}>
@@ -355,8 +355,8 @@ export function ProjectedLineupSection({
                       {pitchCaption}:{side === "home" ? homeName : awayName}{" "}
                       {active.formation ?? "阵型未知"}。
                       {rowsFor(active)
-                        ? "图中站位按数据源给出的球场坐标摆放,坐标为归一化示意坐标,不是精确 GPS,门将/各线的先后顺序真实可信。"
-                        : "本站保存的这条快照没有带球场坐标,球员只能按名单顺序列出,不代表真实站位(开赛前会再次采集,新采集的快照通常带坐标)。"}
+                        ? "站位按真实坐标画的，前后场顺序没错，但不是精确到米的位置。"
+                        : "这份名单没带坐标，只能按顺序列，位置别当真。开赛前会再拿一次。"}
                     </p>
                     {active.subs.length > 0 ? (
                       <details className={styles.bench}>
@@ -387,6 +387,8 @@ export function ProjectedLineupSection({
                 )}
               </>
             )}
+
+            {!confirmed && <p className={styles.footNote}>{OFFICIAL_NOTE}</p>}
           </>
         )}
       </section>
@@ -411,7 +413,7 @@ export function ProjectedLineupSection({
           />
         </div>
         <p className={styles.footNote}>
-          预计回归保留数据源原文口径(如 A few days / Day to day),不换算成具体日期 —— 我们并不知道确切日期。
+          回归时间按原文写（A few days、Day to day 这种），不折算成日期——具体哪天我们也不知道。
         </p>
       </section>
     </>

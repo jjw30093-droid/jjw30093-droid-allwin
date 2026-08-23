@@ -73,7 +73,7 @@ describe("/reco 未登录:今日精选标签引导登录,不拉取也不渲染�
 
     await waitFor(() =>
       expect(
-        screen.queryByText("本场每日精选需要单独授权。登录后可查看当前权限状态。"),
+        screen.queryByText("每日精选按场开通，登录后能看到你有哪几场。"),
       ).not.toBeNull(),
     );
     expect(screen.queryByText("前往登录")).not.toBeNull();
@@ -104,12 +104,12 @@ describe("/reco 已登录但无权限:中性投影,不泄漏任何正文字段",
 
     await waitFor(() =>
       expect(
-        screen.queryByText("本场每日精选需要单独授权,当前账号暂无查看权限。"),
+        screen.queryByText("本场每日精选需要单独授权，当前账号暂无查看权限。"),
       ).not.toBeNull(),
     );
-    // 已登录态不应再出现"登录后查看"这种不通顺表述。
+    // 已登录态不应显示未登录时的列表级引导文案。
     expect(
-      screen.queryByText("本场每日精选需要单独授权。登录后可查看当前权限状态。"),
+      screen.queryByText("每日精选按场开通，登录后能看到你有哪几场。"),
     ).toBeNull();
     // 存在性 + 状态允许展示。
     expect(screen.queryByText("2026-08-16")).not.toBeNull();
@@ -169,7 +169,7 @@ describe("/reco 已登录且有权限:完整内容", () => {
     await waitFor(() => expect(screen.queryByText("已授权测试单")).not.toBeNull());
     expect(screen.queryByText("主胜", { exact: false })).not.toBeNull();
     expect(
-      screen.queryByText("本场每日精选需要单独授权,当前账号暂无查看权限。"),
+      screen.queryByText("本场每日精选需要单独授权，当前账号暂无查看权限。"),
     ).toBeNull();
   });
 });

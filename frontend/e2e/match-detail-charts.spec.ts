@@ -1,7 +1,11 @@
 /**
- * 比赛详情页「数据」→「风格」子 tab 下的四张 Phase 2 核心图
+ * 比赛详情页「球队数据」→「风格」子 tab 下的四张 Phase 2 核心图
  * (进攻转化链 / 控球与场面控制 / 防守承压与限制能力 / 本场攻防对位)
  * ——覆盖真实种子比赛,验证内容渲染且 360/390/430 三档都不出现横向溢出。
+ *
+ * 2026-08-23 单栏重排废除了外层"数据"tab(内容常驻纵向铺开,见
+ * MatchPreTabs.tsx),这里不再需要先点开外层 tab;内层"风格"仍是真实的
+ * pill 选项卡(MatchDataTabs.tsx),点击逻辑不变。
  */
 
 import { test, expect } from "@playwright/test";
@@ -19,8 +23,6 @@ for (const viewport of [
     const id = seedMatchId();
     await page.goto(`/matches/${id}`);
 
-    const dataTab = page.getByRole("tab", { name: "数据" });
-    await dataTab.click();
     const styleTab = page.getByRole("tab", { name: "风格" });
     await styleTab.click();
 
@@ -39,7 +41,6 @@ test("进攻转化链:缺失场次显示数据不足,不伪装成 0", async ({ p
   await page.setViewportSize({ width: 390, height: 844 });
   const id = seedMatchId();
   await page.goto(`/matches/${id}`);
-  await page.getByRole("tab", { name: "数据" }).click();
   await page.getByRole("tab", { name: "风格" }).click();
 
   const chainSection = page
@@ -56,7 +57,6 @@ test("本场攻防对位:文案不出现相关系数/z-score/置信区间等统�
   await page.setViewportSize({ width: 390, height: 844 });
   const id = seedMatchId();
   await page.goto(`/matches/${id}`);
-  await page.getByRole("tab", { name: "数据" }).click();
   await page.getByRole("tab", { name: "风格" }).click();
 
   const matchupSection = page
@@ -71,7 +71,6 @@ test("验收返工四:移动端字号真实 computed,不止查页面级 scrollWi
   await page.setViewportSize({ width: 360, height: 800 });
   const id = seedMatchId();
   await page.goto(`/matches/${id}`);
-  await page.getByRole("tab", { name: "数据" }).click();
   await page.getByRole("tab", { name: "风格" }).click();
 
   // 标签(如"射门""禁区触球")——正文/标签 ≥14px。

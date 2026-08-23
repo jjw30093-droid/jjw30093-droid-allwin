@@ -40,6 +40,6 @@
 /* 移动端底部有固定导航栏,页脚必须让出它的实高 + 安全区,否则免责声明被盖住 */
 @media (max-width: 640px) {
   .inner {
-    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    padding-bottom: var(--bottom-nav-clearance);
   }
 }

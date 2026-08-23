@@ -1,14 +1,13 @@
 import type { MetadataRoute } from "next";
-import { ANON_LEAGUES, SITE_URL } from "@/lib/site";
+import { PUBLIC_LEAGUES, SITE_URL } from "@/lib/site";
 
 /**
- * sitemap 只列匿名可完整浏览的页面(商业模式重构第一部分)。
+ * sitemap 只列匿名可完整浏览的页面。
  *
- * 收窄纪律:league:lottery(瑞典超/挪超/日职/韩K/澳超/英冠/荷甲/葡超/巴甲)
- * 对匿名是登录墙壳页,列进来只会让爬虫抓到空壳——既无 SEO 又降低 AI 爬虫对
- * 整站的信任,因此只列 ANON_LEAGUES(五大联赛 + 欧冠系)。
- * 逐场比赛详情页数量大且随赛程滚动,MVP 阶段不枚举(避免列出已过期/空数据页),
- * 爬虫可从 /matches 列表页发现详情链接。
+ * 2026-08-16 起除"每日精选"外全站比赛内容匿名可完整浏览,PUBLIC_LEAGUES
+ * 是已经真实核对过有内容的联赛清单(与后端 LEAGUE_META 对齐,见 lib/site.ts
+ * 顶部注释)。逐场比赛详情页数量大且随赛程滚动,MVP 阶段不枚举(避免列出
+ * 已过期/空数据页),爬虫可从 /matches 列表页发现详情链接。
  *
  * 需登录页面(/account、/studio、/admin)与登录页本身不进 sitemap。
  */
@@ -23,7 +22,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.3 },
   ];
 
-  const leaguePages: MetadataRoute.Sitemap = ANON_LEAGUES.flatMap(({ id }) => [
+  const leaguePages: MetadataRoute.Sitemap = PUBLIC_LEAGUES.flatMap(({ id }) => [
     {
       url: `${SITE_URL}/league/${id}/standings`,
       changeFrequency: "daily" as const,

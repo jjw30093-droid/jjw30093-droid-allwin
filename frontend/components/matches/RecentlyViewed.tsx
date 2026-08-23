@@ -4,6 +4,9 @@
  * 首页「最近浏览」:读取本机 localStorage 浏览记录,逐场拉公开详情渲染
  * 简短行。已在「我关注的比赛」出现的场次不重复展示;没有记录时整个模块
  * 不渲染。样式与 FollowedMatches 共用同一 CSS 模块(同一视觉,不复制样式)。
+ *
+ * `variant="embedded"`:同 FollowedMatches.tsx 顶部注释,供 ContinueWatching
+ * 收进"继续看"区块时用。
  */
 
 import { useEffect, useState } from "react";
@@ -17,8 +20,17 @@ import styles from "./FollowedMatches.module.css";
 
 type Row = MatchDetailResponse["match"];
 
-export function RecentlyViewed() {
+interface Props {
+  variant?: "standalone" | "embedded";
+  onVisibilityChange?: (visible: boolean) => void;
+}
+
+export function RecentlyViewed({ variant = "standalone", onVisibilityChange }: Props = {}) {
   const [rows, setRows] = useState<Row[] | null>(null);
+
+  useEffect(() => {
+    if (rows) onVisibilityChange?.(rows.length > 0);
+  }, [rows, onVisibilityChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,11 +57,16 @@ export function RecentlyViewed() {
 
   if (!rows || rows.length === 0) return null;
 
+  const Heading = variant === "embedded" ? "h3" : "h2";
+
   return (
-    <section className={styles.section} aria-labelledby="recently-viewed-title">
-      <h2 id="recently-viewed-title" className={styles.title}>
+    <section
+      className={variant === "embedded" ? styles.subsection : styles.section}
+      aria-labelledby="recently-viewed-title"
+    >
+      <Heading id="recently-viewed-title" className={styles.title}>
         最近浏览
-      </h2>
+      </Heading>
       <ul className={styles.list}>
         {rows.map((m) => (
           <li key={m.match_id}>

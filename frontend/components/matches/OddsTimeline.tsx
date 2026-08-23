@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { clientFetch } from "@/lib/api-v1";
+import { formatOdds } from "@/lib/format";
 import { EChart } from "@/components/EChart";
 import { LocalTime } from "./LocalTime";
 import { formatBeijingZh, LEGACY_SOURCE_ZH, MARKET_FIELDS, MARKET_ZH } from "./zh";
@@ -38,14 +39,35 @@ function groupLabel(s: OddsSnapshot): string {
   return `${s.market}|${s.company_id}`;
 }
 
-/** 赔率/盘口线防御性去噪——不强行统一小数位数,只清掉存储层偶发的
- * IEEE754 尾部误差(真实事故 2026-08-21:某场比赛显示"1.9300000000000002"。
- * 干净值 3、-0.25 保持原样,不会被无端补零成"3.00"。后端
+/** 赔率/盘口线防御性去噪——修正存储层偶发的 IEEE754 尾部误差(真实事故
+ * 2026-08-21:某场比赛显示"1.9300000000000002")。后端
  * backend/queries/odds.py::legacy_summary_points 已经在读侧做过同一处理,
- * 这里是前端侧的第二道防线,防止任何未经过该函数的数据源把噪声带到页面。 */
+ * 这里是前端侧的第二道防线,防止任何未经过该函数的数据源把噪声带到页面。
+ * 去噪后的干净数值交给 renderOddsNum() 统一补零,不在这里决定小数位数。 */
 function cleanOddsNum(v: number | null | undefined): number | null {
   if (v == null || Number.isNaN(v)) return null;
   return Math.round(v * 100) / 100;
+}
+
+/** 渲染用:去噪 + 固定两位小数补零(2026-08-23 起赔率与盘口线统一按这个
+ * 格式显示,不再保留"干净整数值不补零"的例外——生产实测出现过"4.1""6"
+ * "1"这类末位缺零的写法,与同一行里补零过的数字混排,反而更不统一)。 */
+function renderOddsNum(v: number | null | undefined): string {
+  const cleaned = cleanOddsNum(v);
+  return cleaned == null ? "—" : formatOdds(cleaned);
+}
+
+/** 亚洲让球盘口线方向标签——符号约定已验证(docs/data-sources.md §2.5,
+ * 48 组精确配对 + 2,834 组历史样本交叉核对,与
+ * backend/commands/reco_settlement_math.py::_resolve_ah 同一套约定):
+ * line>0 主队让球(主队热门)、line<0 客队让球(客队热门)、line=0 平手盘。
+ * 只用于 market==="ah";大小球(ou/corners_ou)的 line 是入球数门槛,没有
+ * 主客方向这个概念,不适用这套标签。 */
+function ahDirectionZh(line: number | null | undefined): "主让" | "客让" | "平手" | null {
+  if (line == null || Number.isNaN(line)) return null;
+  if (line > 0) return "主让";
+  if (line < 0) return "客让";
+  return "平手";
 }
 
 /** 嵌套 payload 的 initial/latest 原样拆开(不像 flatOddsGroup 那样只留一个)。 */
@@ -188,12 +210,18 @@ function OddsNumbers({ market, row }: { market: string; row: CompanyOddsRow }) {
   return (
     <div className={styles.numsBlock}>
       <div className={styles.numsGrid}>
-        {fields.map((f) => (
-          <div key={f.key} className={styles.numCell}>
-            <span className="num">{cleanOddsNum(values?.[f.key]) ?? "—"}</span>
-            <span>{f.label}</span>
-          </div>
-        ))}
+        {fields.map((f) => {
+          const dirTag = market === "ah" && f.key === "line" ? ahDirectionZh(values?.[f.key]) : null;
+          return (
+            <div key={f.key} className={styles.numCell}>
+              <span className="num">
+                {renderOddsNum(values?.[f.key])}
+                {dirTag && <span className={styles.ahTag}>{dirTag}</span>}
+              </span>
+              <span>{f.label}</span>
+            </div>
+          );
+        })}
       </div>
       <p className={styles.sourceLine}>
         <span>{row.companyLabel}</span>
@@ -344,15 +372,20 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
                         <td>{periodZh[p.period] ?? p.period}</td>
                         {is1x2 ? (
                           <>
-                            <td className="num">{cleanOddsNum(p.home_or_over)}</td>
-                            <td className="num">{cleanOddsNum(p.draw) ?? "—"}</td>
-                            <td className="num">{cleanOddsNum(p.away_or_under)}</td>
+                            <td className="num">{renderOddsNum(p.home_or_over)}</td>
+                            <td className="num">{renderOddsNum(p.draw)}</td>
+                            <td className="num">{renderOddsNum(p.away_or_under)}</td>
                           </>
                         ) : (
                           <>
-                            <td className="num">{cleanOddsNum(p.home_or_over)}</td>
-                            <td className="num">{cleanOddsNum(p.line) ?? "—"}</td>
-                            <td className="num">{cleanOddsNum(p.away_or_under)}</td>
+                            <td className="num">{renderOddsNum(p.home_or_over)}</td>
+                            <td className="num">
+                              {renderOddsNum(p.line)}
+                              {market === "ah" && ahDirectionZh(p.line) && (
+                                <span className={styles.ahTag}>{ahDirectionZh(p.line)}</span>
+                              )}
+                            </td>
+                            <td className="num">{renderOddsNum(p.away_or_under)}</td>
                           </>
                         )}
                       </tr>
@@ -405,25 +438,34 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
         ))}
         {freshestRow && (
           <p className={styles.snapshotNote}>
-            这是 <LocalTime iso={freshestRow.observedAt} /> 采集到的快照,
-            <b>不是实时赔率</b>。本场只采集到 <span className="num">{observationCount}</span>{" "}
-            个观测点,不足以画走势,所以这里不画曲线。
+            <LocalTime iso={freshestRow.observedAt} /> 抓到的，
+            <b>不是实时赔率</b>。这场只抓到 <span className="num">{observationCount}</span>{" "}
+            个点，画不出走势。
           </p>
         )}
       </div>
     );
   }
 
+  // 手机端列裁剪:「阶段」「来源更新」窄屏挤占版面,但这两列的值不一定
+  // 每场都是常量(阶段有 pre_match/in_play/unknown 三种真实取值,来源更新
+  // 目前只有 NowGoal 一个来源、恒不声明,但不能硬编码这个假设)——只在
+  // 这一批快照里实测确实全部相同时才收起该列并改成表格上方一句话说明,
+  // 出现真实差异时老实保留整列,不能为了窄屏好看丢真实数据。
+  const allPhases = new Set(resp.snapshots.map((s) => s.market_phase));
+  const uniformPhase = allPhases.size === 1 ? [...allPhases][0] : null;
+  const sourceNeverDeclared = resp.snapshots.every((s) => s.source_updated_at == null);
+
   const header = (fields: { key: string; label: string }[]) => (
     <thead>
       <tr>
         <th>公司</th>
-        <th>阶段</th>
+        <th className={uniformPhase != null ? styles.mobileHideCol : undefined}>阶段</th>
         {fields.map((f) => (
           <th key={f.key}>{f.label}</th>
         ))}
-        <th>本站采集时间</th>
-        <th>来源声明时间</th>
+        <th>采集时间</th>
+        <th className={sourceNeverDeclared ? styles.mobileHideCol : undefined}>来源更新</th>
       </tr>
     </thead>
   );
@@ -451,6 +493,14 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
         </div>
       ))}
 
+      {(uniformPhase != null || sourceNeverDeclared) && (
+        <p className={styles.columnNote}>
+          {uniformPhase != null &&
+            `这批快照都是「${PHASE_ZH[uniformPhase] ?? uniformPhase}」阶段抓到的。`}
+          {sourceNeverDeclared && "这几家公司都没有声明更新时间，统一标注「未声明」。"}
+        </p>
+      )}
+
       {marketRows.map(({ market, rows, companyRows }) => {
         const fields = MARKET_FIELDS[market] ?? [];
         const rawRow = (snap: OddsSnapshot, key: string) => {
@@ -458,16 +508,23 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
           return (
             <tr key={key}>
               <td>{snap.company_name || snap.company_id}</td>
-              <td>{PHASE_ZH[snap.market_phase] ?? snap.market_phase}</td>
-              {fields.map((f) => (
-                <td key={f.key} className="num">
-                  {cleanOddsNum(g?.[f.key]) ?? "—"}
-                </td>
-              ))}
+              <td className={uniformPhase != null ? styles.mobileHideCol : undefined}>
+                {PHASE_ZH[snap.market_phase] ?? snap.market_phase}
+              </td>
+              {fields.map((f) => {
+                const val = cleanOddsNum(g?.[f.key]);
+                const dirTag = market === "ah" && f.key === "line" ? ahDirectionZh(val) : null;
+                return (
+                  <td key={f.key} className="num">
+                    {val == null ? "—" : formatOdds(val)}
+                    {dirTag && <span className={styles.ahTag}>{dirTag}</span>}
+                  </td>
+                );
+              })}
               <td>
                 <LocalTime iso={snap.observed_at} />
               </td>
-              <td>
+              <td className={sourceNeverDeclared ? styles.mobileHideCol : undefined}>
                 <LocalTime iso={snap.source_updated_at} fallback="未声明" />
               </td>
             </tr>
@@ -486,22 +543,33 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
                         {row.companyLabel}
                         {row.changed && <span className={styles.pointTag}>有变动</span>}
                       </td>
-                      <td>{PHASE_ZH[row.marketPhase] ?? row.marketPhase}</td>
+                      <td className={uniformPhase != null ? styles.mobileHideCol : undefined}>
+                        {PHASE_ZH[row.marketPhase] ?? row.marketPhase}
+                      </td>
                       {fields.map((f) => {
                         const cur = cleanOddsNum(row.current?.[f.key]);
                         const init = cleanOddsNum(row.initial?.[f.key]);
+                        const display =
+                          row.changed && init != null && cur != null
+                            ? `${formatOdds(init)} → ${formatOdds(cur)}`
+                            : cur != null
+                              ? formatOdds(cur)
+                              : init != null
+                                ? formatOdds(init)
+                                : "—";
+                        const dirTag =
+                          market === "ah" && f.key === "line" ? ahDirectionZh(cur ?? init) : null;
                         return (
                           <td key={f.key} className="num">
-                            {row.changed && init != null && cur != null
-                              ? `${init} → ${cur}`
-                              : (cur ?? init ?? "—")}
+                            {display}
+                            {dirTag && <span className={styles.ahTag}>{dirTag}</span>}
                           </td>
                         );
                       })}
                       <td>
                         <LocalTime iso={row.observedAt} />
                       </td>
-                      <td>
+                      <td className={sourceNeverDeclared ? styles.mobileHideCol : undefined}>
                         <LocalTime iso={row.sourceUpdatedAt} fallback="未声明" />
                       </td>
                     </tr>
@@ -531,8 +599,8 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
       })}
 
       <p className={styles.footNote}>
-        「本站采集时间」为本站首次观察到该数值的时间(observed_at,按北京时间显示);
-        来源未声明更新时间时如实标注「未声明」。赔率数据仅为同时段观察记录,不构成任何投注建议。
+        「采集时间」是我们第一次看到这个数字的时间，北京时间。有些公司不说自己什么时候更新的，
+        那一列就写「未声明」。
       </p>
     </div>
   );

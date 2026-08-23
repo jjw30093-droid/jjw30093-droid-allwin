@@ -44,9 +44,9 @@ describe("CooccurrenceSection 给定完整数据时必须完整渲染(不再只�
     mockCooccurrenceResponse({ match_id: 1, count: 1, items: [ITEM], note: null });
     render(<CooccurrenceSection matchId={1} />);
 
-    await waitFor(() => expect(screen.queryByText(/共.*组同时段变化/)).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText(/组变化撞在同一个时间段里/)).not.toBeNull());
     // 明细必须真的渲染出来(时间共现描述行),不是只有计数。
-    expect(screen.getByText(/本站采集到赔率变化/)).not.toBeNull();
+    expect(screen.getByText(/赔率动了/)).not.toBeNull();
     expect(screen.getByText(/同时段检测到/)).not.toBeNull();
     expect(screen.queryByText(/登录/)).toBeNull();
     expect(screen.queryByText(/免费登录/)).toBeNull();

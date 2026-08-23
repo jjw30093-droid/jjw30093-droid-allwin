@@ -7,7 +7,7 @@
 @media (max-width: 640px) {
   .page {
     /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
-    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    padding-bottom: var(--bottom-nav-clearance);
   }
 }
 
@@ -61,7 +61,7 @@
 }
 
 .modeOn {
-  color: #2a1b06;
+  color: #fff;
   background: var(--gold-grad);
   font-weight: 700;
 }
@@ -141,7 +141,7 @@
 }
 
 .chipActive {
-  color: #2a1b06;
+  color: #fff;
   background: var(--gold-grad);
   font-weight: 700;
   border-color: transparent;
@@ -160,8 +160,8 @@
 }
 
 .chipActive .proBadge {
-  color: #2a1b06;
-  border-color: #2a1b06;
+  color: #fff;
+  border-color: #fff;
 }
 
 .dateForm {

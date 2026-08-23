@@ -79,11 +79,9 @@ function BottomIcon({ name }: { name: BottomNavIcon }) {
 function BottomNavLinks({
   pathname,
   tab,
-  authed,
 }: {
   pathname: string;
   tab: string | null;
-  authed: boolean;
 }) {
   const onReco = pathname.startsWith("/reco");
   const items: {
@@ -112,7 +110,7 @@ function BottomNavLinks({
       active: onReco && tab === "record",
     },
     {
-      href: authed ? "/account" : "/login",
+      href: "/account",
       label: "我的",
       icon: "account",
       active: pathname.startsWith("/account") || pathname.startsWith("/login"),
@@ -175,7 +173,7 @@ function NavLinksWithStatus({ pathname }: { pathname: string }) {
   return <NavLinks pathname={pathname} status={searchParams.get("status")} />;
 }
 
-function BottomNavWithTab(props: { pathname: string; authed: boolean }) {
+function BottomNavWithTab(props: { pathname: string }) {
   const searchParams = useSearchParams();
   return <BottomNavLinks {...props} tab={searchParams.get("tab")} />;
 }
@@ -198,7 +196,6 @@ export function SiteNav() {
 
 
   const role = me?.authenticated ? me.user?.role : null;
-  const authed = Boolean(me?.authenticated);
 
   return (
     <>
@@ -252,8 +249,8 @@ export function SiteNav() {
         </div>
       </header>
 
-      <Suspense fallback={<BottomNavLinks pathname={pathname} tab={null} authed={authed} />}>
-        <BottomNavWithTab pathname={pathname} authed={authed} />
+      <Suspense fallback={<BottomNavLinks pathname={pathname} tab={null} />}>
+        <BottomNavWithTab pathname={pathname} />
       </Suspense>
     </>
   );

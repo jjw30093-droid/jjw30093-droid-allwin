@@ -6,7 +6,7 @@
 @media (max-width: 640px) {
   .page {
     /* 底部固定导航栏在移动端遮挡内容，补足其实高 + 安全区（宪法审计 D1） */
-    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    padding-bottom: var(--bottom-nav-clearance);
   }
 }
 
@@ -168,7 +168,7 @@
 .createBtn {
   flex-shrink: 0;
   background: var(--gold-grad);
-  color: #2a1b06;
+  color: #fff;
   font-weight: 700;
   border: none;
   border-radius: var(--r-pill);
@@ -220,7 +220,7 @@
 }
 
 .statusPill[data-status="published"] {
-  color: #2a1b06;
+  color: #fff;
   background: var(--gold-grad);
   border-color: transparent;
   font-weight: 700;

@@ -26,6 +26,8 @@ const ALLOWLIST: Record<string, string> = {
   "admin/page.tsx": "内部管理后台,robots.ts 已 Disallow,不进 sitemap,标题无产品价值",
   "studio/page.tsx": "Creator Studio 内部工具,同上",
   "studio/matches/[matchId]/page.tsx": "Creator Studio 内部工具,同上",
+  "(public)/league/[id]/page.tsx":
+    "纯重定向到 /league/{id}/standings,渲染前就 redirect(),用户从不会看到这个页面的标题",
 };
 
 function findAllPageFiles(dir: string, out: string[] = []): string[] {

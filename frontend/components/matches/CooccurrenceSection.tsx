@@ -67,8 +67,8 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
 
   const countLine = (
     <p className={styles.countLine}>
-      共 <b className="num">{resp.count}</b> 组同时段变化。
-      <b>同一时间窗内观察到两类变化,不代表二者存在因果关系。</b>
+      <b className="num">{resp.count}</b> 组变化撞在同一个时间段里。
+      <b>只是时间对上了，谁引起谁看不出来。</b>
     </p>
   );
 
@@ -88,7 +88,7 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
                 <span className={styles.itemTime}>
                   <LocalTime iso={item.odds_moved_at} />
                 </span>
-                <span>本站采集到赔率变化:{describeOddsMove(item)}</span>
+                <span>赔率动了：{describeOddsMove(item)}</span>
               </div>
               <div className={styles.itemLine}>
                 <span className={styles.itemTime}>

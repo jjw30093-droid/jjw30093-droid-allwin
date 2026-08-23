@@ -12,13 +12,18 @@
  * 必须带 observed_at:这是某一时刻的赔率快照,不是实时数据,不显示时间戳
  * 会让用户把一个可能是几小时前的数字当成当前赔率(CLAUDE.md §6.2 不伪装)。
  *
- * 2026-08-20 站长要求加交互:点击某一档(主胜/平/客胜)的色块或数字,该档
- * 数字放大、色块高亮,再点一次取消。这是纯展示态的本地选中,不发请求、不
- * 影响其它比赛卡各自独立(useState 组件内私有)。整条组件常被父级 <Link>
- * 包住(MatchRow 整行是链接、首页次要卡整张是链接)——点击必须
- * preventDefault+stopPropagation,否则点一下选中态还没看到就跳转到详情页
- * 了;size="lg" 用在纯 <article>(首页重点卡)里没有外层链接,同样调用这两个
- * 方法是安全的空操作,不需要按用法分支两套实现。
+ * 2026-08-20 站长要求加交互:点击数字(主胜/平/客胜),该档数字放大、背景
+ * 高亮,再点一次取消。这是纯展示态的本地选中,不发请求,各比赛卡之间互不
+ * 影响(useState 组件内私有)。
+ *
+ * 2026-08-23 修复(P1):三段色块条不再是 <button>,只是纯展示的 <span>。
+ * 此前色块条上也挂着 onClick+preventDefault+stopPropagation,而组件常被
+ * 父级 <Link> 整行/整卡包住(MatchRow 整行、首页次要卡整张)——点色块这个
+ * 视觉上最显眼的区域会把整行导航吞掉,页面看起来毫无反应。现在只有三个
+ * 数字按钮保留点击高亮,并保留 preventDefault+stopPropagation 防止触发
+ * 外层导航;色块条本身不拦截任何点击,点在色块上会正常触发外层 <Link>。
+ * 容器 role 相应从 "img" 改成 "group"——里面确实有可交互的数字按钮,
+ * role="img" 意味着不该有可聚焦子元素,原先自相矛盾。
  */
 
 import { useState } from "react";
@@ -53,8 +58,8 @@ export function WinProbabilityBar({
   const label = `胜平负概率:主胜 ${home}%,平局 ${draw}%,客胜 ${away}%`;
 
   function toggle(outcome: Outcome, e: React.MouseEvent) {
-    // 组件常被父级 <Link> 整体包住,点色块/数字应该只是选中高亮,不能顺带
-    // 触发整行导航——见模块顶部注释。
+    // 组件常被父级 <Link> 整体包住,点数字应该只是选中高亮,不能顺带触发
+    // 整行导航——见模块顶部注释。色块条不再调用这个函数,不受影响。
     e.preventDefault();
     e.stopPropagation();
     setSelected((cur) => (cur === outcome ? null : outcome));
@@ -62,35 +67,11 @@ export function WinProbabilityBar({
 
   if (size === "lg") {
     return (
-      <div className={styles.wrapLg} role="img" aria-label={label}>
-        <div className={styles.barLg}>
-          <button
-            type="button"
-            className={styles.segHome}
-            style={{ width: `${p_home * 100}%` }}
-            data-selected={selected === "home"}
-            aria-pressed={selected === "home"}
-            aria-label={`主胜概率条 ${home}%`}
-            onClick={(e) => toggle("home", e)}
-          />
-          <button
-            type="button"
-            className={styles.segDraw}
-            style={{ width: `${p_draw * 100}%` }}
-            data-selected={selected === "draw"}
-            aria-pressed={selected === "draw"}
-            aria-label={`平局概率条 ${draw}%`}
-            onClick={(e) => toggle("draw", e)}
-          />
-          <button
-            type="button"
-            className={styles.segAway}
-            style={{ width: `${p_away * 100}%` }}
-            data-selected={selected === "away"}
-            aria-pressed={selected === "away"}
-            aria-label={`客胜概率条 ${away}%`}
-            onClick={(e) => toggle("away", e)}
-          />
+      <div className={styles.wrapLg} role="group" aria-label={label}>
+        <div className={styles.barLg} aria-hidden="true">
+          <span className={styles.segHome} style={{ width: `${p_home * 100}%` }} />
+          <span className={styles.segDraw} style={{ width: `${p_draw * 100}%` }} />
+          <span className={styles.segAway} style={{ width: `${p_away * 100}%` }} />
         </div>
         <div className={styles.numsLg}>
           <button
@@ -131,37 +112,13 @@ export function WinProbabilityBar({
   return (
     <div
       className={compact ? styles.wrapCompact : styles.wrap}
-      role="img"
+      role="group"
       aria-label={label}
     >
-      <div className={styles.bar}>
-        <button
-          type="button"
-          className={styles.segHome}
-          style={{ width: `${p_home * 100}%` }}
-          data-selected={selected === "home"}
-          aria-pressed={selected === "home"}
-          aria-label={`主胜概率条 ${home}%`}
-          onClick={(e) => toggle("home", e)}
-        />
-        <button
-          type="button"
-          className={styles.segDraw}
-          style={{ width: `${p_draw * 100}%` }}
-          data-selected={selected === "draw"}
-          aria-pressed={selected === "draw"}
-          aria-label={`平局概率条 ${draw}%`}
-          onClick={(e) => toggle("draw", e)}
-        />
-        <button
-          type="button"
-          className={styles.segAway}
-          style={{ width: `${p_away * 100}%` }}
-          data-selected={selected === "away"}
-          aria-pressed={selected === "away"}
-          aria-label={`客胜概率条 ${away}%`}
-          onClick={(e) => toggle("away", e)}
-        />
+      <div className={styles.bar} aria-hidden="true">
+        <span className={styles.segHome} style={{ width: `${p_home * 100}%` }} />
+        <span className={styles.segDraw} style={{ width: `${p_draw * 100}%` }} />
+        <span className={styles.segAway} style={{ width: `${p_away * 100}%` }} />
       </div>
       <div className={styles.labels}>
         <button

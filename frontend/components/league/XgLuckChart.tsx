@@ -19,14 +19,11 @@
 
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
+import { useChartColors } from "@/components/charts/useChartColors";
 import type { StandingsResponse } from "@/lib/api-v1";
 import styles from "./XgLuckChart.module.css";
 
 type Row = StandingsResponse["rows"][number];
-
-const GOLD = "#d49e33";
-const LOSS = "#c05437";
-const INK2 = "#a79c87";
 
 type LuckRow = {
   name: string;
@@ -54,6 +51,7 @@ export function buildLuckRows(rows: Row[]): LuckRow[] {
 }
 
 export function XgLuckChart({ rows }: { rows: Row[] }) {
+  const c = useChartColors();
   const data = buildLuckRows(rows);
   if (data.length === 0) {
     return (
@@ -74,8 +72,8 @@ export function XgLuckChart({ rows }: { rows: Row[] }) {
       min: -maxAbs * 1.15,
       max: maxAbs * 1.15,
       axisLabel: {
-        color: INK2,
-        fontSize: 11,
+        color: c.ink2,
+        fontSize: 12,
         formatter: (v: number) => (v === 0 ? "0" : `${v > 0 ? "+" : ""}${v.toFixed(0)}`),
       },
       splitLine: { lineStyle: { opacity: 0.12 } },
@@ -86,7 +84,7 @@ export function XgLuckChart({ rows }: { rows: Row[] }) {
       data: [...data].reverse().map((d) => d.name),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: INK2, fontSize: 11 },
+      axisLabel: { color: c.ink2, fontSize: 12 },
     },
     tooltip: {
       confine: true,
@@ -106,14 +104,14 @@ export function XgLuckChart({ rows }: { rows: Row[] }) {
         type: "bar",
         data: [...data].reverse().map((d) => ({
           value: Number(d.diff.toFixed(2)),
-          itemStyle: { color: d.diff >= 0 ? GOLD : LOSS },
+          itemStyle: { color: d.diff >= 0 ? c.win : c.loss },
         })),
         barWidth: "62%",
         label: {
           show: true,
           position: "right",
-          color: INK2,
-          fontSize: 11,
+          color: c.ink2,
+          fontSize: 12,
           formatter: ({ value }: { value: unknown }) => {
             const v = Number(value);
             return `${v > 0 ? "+" : ""}${v.toFixed(1)}`;

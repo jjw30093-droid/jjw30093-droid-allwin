@@ -23,23 +23,15 @@
   height: 6px;
 }
 
-/* 三个色块与三个标签/数字都是 <button>(可点击选中,见组件顶部注释)——
- * 统一清掉浏览器默认按钮外观(边框/内边距/背景/字体继承),恢复成原来纯
- * 展示时的 <span> 观感,只额外加 cursor 与聚焦态。 */
+/* 2026-08-23 修复(P1):三段色块只是纯展示的 <span>,不再是 <button>——
+ * 不响应点击,不拦截事件,组件外层常见的父级 <Link>(MatchRow 整行、首页
+ * 次要卡整张)在色块区域能正常导航。这里不需要任何按钮重置样式或选中态。 */
 .segHome,
 .segDraw,
 .segAway {
   display: block;
   height: 100%;
   min-width: 0;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  /* 选中态用 filter/box-shadow 过渡,不用 transform(避免色块跳出行高)。 */
-  transition:
-    filter 120ms ease,
-    box-shadow 120ms ease;
 }
 
 .segHome {
@@ -52,17 +44,6 @@
 
 .segAway {
   background: var(--loss);
-}
-
-/* 选中高亮:内嵌白色描边 + 轻微提亮,不用发光/毛玻璃(DESIGN.md 深色模式
- * 铁律)——与本站其它"选中态描边"惯例一致(见 PitchFormation.module.css
- * 的 .shirt box-shadow 描边)。inset 描边不会被 .bar 的 overflow:hidden
- * 裁掉(裁的是超出自身盒子的部分,inset 阴影天然在盒子内)。 */
-.segHome[data-selected="true"],
-.segDraw[data-selected="true"],
-.segAway[data-selected="true"] {
-  filter: brightness(1.18);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .labels {
@@ -81,13 +62,19 @@
 .labelDraw,
 .labelAway {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 3px;
   white-space: nowrap;
   border: none;
   background: none;
-  padding: 2px 4px;
-  margin: -2px -4px;
+  /* 触控目标下限 44px(CLAUDE.md/站长要求):纵向 padding 真实撑开按钮
+   * 高度(min-height 兜底,不靠 padding 精确凑数),不再用负 margin 抵消
+   * 纵向——这里要的就是看得见的更高触控区,不是隐形热区。横向 padding+
+   * 负 margin 仍然抵消,让文字左右边缘对齐上方色块条,不因为按钮内边距
+   * 产生视觉缩进。 */
+  padding: 8px 4px;
+  margin: 0 -4px;
+  min-height: 44px;
   border-radius: var(--r-control);
   cursor: pointer;
   font: inherit;
@@ -170,10 +157,15 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
   border: none;
   background: none;
-  padding: 4px 6px;
+  padding: 6px 6px;
+  /* 触控目标下限 44px(同 .labelHome 一组的注释)——数字本身字号已经较大,
+   * 实测内容高度已接近 44px,这里的 padding/min-height 只是把它钉死,
+   * 不依赖字体度量的边界情况。 */
+  min-height: 44px;
   border-radius: var(--r-control);
   cursor: pointer;
   font: inherit;

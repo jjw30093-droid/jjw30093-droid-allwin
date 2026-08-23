@@ -141,10 +141,8 @@ export default function PricingPage() {
         <h1 className={styles.title}>访问权限说明</h1>
       </div>
       <p className={styles.subtitle}>
-        登录不是付费,也不解锁任何足球数据:全部联赛资料、模型完整概率、完整赔率时间线,
-        匿名浏览即可看到完整内容,无需登录。登录只用于收藏、查看历史战绩、账户设置等
-        个人功能。只有<strong>赛前每日精选</strong>需要站长按场为账号单独开通授权。
-        本站提供的都是数据、概率与分析内容,不提供投注建议;模型输出是概率,不是确定结果。
+        比赛数据、赔率、概率都不用登录，匿名打开就是完整的。登录只用来收藏、看历史
+        战绩和管账号。只有赛前的<strong>每日精选</strong>，要站长按场给你的账号开通。
       </p>
 
       <Suspense fallback={<Skeleton />}>

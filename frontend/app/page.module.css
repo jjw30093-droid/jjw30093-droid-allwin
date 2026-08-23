@@ -294,37 +294,22 @@
   text-decoration: none;
 }
 
-/* <640px:容器自身横向滚动,body 不产生横向滚动条(E2E 在 360/390/430/1280
- * 四个宽度强制断言);640-899px 与 ≥900px 两档改纯 CSS 网格,见下方媒体查询。 */
+/* 2026-08-23 首页信息架构重排:此前 <900px 靠横向滑动 + nth-child 隐藏第
+ * 6、7 张卡,手机端实测只有 5 张卡进入可视区,其余 100+ 场要横向拖才能看到。
+ * 改成 <900px 纵向单列列表(不滚动、不隐藏),一次性多看到几场;body 不产生
+ * 横向滚动条(E2E 在 360/390/430/1280 四个宽度强制断言)。≥900px 保持原样:
+ * 4 列网格,只是把"只露 7 张"的边界从 nth-child(6)/(7) 改成 nth-child(n+8),
+ * 因为渲染层现在多塞了几张 DOM(见 SECONDARY_CARD_LIMIT 注释)。 */
 .secondaryViewport {
-  display: grid;
-  grid-auto-columns: 228px;
-  grid-auto-flow: column;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  overflow-x: auto;
-  padding: 1px 1px 8px;
-  scroll-padding-inline: 1px;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  overscroll-behavior-inline: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.secondaryViewport::-webkit-scrollbar {
-  display: none;
-}
-
-/* 640px 以下只展示前 5 张卡 + 入口格(第 6、7 张卡隐藏,不是不存在——
- * 单份 DOM 列表靠 CSS 在三档断点间切换,不为不同宽度渲染两份重复内容) */
-.secondaryViewport > :nth-child(6),
-.secondaryViewport > :nth-child(7) {
-  display: none;
+  padding: 1px;
 }
 
 .secondaryCard,
 .secondaryAll {
   min-height: 108px;
-  scroll-snap-align: start;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-card);
   background: var(--surface);
@@ -413,14 +398,16 @@
   font-weight: 700;
 }
 
+/* 独立于 .secondaryViewport 之外的固定一行(2026-08-23):不再是网格/列表
+ * 里的一块 tile,是任何断点都稳定可见的"查看全部"入口,不受列表渲染数量
+ * 或断点截断影响。 */
 .secondaryAll {
   display: flex;
-  min-width: 124px;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 16px;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 14px 16px;
   background: var(--surface-soft);
   text-align: center;
 }
@@ -449,14 +436,6 @@
   font-size: 14px;
 }
 
-@media (min-width: 640px) {
-  .secondaryViewport {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow-x: visible;
-  }
-}
-
 @media (min-width: 900px) {
   .secondaryHintMobile {
     display: none;
@@ -468,44 +447,21 @@
     gap: 4px;
   }
 
+  /* 桌面网格布局保持不变(§任务范围明确不动):4 列,只露 7 张。渲染层
+   * 现在给了 SECONDARY_CARD_LIMIT=15 张 DOM(供 <900px 纵向列表使用),
+   * 这里把第 8 张及以后隐藏,视觉结果与改造前完全一致。 */
   .secondaryViewport {
+    display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .secondaryViewport > :nth-child(6),
-  .secondaryViewport > :nth-child(7) {
-    display: block;
+  .secondaryViewport > :nth-child(n + 8) {
+    display: none;
   }
 
   .secondaryAllHint {
     display: block;
   }
-}
-
-.sectionHead {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.sectionTitle {
-  margin: 0;
-  color: var(--ink);
-  font-size: 23px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-}
-
-.textLink {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  color: var(--brand-teal);
-  font-size: 12px;
-  font-weight: 800;
-  text-decoration: none;
 }
 
 .emptyText {
@@ -514,9 +470,12 @@
   font-size: 14px;
 }
 
+/* 2026-08-23:3 格改 2 格——手机端窄列容易把"模型公开记录"这类四字标题挤到
+ * 换行;2 列也让新增的"联赛数据"/"模型说明"两个入口(640px 以下顶部导航
+ * 整个隐藏,只能从这里或页脚触达)有地方放,不用再加一整行。 */
 .quickLinks {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   margin-top: 36px;
   border-top: 1px solid var(--border-strong);
   border-bottom: 1px solid var(--border-strong);
@@ -525,14 +484,18 @@
 .quickLinks a {
   display: grid;
   gap: 5px;
-  min-height: 70px;
+  min-height: 44px;
   padding: 15px 16px;
   color: var(--ink);
   text-decoration: none;
 }
 
-.quickLinks a + a {
+.quickLinks a:nth-child(2n) {
   border-left: 1px solid var(--border-strong);
+}
+
+.quickLinks a:nth-child(n + 3) {
+  border-top: 1px solid var(--border-strong);
 }
 
 .quickLinks strong {
@@ -584,13 +547,6 @@
   }
 }
 
-.disclaimer {
-  margin-top: 22px;
-  color: var(--ink-3);
-  font-size: 11px;
-  line-height: 1.65;
-}
-
 @media (max-width: 760px) {
   .page {
     padding: 0 12px 40px;
@@ -609,23 +565,7 @@
   }
 
   .quickLinks {
-    grid-template-columns: 1fr;
     margin-top: 28px;
-  }
-
-  .quickLinks a + a {
-    border-top: 1px solid var(--border-strong);
-    border-left: 0;
-  }
-}
-
-/* <640px:近期比赛横滑容器出血到屏幕边缘(负外边距 + 等量内边距抵消),
- * 只在真正横滑这一档需要——640px 以上已经是静态网格,不需要出血。 */
-@media (max-width: 639px) {
-  .secondaryViewport {
-    margin-inline: -12px;
-    padding-inline: 12px;
-    scroll-padding-inline: 12px;
   }
 }
 
@@ -635,104 +575,67 @@
   }
 }
 
-/* ── 今晚/明天/未来7天 计数条 ──────────────────────────── */
+/* ── 今晚/明天/本周 日期切换器(2026-08-23 首页信息架构重排) ──────
+ * 取代原来的"数字 + 进度段 + 数据更新条"大卡片——那张卡把首屏占满,
+ * 用户要往下滚约 180px 才看到第一场真实比赛。现在只剩三个小 pill,
+ * 数据更新条挪到页面底部(见 .freshnessLine),进度段是纯装饰,已删除。 */
 
-/* ── 今晚/明天/未来7天计数条(时间轴式:数字 + 进度段 + 数据更新条)
- * design_handoff_home_hero/README.md §2。单张卡收编原来独立一行的
- * freshnessLine;count=0 靠颜色降级(--ink-3),不再用 opacity——降透明
- * 会让"0"更难读。 */
+.dateSwitcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
 
-.countsBar {
-  margin: 0 0 14px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
+.dateTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
   background: var(--surface);
-}
-
-.countsRow {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 12px 4px 0;
-}
-
-.countItem {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  padding: 0 4px 10px;
-  color: inherit;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 700;
   text-decoration: none;
 }
 
-.countLabel {
-  color: var(--ink-2);
-  font-size: 12.5px;
-}
-
-.countItem[data-empty="true"] .countLabel {
-  color: var(--ink-3);
-}
-
-.countNum {
-  color: var(--ink);
-  font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.countItem[data-highlight] .countNum {
+.dateTab[data-highlight] {
+  border-color: var(--brand-teal);
   color: var(--brand-teal);
 }
 
-.countItem[data-empty="true"] .countNum {
+.dateTab[data-empty="true"] {
   color: var(--ink-3);
 }
 
-.countUnit {
-  color: var(--ink-3);
-  font-size: 11px;
-}
-
-.countsProgress {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  padding: 0 12px 12px;
-}
-
-.progressOn,
-.progressOff {
-  height: 4px;
-  border-radius: var(--r-pill);
-}
-
-.progressOn {
-  background: var(--brand-teal);
-}
-
-.progressOff {
-  background: var(--border);
+.dateTabNum {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .countsFallback {
+  flex-basis: 100%;
   margin: 0;
-  padding: 0 12px 12px;
-  color: var(--ink-2);
+  color: var(--ink-3);
   font-size: 12px;
   line-height: 1.6;
 }
 
-/* ── 今日更新状态(原独立段落,现收编进计数条卡底部) ─────────── */
+/* ── 数据更新状态(2026-08-23 从首屏计数条挪到页面底部,紧邻页脚) ── */
 
 .freshnessLine {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin: 0;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
+  margin: 22px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
   background: var(--surface-soft);
   color: var(--ink-3);
   font-size: 11px;
@@ -777,33 +680,8 @@
 }
 
 @media (min-width: 900px) {
-  .countsRow {
-    padding: 14px 8px 0;
-  }
-
-  .countItem {
-    display: flex;
-    align-items: baseline;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 8px 12px;
-  }
-
-  .countLabel {
+  .dateTab {
     font-size: 14px;
-  }
-
-  .countNum {
-    font-size: 34px;
-  }
-
-  .countUnit {
-    font-size: 12px;
-  }
-
-  .countsProgress {
-    gap: 4px;
-    padding: 0 16px 14px;
   }
 
   .freshnessLine {
@@ -852,28 +730,19 @@
   margin: 0 0 12px;
 }
 
-.picksActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-/* ── 推荐战绩摘要 ──────────────────────────────────────── */
-
-.recoSummary {
-  margin: 26px 0 0;
-}
+/* ── 推荐战绩摘要行(2026-08-23 并入今日精选卡,不再单独成 section) ── */
 
 .recoSummaryRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
+  margin: 0 0 14px;
 }
 
 .recoSummaryItem {
   border: 1px solid var(--border);
   border-radius: var(--r-card);
-  background: var(--surface);
+  background: var(--surface-soft);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -890,12 +759,34 @@
   color: var(--ink-3);
 }
 
-/* ── 今日精选:文字链接(首页只保留重点卡一个最强按钮) ── */
+.picksActions {
+  display: flex;
+}
 
-.picksLink {
+/* 今日精选唯一的主 CTA(2026-08-23 起替换"查看今日精选"/"查看历史战绩"两个
+ * 并列文字链接——两个入口容易让人分不清主次,合并进同一张卡后只留一个)。 */
+.picksCta {
+  display: flex;
+  min-height: 44px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--r-pill);
+  background: var(--brand-teal);
+  color: #fff;
   font-size: 14px;
-  font-weight: 700;
-  color: var(--brand-teal);
+  font-weight: 800;
   text-decoration: none;
-  margin-right: 18px;
+}
+
+.picksCta span {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 16px;
+}
+
+@media (hover: hover) {
+  .picksCta:hover {
+    filter: brightness(0.94);
+  }
 }

@@ -65,7 +65,7 @@ describe("MarketCard 结论区", () => {
       render(<MarketCard card={card} />);
       expect(screen.queryByText("偏大")).toBeNull();
       expect(screen.queryByText("偏小")).toBeNull();
-      expect(screen.getByText(/样本外测试中不够稳定/)).not.toBeNull();
+      expect(screen.getByText(/历史命中率不够稳/)).not.toBeNull();
       // hit_rate 的具体数值不应该被当结论展示出来
       expect(screen.queryByText(/51%/)).toBeNull();
       // 2026-08-21:estimate 非空时,空白态不再放"暂无倾向"这种空话,改成
@@ -74,7 +74,7 @@ describe("MarketCard 结论区", () => {
       // "5.2" 在结论格与折叠区"两队近 10 场自身历史均值合计"里各出现一次,
       // 两处都是真实内容,不是重复渲染。
       expect(screen.getAllByText("5.2").length).toBeGreaterThan(0);
-      expect(screen.getByText("两队近10场合计")).not.toBeNull();
+      expect(screen.getByText("两队近 10 场合计")).not.toBeNull();
       expect(screen.getByText(/\+1\.7/)).not.toBeNull();
       expect(screen.getByText("对比盘口线")).not.toBeNull();
     },
@@ -113,14 +113,14 @@ describe("MarketCard 结论区", () => {
       hit_rate: null,
     };
     render(<MarketCard card={card} />);
-    expect(screen.getByText(/历史场次不足/)).not.toBeNull();
+    expect(screen.getByText(/场次还不够多/)).not.toBeNull();
     expect(screen.queryByText(/两队近 10 场自身历史均值合计/)).toBeNull();
   });
 
   it("data_quality='no_history' 时提示联赛数据补采", () => {
     const card: MarketCardData = { ...BASE, data_quality: "no_history", estimate: null, signal_grade: null, lean: null };
     render(<MarketCard card={card} />);
-    expect(screen.getByText(/该联赛历史数据补采中/)).not.toBeNull();
+    expect(screen.getByText(/历史数据还没补齐/)).not.toBeNull();
   });
 
   it("line_source='market' 时标「真实盘口」,不能和统计参考线看起来一样", () => {
@@ -196,7 +196,7 @@ describe("MarketCard 折叠区:各线回测 + 对手侧 + 回测更新时间(数
       ],
     };
     render(<MarketCard card={card} />);
-    expect(screen.getByText(/对手侧/)).not.toBeNull();
+    expect(screen.getByText(/对手打成什么样/)).not.toBeNull();
     expect(screen.getByText("1.9")).not.toBeNull();
     expect(screen.getByText("2.2")).not.toBeNull();
     // 两处场次数字都必须各自出现,不能被压成同一个"共 N 场"
@@ -244,8 +244,8 @@ describe("MarketCard 折叠区:各线回测 + 对手侧 + 回测更新时间(数
       ],
     };
     render(<MarketCard card={card} />);
-    expect(screen.getByText(/这条线没有,因此不给倾向/)).not.toBeNull();
-    expect(screen.getByText(/真实盘口线 10/)).not.toBeNull();
+    expect(screen.getByText(/这条没验过，所以不给倾向/)).not.toBeNull();
+    expect(screen.getByText(/真实盘口是 10/)).not.toBeNull();
     expect(screen.getByText(/8\.5.*\/.*9\.5.*\/.*10\.5/)).not.toBeNull();
     expect(
       screen.queryByText("该盘口线暂无历史回测数据,仅展示两队近期数据对比。"),
@@ -261,7 +261,7 @@ describe("MarketCard 折叠区:各线回测 + 对手侧 + 回测更新时间(数
       lines: [{ line: 10.5, is_default: true, signal_grade: "★", hit_rate: 0.55, sample_size: 180 }],
     };
     render(<MarketCard card={card} />);
-    expect(screen.getByText(/超过 10 个.*超过 10\.5 个.*同一件事/)).not.toBeNull();
+    expect(screen.getByText(/10 和 10\.5 其实是同一条线/)).not.toBeNull();
     expect(screen.getByText(/走水/)).not.toBeNull();
   });
 

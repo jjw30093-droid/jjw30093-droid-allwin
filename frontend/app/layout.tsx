@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Oswald, Noto_Sans_SC } from "next/font/google";
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const oswald = Oswald({
@@ -17,6 +18,7 @@ const notoSansSC = Noto_Sans_SC({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "欧赢 ALLWIN｜看数据，也看门道",
     // 子路由段只需给出自己的短标题,后缀由这里统一追加——之前每个页面

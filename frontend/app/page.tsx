@@ -8,9 +8,8 @@ import {
 } from "@/lib/api-v1";
 import { selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
 import { LocalTime } from "@/components/matches/LocalTime";
-import { FollowedMatches } from "@/components/matches/FollowedMatches";
-import { RecentlyViewed } from "@/components/matches/RecentlyViewed";
-import { HomeMatchExperienceLive } from "@/components/home/HomeMatchExperienceLive";
+import { ContinueWatching } from "@/components/home/ContinueWatching";
+import { HomeMatchExperienceLive, FreshnessBlock } from "@/components/home/HomeMatchExperienceLive";
 import styles from "./page.module.css";
 
 type RecoOverview = GetJson<"/api/v1/reco/overview">;
@@ -42,10 +41,12 @@ type HomePageData = {
  * backend/queries/odds.py::latest_1x2_by_match),不需要再单独请求
  * analysis bundle——那是"近期战绩"面板专用的字段,面板已下架。
  *
- * 数据更新条(freshness)一并在这里取:2026-08-13 Claude Design 定稿把
- * 它从独立段落挪进了计数条卡内部,不再是页面顶部单独一行——公开只读、
- * 不受身份影响,SSR 一次即可,不需要跟着 HomeMatchExperienceLive 的
- * 客户端 cookie 刷新重新拉。
+ * 数据更新条(freshness)一并在这里取——公开只读、不受身份影响,SSR 一次
+ * 即可,不需要跟着 HomeMatchExperienceLive 的客户端 cookie 刷新重新拉。
+ * 2026-08-23 首页信息架构重排:渲染挪到了页面底部(见 FreshnessSection),
+ * 不再放在首屏的计数条里,但数据获取仍然收在这同一个聚合函数内——
+ * getFreshness() 是 React cache(),FreshnessSection 会拿到同一份结果,
+ * 不是发起第二次网络请求。
  */
 export const getHomePageData = cache(async (): Promise<HomePageData> => {
   const [upcoming, todayList, tomorrowList, shotsList, freshness] = await Promise.all([
@@ -140,7 +141,6 @@ async function HomeMatchExperienceSection() {
         initialFeatured={null}
         initialSecondary={[]}
         initialCounts={null}
-        initialFreshness={null}
         initialErrored
       />
     );
@@ -151,53 +151,22 @@ async function HomeMatchExperienceSection() {
       initialFeatured={data.featured}
       initialSecondary={data.secondary}
       initialCounts={data.counts}
-      initialFreshness={data.freshness}
       initialErrored={false}
     />
   );
 }
 
-/* ── 今日精选 + 推荐战绩摘要(匿名聚合,不含单据内容) ───── */
-
-async function DailyPicksSection() {
-  const overview = await getRecoOverview();
-  return (
-    <section className={styles.picksCard} aria-labelledby="daily-picks-title">
-      <header className={styles.picksHead}>
-        <h2 id="daily-picks-title">今日精选</h2>
-        {overview && overview.today_published_count > 0 && (
-          <span className={styles.picksBadge}>
-            已发布 {overview.today_published_count} 场
-          </span>
-        )}
-      </header>
-      {!overview ? (
-        <p className={styles.picksNote}>精选状态暂时无法加载,可直接进入精选页查看。</p>
-      ) : overview.today_published_count > 0 ? (
-        <p className={styles.picksNote}>
-          今天已发布 <b className="num">{overview.today_published_count}</b> 场
-          {overview.today_latest_published_at && (
-            <>
-              ,更新于 <LocalTime iso={overview.today_latest_published_at} />
-            </>
-          )}
-          。内容包含赛果方向、数据依据与风险提示。
-        </p>
-      ) : (
-        <p className={styles.picksNote}>今日精选尚未发布;发布后本模块自动更新。</p>
-      )}
-      {/* 首页只保留重点卡"查看完整分析"一个最强按钮,这里降为文字链接 */}
-      <div className={styles.picksActions}>
-        <Link href="/reco?tab=daily" className={styles.picksLink}>
-          查看今日精选 →
-        </Link>
-        <Link href="/reco?tab=record" className={styles.picksLink}>
-          查看历史战绩 →
-        </Link>
-      </div>
-    </section>
-  );
+/* ── 数据更新状态(2026-08-23 从首屏计数条挪到页面底部) ──────────
+ * getFreshness() 是同一个 React cache()、同一次请求内已经被 getHomePageData()
+ * 调过一次——这里不是第二次网络请求,是同一份缓存结果的第二次读取。 */
+async function FreshnessSection() {
+  const freshness = await getFreshness();
+  return <FreshnessBlock freshness={freshness} />;
 }
+
+/* ── 今日精选(2026-08-23 合并):发布状态 + 近 N 天战绩摘要 ─────────
+ * 这两块此前分开渲染,却读的是同一个 getRecoOverview() 数据源,首页因此
+ * 出现四个指向 /reco 的入口。合并成一张卡,只留"查看今日精选"一个主 CTA。 */
 
 /** "1胜 2半赢 3负 1半输 2走"——四分之一盘口半赢/半输(2026-08-16)只在实际
  * 出现时才加进这行,避免绝大多数场次(没有 half_win/half_loss)时把恒为 0
@@ -211,51 +180,73 @@ function recoResultBreakdownText(overview: RecoOverview): string {
   return parts.join(" ");
 }
 
-async function RecoSummarySection() {
+async function DailyPicksSection() {
   const overview = await getRecoOverview();
-  if (!overview) return null;
-  const hasRecords = overview.settled_count > 0;
+  const hasRecords = !!overview && overview.settled_count > 0;
   return (
-    <section className={styles.recoSummary} aria-labelledby="reco-summary-title">
-      <header className={styles.sectionHead}>
-        <div>
-          <h2 id="reco-summary-title" className={styles.sectionTitle}>
-            近{overview.window_days}天推荐记录
-          </h2>
-        </div>
-        <Link href="/reco?tab=record" className={styles.textLink}>
-          查看全部记录 →
-        </Link>
+    <section className={styles.picksCard} aria-labelledby="daily-picks-title">
+      <header className={styles.picksHead}>
+        <h2 id="daily-picks-title">今日精选</h2>
+        {overview && overview.today_published_count > 0 && (
+          <span className={styles.picksBadge}>
+            已发布 {overview.today_published_count} 场
+          </span>
+        )}
       </header>
-      {hasRecords ? (
-        <div className={styles.recoSummaryRow}>
-          <div className={styles.recoSummaryItem}>
-            <b className="num">{overview.settled_count}</b>
-            <span>已结算</span>
-          </div>
-          <div className={styles.recoSummaryItem}>
-            <b className="num">{recoResultBreakdownText(overview)}</b>
-            <span>命中/未中/走水</span>
-          </div>
-          <div className={styles.recoSummaryItem}>
-            <b className="num">
-              {overview.net_units >= 0 ? "+" : ""}
-              {overview.net_units.toFixed(2)}
-            </b>
-            <span>净单位</span>
-          </div>
-          {overview.voided_count > 0 && (
-            <div className={styles.recoSummaryItem}>
-              <b className="num">{overview.voided_count}</b>
-              <span>作废(单列)</span>
-            </div>
+
+      {!overview ? (
+        <p className={styles.picksNote}>精选状态暂时加载不出来，可以直接进精选页看看。</p>
+      ) : overview.today_published_count > 0 ? (
+        <p className={styles.picksNote}>
+          今天已发布 <b className="num">{overview.today_published_count}</b> 场
+          {overview.today_latest_published_at && (
+            <>
+              ，更新于 <LocalTime iso={overview.today_latest_published_at} />
+            </>
           )}
-        </div>
-      ) : (
-        <p className={styles.emptyText}>
-          正式推荐尚未开始,首场结算后开始累计;命中与未中都会保留。
+          。内容包含赛果方向、数据依据与风险提示。
         </p>
+      ) : (
+        <p className={styles.picksNote}>今天还没发。发了这儿会自己更新。</p>
       )}
+
+      {overview &&
+        (hasRecords ? (
+          <div className={styles.recoSummaryRow}>
+            <div className={styles.recoSummaryItem}>
+              <b className="num">{overview.settled_count}</b>
+              <span>近 {overview.window_days} 天已结算</span>
+            </div>
+            <div className={styles.recoSummaryItem}>
+              <b className="num">{recoResultBreakdownText(overview)}</b>
+              <span>命中/未中/走水</span>
+            </div>
+            <div className={styles.recoSummaryItem}>
+              <b className="num">
+                {overview.net_units >= 0 ? "+" : ""}
+                {overview.net_units.toFixed(2)}
+              </b>
+              <span>净单位</span>
+            </div>
+            {overview.voided_count > 0 && (
+              <div className={styles.recoSummaryItem}>
+                <b className="num">{overview.voided_count}</b>
+                <span>作废</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className={styles.emptyText}>
+            还没开始发推荐。第一单结算之后这里开始累计，中没中都留着。
+          </p>
+        ))}
+
+      <div className={styles.picksActions}>
+        <Link href="/reco?tab=daily" className={styles.picksCta}>
+          查看今日精选
+          <span aria-hidden>→</span>
+        </Link>
+      </div>
     </section>
   );
 }
@@ -271,21 +262,24 @@ export default function Home() {
         <DailyPicksSection />
       </Suspense>
 
-      <Suspense fallback={null}>
-        <RecoSummarySection />
-      </Suspense>
-
-      <FollowedMatches />
-      <RecentlyViewed />
+      <ContinueWatching />
 
       <nav className={styles.quickLinks} aria-label="常用入口">
+        <Link href="/leagues">
+          <strong>联赛数据</strong>
+          <span>排名、赛程与球队统计</span>
+        </Link>
+        <Link href="/about-model">
+          <strong>模型说明</strong>
+          <span>方法论与校准结果</span>
+        </Link>
         <Link href="/track-record">
           <strong>模型公开记录</strong>
           <span>查看发布与赛后评估</span>
         </Link>
         <Link href="/pricing">
           <strong>权限说明</strong>
-          <span>登录免费,精选需授权</span>
+          <span>比赛数据不用登录，精选要开通</span>
         </Link>
         <Link href="/about">
           <strong>关于我们</strong>
@@ -293,9 +287,11 @@ export default function Home() {
         </Link>
       </nav>
 
-      <footer className={styles.disclaimer}>
-        数据与概率仅供研究和内容参考，不构成投注建议；历史表现不代表未来。
-      </footer>
+      {/* 数据更新状态:2026-08-23 从首屏计数条挪到这里,紧邻页脚之前,
+          不再占首屏空间。 */}
+      <Suspense fallback={null}>
+        <FreshnessSection />
+      </Suspense>
     </main>
   );
 }

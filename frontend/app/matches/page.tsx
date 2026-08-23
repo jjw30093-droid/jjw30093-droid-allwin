@@ -152,7 +152,7 @@ export default async function MatchesPage({
         <div className={styles.errorBox}>
           <div className={styles.errorTitle}>数据暂时无法加载</div>
           <p>
-            数据服务暂时不可用，请稍后刷新重试。
+            数据暂时加载不出来，稍后刷新试试。
           </p>
         </div>
       </main>
@@ -201,8 +201,8 @@ export default async function MatchesPage({
           是一句假话,而且概率条那半句对已完赛比赛也没有意义(§2.2)。 */}
       <p className={styles.footNote}>
         {status === "finished"
-          ? "默认展示全部已完赛比赛，按开球时间由近及远排序；可用上方时间筛选缩到今天/昨天/近三天/近七天。比分与赛后数据来自数据源，点进比赛可看射门图、阵容与事件。"
-          : "默认展示未来七天未开赛比赛，并按精确开球时间排序。胜平负概率条由 Bet365 赔率折算得到，标注了采集时间；无赔率的比赛不展示概率条。"}
+          ? "已完赛的比赛按时间倒序排，上面可以缩到昨天、近三天或近七天。点进任意一场能看射门图、阵容和事件。"
+          : "默认按开球时间排未来七天的比赛。概率条是 Bet365 欧赔去水折算的，不是我们的模型算的；没抓到赔率的场次不显示。"}
       </p>
     </main>
   );

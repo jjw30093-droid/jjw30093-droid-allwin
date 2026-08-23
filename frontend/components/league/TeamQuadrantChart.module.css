@@ -1,5 +1,5 @@
 .card {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
   padding: 16px 14px 14px;
@@ -38,7 +38,7 @@
 
 .tab,
 .tabOn {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   background: transparent;
   color: var(--ink-2);
   border-radius: 999px;
@@ -52,13 +52,13 @@
 
 .tab:hover:not(:disabled) {
   color: var(--ink);
-  border-color: var(--gold);
+  border-color: var(--brand-teal);
 }
 
 .tabOn {
-  color: #2a1b06;
-  background: var(--gold);
-  border-color: var(--gold);
+  color: #fff;
+  background: var(--gold-grad);
+  border-color: transparent;
   font-weight: 600;
 }
 
@@ -72,7 +72,7 @@
   gap: 5px;
   margin: 12px 0 8px;
   padding-top: 11px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border);
 }
 
 .legendRow {
@@ -85,7 +85,7 @@
 }
 
 .legendKey {
-  color: var(--gold);
+  color: var(--brand-teal);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -103,7 +103,7 @@
 }
 
 .empty {
-  border: 1px dashed var(--line);
+  border: 1px dashed var(--border);
   border-radius: 12px;
   padding: 22px 16px;
   text-align: center;

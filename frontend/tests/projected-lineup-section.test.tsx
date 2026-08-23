@@ -117,8 +117,8 @@ describe("ProjectedLineupSection 替补席永不静默隐藏", () => {
     const { container } = render(
       <ProjectedLineupSection {...BASE_PROPS} lineupType="predicted" source="enetpulse" />,
     );
-    expect(container.textContent).toContain("第三方(Enetpulse)预测阵容只给出首发 11 人");
-    expect(container.textContent).not.toContain("数据源本次观测只给了首发");
+    expect(container.textContent).toContain("这类预测名单只有首发 11 人，本来就不带替补。");
+    expect(container.textContent).not.toContain("这次只拿到首发，没有替补。");
     // jsdom 不遵守 <details> 的折叠可见性,getByText 在折叠块里也找得到——
     // 空态是否真的没有套 <details> 必须断言 DOM 结构本身,不能只断言文本。
     expect(container.querySelector("details")).toBeNull();
@@ -134,8 +134,8 @@ describe("ProjectedLineupSection 替补席永不静默隐藏", () => {
     const { container } = render(
       <ProjectedLineupSection {...BASE_PROPS} lineupType="predicted" source={null} />,
     );
-    expect(container.textContent).not.toContain("只给出首发 11 人");
-    expect(container.textContent).toContain("数据源本次观测只给了首发");
+    expect(container.textContent).not.toContain("这类预测名单只有首发 11 人");
+    expect(container.textContent).toContain("这次只拿到首发，没有替补。");
   });
 
   it("lastStarting11 + 空替补:显示通用说明,不显示 Enetpulse 专属说明", () => {
@@ -146,8 +146,8 @@ describe("ProjectedLineupSection 替补席永不静默隐藏", () => {
         source="lastStartingLineups"
       />,
     );
-    expect(container.textContent).toContain("数据源本次观测只给了首发");
-    expect(container.textContent).not.toContain("只给出首发 11 人");
+    expect(container.textContent).toContain("这次只拿到首发，没有替补。");
+    expect(container.textContent).not.toContain("这类预测名单只有首发 11 人");
   });
 
   it("不得用另一条快照/另一场的替补顶替本条空替补", () => {

@@ -219,6 +219,8 @@ do_build() {
 
   bash "$RELEASE_DIR/deploy/scripts/check_browser_bundle.sh" "$RELEASE_DIR/frontend" \
     || die "浏览器构建产物含 127.0.0.1/localhost API 地址;检查 shared/.env 的 NEXT_PUBLIC_API_BASE(生产应留空)与残留的 frontend/.env.local"
+  bash "$RELEASE_DIR/deploy/scripts/check_public_urls.sh" "$RELEASE_DIR/frontend" \
+    || die "sitemap.xml/robots.txt/llms.txt 含占位域名或 host 不一致;检查 shared/.env 的 NEXT_PUBLIC_SITE_URL 是否设为 https://miaomiaodi.vip"
   "$RELEASE_DIR/.venv/bin/python" "$RELEASE_DIR/scripts/verify_next_assets.py" \
     --frontend "$RELEASE_DIR/frontend" \
     || die "Next 构建 HTML/manifest 引用了不存在的静态资源"

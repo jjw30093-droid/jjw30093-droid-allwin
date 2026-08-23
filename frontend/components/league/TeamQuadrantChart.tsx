@@ -24,13 +24,9 @@
 import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
+import { useChartColors } from "@/components/charts/useChartColors";
 import type { TeamSeasonStatRow } from "@/lib/api-v1";
 import styles from "./TeamQuadrantChart.module.css";
-
-const GOLD = "#d49e33";
-const INK2 = "#a79c87";
-const WIN = "#4e9a5b";
-const LOSS = "#c05437";
 
 type Axis = {
   key: keyof TeamSeasonStatRow;
@@ -173,6 +169,7 @@ export function outlierNames(pts: Pt[], mx: number, my: number, take = 6): Set<s
 }
 
 export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
+  const c = useChartColors();
   // 攻防视角依赖数据源的 xg 档,不是每个联赛赛季都有 —— 先算可用性再定默认视角
   const available = useMemo(
     () => VIEWS.filter((v) => collectPoints(rows, v).length >= 4),
@@ -198,7 +195,7 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
   // 0(两项都好)= 绿, 2(两项都差)= 红, 1/3(一好一差)= 金。
   const lowY = view.y.lowerIsBetter === true;
   const quad = (p: Pt) => quadrantOf(p, mx, my, lowY);
-  const QUAD_COLOR = [WIN, GOLD, LOSS, GOLD];
+  const QUAD_COLOR = [c.win, c.teal, c.loss, c.teal];
   const colorOf = (p: Pt) => QUAD_COLOR[quad(p)];
   const labelled = outlierNames(pts, mx, my);
 
@@ -218,12 +215,12 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
       name: view.x.label,
       nameLocation: "middle",
       nameGap: 26,
-      nameTextStyle: { color: INK2, fontSize: 11 },
+      nameTextStyle: { color: c.ink2, fontSize: 12 },
       // scale + 百分比留白:不硬写 min/max,否则 ECharts 会把
       // 0.47236656243863856 这种原始端点值直接画成刻度标签。
       scale: true,
       boundaryGap: ["14%", "14%"],
-      axisLabel: { color: INK2, fontSize: 11 },
+      axisLabel: { color: c.ink2, fontSize: 12 },
       splitLine: { lineStyle: { opacity: 0.1 } },
     },
     yAxis: {
@@ -233,12 +230,12 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
       // 让轴名永远停在图的左上角。
       nameLocation: lowY ? "start" : "end",
       nameGap: 12,
-      nameTextStyle: { color: INK2, fontSize: 11, align: "left" },
+      nameTextStyle: { color: c.ink2, fontSize: 12, align: "left" },
       // 越少被创造 xG 越好 → 反转,让"好"永远在上方
       inverse: lowY,
       scale: true,
       boundaryGap: ["16%", "16%"],
-      axisLabel: { color: INK2, fontSize: 11 },
+      axisLabel: { color: c.ink2, fontSize: 12 },
       splitLine: { lineStyle: { opacity: 0.1 } },
     },
     tooltip: {
@@ -269,8 +266,8 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
           // 标在点正上方而不是右侧:右侧的队名到了图右边缘会被裁掉
           position: "top",
           distance: 5,
-          color: INK2,
-          fontSize: 10,
+          color: c.ink2,
+          fontSize: 12,
           formatter: (p: unknown) => {
             const n = (p as { data: { pt: Pt } }).data.pt.name;
             return labelled.has(n) ? n : "";
@@ -282,7 +279,7 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
         markLine: {
           silent: true,
           symbol: "none",
-          lineStyle: { color: INK2, type: "dashed", opacity: 0.45 },
+          lineStyle: { color: c.ink2, type: "dashed", opacity: 0.45 },
           label: { show: false },
           data: [{ xAxis: mx }, { yAxis: my }],
         },

@@ -19,14 +19,11 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { tokensFor } from "@/components/charts/chartMode";
+import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type Shot = MatchReport["shots"][number];
-
-const GOLD = "#d49e33";
-const INK2 = "#a79c87";
-const GOAL = "#4e9a5b";
 
 type Point = { minute: number; total: number; goal: Shot | null };
 
@@ -58,6 +55,7 @@ function buildOption(
   awayName: string,
   endMinute: number,
   mode: ChartMode,
+  c: ChartColors,
 ): EChartsOption {
   const t = tokensFor(mode);
   // 曲线画到终场:补一个末端点,否则线在最后一次射门处就断了
@@ -87,7 +85,7 @@ function buildOption(
     },
     legend: {
       data: [homeName, awayName],
-      textStyle: { color: INK2, fontSize: t.legendFont },
+      textStyle: { color: c.ink2, fontSize: t.legendFont },
       top: 0,
       itemHeight: Math.round(t.legendFont * 0.8),
       itemWidth: Math.round(t.legendFont * 1.6),
@@ -116,13 +114,13 @@ function buildOption(
       min: 0,
       max: endMinute,
       interval: 15,
-      axisLabel: { color: INK2, fontSize: t.axisFont, formatter: (v: number) => `${v}'` },
+      axisLabel: { color: c.ink2, fontSize: t.axisFont, formatter: (v: number) => `${v}'` },
       splitLine: { show: false },
     },
     yAxis: {
       type: "value",
       axisLabel: {
-        color: INK2,
+        color: c.ink2,
         fontSize: t.axisFont,
         formatter: (v: number) => v.toFixed(1),
       },
@@ -135,18 +133,18 @@ function buildOption(
         step: "end",
         showSymbol: false,
         data: h.map((p) => [p.minute, p.total]),
-        color: GOLD,
+        color: c.teal,
         lineStyle: { width: t.lineWidth },
         areaStyle: { opacity: 0.12 },
         markPoint: {
           symbol: "circle",
           symbolSize: t.symbolSize + 4,
-          data: goalMarks(home, GOAL),
+          data: goalMarks(home, c.win),
           label: {
             show: true,
             position: "top",
-            fontSize: Math.round(t.axisFont * 0.95),
-            color: GOAL,
+            fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
+            color: c.win,
             formatter: ({ name }: { name: string }) => name,
           },
         },
@@ -157,18 +155,18 @@ function buildOption(
         step: "end",
         showSymbol: false,
         data: a.map((p) => [p.minute, p.total]),
-        color: INK2,
+        color: c.navy,
         lineStyle: { width: t.lineWidth },
         areaStyle: { opacity: 0.08 },
         markPoint: {
           symbol: "circle",
           symbolSize: t.symbolSize + 4,
-          data: goalMarks(away, GOAL),
+          data: goalMarks(away, c.win),
           label: {
             show: true,
             position: "bottom",
-            fontSize: Math.round(t.axisFont * 0.95),
-            color: GOAL,
+            fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
+            color: c.win,
             formatter: ({ name }: { name: string }) => name,
           },
         },
@@ -196,6 +194,7 @@ export function XgRaceChart({
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
+  const c = useChartColors();
 
   useEffect(() => {
     if (mode === "export") return;
@@ -239,8 +238,8 @@ export function XgRaceChart({
   }, [home.length, away.length, hTotal, aTotal, homeName, awayName, homeScore, awayScore]);
 
   const option = useMemo(
-    () => buildOption(home, away, homeName, awayName, endMinute, mode),
-    [home, away, homeName, awayName, endMinute, mode],
+    () => buildOption(home, away, homeName, awayName, endMinute, mode, c),
+    [home, away, homeName, awayName, endMinute, mode, c],
   );
 
   if (home.length <= 1 && away.length <= 1) {

@@ -16,9 +16,13 @@
  * 见 node_modules/next/dist/docs/01-app/03-api-reference/04-functions/use-search-params.md)。
  *
  * 2026-08-14 重设计(Claude Design 定稿,design_handoff_login_redesign,方向 2a):
- * 标题组 eyebrow+h1 随环境变化;扫码卡是页面核心区域;密码登录从卡片降级为纯文字
+ * 标题组 h1 随环境变化;扫码卡是页面核心区域;密码登录从卡片降级为纯文字
  * <details>;整页改 flex+gap 纵向堆叠,不再用 margin 堆叠。SSR 水合前(env===null)
  * 的骨架直接复用 ScanLoginCard 自己的卡片外壳,不再是单独两条骨架横条。
+ *
+ * 2026-08-23 修复(P1,生产实测普通用户无法注册登录):删除"登录后可免费查看"
+ * 三条假卖点(内容早已全站免费,"模型完整概率"功能不存在),与 pricing 页口径
+ * 对齐;删除英文 eyebrow 装饰;微信登录未开放态补充公众号关注入口作为过渡。
  */
 
 import { Suspense, useEffect, useState } from "react";
@@ -31,8 +35,10 @@ import {
   type MeResponse,
   type PasswordLoginResponse,
 } from "@/lib/api-v1";
+import Image from "next/image";
 import { ENV_TITLE, ScanLoginCard, useEnv } from "@/components/auth/ScanLoginCard";
 import scanStyles from "@/components/auth/ScanLoginCard.module.css";
+import followStyles from "@/components/trust/WechatFollowCard.module.css";
 import styles from "./login.module.css";
 
 /** 与后端 service.is_safe_next_path 同规则:仅本站相对路径。 */
@@ -96,7 +102,7 @@ function PasswordLoginSection({ nextPath }: { nextPath: string }) {
         <button type="submit" className={styles.btnPrimary} disabled={busy}>
           {busy ? "登录中…" : "登录"}
         </button>
-        <p className={styles.note}>仅供站长通过 CLI 创建的管理员账号使用。</p>
+        <p className={styles.note}>管理员账号专用。</p>
       </form>
     </details>
   );
@@ -163,10 +169,9 @@ function LoginBody() {
   return (
     <main className={styles.page}>
       <div className={styles.titleGroup}>
-        <span className={styles.eyebrow}>WECHAT LOGIN</span>
         <h1 className={styles.title}>{pageTitle}</h1>
         <p className={styles.note}>
-          首次扫码即自动创建账号,无需填写手机号;登录完成后会返回刚才浏览的页面。
+          第一次扫码会自动建号，不用填手机号。登完自动回到你刚才那页。
         </p>
       </div>
 
@@ -188,11 +193,23 @@ function LoginBody() {
 
       {wechatEnabled === false ? (
         <section className={styles.card}>
-          <h2 className={styles.cardTitle}>微信登录暂未开放</h2>
+          <h2 className={styles.cardTitle}>扫码登录还在开通中</h2>
           <p className={styles.note}>
-            站点尚未开启微信登录(需要完成公众号配置)。开放后本页将提供微信扫码登录入口,
-            请稍后再试。
+            公众号那边的配置还没走完，暂时登不了。这段时间比赛数据、赔率、历史战绩都不用登录，
+            照常看。配好之后这页会直接出二维码。
           </p>
+          <p className={styles.note}>想在扫码开放时第一时间收到通知，可以先关注公众号。</p>
+          <div className={followStyles.qrBox}>
+            <Image
+              src="/brand/wechat-mp-qr.png"
+              alt="欧赢 ALLWIN 公众号二维码"
+              width={160}
+              height={160}
+              className={followStyles.qr}
+              unoptimized
+            />
+            <span className={followStyles.qrHint}>微信扫码关注</span>
+          </div>
         </section>
       ) : env === null ? (
         <ScanCardSkeleton />
@@ -201,20 +218,17 @@ function LoginBody() {
       )}
 
       <section className={styles.perksBlock}>
-        <h2 className={styles.perksTitle}>登录后可免费查看</h2>
-        <ul className={styles.perks}>
-          <li>全部联赛数据(含冷门赛事)</li>
-          <li>模型完整概率(主胜 / 平局 / 客胜)</li>
-          <li>完整赔率时间线与历史战绩</li>
-        </ul>
-        <p className={styles.perksFoot}>免费 · 不填手机号 · 不代购、不承诺收益;推荐与修正记录公开</p>
+        <p className={styles.perksTitle}>
+          登录只用于收藏、关注和每日精选授权。比赛数据、赔率和赛果不登录也能看全。
+        </p>
+        <p className={styles.perksFoot}>比赛数据、赔率、概率都不用登录，直接看。</p>
       </section>
 
       <PasswordLoginSection nextPath={nextPath} />
 
       <p className={styles.footNote}>
-        说明:当前版本仅支持微信登录,尚未接入短信/邮箱验证,暂不支持绑定备用恢复方式;
-        请妥善保管微信账号。登录即表示同意本站以内部账号 ID 关联你的微信身份标识。
+        现在只能用微信登录，短信和邮箱还没接，也就没有备用的找回方式，微信号别丢。
+        登录后我们只存一个内部账号 ID 跟你的微信对应，不读昵称和头像。
       </p>
     </main>
   );
@@ -226,7 +240,6 @@ export default function LoginPage() {
       fallback={
         <main className={styles.page}>
           <div className={styles.titleGroup}>
-            <span className={styles.eyebrow}>WECHAT LOGIN</span>
             <h1 className={styles.title}>登录</h1>
           </div>
           <ScanCardSkeleton />

@@ -1,0 +1,62 @@
+.wrap {
+  width: 100%;
+}
+
+/* 吸顶锚点导航条(2026-08-23 单栏重排,取代原来的横向 tab 切换)——
+ * 停在 SiteNav 下方,不叠在它上面(SiteNav.module.css 的 z-index 是 50,
+ * 这里必须更小;top 跟随 SiteNav .inner 在两档断点下的真实高度)。 */
+.anchorNav {
+  position: sticky;
+  top: 62px;
+  z-index: 40;
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 20px;
+  padding: 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.anchorNav::-webkit-scrollbar {
+  display: none;
+}
+
+.anchorNav a {
+  flex: none;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.anchorNav a:hover,
+.anchorNav a:focus-visible {
+  color: var(--brand-teal);
+  background: var(--surface-2);
+}
+
+@media (max-width: 640px) {
+  .anchorNav {
+    top: 52px;
+  }
+}
+
+/* 锚点跳转目标——scroll-margin-top 让滚动定位停在吸顶导航条下方,
+ * 而不是被它遮住标题。 */
+.jumpTarget {
+  scroll-margin-top: 108px;
+}
+
+@media (max-width: 640px) {
+  .jumpTarget {
+    scroll-margin-top: 96px;
+  }
+}

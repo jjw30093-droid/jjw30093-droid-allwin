@@ -74,6 +74,16 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
+  /* typography scale：标题字号，替代各页各写一遍 */
+  --fs-h1: 22px; /* 页面级大标题，如 /matches 的"比赛" */
+  --fs-h2: 16px; /* 区块级标题，如"重点比赛""近期比赛" */
+  --fs-h3: 13.5px; /* 子区块标题 */
+  /* layout：页面留白与卡片内边距，替代各页各写一遍的 12px/16px/20px */
+  --page-gutter: 12px;
+  --card-pad: 16px;
+  /* 底部导航栏真实高度(58px,见 SiteNav.module.css .bottomNav 的 min-height)
+   * + 安全区 + 16px 视觉间距，替代全站散落的 calc(88px + env(safe-area-inset-bottom)) */
+  --bottom-nav-clearance: calc(58px + env(safe-area-inset-bottom) + 16px);
 }
 
 html[data-theme="dark"] {
@@ -129,6 +139,14 @@ html[data-theme="dark"] {
 
 html {
   background: var(--bg);
+}
+
+/* 比赛详情页吸顶锚点导航条(MatchPreTabs)靠这个做平滑滚动;
+ * 尊重"减少动态效果"系统偏好时退回瞬间跳转。 */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 html,

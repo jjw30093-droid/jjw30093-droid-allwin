@@ -332,7 +332,7 @@ describe("空态:日期已过去但停在赛程视图时,给出到当天赛果�
     // 只看空态框内部:更多筛选里的「已完赛」状态 chip 本来就带 status=finished,
     // 它是常设筛选控件,不是这条空态出口。
     const emptyBox = Array.from(container.querySelectorAll("div")).find((d) =>
-      d.textContent?.startsWith("没有符合当前筛选条件的比赛"),
+      d.textContent?.startsWith("这几个条件凑一起，一场都没有。"),
     )!;
     expect(emptyBox).toBeTruthy();
     expect(emptyBox.querySelectorAll("a")).toHaveLength(0);

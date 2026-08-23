@@ -29,7 +29,7 @@
 }
 
 .chipActive {
-  color: #2a1b06;
+  color: #fff;
   background: var(--gold-grad);
   font-weight: 700;
   border-color: transparent;

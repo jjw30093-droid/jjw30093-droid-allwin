@@ -18,6 +18,7 @@
 import type { ReactNode } from "react";
 import { formatBeijingDateTime, TEAM_STAT_LABELS } from "@/components/matches/zh";
 import type { MarketCard as MarketCardData } from "@/lib/api-v1";
+import { formatPct } from "@/lib/format";
 import styles from "./MarketCard.module.css";
 
 const DRIVER_LABEL: Record<string, string> = Object.fromEntries(
@@ -41,10 +42,14 @@ function fmt(v: number | null | undefined, digits = 1): string {
 function lineEquivalenceNote(card: MarketCardData): string | null {
   const { calibration_line, line } = card;
   if (calibration_line == null || calibration_line === line) return null;
+  // card.market 此处恒为 "corners" 或 "yellow_cards"(唯二会走到整数线等价
+  // 映射的市场,见 backend/queries/market_cards.py::_calibration_line 文档
+  // 字符串)——这里按市场分别叫"角球"/"罚牌",不硬编码成"角球"一种说法,
+  // 否则罚牌卡片会显示一句关于角球的错误说明。
+  const noun = card.market === "corners" ? "角球" : "罚牌";
   return (
-    `本场盘口线是 ${line},实际取整数,「超过 ${line} 个」与「超过 ${calibration_line} 个」是同一件事,` +
-    `因此本卡采用 ${calibration_line} 线的回测口径。真实盘口在整数线上通常有走水(打平退款),` +
-    `本站只统计「是否超过该线」,不含走水口径。`
+    `${noun}是整数，${line} 和 ${calibration_line} 其实是同一条线，下面按 ${calibration_line} 的历史数据算。` +
+    `整数盘口会走水，这里的命中率不含走水。`
   );
 }
 
@@ -96,7 +101,7 @@ type DegradedReason = {
 function noCalibrationNote(card: MarketCardData): string {
   if (card.no_calibration_reason === "line_not_calibrated") {
     const calibratedLines = card.lines.map((ln) => ln.line).join(" / ");
-    return `本场采用的是数据源的真实盘口线 ${card.line},我们只对 ${calibratedLines} 做过历史回测,这条线没有,因此不给倾向。`;
+    return `这场的真实盘口是 ${card.line}，我们只回测过 ${calibratedLines}，这条没验过，所以不给倾向。`;
   }
   return "该盘口线暂无历史回测数据,仅展示两队近期数据对比。";
 }
@@ -107,14 +112,14 @@ function degradedReason(card: MarketCardData): DegradedReason | null {
     return {
       pill: "样本不足",
       cellNote: "历史数据补采中",
-      fullNote: "该联赛历史数据补采中,暂无法给出数据倾向。",
+      fullNote: "这个联赛的历史数据还没补齐，先不给倾向。",
     };
   }
   if (data_quality === "insufficient_sample") {
     return {
       pill: "样本不足",
       cellNote: "场次不足",
-      fullNote: "两队近期同联赛历史场次不足,暂无法给出数据倾向。",
+      fullNote: "两队打过的场次还不够多，先不给倾向。",
     };
   }
   if (signal_grade == null) {
@@ -127,7 +132,7 @@ function degradedReason(card: MarketCardData): DegradedReason | null {
       : {
           pill: "未标定",
           cellNote: "样本外测试不稳定",
-          fullNote: "有历史数据,但这个盘口线在样本外测试中不够稳定,暂不给出倾向,仅展示数据对比。",
+          fullNote: "这条线的历史命中率不够稳，不给方向，只放两队的数据。",
         };
   }
   return null;
@@ -168,7 +173,7 @@ export function MarketCard({ card }: { card: MarketCardData }) {
                 不给方向词(2026-08-21 站长拍板:空白态别再放两个空话)。 */}
             <div className={styles.factCell}>
               <span className={`${styles.factValue} num`}>{card.estimate}</span>
-              <span className={styles.factCaption}>两队近10场合计</span>
+              <span className={styles.factCaption}>两队近 10 场合计</span>
             </div>
             <div className={styles.factCell}>
               <span className={`${styles.factValue} num`}>
@@ -202,7 +207,7 @@ export function MarketCard({ card }: { card: MarketCardData }) {
             </div>
             <div className={styles.hitCell}>
               <span className={`${styles.hitValue} num`} data-empty={card.hit_rate == null ? "true" : undefined}>
-                {card.hit_rate == null ? "—" : `${(card.hit_rate * 100).toFixed(0)}%`}
+                {card.hit_rate == null ? "—" : formatPct(card.hit_rate)}
               </span>
               <span className={styles.hitCaption}>历史命中率</span>
             </div>
@@ -214,25 +219,23 @@ export function MarketCard({ card }: { card: MarketCardData }) {
         <p className={styles.note}>{degraded.fullNote}</p>
       ) : (
         <p className={styles.note}>
-          历史上两队近况落在同一档位时,{card.line} 线
-          {card.market === "goals" ? "大球" : "过线"}的比例是{" "}
+          过去两队状态跟现在差不多的时候，{card.line} {card.market === "goals" ? "大球" : "过线"}开出过{" "}
           <b className={styles.noteStrong}>
-            <span className="num">{card.hit_rate != null ? `${(card.hit_rate * 100).toFixed(0)}%` : "—"}</span>
+            <span className="num">{card.hit_rate != null ? formatPct(card.hit_rate) : "—"}</span>
           </b>
-          (样本 <span className={`num ${styles.noteNum}`}>{card.sample_size ?? 0}</span> 场
-          {card.calibration_scope === "all_leagues" ? ",跨联赛合并统计" : ""})。这是历史同类样本的兑现比例,
-          <b className={styles.noteStrong}>不是这场比赛的胜率</b>。
+          （<span className={`num ${styles.noteNum}`}>{card.sample_size ?? 0}</span> 场{card.calibration_scope === "all_leagues" ? "，跨联赛一起算" : ""}）。这是历史比例，
+          <b className={styles.noteStrong}>不是这场的胜率</b>。
         </p>
       )}
 
       <details className={styles.details}>
-        <summary>为什么 · 驱动因子对比</summary>
+        <summary>为什么这么判断</summary>
         <table className={styles.driverTable}>
           <thead>
             <tr>
               <th>指标</th>
-              <th className="num">主队 近10场均值</th>
-              <th className="num">客队 近10场均值</th>
+              <th className="num">主队 近 10 场均值</th>
+              <th className="num">客队 近 10 场均值</th>
             </tr>
           </thead>
           <tbody>
@@ -246,13 +249,13 @@ export function MarketCard({ card }: { card: MarketCardData }) {
           </tbody>
         </table>
 
-        <h4 className={styles.subheading}>对手侧:两队的对手在这些指标上让出多少</h4>
+        <h4 className={styles.subheading}>对手打成什么样</h4>
         <table className={styles.driverTable}>
           <thead>
             <tr>
               <th>指标</th>
-              <th className="num">主队对手 近10场均值</th>
-              <th className="num">客队对手 近10场均值</th>
+              <th className="num">主队对手 近 10 场均值</th>
+              <th className="num">客队对手 近 10 场均值</th>
             </tr>
           </thead>
           <tbody>
@@ -278,7 +281,7 @@ export function MarketCard({ card }: { card: MarketCardData }) {
               两队近 10 场自身历史均值合计 <span className="num">{card.estimate}</span>。
             </>
           )}
-          倾向来自离线历史回测,不构成投注建议;样本量不足 3 场的指标显示 &ldquo;—&rdquo;。
+          样本不足 3 场的指标显示「—」。
         </p>
 
         {card.lines.length > 0 && (
@@ -286,19 +289,19 @@ export function MarketCard({ card }: { card: MarketCardData }) {
             <h4 className={styles.subheading}>本市场各盘口线的历史回测</h4>
             {equivalenceNote && <p className={styles.foldNote}>{equivalenceNote}</p>}
             <p className={styles.foldNote}>
-              这是我们对该市场每条盘口线各自做过的离线回测记录,用于说明&ldquo;哪条线我们验证过、哪条没有&rdquo;。上方结论只看默认线,不因为别的线定级更好看就换线。
+              每条线我们都单独回测过，列在这儿是让你知道哪条验过、哪条没验。上面的结论只按默认那条线算，不挑好看的换。
             </p>
             <ul className={styles.linesList}>
               {card.lines.map((ln) => (
                 <li key={ln.line} className={styles.lineRow} data-default={ln.is_default ? "true" : undefined}>
                   <span className="num">{ln.line}</span>
                   <span>· {ln.signal_grade ?? "未定级"} ·</span>
-                  <span className="num">{ln.hit_rate != null ? `${(ln.hit_rate * 100).toFixed(0)}%` : "—"}</span>
+                  <span className="num">{ln.hit_rate != null ? formatPct(ln.hit_rate) : "—"}</span>
                   <span>
                     · 样本 <span className="num">{ln.sample_size ?? "—"}</span> 场
                   </span>
                   {ln.signal_grade == null && (
-                    <span className={styles.lineRowNote}>该线样本外测试不单调,不给方向性结论。</span>
+                    <span className={styles.lineRowNote}>这条线历史表现不稳，不给方向。</span>
                   )}
                 </li>
               ))}

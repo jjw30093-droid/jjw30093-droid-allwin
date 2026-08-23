@@ -1,0 +1,68 @@
+/* 根 404、比赛详情 404、路由级错误页共用的极简版式。
+ * 三个场景视觉上应该是同一件事("这条路走不通,去别的地方看"),
+ * 没必要各写一套样式。global-error.tsx 不引用这个文件——那一层
+ * 外部 CSS 不保证能加载,必须自带内联样式。 */
+
+.wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 96px 20px 120px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.desc {
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 5px 20px;
+  border-radius: var(--r-pill);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btnPrimary {
+  background: var(--brand-teal);
+  color: var(--paper-bright);
+}
+
+.btnPrimary:hover {
+  background: var(--gold-700);
+}
+
+.btnGhost {
+  background: var(--surface);
+  color: var(--ink-2);
+  border-color: var(--border);
+}
+
+.btnGhost:hover {
+  background: var(--surface-2);
+}

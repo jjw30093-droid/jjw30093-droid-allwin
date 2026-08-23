@@ -65,30 +65,36 @@ test("首页匿名可浏览", async ({ page }) => {
   // 概率条底部必须标注赔率观测时间(§6.2 不伪装:折算概率不是实时数据)
   await expect(featured.getByText("采集于")).toBeVisible();
 
-  // 今日更新状态:赛程/赔率/推荐三条独立时间戳(种子已产生真实赛程+推荐
-  // 记录,赔率库为空 → 该条如实显示"尚无记录",不得三条都用同一个假时间)
+  // 今日更新状态:2026-08-23 起首屏只常驻一行"赛程 · 赔率"摘要(赛程/赔率
+  // 两条时间戳合并展示),"推荐更新"不再放进这个区块——推荐是站长自己的
+  // 发布节奏,不是数据新鲜度指标。赛程/赔率任一进入 STALE/UNAVAILABLE 才
+  // 展开成逐行,种子数据两者皆正常,这里断言的是折叠态的常驻摘要。
   const freshness = page.getByTestId("freshness-line");
   await expect(freshness).toBeVisible();
-  await expect(freshness).toContainText("赛程更新");
-  await expect(freshness).toContainText("赔率更新");
-  await expect(freshness).toContainText("推荐更新");
+  await expect(freshness).toContainText("赛程");
+  await expect(freshness).toContainText("赔率");
+  await expect(freshness).not.toContainText("推荐更新");
 
   // 本周比赛列表(替代旧的横滑"其他比赛"+"近期赛程"重复区):不含重点场
   const weekList = page.getByTestId("this-week-matches");
   await expect(weekList).toBeVisible();
   await expect(weekList.locator(`a[href*="/matches/${seedMatchId()}"]`)).toHaveCount(0);
 
-  // 今日精选与近30天推荐记录模块(匿名聚合,无单据内容)
+  // 今日精选模块:2026-08-23 起与"近30天推荐记录"合并成一张卡,只保留一个
+  // 主 CTA,不再各自渲染标题——「近N天推荐记录」这个独立标题已被合并掉。
   await expect(page.getByRole("heading", { name: "今日精选" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /近\d+天推荐记录/ }),
-  ).toBeVisible();
+  ).toHaveCount(0);
 
   const bottomNav = page.getByTestId("mobile-bottom-nav");
   await expect(bottomNav).toBeVisible();
+  // "我的"2026-08-23 起恒定指向 /account(不论登录状态),由 /account 自己
+  // 处理匿名态展示(已验证该页面有 anonymous 分支,不是裸跳转/空白页),
+  // 不再是 authed ? "/account" : "/login" 这种在导航层判断认证状态的写法。
   await expect(bottomNav.getByRole("link", { name: "我的" })).toHaveAttribute(
     "href",
-    "/login",
+    "/account",
   );
 
   expect(
@@ -248,7 +254,10 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
   const id = seedMatchId();
 
   await page.goto(`/matches/${id}`);
-  await expect(page.getByRole("heading", { name: "数据倾向" })).toBeVisible();
+  // 板块标题 2026-08-23 从"数据倾向"改名"盘口参考"(内部类目名换成竞彩
+  // 用户实际会用的词);MarketCard 内部倾向格下方的小字 caption 仍叫
+  // "数据倾向",与这里的区块大标题是两处不同文本,互不影响。
+  await expect(page.getByRole("heading", { name: "盘口参考" })).toBeVisible();
 
   // 两张卡都要出现(2026-08-20 站长要求「数据倾向」板块只保留罚牌/角球,
   // 大小球不展示——backend/queries/market_cards.py::match_market_cards
@@ -262,17 +271,27 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
     await expect(page.getByText(`盘口线 ${line}`)).toBeVisible();
   }
 
-  // 罚牌在种子数据上是有效信号(★★,偏大),必须渲染倾向结论(2026-08-14
+  // 罚牌在种子数据上是有效信号(★★),必须渲染倾向结论(2026-08-14
   // 重设计:结论区是"偏大/偏小"大字 + "数据倾向"小字说明两个独立元素,
-  // 不再是"数据倾向:偏大"一句话),且明确不是投注建议措辞。此前"偏小"
-  // 断言来自已被移除的大小球卡(种子数据里唯一显示偏小的市场),角球在
-  // 种子数据上不单调、没有方向(见下方断言),移除大小球后页面上不应再有
-  // 任何"偏小"文案。
-  await expect(page.getByText("偏大")).toBeVisible();
-  await expect(page.getByText("偏小")).toHaveCount(0);
+  // 不再是"数据倾向:偏大"一句话),且明确不是投注建议措辞。
+  //
+  // 具体是"偏大"还是"偏小"不做硬编码断言:hit_rate 来自
+  // backend.eval.calibrate_markets 对核心库真实历史比赛的滚动回测(见该
+  // 模块文档字符串的方法论),种子脚本每次运行都会对着当时的真实累积数据
+  // 重新标定——这是故意的(CLAUDE.md 禁止编造模型表现/伪造回测样本),
+  // 不是"种子数据该固定却没固定"的 bug,所以罚牌这张卡具体落在偏大还是
+  // 偏小,会随生产数据量增长真实漂移,而且两个方向都不违反"有信号"这条
+  // 断言的本意。2026-08-21 实测已从最初断言的"偏大"变成"偏小",证实了
+  // 这个漂移是真实发生的,而不是假设。角球卡在种子数据上不单调、没有
+  // 方向(见下方断言);只要页面上"偏大"或"偏小"任一恰好出现一次,就说明
+  // 罚牌渲染了真实倾向且没有其它市场卡串入多余的方向文案。
+  const overCount = await page.getByText("偏大").count();
+  const underCount = await page.getByText("偏小").count();
+  expect(overCount + underCount).toBe(1);
   await expect(page.getByText("数据倾向").first()).toBeVisible();
-  // "推荐"不检测——"推荐待发布"是 QuickView 的合法状态文案,不是投注推荐,
-  // 检测那个词会和自己的功能打架;真正禁止的措辞是"必胜"/"稳赚"/"红单"。
+  // "推荐"本身不检测——每日精选相关的合法文案(如"每日精选需要单独授权")
+  // 会用到这个词,不是投注推荐,检测那个词会和自己的功能打架;真正禁止的
+  // 措辞是"必胜"/"稳赚"/"红单"。
   await expect(page.getByText("必胜")).toHaveCount(0);
   await expect(page.getByText("稳赚")).toHaveCount(0);
   await expect(page.getByText("红单")).toHaveCount(0);
@@ -342,12 +361,14 @@ test("详情页免费概率投影(API 层)+ 本场看点不渲染任何概率(UI
   await expect(page.getByText("25%")).toHaveCount(0);
 
   // 本场看点(先结论后证据):推荐存在性状态。
-  // 种子未发布任何推荐单 → 如实"推荐待发布",不得伪造已发布。
+  // 2026-08-23 改版:没有已发布精选时,"推荐待发布"这种内部发布流程状态
+  // 不再展示给用户(对用户没有信息量)——整个 quick-view 区块直接不渲染,
+  // 不是伪造已发布,也不是空话占位。种子未发布任何推荐单,所以这里断言
+  // 整个区块缺席。
   // 2026-08-14 重设计:内容分 tab(看点/数据/赔率)后,"查看详细数据↓"
   // 锚点已删除——不再有"往下滚"这件事,断言随之移除。
-  const quick = page.getByTestId("quick-view");
-  await expect(quick).toBeVisible();
-  await expect(quick.getByText("推荐待发布")).toBeVisible();
+  await expect(page.getByTestId("quick-view")).toHaveCount(0);
+  await expect(page.getByText("推荐待发布")).toHaveCount(0);
 });
 
 test("队徽走同源媒体路由:Web 源必须与 API 源返回同一张 PNG", async ({ request }) => {

@@ -126,7 +126,7 @@
 .championBadge {
   margin-left: 8px;
   font-size: 11px;
-  color: #2a1b06;
+  color: #fff;
   background: var(--gold-grad);
   border-radius: var(--r-pill);
   padding: 2px 8px;

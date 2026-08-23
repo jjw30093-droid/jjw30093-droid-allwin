@@ -57,7 +57,6 @@ function renderFeatured(featured: HomeMatchCard) {
       initialFeatured={featured}
       initialSecondary={[]}
       initialCounts={null}
-      initialFreshness={null}
       initialErrored={false}
     />,
   );
@@ -85,8 +84,7 @@ describe("重点卡「焦点战」标签", () => {
           initialFeatured={missing}
           initialSecondary={[]}
           initialCounts={null}
-          initialFreshness={null}
-          initialErrored={false}
+              initialErrored={false}
         />,
       ),
     ).not.toThrow();
