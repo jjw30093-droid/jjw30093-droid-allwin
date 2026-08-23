@@ -101,16 +101,22 @@ export const HALF_KIND_ZH: Record<string, string> = {
   AET: "加时赛结束",
 };
 
+// 2026-08-23 统一:AttemptSaved 目前无法区分"门将扑出"与"被后卫封堵"
+// (数据源原始字段带 isBlocked,但采集端尚未落库),此前 zh.ts 写"被扑出"、
+// ShotMapExplorer.tsx 写"被扑/被挡",同一页面两处措辞不一致。统一采用
+// 更诚实的"被扑/被挡"——采集端补上 isBlocked 后再拆分成两个准确的值。
 export const SHOT_OUTCOME_ZH: Record<string, string> = {
   Goal: "进球",
-  AttemptSaved: "被扑出",
+  AttemptSaved: "被扑/被挡",
   Miss: "偏出",
   Post: "中框",
 };
 
 export const SHOT_SITUATION_ZH: Record<string, string> = {
   RegularPlay: "运动战",
-  FastBreak: "快速反击",
+  // 与 backend/queries/matchup.py、backend/queries/team_style_preview.py
+  // 的 FastBreak="反击" 对齐(此前这里单独写"快速反击",站内两个叫法)。
+  FastBreak: "反击",
   SetPiece: "定位球",
   FromCorner: "角球",
   FreeKick: "任意球",
@@ -136,7 +142,14 @@ export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "nu
   { key: "expected_goals", label: "官方统计 xG", format: "num1" },
   // 同一来源、同一命名逻辑的射正版本(数据倾向卡片 Fix 3,大小球市场折叠区补充)。
   { key: "expected_goals_on_target", label: "官方统计 xGOT", format: "num1" },
-  { key: "total_shots", label: "射门", format: "num" },
+  // 2026-08-23 对照 FotMob 官方安卓包补充展示(此前已采集但从未渲染,
+  // 数据库实测覆盖率 100%)。三项 xG 拆分与"官方统计 xG"同一来源、同一
+  // 命名逻辑,只是拆到了进球来源这一维。
+  { key: "expected_goals_open_play", label: "运动战 xG", format: "num1" },
+  { key: "expected_goals_set_play", label: "定位球 xG", format: "num1" },
+  { key: "expected_goals_non_penalty", label: "非点球 xG", format: "num1" },
+  // 采纳 FotMob 官方措辞(与其安卓包资源名 total_shots 同 key 同中文)。
+  { key: "total_shots", label: "射门次数", format: "num" },
   { key: "shots_on_target", label: "射正", format: "num" },
   // 射门图/球队统计口径的"未射正"(§11.2 修内部枚举泄漏:此前缺中文标签,
   // 英文 key 会直接渲染给用户)。
@@ -145,12 +158,21 @@ export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "nu
   { key: "big_chance_missed", label: "错失绝佳机会", format: "num" },
   { key: "shots_inside_box", label: "禁区内射门", format: "num" },
   { key: "shots_outside_box", label: "禁区外射门", format: "num" },
-  // 己方射门被对方封堵的次数(进攻视角)。§11.2 修内部枚举泄漏:此前缺
-  // 中文标签,角球卡驱动因子会把 "blocked_shots" 原样渲染给用户。
-  { key: "blocked_shots", label: "封堵射门", format: "num" },
-  { key: "touches_opp_box", label: "对方禁区触球", format: "num" },
+  { key: "shots_woodwork", label: "击中门框", format: "num" },
+  // 己方射门被对方封堵的次数(进攻视角)。采纳 FotMob 官方措辞(与其安卓包
+  // 资源名 blocked_shots 同 key 同中文),同时与下面 shot_blocks(防守视角,
+  // "封堵对方射门")拉开攻防方向差异,不再是"封堵射门"/"封堵对方射门"这种
+  // 容易看错方向的一字之差。
+  { key: "blocked_shots", label: "射门被封堵", format: "num" },
+  // 采纳 FotMob 官方措辞(资源名 touches_opp_box,多一个"内"字消歧义)。
+  { key: "touches_opp_box", label: "对方禁区内触球", format: "num" },
+  { key: "passes", label: "传球总数", format: "num" },
   { key: "accurate_passes", label: "成功传球", format: "num" },
+  { key: "own_half_passes", label: "己方半场传球", format: "num" },
+  { key: "opposition_half_passes", label: "对方半场传球", format: "num" },
+  { key: "long_balls_accurate", label: "成功长传", format: "num" },
   { key: "accurate_crosses", label: "成功传中", format: "num" },
+  { key: "player_throws", label: "掷界外球", format: "num" },
   { key: "corners", label: "角球", format: "num" },
   { key: "tackles", label: "抢断", format: "num" },
   { key: "interceptions", label: "拦截", format: "num" },
@@ -161,7 +183,9 @@ export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "nu
   { key: "clearances", label: "解围", format: "num" },
   { key: "keeper_saves", label: "门将扑救", format: "num" },
   { key: "duel_won", label: "对抗成功", format: "num" },
+  { key: "ground_duels_won", label: "地面对抗成功", format: "num" },
   { key: "aerials_won", label: "争顶成功", format: "num" },
+  { key: "dribbles_succeeded", label: "成功过人", format: "num" },
   { key: "fouls", label: "犯规", format: "num" },
   { key: "offsides", label: "越位", format: "num" },
   { key: "yellow_cards", label: "黄牌", format: "num" },

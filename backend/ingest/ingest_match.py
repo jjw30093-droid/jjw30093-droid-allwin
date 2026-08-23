@@ -8,8 +8,13 @@ ingest_match.py — 抓取单场比赛详情并落库。
     - dim_match / dim_player: INSERT OR REPLACE(upsert)
     - fact_shotmap / fact_player_match_stats / fact_team_match_stats /
       fact_match_events / fact_match_lineup:
-      先 DELETE WHERE Match_ID=? 再插入,不依赖行级唯一键
-      (shotmap 等原始数据本身没有稳定的行 id)
+      先 DELETE WHERE Match_ID=? 再插入,不依赖行级唯一键。
+      2026-08-23 更正:此前这里写"shotmap 等原始数据本身没有稳定的行 id",
+      不准确——原始 payload 每脚射门都带 `id`(现已落库为 fact_shotmap.Shot_ID,
+      见 backend/migrations/core/0005_shotmap_raw_fields.sql),只是此前没
+      解析。整场 DELETE+INSERT 仍然是当前实现,没有改成按行 upsert——这不是
+      因为缺行键,是因为整场重新落库本身就足够简单可靠,不值得为了避免
+      重写全部行而引入更复杂的按行 diff 逻辑。
 """
 
 import argparse

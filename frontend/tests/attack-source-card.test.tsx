@@ -16,8 +16,8 @@ type SourceRow = components["schemas"]["MatchPreviewAttackSourceDTO"];
 describe("AttackSourceCard 部分 xG 缺失时的诚实展示", () => {
   it("全部来源都有 xG 时,卡头显示真实合计", () => {
     const rows: SourceRow[] = [
-      { label: "运动战", shots: 10, shot_pct: 66.7, xg: 1.2 },
-      { label: "反击", shots: 5, shot_pct: 33.3, xg: 0.8 },
+      { key: "RegularPlay", label: "运动战", shots: 10, shot_pct: 66.7, xg: 1.2 },
+      { key: "FastBreak", label: "反击", shots: 5, shot_pct: 33.3, xg: 0.8 },
     ];
     render(<AttackSourceCard teamName="测试队" rows={rows} note="备注" />);
     expect(screen.getByText(/15 脚射门/)).not.toBeNull();
@@ -26,8 +26,8 @@ describe("AttackSourceCard 部分 xG 缺失时的诚实展示", () => {
 
   it("某来源 xG 缺失时,卡头不得显示看似完整的合计数字", () => {
     const rows: SourceRow[] = [
-      { label: "运动战", shots: 10, shot_pct: 66.7, xg: 1.2 },
-      { label: "反击", shots: 5, shot_pct: 33.3, xg: null }, // 缺失,不是 0
+      { key: "RegularPlay", label: "运动战", shots: 10, shot_pct: 66.7, xg: 1.2 },
+      { key: "FastBreak", label: "反击", shots: 5, shot_pct: 33.3, xg: null }, // 缺失,不是 0
     ];
     const { container } = render(<AttackSourceCard teamName="测试队" rows={rows} note="备注" />);
     // 卡头合计(cardMeta,不是逐条明细里"运动战"自己那行合法的 xG 1.20)
@@ -41,8 +41,8 @@ describe("AttackSourceCard 部分 xG 缺失时的诚实展示", () => {
 
   it("某来源 xG 缺失时,xG 占比条不得只对已知来源归一化成 100%", () => {
     const rows: SourceRow[] = [
-      { label: "运动战", shots: 10, shot_pct: 66.7, xg: 1.2 },
-      { label: "反击", shots: 5, shot_pct: 33.3, xg: null },
+      { key: "RegularPlay", label: "运动战", shots: 10, shot_pct: 66.7, xg: 1.2 },
+      { key: "FastBreak", label: "反击", shots: 5, shot_pct: 33.3, xg: null },
     ];
     const { container } = render(<AttackSourceCard teamName="测试队" rows={rows} note="备注" />);
     // 两条成分条(射门 + xG)都在;xG 那条不应该把"运动战"的段拉到 100% 宽度——

@@ -118,7 +118,7 @@ def _e2e_style_profile(match: dict, cutoff: str) -> dict:
             "shots_on_target": ("射正", "次/场", "higher"),
             "box_touches_per_match": ("禁区触球", "次/场", "higher"),
             "corners_per_match": ("角球", "次/场", "higher"),
-            "accurate_crosses": ("准确传中", "次/场", "higher"),
+            "accurate_crosses": ("成功传中", "次/场", "higher"),
             "set_piece_goals": ("定位球进球", "球", "higher"),
             "xga_per_match": ("xGA", "/场", "lower"),
             "tackles": ("抢断", "次/场", "higher"),

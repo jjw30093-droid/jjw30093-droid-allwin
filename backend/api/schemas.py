@@ -1050,6 +1050,10 @@ class MatchPreviewStyleViewDTO(BaseModel):
 
 
 class MatchPreviewAttackSourceDTO(BaseModel):
+    # 稳定的 Situation 枚举原文(如 "RegularPlay",无法识别的来源为 "其他")。
+    # 2026-08-23 新增:此前前端只拿到中文 label 就当 key 用来查配色表,
+    # 后端改中文措辞会让配色静默掉回灰色兜底(未触发任何报错)。
+    key: str
     label: str
     shots: int
     shot_pct: float
@@ -1135,8 +1139,9 @@ class MatchPreviewMatchupSituationDTO(BaseModel):
     # 情境类型的 xG 统计里剔除(不是丢那一脚拿"部分已知"凑合计),用剩下的
     # "干净"场次重新算均值——own_xg_matches 就是这个干净场次数,可能小于
     # 比赛信息卡展示的窗口场次(profile.matches);own_xg_complete=False
-    # (真的没有任何干净场次可用)时恒为 None。box_shots 没有 xG 拆分,恒为
-    # None,不代表数据缺失。
+    # (真的没有任何干净场次可用)时恒为 None。box_shots 的 xG 来自坐标法
+    # 聚合(2026-08-23,约 98% 与官方射门次数计数一致,非官方直发字段),
+    # 与其余三类同一套完整性规则,不代表精度完全相同。
     own_xg_matches: Optional[int] = None
     conceded_shots_pg: Optional[float] = None
     conceded_xg_pg: Optional[float] = None
@@ -1145,8 +1150,8 @@ class MatchPreviewMatchupSituationDTO(BaseModel):
     # 验收返工二(独立复核第二轮,P1):显式声明这一类该用哪个字段判定
     # "关键对位",前端不得再用 `own_xg_pg ?? own_shots_pg` 隐式猜单位——
     # 那在 xG 不完整时会把射门次数当 xG 用,去跟 xG 口径的联赛基准比
-    # (真实复现:比赛 5868022/球队 10205)。运动战/反击/定位球恒为 "xg",
-    # 禁区内射门(没有 xG 拆分)恒为 "shots"。
+    # (真实复现:比赛 5868022/球队 10205)。四类(含禁区内射门)恒为 "xg"
+    # (2026-08-23 起,禁区内射门的 xG 改用坐标法聚合,不再用 "shots")。
     comparison_metric: str = "xg"
     # 己方/对手的"比较值"——xg 类型时就是 own_xg_pg/conceded_xg_pg 本身
     # (且要求 xg_complete),shots 类型时就是 own_shots_pg/conceded_shots_pg。

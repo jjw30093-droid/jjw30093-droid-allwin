@@ -123,9 +123,9 @@ def _staged_core_migrations(tmp_path: Path, names: tuple[str, ...]) -> Path:
 
 def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
     db_path = tmp_path / "fresh.db"
-    # 4 = 0001..0004(0004_venue_weather.sql 2026-08-20 新增;这个数字随 core
-    # migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 4
+    # 5 = 0001..0005(0005_shotmap_raw_fields.sql 2026-08-23 新增;这个数字随
+    # core migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 5
     assert schedule.apply_schedule_state_schema_v1(db_path) == 0
     conn = sqlite3.connect(db_path)
     try:
@@ -140,6 +140,7 @@ def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
             (2, "0002_kickoff_provenance.sql"),
             (3, "0003_schedule_state_v1.sql"),
             (4, "0004_venue_weather.sql"),
+            (5, "0005_shotmap_raw_fields.sql"),
         ]
     finally:
         conn.close()
@@ -162,11 +163,12 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
     conn.commit()
     conn.close()
 
-    # 2 = 0003(schedule state,不碰 dim_match)+ 0004(venue/weather,给
-    # dim_match 追加 4 个可空列)。本测试真正要守住的不变量是"已有列/已有行
-    # 原样不变",不是"dim_match 列数恒定不变"——0004 本身就是要给它加列的
-    # migration,这里只验证它是纯追加、不改写/不删除已有列。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 2
+    # 3 = 0003(schedule state,不碰 dim_match)+ 0004(venue/weather,给
+    # dim_match 追加 4 个可空列)+ 0005(shotmap raw fields,不碰 dim_match,
+    # 只给 fact_shotmap 建骨架+加列)。本测试真正要守住的不变量是"已有列/
+    # 已有行原样不变",不是"dim_match 列数恒定不变"——0004 本身就是要给它
+    # 加列的 migration,这里只验证它是纯追加、不改写/不删除已有列。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 3
     conn = sqlite3.connect(db_path)
     try:
         after_columns = conn.execute("PRAGMA table_info(dim_match)").fetchall()
@@ -185,7 +187,7 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
         conn.close()
 
 
-def test_current_real_v1_shape_upgrades_through_0002_0003_0004_in_tmp(tmp_path):
+def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_in_tmp(tmp_path):
     staged = _staged_core_migrations(
         tmp_path,
         ("0001_dim_match_kickoff.sql",),
@@ -201,7 +203,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_in_tmp(tmp_path):
     conn.commit()
     conn.close()
 
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 3
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 4
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -213,7 +215,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_in_tmp(tmp_path):
         ).fetchone() == ("date_only", None)
         assert conn.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
-        ).fetchall() == [(1,), (2,), (3,), (4,)]
+        ).fetchall() == [(1,), (2,), (3,), (4,), (5,)]
     finally:
         conn.close()
 

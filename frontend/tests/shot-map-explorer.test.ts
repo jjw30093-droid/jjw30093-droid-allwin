@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { officialOnTargetApplies, officialOnTargetSum } from "@/components/charts/ShotMapExplorer";
+import {
+  filterShotRows,
+  officialOnTargetApplies,
+  officialOnTargetSum,
+} from "@/components/charts/ShotMapExplorer";
 
 // 最小可用的 ShotMapData fixture:两支球队各打了两场,team 1 主场对 team 2、
 // team 1 客场对 team 3。official_stats 覆盖三支球队在这几场的官方口径。
@@ -92,5 +96,21 @@ describe("officialOnTargetApplies(官方射正是否可用于当前筛选)", () 
 
   it("多个子筛选同时生效仍不可用", () => {
     expect(officialOnTargetApplies("on_target", "first", ["Penalty"], "Header")).toBe(false);
+  });
+});
+
+describe("filterShotRows 排除点球大战(2026-08-23 对齐 ShotMapChart.tsx 口径)", () => {
+  it("PenaltyShootout 的射门不计入,即使命中球队/场次筛选", () => {
+    const withShootout = {
+      ...data,
+      recent_sets: { "1": { same_league: { matched_games: 2, match_ids: [100, 101] } } },
+      shots: [
+        { match_id: 100, team_id: 1, period: "FirstHalf", outcome: "Goal", x: 90, y: 34, xg: 0.5, minute: 10, situation: "RegularPlay", shot_type: "RightFoot" },
+        { match_id: 100, team_id: 1, period: "PenaltyShootout", outcome: "Goal", x: 100, y: 34, xg: null, minute: null, situation: "Penalty", shot_type: "RightFoot" },
+      ],
+    };
+    const rows = filterShotRows(withShootout as never, 1, "same_league", "created", "all");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].period).toBe("FirstHalf");
   });
 });

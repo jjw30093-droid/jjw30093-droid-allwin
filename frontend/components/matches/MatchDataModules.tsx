@@ -23,18 +23,23 @@ type SourceRow = components["schemas"]["MatchPreviewAttackSourceDTO"];
  * 页面背景(#07161e)几乎同色,色块会糊到看不见——改用 --brand-blue,
  * 深浅两色都是明确可辨识的中亮度蓝(同 TeamStyleQuadrant.tsx 客队色的
  * 修复依据一致)。其余条目是固定中间调字面量色,深浅两色对比度本身已够,
- * 不需要改。 */
+ * 不需要改。
+ *
+ * 2026-08-23:改成用后端下发的稳定 Situation 枚举原文(r.key)当 key,
+ * 不再用中文 label——此前用中文当 key 时,任何一次改中文措辞(比如
+ * team_style_preview.py 的 _SITUATION_ZH)都会让配色静默掉回灰色兜底,
+ * 不会报错也不会被测试抓到。 */
 const SOURCE_COLOR: Record<string, string> = {
-  运动战: "var(--brand-blue)",
-  反击: "var(--brand-teal)",
-  角球: "#3f8781",
-  定位球: "#6b9e99",
-  个人突破: "#4f6f79",
-  点球: "#2a5a63",
+  RegularPlay: "var(--brand-blue)",
+  FastBreak: "var(--brand-teal)",
+  FromCorner: "#3f8781",
+  SetPiece: "#6b9e99",
+  IndividualPlay: "#4f6f79",
+  Penalty: "#2a5a63",
   其他: "#8fa3a3",
 };
 
-const colorOf = (label: string) => SOURCE_COLOR[label] ?? "#8fa3a3";
+const colorOf = (key: string) => SOURCE_COLOR[key] ?? "#8fa3a3";
 
 function Bar({
   rows,
@@ -58,7 +63,7 @@ function Bar({
         <span
           key={r.label}
           className={styles.barSeg}
-          style={{ width: `${((pick(r) as number) / total) * 100}%`, background: colorOf(r.label) }}
+          style={{ width: `${((pick(r) as number) / total) * 100}%`, background: colorOf(r.key) }}
           title={`${r.label} ${(((pick(r) as number) / total) * 100).toFixed(1)}%`}
         />
       ))}
@@ -112,7 +117,7 @@ export function AttackSourceCard({
       <ul className={styles.sourceList}>
         {rows.map((r) => (
           <li key={r.label} className={styles.sourceRow}>
-            <span className={styles.swatch} style={{ background: colorOf(r.label) }} />
+            <span className={styles.swatch} style={{ background: colorOf(r.key) }} />
             <span className={styles.sourceLabel}>{r.label}</span>
             <span className={`${styles.sourceShots} num`}>
               {r.shots} 脚 · {r.shot_pct.toFixed(1)}%

@@ -1,9 +1,23 @@
-"""指标注册表 —— 赛前可视化(PREMATCH_MOBILE_DATA_VISUALIZATION_V2)的唯一真源。
+"""指标注册表 —— 赛前可视化(PREMATCH_MOBILE_DATA_VISUALIZATION_V2)的设计态元数据。
+
+⚠️ 2026-08-23 对照 FotMob 安卓包审计核实的现状:本文件**没有真正被查询层
+或前端接线**。`backend/queries/attack_chain.py` / `possession_control.py` /
+`defensive_pressure.py` / `matchup.py` 各自独立实现了自己的中文名、缺失策略、
+最小样本——与本文件里声明的同名指标已经出现分叉(如 `touches_opp_box` 这里
+写"禁区触球",`frontend/components/matches/zh.ts` TEAM_STAT_LABELS 写"对方
+禁区内触球")。除本文件开头两行文档注释和 `scripts/recompute_metric_coverage.py`
+外,没有任何代码 import 本模块的 `REGISTRY`/`get_metric`。
+
+不要把本文件当成运行时真源来查——它是当初设计阶段写的目标态文档,
+下面这句"查询层与前端都从这里取元数据"目前不是事实。如果要让它重新
+成为真源,需要让上述查询模块改为从这里读取标签/口径,而不是各自硬编码;
+在那之前,改动任何一处指标定义都必须同时检查上述四个查询模块与
+frontend/components/matches/zh.ts 是否也需要跟着改,本文件不会自动同步。
 
 不把数据库字段直接推到页面:每个要在图表里出现的指标都必须先在这里声明
 canonical_key / 中文名 / 中文一句话解释 / 分子分母 / 单位 / 方向 / 最小样本 /
 缺失策略 / 适用位置 / 主客场敏感性 / 对手校正策略 / 覆盖率 / 来源字段 /
-方法论版本——查询层与前端都从这里取元数据,不各自维护一份可能漂移的说明。
+方法论版本——这是设计意图,尚未接线到运行时。
 
 四类语义(决定页面措辞,§一 措辞纪律):
 - performance:可比优劣的表现指标(如 xG、射正数)。

@@ -161,6 +161,15 @@ SHOTMAP_COLUMNS = [
     ("Situation", "TEXT"),
     ("Outcome", "TEXT"),
     ("Shot_Type", "TEXT"),
+    # 2026-08-23 见 backend/migrations/core/0005_shotmap_raw_fields.sql——
+    # 原始 payload 早就带这些字段,此前解析器没取。旧场次(未重新抓取)
+    # 这些列恒为 NULL,不是"这场比赛没有这个数据"。
+    ("Shot_ID", "INTEGER"),
+    ("Is_Blocked", "INTEGER"),
+    ("Is_On_Target", "INTEGER"),
+    ("Is_From_Inside_Box", "INTEGER"),
+    ("Minute_Added", "INTEGER"),
+    ("Keeper_ID", "TEXT"),
 ]
 
 

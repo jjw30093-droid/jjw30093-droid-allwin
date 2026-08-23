@@ -11433,6 +11433,10 @@
    },
    "MatchPreviewAttackSourceDTO": {
     "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
      "label": {
       "type": "string",
       "title": "Label"
@@ -11459,6 +11463,7 @@
     },
     "type": "object",
     "required": [
+     "key",
      "label",
      "shots",
      "shot_pct"

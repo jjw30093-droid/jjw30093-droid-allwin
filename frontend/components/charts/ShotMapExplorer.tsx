@@ -144,6 +144,10 @@ export function filterShotRows(
 ): Shot[] {
   const matchIds = new Set(data.recent_sets[String(teamId)]?.[scope]?.match_ids ?? []);
   return data.shots.filter((shot) => {
+    // 点球大战不属于比赛 xG/射门统计,与 ShotMapChart.tsx(单场射门图)
+    // 的排除口径对齐——此前只有 ShotMapChart 排除,这里不排除,同一个站
+    // 的两张射门图对"什么算一脚射门"口径不一致(2026-08-23 对照修复)。
+    if (shot.period === "PenaltyShootout") return false;
     if (!matchIds.has(shot.match_id)) return false;
     if (matchId !== undefined && shot.match_id !== matchId) return false;
     if (mode === "created" ? shot.team_id !== teamId : shot.team_id === teamId) return false;
@@ -220,14 +224,16 @@ function arcPoints(
   return points;
 }
 
+// 真实枚举只有 4 个值(Goal/AttemptSaved/Miss/Post,库内实测无 Blocked——
+// FotMob 把"被后卫封堵"也计入 AttemptSaved,见下),与
+// frontend/components/matches/zh.ts 的 SHOT_OUTCOME_ZH 保持同一套措辞。
 function outcomeLabel(outcome: string | null): string {
   if (outcome === "Goal") return "进球";
   // FotMob 原始数据把"门将扑出"和"被后卫封堵"都记成 AttemptSaved,单次
   // 射门层面无法精确区分——不能标"射正被扑",那是编出来的精确度。
   if (outcome === "AttemptSaved") return "被扑/被挡";
   if (outcome === "Post") return "击中门框";
-  if (outcome === "Blocked") return "射门被封堵";
-  if (outcome === "Miss") return "未射正";
+  if (outcome === "Miss") return "偏出";
   return "结果未标注";
 }
 

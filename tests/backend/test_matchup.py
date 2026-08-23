@@ -20,12 +20,18 @@ def _stats(conn, match_id, team_id, **fields):
     )
 
 
-def _shot(conn, match_id, team_id, situation, xg):
+def _shot(conn, match_id, team_id, situation, xg, *, x=None, y=None):
     conn.execute(
-        "INSERT INTO fact_shotmap (Match_ID, Player_ID, Team_ID, Minute, Period, Situation, xG)"
-        " VALUES (?, 'p1', ?, 10, 'FirstHalf', ?, ?)",
-        (match_id, team_id, situation, xg),
+        "INSERT INTO fact_shotmap (Match_ID, Player_ID, Team_ID, Minute, Period, Situation, xG, X_Coord, Y_Coord)"
+        " VALUES (?, 'p1', ?, 10, 'FirstHalf', ?, ?, ?, ?)",
+        (match_id, team_id, situation, xg, x, y),
     )
+
+
+# 标准 FIFA 禁区内一点(与 backend/queries/matchup.py 的 _BOX_X_MIN/_BOX_Y_MIN/
+# _BOX_Y_MAX 同一套几何,X_Coord>=88.5、Y_Coord 在 [13.84, 54.16] 之间)。
+_BOX_POINT = {"x": 95.0, "y": 34.0}
+_OUTSIDE_BOX_POINT = {"x": 60.0, "y": 34.0}
 
 
 def _seed_window(conn, team_id, *, n=10):
@@ -76,7 +82,11 @@ class TestTeamMatchupProfile:
         box = by_key["box_shots"]
         assert box["own_shots_pg"] == 6.0
         assert box["conceded_shots_pg"] == 4.0
-        assert box["own_xg_pg"] is None  # 禁区内射门这一行本来就不产出 xG
+        # 射门次数来自官方 shots_inside_box 字段;fixture 里没有任何射门带
+        # 坐标,坐标法(own_xg_pg)因此没有干净场次可用,如实回退 None——
+        # 不代表"禁区内射门不产出 xG"(见下面 test_box_xg_from_coordinates)。
+        assert box["own_xg_pg"] is None
+        assert box["own_xg_complete"] is False
 
     def test_no_history_returns_unavailable_with_empty_situations(self, data_dir):
         conn = connect_rw("core")
@@ -136,6 +146,36 @@ class TestTeamMatchupProfile:
         assert regular["own_xg_complete"] is False
         assert regular["own_xg_pg"] is None
         assert regular["own_xg_matches"] is None
+
+    def test_box_xg_from_coordinates(self, data_dir):
+        """2026-08-23 FotMob 官方安卓包核实:FotMob 自己也没有"禁区内 xG"这个
+        指标,但坐标法(标准 FIFA 禁区几何)已用 25,984 个真实队场样本对官方
+        shots_inside_box 计数验证 97.97% 完全一致——因此 allwin 改用坐标法
+        从 fact_shotmap 聚合禁区内 xG,与官方射门次数字段并行、互不覆盖。
+        这里验证:禁区内(_BOX_POINT)的射门计入 xG,禁区外(_OUTSIDE_BOX_POINT)
+        的射门(哪怕 Situation 也是 RegularPlay)不计入。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        for j in range(5):
+            mid = TEAM * 10 + j
+            opp = 9700 + j
+            insert_match(conn, mid, league_id=LEAGUE, date=f"2025-01-{10+j:02d}",
+                         home_id=TEAM, away_id=opp, home="队A", away="对手",
+                         status="Finish", home_score=1, away_score=0,
+                         kickoff_at_utc=f"2025-01-{10+j:02d}T12:00:00Z")
+            _shot(conn, mid, TEAM, "RegularPlay", 0.4, **_BOX_POINT)
+            _shot(conn, mid, TEAM, "RegularPlay", 9.0, **_OUTSIDE_BOX_POINT)
+            _stats(conn, mid, TEAM, shots_inside_box=1.0)
+        conn.commit()
+
+        result = team_matchup_profile(conn, TEAM, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
+        box = next(s for s in result["situations"] if s["key"] == "box_shots")
+        assert box["own_shots_pg"] == 1.0  # 官方字段,不受坐标法影响
+        assert box["own_xg_complete"] is True
+        assert box["own_xg_matches"] == 5
+        assert box["own_xg_pg"] == 0.4  # 只计入禁区内那一脚,禁区外的 9.0 被排除
+        assert box["comparison_metric"] == "xg"
+        assert box["own_comparison_value"] == 0.4
 
 
 def _seed_league_baseline_team(conn, team_id, *, regular_xg_per_shot=0.3, n=10, start_id=8000):
@@ -289,8 +329,11 @@ class TestLeagueSituationBaseline:
         assert regular["comparison_complete"] is True
 
         box = next(s for s in result["situations"] if s["key"] == "box_shots")
-        assert box["comparison_metric"] == "shots"
-        assert box["own_comparison_value"] == box["own_shots_pg"]
+        # 2026-08-23 起禁区内射门的 xG 改用坐标法,comparison_metric 恒为
+        # "xg"(与其它三类一致);这份 fixture 没有坐标数据,own_comparison_value
+        # 因此是 None,不再借用 own_shots_pg。
+        assert box["comparison_metric"] == "xg"
+        assert box["own_comparison_value"] is None
 
     def test_real_data_shape_incomplete_xg_never_falls_back_to_shots(self, data_dir):
         """真实数据复现(比赛 5868022 / 球队 10205,独立复核第二轮报告的

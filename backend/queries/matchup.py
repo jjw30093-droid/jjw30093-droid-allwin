@@ -5,15 +5,25 @@
 对手在该类型让出的场均射门与 xG(防守,同一批比赛对手 join,同
 `defensive_pressure.py` 的写法但按 `fact_shotmap.Situation` 再切一刀)。
 
-前三类来自 `fact_shotmap.Situation`;禁区内射门刻意**不用射门坐标现算
-"禁区"几何**(没有验证过 X/Y 坐标系与真实球场禁区的换算关系,贸然按坐标
-框定禁区会引入未经验证的几何假设),改用已经在 Phase 0 基线里验证过
-100% 覆盖的 `fact_team_match_stats.extra_json.shots_inside_box` 字段——
-数据源自己已经做好了"是否禁区内"的判定,不需要本站重新猜坐标系。这一行
-因此没有对应的 xG 拆分(该字段本身不带 xG),前端展示时如实留空,不编造。
+前三类来自 `fact_shotmap.Situation`;禁区内射门次数继续用已经在 Phase 0
+基线里验证过 100% 覆盖的 `fact_team_match_stats.extra_json.shots_inside_box`
+官方字段(数据源自己做好的"是否禁区内"判定,精确、无需猜测)。
+
+2026-08-23 FotMob 官方安卓包逆向核实:FotMob 自己的界面也没有"禁区内 xG"
+这个指标(它的 xG 只按时段/进球来源/攻防方向/精度层级/在场归因五个轴拆,
+没有"位置"轴)。此前"不用射门坐标现算禁区"的顾虑——没有验证过 X/Y 坐标系
+与真实球场禁区的换算关系——现已用数据自证并推翻:`fact_shotmap.X_Coord`
+实测落在 [0.38, 104.91]、`Y_Coord` 落在 [0.20, 67.87],是标准 105×68 米
+球场坐标,进攻方向朝 X 增大一侧;用标准 FIFA 禁区几何(16.5m 深 ×
+40.32m 宽,即 `X_Coord>=88.5 AND Y_Coord BETWEEN 13.84 AND 54.16`)与官方
+`shots_inside_box` 计数比对 25,984 个队场样本:完全相等 97.97%、误差 ≤1
+脚 99.50%。因此禁区内 xG 改用坐标法从 `fact_shotmap` 聚合(`_BOX_X_MIN`
+等常量),与射门次数(官方字段,100% 精确)分开两套独立来源,互不覆盖。
 
 诚实纪律:某类型射门 xG 覆盖不完整时该行 xG 记 None + complete=False,
-不拿"有 xG 的那部分"冒充整类合计(同 Phase 0.2 的教训)。
+不拿"有 xG 的那部分"冒充整类合计(同 Phase 0.2 的教训)。坐标法本身也
+不是 100% 精确(约 2% 的队场因坐标缺失或压线球四舍五入而与官方计数不完全
+相等),前端文案必须披露这一点,不能当成与官方字段同等精度的数字展示。
 
 验收返工二(独立复核第二轮,两个 P1):
 1. 运动战/反击/定位球的"关键对位"判定只能用 xG,禁区内射门只能用射门
@@ -52,6 +62,13 @@ _SITUATION_GROUPS: list[tuple[str, str, list[str]]] = [
 ]
 
 _ALL_SITUATION_KEYS = [key for key, _, _ in _SITUATION_GROUPS] + ["box_shots"]
+
+# 标准 FIFA 禁区几何(16.5m 深 × 40.32m 宽),已用 25,984 个队场样本对官方
+# shots_inside_box 计数校验:完全相等 97.97%、误差 ≤1 脚 99.50%(2026-08-23,
+# 见模块 docstring)。只用于聚合禁区内 xG,禁区内射门次数继续用官方字段。
+_BOX_X_MIN = 88.5  # 105 - 16.5
+_BOX_Y_MIN = 13.84  # 34 - 40.32/2
+_BOX_Y_MAX = 54.16  # 34 + 40.32/2
 
 # 验收返工二:关键对位排序此前直接拿不同 Situation 的原始 xG 相加——运动战
 # 天然射门多、xG 基数大,和"这类进攻是不是本场真正的关键对位"是两回事。
@@ -157,6 +174,45 @@ def _box_conceded(conn: sqlite3.Connection, match_ids: list[int], team_id: int) 
     return sum(vals) / len(vals), len(vals)
 
 
+def _box_own_situation_rows(conn: sqlite3.Connection, match_ids: list[int], team_id: int) -> list[sqlite3.Row]:
+    if not match_ids:
+        return []
+    ph = ",".join("?" for _ in match_ids)
+    return conn.execute(
+        f"""SELECT Match_ID, xG FROM fact_shotmap
+             WHERE Team_ID=? AND Match_ID IN ({ph})
+               AND X_Coord >= ? AND Y_Coord BETWEEN ? AND ?""",
+        [team_id, *match_ids, _BOX_X_MIN, _BOX_Y_MIN, _BOX_Y_MAX],
+    ).fetchall()
+
+
+def _box_conceded_situation_rows(conn: sqlite3.Connection, match_ids: list[int], team_id: int) -> list[sqlite3.Row]:
+    if not match_ids:
+        return []
+    ph = ",".join("?" for _ in match_ids)
+    return conn.execute(
+        f"""SELECT f.Match_ID Match_ID, f.xG xG
+              FROM dim_match m
+              JOIN fact_shotmap f ON f.Match_ID=m.Match_ID
+               AND f.Team_ID = (CASE WHEN m.Home_Team_ID=? THEN m.Away_Team_ID ELSE m.Home_Team_ID END)
+             WHERE m.Match_ID IN ({ph})
+               AND f.X_Coord >= ? AND f.Y_Coord BETWEEN ? AND ?""",
+        [team_id, *match_ids, _BOX_X_MIN, _BOX_Y_MIN, _BOX_Y_MAX],
+    ).fetchall()
+
+
+def _box_own_xg(conn: sqlite3.Connection, match_ids: list[int], team_id: int) -> tuple[float | None, bool, int]:
+    """禁区内 xG(坐标法聚合)。与 `_box_own` 的官方射门次数字段相互独立,
+    只贡献 xG,不覆盖/不校正官方计数。"""
+    _shots, xg, complete, clean_n = _shots_xg(_box_own_situation_rows(conn, match_ids, team_id), match_ids)
+    return xg, complete, clean_n
+
+
+def _box_conceded_xg(conn: sqlite3.Connection, match_ids: list[int], team_id: int) -> tuple[float | None, bool, int]:
+    _shots, xg, complete, clean_n = _shots_xg(_box_conceded_situation_rows(conn, match_ids, team_id), match_ids)
+    return xg, complete, clean_n
+
+
 def league_situation_baseline(
     conn: sqlite3.Connection, league_id: int, before_boundary: str,
     *, is_home: bool, tier: str, max_n: int = DEFAULT_MAX_N, min_n: int = DEFAULT_MIN_N,
@@ -174,9 +230,9 @@ def league_situation_baseline(
     样本队数低于 `MIN_BASELINE_SAMPLE` 时该项基准记 None,不编造一个基于
     极小样本的数字。
 
-    运动战/反击/定位球三类用 xG(该队该 Situation 全部射门都带 xG 才计入
-    样本,不用不完整的部分 xG 拉低基准);禁区内射门没有 xG,用射门次数。
-    这个函数本身较贵(遍历联赛全部球队各跑一遍窗口 + shotmap 查询),是
+    四类(含禁区内射门)统一用 xG(该队该情境全部射门都带 xG 才计入样本,
+    不用不完整的部分 xG 拉低基准);禁区内射门的 xG 来自坐标法聚合,见
+    `_box_own_xg`/`_box_conceded_xg`。这个函数本身较贵(遍历联赛全部球队各跑一遍窗口 + shotmap 查询),是
     本轮已知的 P2 性能债,不在这次返工范围内优化——真实测量值见
     `docs/current-state.md` 性能记录章节。
     """
@@ -203,12 +259,12 @@ def league_situation_baseline(
                 own_samples[key].append(own_xg / own_clean_n)
             if conc_xg_complete and conc_clean_n > 0:
                 conceded_samples[key].append(conc_xg / conc_clean_n)
-        box_own_avg, _box_own_n = _box_own(conn, ids, tid)
-        box_conc_avg, _box_conc_n = _box_conceded(conn, ids, tid)
-        if box_own_avg is not None:
-            own_samples["box_shots"].append(box_own_avg)
-        if box_conc_avg is not None:
-            conceded_samples["box_shots"].append(box_conc_avg)
+        box_own_xg, box_own_xg_complete, box_own_clean_n = _box_own_xg(conn, ids, tid)
+        box_conc_xg, box_conc_xg_complete, box_conc_clean_n = _box_conceded_xg(conn, ids, tid)
+        if box_own_xg_complete and box_own_clean_n > 0:
+            own_samples["box_shots"].append(box_own_xg / box_own_clean_n)
+        if box_conc_xg_complete and box_conc_clean_n > 0:
+            conceded_samples["box_shots"].append(box_conc_xg / box_conc_clean_n)
 
     baseline: dict[str, dict[str, Any]] = {}
     for key in _ALL_SITUATION_KEYS:
@@ -327,21 +383,28 @@ def team_matchup_profile(
     box_conc_avg, box_conc_n = _box_conceded(conn, ids, team_id)
     box_own_shots_pg = round(box_own_avg, 2) if box_own_avg is not None else None
     box_conc_shots_pg = round(box_conc_avg, 2) if box_conc_avg is not None else None
+    # 禁区内 xG(坐标法,见模块 docstring 的 97.97% 验证)。分子分母配对规则
+    # 与其它三类 situation 一致:同一场比赛只要有 1 脚禁区内射门缺 xG,
+    # 整场从这一类 xG 统计里剔除。
+    box_own_xg, box_own_xg_complete, box_own_xg_clean_n = _box_own_xg(conn, ids, team_id)
+    box_conc_xg, box_conc_xg_complete, box_conc_xg_clean_n = _box_conceded_xg(conn, ids, team_id)
+    box_own_xg_pg = round(box_own_xg / box_own_xg_clean_n, 2) if box_own_xg_complete else None
+    box_conc_xg_pg = round(box_conc_xg / box_conc_xg_clean_n, 2) if box_conc_xg_complete else None
     situations.append({
         "key": "box_shots",
         "label": "禁区内射门",
         "own_shots_pg": box_own_shots_pg,
-        "own_xg_pg": None,
-        "own_xg_complete": False,
-        "own_xg_matches": None,
+        "own_xg_pg": box_own_xg_pg,
+        "own_xg_complete": box_own_xg_complete,
+        "own_xg_matches": box_own_xg_clean_n if box_own_xg_complete else None,
         "conceded_shots_pg": box_conc_shots_pg,
-        "conceded_xg_pg": None,
-        "conceded_xg_complete": False,
-        "conceded_xg_matches": None,
+        "conceded_xg_pg": box_conc_xg_pg,
+        "conceded_xg_complete": box_conc_xg_complete,
+        "conceded_xg_matches": box_conc_xg_clean_n if box_conc_xg_complete else None,
         **_comparison_fields(
-            metric="shots",
-            own_xg_pg=None, own_xg_complete=False, own_shots_pg=box_own_shots_pg,
-            conc_xg_pg=None, conc_xg_complete=False, conc_shots_pg=box_conc_shots_pg,
+            metric="xg",
+            own_xg_pg=box_own_xg_pg, own_xg_complete=box_own_xg_complete, own_shots_pg=box_own_shots_pg,
+            conc_xg_pg=box_conc_xg_pg, conc_xg_complete=box_conc_xg_complete, conc_shots_pg=box_conc_shots_pg,
             baseline_entry=baseline["box_shots"],
         ),
     })

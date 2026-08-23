@@ -213,9 +213,10 @@ describe("MarketCard 折叠区:各线回测 + 对手侧 + 回测更新时间(数
     };
     render(<MarketCard card={card} />);
     expect(screen.queryByText("blocked_shots")).toBeNull();
-    // "封堵射门"合法出现两次(为/对手侧各一张表的同一行标签),用 getAllByText
-    // 而不是 getByText——两处都是真实内容,不是重复渲染。
-    expect(screen.getAllByText("封堵射门").length).toBeGreaterThan(0);
+    // "射门被封堵"合法出现两次(为/对手侧各一张表的同一行标签),用 getAllByText
+    // 而不是 getByText——两处都是真实内容,不是重复渲染。2026-08-23 采纳
+    // FotMob 官方措辞,此前叫"封堵射门"。
+    expect(screen.getAllByText("射门被封堵").length).toBeGreaterThan(0);
   });
 
   it("展示回测数据更新时间(北京时间)", () => {

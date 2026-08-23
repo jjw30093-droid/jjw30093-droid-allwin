@@ -300,6 +300,7 @@ def team_attack_sources(
     for r in rows:
         situation = r["situation"] or "其他"
         out.append({
+            "key": situation,
             "label": _SITUATION_ZH.get(situation, situation),
             "shots": r["shots"],
             "shot_pct": round(100.0 * r["shots"] / total_shots, 1),

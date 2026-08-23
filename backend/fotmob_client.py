@@ -763,14 +763,32 @@ class FotMobClient:
         返回字段列表（对应 fact_shotmap 列）:
           Match_ID, Player_ID, Team_ID, Minute, Period,
           X_Coord, Y_Coord, xG, xGOT,
-          Situation, Outcome, Shot_Type
+          Situation, Outcome, Shot_Type,
+          Shot_ID, Is_Blocked, Is_On_Target, Is_From_Inside_Box,
+          Minute_Added, Keeper_ID
 
         说明:
           - Situation: 射门情境（RegularPlay/FromCorner/SetPiece/FreeKick/Penalty）
             FotMob SSR 数据中该字段有时缺失（旧场次），需后续补采
           - xGOT:      expectedGoalsOnTarget，SSR 数据中有时缺失
-          - Shot_Type: 射门方式（LeftFoot/RightFoot/Head/OtherBodyPart）
+          - Shot_Type: 射门方式（LeftFoot/RightFoot/Header/OtherBodyParts，
+            此前这行注释误写成 Head/OtherBodyPart，与真实枚举值不符）
           - Period:    比赛阶段（FirstHalf/SecondHalf/ExtraTimeFirstHalf 等）
+          - Outcome:   真实枚举只有 4 个值 Goal/AttemptSaved/Miss/Post
+            （库内实测 33 万行验证过，从无 BlockedShot——FotMob 把"被后卫
+            封堵"也计入 AttemptSaved，用下面新增的 Is_Blocked 才能拆开）
+
+        2026-08-23 补齐(对照 FotMob 官方安卓包核实,原始 payload 本来就带
+        这些字段,只是此前没解析):
+          - Shot_ID:            原始 id,可作稳定行键(此前 ingest_match.py
+            误称"没有稳定的行 id"，据此用整场 DELETE+INSERT 而非按行更新)
+          - Is_Blocked:         被封堵(与门将扑出互斥，用于拆分 AttemptSaved)
+          - Is_On_Target:       是否射正（精确值，不再靠 Outcome 猜）
+          - Is_From_Inside_Box: 是否禁区内射门（校验信号，不替代
+            backend/queries/matchup.py 的坐标法——见该文件模块 docstring）
+          - Minute_Added:       补时分钟（此前缺失导致所有 90+X 分钟射门
+            坍缩到第 90 分钟）
+          - Keeper_ID:          面对的门将 player id
         """
         content = page_props.get("content", {})
         shots_raw = content.get("shotmap", {}).get("shots", [])
@@ -788,8 +806,14 @@ class FotMobClient:
                 "xG":        s.get("expectedGoals"),
                 "xGOT":      s.get("expectedGoalsOnTarget"),
                 "Situation": s.get("situation"),   # 可能为 None（SSR 旧场次缺失）
-                "Outcome":   s.get("eventType"),   # AttemptSaved/Goal/Miss/BlockedShot
-                "Shot_Type": s.get("shotType"),    # LeftFoot/RightFoot/Head 等
+                "Outcome":   s.get("eventType"),   # Goal/AttemptSaved/Miss/Post
+                "Shot_Type": s.get("shotType"),    # LeftFoot/RightFoot/Header/OtherBodyParts
+                "Shot_ID":             s.get("id"),
+                "Is_Blocked":          s.get("isBlocked"),
+                "Is_On_Target":        s.get("isOnTarget"),
+                "Is_From_Inside_Box":  s.get("isFromInsideBox"),
+                "Minute_Added":        s.get("minAdded"),
+                "Keeper_ID":           s.get("keeperId"),
             })
         return records
 

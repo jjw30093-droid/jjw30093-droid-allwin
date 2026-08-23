@@ -108,7 +108,9 @@ METRIC_REGISTRY: tuple[MetricSpec, ...] = (
     MetricSpec(
         "big_chances_per_match",
         "big_chance_team",
-        "重大机会",
+        # 与 frontend/components/matches/zh.ts TEAM_STAT_LABELS 的 big_chance
+        # 对齐(此前这里单独写"重大机会",站内两个叫法)。
+        "绝佳机会",
         "次/场",
         "per_match",
         "higher",
@@ -124,7 +126,8 @@ METRIC_REGISTRY: tuple[MetricSpec, ...] = (
     MetricSpec(
         "accurate_crosses",
         "accurate_cross_team",
-        "准确传中",
+        # 与 zh.ts TEAM_STAT_LABELS 的 accurate_crosses 对齐(此前写"准确传中")。
+        "成功传中",
         "次/场",
         "direct",
         "higher",
@@ -667,7 +670,7 @@ def build_douyin_safe_profile(profile: dict, match: dict, uncertainty: list[dict
             "text": (
                 (
                     f"场均角球是{corners['home']['display']}对"
-                    f"{corners['away']['display']}，准确传中是"
+                    f"{corners['away']['display']}，成功传中是"
                     f"{crosses['home']['display']}对{crosses['away']['display']}。"
                     if corners and crosses
                     else "边路数据暂不完整。"

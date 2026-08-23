@@ -2900,6 +2900,8 @@ export interface components {
         };
         /** MatchPreviewAttackSourceDTO */
         MatchPreviewAttackSourceDTO: {
+            /** Key */
+            key: string;
             /** Label */
             label: string;
             /** Shots */
