@@ -33,10 +33,20 @@ function symbolSize(xg: number | null | undefined): number {
   return 7 + Math.min(1, xg ?? 0) * 22;
 }
 
+/** AttemptSaved 精确结果文案:is_blocked 已知时能区分"被封堵"和"被扑出";
+ * 未知(该场未回填,2026-08-23 起才采集,见 backend/migrations/core/
+ * 0005_shotmap_raw_fields.sql)时退回 SHOT_OUTCOME_ZH 的"被扑/被挡"。 */
+function outcomeLabelFor(s: Shot): string {
+  if (s.outcome === "AttemptSaved" && s.is_blocked != null) {
+    return s.is_blocked ? "被封堵" : "被扑出";
+  }
+  return SHOT_OUTCOME_ZH[s.outcome ?? ""] ?? s.outcome ?? "";
+}
+
 function shotTooltip(s: Shot): string {
   const parts = [
     `${s.player_name ?? s.player_id}${s.minute != null ? ` ${s.minute}'` : ""}`,
-    `${SHOT_OUTCOME_ZH[s.outcome ?? ""] ?? s.outcome ?? ""} · xG ${s.xg?.toFixed(3) ?? "—"}`,
+    `${outcomeLabelFor(s)} · xG ${s.xg?.toFixed(3) ?? "—"}`,
   ];
   const detail = [
     s.situation ? SHOT_SITUATION_ZH[s.situation] ?? s.situation : null,
@@ -54,9 +64,18 @@ type HalfFilter = "all" | "first" | "second";
 const SITUATION_CHIPS = ["FromCorner", "SetPiece", "FreeKick", "FastBreak", "Penalty"];
 const BODY_PARTS = ["LeftFoot", "RightFoot", "Header"];
 
-/** 射正 = 进球 + 被扑出(中框/偏出不算射正,与球队统计口径一致)。 */
+/** 射正 = 进球 + 被扑出(中框/偏出不算射正,与球队统计口径一致)。
+ *
+ * is_blocked 已知时(该场已回填,见 fact_shotmap.Is_Blocked)用精确口径:
+ * AttemptSaved 里真正被封堵的球排除掉——is_on_target 本身**不**排除被封堵
+ * 的球(FotMob 把"射门轨迹朝不朝门"与"是否被封堵"分开标记,实测同一脚
+ * AttemptSaved 里被封堵的球 99.8% 仍标 is_on_target=true),必须
+ * is_blocked=false 才算真正射正。未回填的场次(is_blocked 为 null)退回
+ * 旧的 Outcome 口径(混入被封堵球,与官方统计对不上,但没有更好的数据)。 */
 function isOnTarget(s: Shot): boolean {
-  return s.outcome === "Goal" || s.outcome === "AttemptSaved";
+  if (s.outcome === "Goal") return true;
+  if (s.outcome !== "AttemptSaved") return false;
+  return s.is_blocked == null ? true : !s.is_blocked;
 }
 
 /**
@@ -133,6 +152,11 @@ export function ShotMapChart({
     (s) => s.period !== "PenaltyShootout" && s.x != null && s.y != null,
   );
   const shootout = shots.length - plottable.length;
+  // 该场是否已回填 is_blocked(2026-08-23 起才采集)。一场比赛要么整场
+  // 回填过、要么完全没有(单场 ingest 是全量重新落库),用 every 而不是
+  // some——避免半场有数据、半场没有时误报"精确"。
+  const hasPreciseOnTarget =
+    plottable.length > 0 && plottable.every((s) => s.is_blocked != null);
   // 导出模式忽略筛选状态(卡片是静态图,固定展示全场)
   const plotted = useMemo(
     () =>
@@ -240,11 +264,13 @@ export function ShotMapChart({
             </div>
             <div className={styles.segmented}>
               {(
-                // AttemptSaved 混了门将扑救与后卫封堵,单次射门层面无法
-                // 精确区分——标注写清楚,避免和球队官方射正数字对不上。
+                // AttemptSaved 混了门将扑救与后卫封堵,单次射门层面此前无法
+                // 精确区分,标注为"射正(含被封堵)"避免和球队官方射正数字
+                // 对不上;2026-08-23 起已回填的场次(hasPreciseOnTarget)
+                // 能用 is_blocked 精确排除被封堵的球,标签相应改回"射正"。
                 [
                   ["all", "全部"],
-                  ["on_target", "射正(含被封堵)"],
+                  ["on_target", hasPreciseOnTarget ? "射正" : "射正(含被封堵)"],
                   ["goal", "进球"],
                 ] as const
               ).map(([k, label]) => (

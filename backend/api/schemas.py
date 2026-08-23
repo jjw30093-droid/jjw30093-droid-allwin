@@ -860,6 +860,16 @@ class MatchReportShot(BaseModel):
     situation: Optional[str] = None
     outcome: Optional[str] = None                # Goal / AttemptSaved / Miss / Post
     shot_type: Optional[str] = None
+    # 2026-08-23 起才采集(见 backend/migrations/core/0005_shotmap_raw_fields.sql),
+    # 旧场次/未回填场次恒为 None——前端必须区分 None(无精确口径)和 False。
+    # is_on_target 本身**不排除被封堵的球**(FotMob 把"射门轨迹朝不朝门"
+    # 与"是否被封堵"分开标记,实测同一脚 AttemptSaved 里被封堵的球 99.8%
+    # 仍标 is_on_target=true);判定"真正意义上的射正"必须
+    # is_blocked=False AND (outcome=='Goal' OR is_on_target=true) 一起用,
+    # 单看 is_on_target 不够(2026-08-23 生产库 3400 队场实测:配合使用
+    # 后与官方 ShotsOnTarget 完全一致率从 6.8% 升到 94.5%,误差 ≤1 达 98.8%)。
+    is_blocked: Optional[bool] = None
+    is_on_target: Optional[bool] = None
 
 
 class MatchReportTeamStat(BaseModel):

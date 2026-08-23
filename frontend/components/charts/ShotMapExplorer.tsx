@@ -31,6 +31,10 @@ type Shot = {
   outcome: string | null;
   situation: string | null;
   shot_type: string | null;
+  // 2026-08-23 起才采集(见 backend/migrations/core/0005_shotmap_raw_fields.sql),
+  // 旧场次/未回填场次恒为 null——区分"未知"和"false",不能当 false 用。
+  is_blocked?: boolean | null;
+  is_on_target?: boolean | null;
 };
 
 type OfficialStat = {
@@ -131,6 +135,15 @@ function preferredScopeFor(data: ShotMapData, teamId: number): Scope {
   return "same_league";
 }
 
+/** 射正判定,与 ShotMapChart.tsx 的 isOnTarget 同一套口径:is_blocked 已知
+ * 时精确排除被封堵的球(is_on_target 本身不排除),未知时退回旧的
+ * Outcome 口径(混入被封堵球)。 */
+function isPreciseOnTarget(shot: Shot): boolean {
+  if (shot.outcome === "Goal") return true;
+  if (shot.outcome !== "AttemptSaved") return false;
+  return shot.is_blocked == null ? true : !shot.is_blocked;
+}
+
 export function filterShotRows(
   data: ShotMapData,
   teamId: number,
@@ -152,8 +165,7 @@ export function filterShotRows(
     if (matchId !== undefined && shot.match_id !== matchId) return false;
     if (mode === "created" ? shot.team_id !== teamId : shot.team_id === teamId) return false;
     if (outcome === "goal" && shot.outcome !== "Goal") return false;
-    if (outcome === "on_target" && shot.outcome !== "Goal" && shot.outcome !== "AttemptSaved")
-      return false;
+    if (outcome === "on_target" && !isPreciseOnTarget(shot)) return false;
     if (situations.length > 0 && !situations.includes(shot.situation ?? "")) return false;
     if (bodyPart && shot.shot_type !== bodyPart) return false;
     if (half === "first" && shot.period !== "FirstHalf") return false;
@@ -168,9 +180,7 @@ export function summarizeShotRows(rows: Shot[]): ShotSummary {
     .filter((value): value is number => value !== null && Number.isFinite(value));
   return {
     shots: rows.length,
-    onTarget: rows.filter(
-      (shot) => shot.outcome === "Goal" || shot.outcome === "AttemptSaved",
-    ).length,
+    onTarget: rows.filter(isPreciseOnTarget).length,
     goals: rows.filter((shot) => shot.outcome === "Goal").length,
     xg:
       xgValues.length > 0
@@ -227,11 +237,16 @@ function arcPoints(
 // 真实枚举只有 4 个值(Goal/AttemptSaved/Miss/Post,库内实测无 Blocked——
 // FotMob 把"被后卫封堵"也计入 AttemptSaved,见下),与
 // frontend/components/matches/zh.ts 的 SHOT_OUTCOME_ZH 保持同一套措辞。
-function outcomeLabel(outcome: string | null): string {
+export function outcomeLabel(outcome: string | null, isBlocked?: boolean | null): string {
   if (outcome === "Goal") return "进球";
-  // FotMob 原始数据把"门将扑出"和"被后卫封堵"都记成 AttemptSaved,单次
-  // 射门层面无法精确区分——不能标"射正被扑",那是编出来的精确度。
-  if (outcome === "AttemptSaved") return "被扑/被挡";
+  if (outcome === "AttemptSaved") {
+    // is_blocked 已知时(该场已回填,2026-08-23 起才采集,见
+    // backend/migrations/core/0005_shotmap_raw_fields.sql)能精确区分
+    // "门将扑出"和"被后卫封堵";未知时不能标"射正被扑",那是编出来的
+    // 精确度,退回两者皆可能的措辞。
+    if (isBlocked != null) return isBlocked ? "被封堵" : "被扑出";
+    return "被扑/被挡";
+  }
   if (outcome === "Post") return "击中门框";
   if (outcome === "Miss") return "偏出";
   return "结果未标注";
@@ -357,7 +372,7 @@ function ShotMapExplorerReady({
           const match = matchById.get(item.match_id);
           return [
             `${shortDate(match?.date_utc ?? "")} · 对 ${matchOpponent(match, teamId)}`,
-            `${item.minute ?? "?"}′ · ${outcomeLabel(item.outcome)}`,
+            `${item.minute ?? "?"}′ · ${outcomeLabel(item.outcome, item.is_blocked)}`,
             `xG ${item.xg == null ? "未提供" : item.xg.toFixed(2)}`,
           ].join("<br/>");
         },

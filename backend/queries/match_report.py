@@ -193,7 +193,8 @@ def _events(conn, match_id, i18n):
 def _shots(conn, match_id, home_team_id, away_team_id, lineup_names, i18n):
     rows = conn.execute(
         """SELECT Player_ID, Team_ID, Minute, Period, X_Coord, Y_Coord,
-                  xG, xGOT, Situation, Outcome, Shot_Type
+                  xG, xGOT, Situation, Outcome, Shot_Type,
+                  Is_Blocked, Is_On_Target
            FROM fact_shotmap
            WHERE Match_ID=? AND Team_ID IN (?, ?)""",
         (match_id, home_team_id, away_team_id),
@@ -201,6 +202,10 @@ def _shots(conn, match_id, home_team_id, away_team_id, lineup_names, i18n):
     out = []
     for r in rows:
         pid = str(r["Player_ID"])
+        # Is_Blocked/Is_On_Target 2026-08-23 起才开始采集(见
+        # backend/migrations/core/0005_shotmap_raw_fields.sql),旧场次/
+        # 未回填的场次这两列恒为 NULL——前端必须按 is_blocked is None 判定
+        # "这场没有精确口径可用",不能把 NULL 当 False。
         out.append({
             "player_id": pid,
             "player_name": _display_name(r["Player_ID"], lineup_names.get(pid), i18n),
@@ -215,6 +220,8 @@ def _shots(conn, match_id, home_team_id, away_team_id, lineup_names, i18n):
             "situation": r["Situation"],
             "outcome": r["Outcome"],
             "shot_type": r["Shot_Type"],
+            "is_blocked": bool(r["Is_Blocked"]) if r["Is_Blocked"] is not None else None,
+            "is_on_target": bool(r["Is_On_Target"]) if r["Is_On_Target"] is not None else None,
         })
     out.sort(key=lambda s: (_PERIOD_ORDER.get(s["period"], 9), s["minute"] or 0))
     return out

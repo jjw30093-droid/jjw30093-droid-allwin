@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterShotRows,
+  outcomeLabel,
   summarizeShotRows,
 } from "@/components/charts/ShotMapExplorer";
 
@@ -151,5 +152,42 @@ describe("recent shot-map filters", () => {
       goals: 0,
       xg: null,
     });
+  });
+
+  it("is_blocked 已知时精确排除被封堵的球(2026-08-23 起才回填,is_on_target 本身不排除被封堵)", () => {
+    const rows = [
+      { ...data.shots[0], shot_id: "saved", outcome: "AttemptSaved", is_blocked: false },
+      { ...data.shots[0], shot_id: "blocked", outcome: "AttemptSaved", is_blocked: true },
+      { ...data.shots[0], shot_id: "goal", outcome: "Goal", is_blocked: false },
+    ];
+    const summary = summarizeShotRows(rows);
+    // 3 脚里只有 2 脚真正射正(门将扑出的 1 + 进球 1),被封堵的 1 脚排除
+    expect(summary.onTarget).toBe(2);
+  });
+
+  it("is_blocked 未知时(未回填场次)退回旧口径,不排除任何 AttemptSaved", () => {
+    const rows = [
+      { ...data.shots[0], shot_id: "unknown-1", outcome: "AttemptSaved", is_blocked: null },
+      { ...data.shots[0], shot_id: "unknown-2", outcome: "AttemptSaved" },
+    ];
+    expect(summarizeShotRows(rows).onTarget).toBe(2);
+  });
+});
+
+describe("outcomeLabel(2026-08-23 精确拆分被扑出/被封堵)", () => {
+  it("is_blocked=false 标'被扑出',is_blocked=true 标'被封堵'", () => {
+    expect(outcomeLabel("AttemptSaved", false)).toBe("被扑出");
+    expect(outcomeLabel("AttemptSaved", true)).toBe("被封堵");
+  });
+
+  it("is_blocked 未提供或为 null 时退回'被扑/被挡'(不假装有精确度)", () => {
+    expect(outcomeLabel("AttemptSaved")).toBe("被扑/被挡");
+    expect(outcomeLabel("AttemptSaved", null)).toBe("被扑/被挡");
+  });
+
+  it("其它结果不受 is_blocked 影响", () => {
+    expect(outcomeLabel("Goal", true)).toBe("进球");
+    expect(outcomeLabel("Miss")).toBe("偏出");
+    expect(outcomeLabel("Post")).toBe("击中门框");
   });
 });

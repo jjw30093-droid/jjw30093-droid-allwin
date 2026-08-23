@@ -3437,6 +3437,10 @@ export interface components {
             outcome?: string | null;
             /** Shot Type */
             shot_type?: string | null;
+            /** Is Blocked */
+            is_blocked?: boolean | null;
+            /** Is On Target */
+            is_on_target?: boolean | null;
         };
         /** MatchReportTeamStat */
         MatchReportTeamStat: {

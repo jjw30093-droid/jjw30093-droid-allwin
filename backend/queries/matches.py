@@ -615,7 +615,8 @@ def recent_shot_map_spec(
         for index, row in enumerate(
             conn.execute(
                 f"""SELECT Match_ID, Player_ID, Team_ID, Minute, Period,
-                           X_Coord, Y_Coord, xG, xGOT, Situation, Outcome, Shot_Type
+                           X_Coord, Y_Coord, xG, xGOT, Situation, Outcome, Shot_Type,
+                           Is_Blocked, Is_On_Target
                       FROM fact_shotmap
                      WHERE Match_ID IN ({placeholders})
                        AND X_Coord BETWEEN 0 AND 105
@@ -639,6 +640,11 @@ def recent_shot_map_spec(
                     "situation": row["Situation"],
                     "outcome": row["Outcome"],
                     "shot_type": row["Shot_Type"],
+                    # 2026-08-23 起才采集(见 backend/migrations/core/
+                    # 0005_shotmap_raw_fields.sql),旧场次/未回填场次恒为
+                    # None——前端必须区分 None(无精确口径)和 False。
+                    "is_blocked": bool(row["Is_Blocked"]) if row["Is_Blocked"] is not None else None,
+                    "is_on_target": bool(row["Is_On_Target"]) if row["Is_On_Target"] is not None else None,
                 }
             )
     if not shots:
@@ -646,8 +652,10 @@ def recent_shot_map_spec(
     # 官方口径射正/被封堵/总射门(fact_team_match_stats.extra_json)——单纯从
     # fact_shotmap 的 Outcome 数逐次射门算"射正"会把 AttemptSaved 里混进的
     # 被封堵射门也算作射正(实测 26,067 队场:场均 7.75 vs 官方 4.36,只有
-    # 6.8% 完全吻合)。前端聚合汇总数字改用这里,逐次射门点的颜色/tooltip
-    # 仍标注原始 Outcome,不假装能在单次射门层面区分扑救与封堵。
+    # 6.8% 完全吻合)。前端聚合汇总数字改用这里。2026-08-23 起已回填的场次
+    # (shots[].is_blocked 非 None)可以在单次射门层面精确拆分"被扑出"/
+    # "被封堵"(见 ShotMapExplorer.tsx outcomeLabel);未回填场次仍不假装
+    # 能在单次射门层面区分,保留原始 Outcome 展示。
     official_stats: list[dict] = []
     if all_match_ids:
         for row in conn.execute(

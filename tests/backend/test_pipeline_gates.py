@@ -10,6 +10,7 @@ import pytest
 from backend.cli import pipeline_gates as pg
 from backend.db.connections import connect_ro, connect_rw
 from backend.db.util import utc_now_iso
+from tests.backend.coreseed import seed_core_schema
 
 NOW = "2026-08-10T00:00:00Z"
 
@@ -224,6 +225,95 @@ class TestSourceWaf:
         conn_odds.commit()
         conn_odds.close()
         assert _gate(pg.run(now_iso=NOW), "source_waf_blocked")["level"] == "OK"
+
+
+def _seed_box_team_match(conn_core, mid, team_id, *, box_shots_coord, box_shots_official,
+                          kickoff="2026-08-05T12:00:00Z"):
+    """一个队场:coord 侧插 box_shots_coord 脚禁区内坐标射门(X>=88.5,
+    Y in [13.84,54.16])+ 1 脚禁区外的(验证几何过滤本身生效),official 侧
+    写 fact_team_match_stats.extra_json.shots_inside_box=box_shots_official。"""
+    import json as _json
+    for i in range(box_shots_coord):
+        conn_core.execute(
+            "INSERT INTO fact_shotmap (Match_ID, Player_ID, Team_ID, Minute, Period,"
+            " X_Coord, Y_Coord, xG, Situation, Outcome, Shot_Type)"
+            " VALUES (?, ?, ?, 10, 'FirstHalf', 95.0, 34.0, 0.1, 'RegularPlay', 'Miss', 'RightFoot')",
+            (mid, f"p{team_id}-{i}", team_id),
+        )
+    # 禁区外一脚,确认几何过滤没把它算进去
+    conn_core.execute(
+        "INSERT INTO fact_shotmap (Match_ID, Player_ID, Team_ID, Minute, Period,"
+        " X_Coord, Y_Coord, xG, Situation, Outcome, Shot_Type)"
+        " VALUES (?, ?, ?, 20, 'FirstHalf', 40.0, 34.0, 0.05, 'RegularPlay', 'Miss', 'RightFoot')",
+        (mid, f"p{team_id}-out", team_id),
+    )
+    conn_core.execute(
+        "INSERT INTO fact_team_match_stats (Match_ID, Team_ID, Period, Goals, extra_json)"
+        " VALUES (?, ?, 'All', 0, ?)",
+        (mid, team_id, _json.dumps({"shots_inside_box": box_shots_official})),
+    )
+
+
+class TestBoxShotGeometryDrift:
+    def test_matching_coordinates_and_official_count_are_ok(self, data_dir):
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        for i in range(pg.G10_MIN_TEAM_MATCHES):
+            mid = 5000 + i
+            _seed_match(conn_core, mid, status="Finish", kickoff="2026-08-05T12:00:00Z",
+                        home_score=1, away_score=0)
+            _seed_box_team_match(conn_core, mid, mid * 10, box_shots_coord=3, box_shots_official=3.0)
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "box_shot_geometry_drift")
+        assert g["level"] == "OK"
+        assert g["team_matches"] == pg.G10_MIN_TEAM_MATCHES
+        assert g["mismatched"] == 0
+
+    def test_systematic_mismatch_above_threshold_is_warning(self, data_dir):
+        """>1% 队场坐标法算出的禁区内射门数与官方计数不相等——坐标系可能
+        漂移(采集端换了坐标约定、球场朝向反了),不是正常的压线/缺失噪音。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        for i in range(pg.G10_MIN_TEAM_MATCHES):
+            mid = 5100 + i
+            _seed_match(conn_core, mid, status="Finish", kickoff="2026-08-05T12:00:00Z",
+                        home_score=1, away_score=0)
+            # 坐标法算出 3 脚,官方计数固定写 5——全部队场都对不上
+            _seed_box_team_match(conn_core, mid, mid * 10, box_shots_coord=3, box_shots_official=5.0)
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "box_shot_geometry_drift")
+        assert g["level"] == "WARNING"
+        assert g["mismatched"] == pg.G10_MIN_TEAM_MATCHES
+        assert g["mismatch_rate"] == 1.0
+
+    def test_below_min_sample_is_skipped_not_warning(self, data_dir):
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        mid = 5200
+        _seed_match(conn_core, mid, status="Finish", kickoff="2026-08-05T12:00:00Z",
+                    home_score=1, away_score=0)
+        _seed_box_team_match(conn_core, mid, mid * 10, box_shots_coord=3, box_shots_official=5.0)
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "box_shot_geometry_drift")
+        assert g["level"] == "OK"
+        assert g["detail"] == "skipped_insufficient_sample"
+
+    def test_outside_30_day_window_excluded(self, data_dir):
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        for i in range(pg.G10_MIN_TEAM_MATCHES):
+            mid = 5300 + i
+            _seed_match(conn_core, mid, status="Finish", kickoff="2026-01-01T12:00:00Z",
+                        home_score=1, away_score=0)
+            _seed_box_team_match(conn_core, mid, mid * 10, box_shots_coord=3, box_shots_official=5.0)
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "box_shot_geometry_drift")
+        assert g["level"] == "OK"
+        assert g["detail"] == "skipped_insufficient_sample"
 
 
 class TestNotifySuppression:

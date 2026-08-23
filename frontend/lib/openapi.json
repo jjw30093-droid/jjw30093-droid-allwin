@@ -13306,6 +13306,28 @@
        }
       ],
       "title": "Shot Type"
+     },
+     "is_blocked": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Is Blocked"
+     },
+     "is_on_target": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Is On Target"
      }
     },
     "type": "object",

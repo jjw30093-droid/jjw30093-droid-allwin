@@ -7,15 +7,16 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
 的重复告警。
 
 门清单(与计划一致;每门的判据在各 _gate_* 函数 docstring):
-  G1 fixtures_window_empty       赛季期内 7 天窗口 0 场            CRITICAL
-  G2 league_coverage_regression  最近一次赛程同步被反退化门禁拒写   CRITICAL
-  G3 kickoff_precision           7 天窗口内非 exact kickoff > 0    WARNING
-  G4 entity_resolution_degraded  逐联赛 pollable/in_window          <60% WARN / ==0 CRITICAL
-  G5 odds_coverage               未来 24h 有 pre_match 快照占比      <50% WARNING
-  G6 closing_coverage            完赛场 T-15min 内收盘快照占比       <80% WARN / <70% CRITICAL
-  G7 score_regression            NotStarted 却带比分(清列泄漏兜底)  >0 CRITICAL
-  G8 company_scope               近 24h 出现目标外公司 cid          CRITICAL
-  G9 source_waf_blocked          近 1h source_health 命中 WAF       CRITICAL
+  G1  fixtures_window_empty       赛季期内 7 天窗口 0 场            CRITICAL
+  G2  league_coverage_regression  最近一次赛程同步被反退化门禁拒写   CRITICAL
+  G3  kickoff_precision           7 天窗口内非 exact kickoff > 0    WARNING
+  G4  entity_resolution_degraded  逐联赛 pollable/in_window          <60% WARN / ==0 CRITICAL
+  G5  odds_coverage               未来 24h 有 pre_match 快照占比      <50% WARNING
+  G6  closing_coverage            完赛场 T-15min 内收盘快照占比       <80% WARN / <70% CRITICAL
+  G7  score_regression            NotStarted 却带比分(清列泄漏兜底)  >0 CRITICAL
+  G8  company_scope               近 24h 出现目标外公司 cid          CRITICAL
+  G9  source_waf_blocked          近 1h source_health 命中 WAF       CRITICAL
+  G10 box_shot_geometry_drift     坐标法禁区内射门数 vs 官方计数漂移  >1% WARNING
 
 数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
 不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
@@ -46,6 +47,17 @@ CLOSING_WINDOW_SECONDS = 900         # T-15min 收盘覆盖判据
 G4_MIN_MATCHES = 3                   # 窗口内 ≥3 场才判实体解析率
 G5_MIN_MATCHES = 3
 G6_MIN_MATCHES = 5
+
+# G10:标准 FIFA 禁区几何(与 backend/queries/matchup.py 的 _BOX_X_MIN/
+# _BOX_Y_MIN/_BOX_Y_MAX 同一套常量),已用 25,984 个队场样本对官方
+# shots_inside_box 计数校验:完全相等 97.97%(2026-08-23)。这里只对近期
+# 有坐标数据的队场重跑同一校验,坐标系一旦漂移(采集端换了坐标约定、
+# 球场朝向反了)能在质量门里被抓到,不必等用户发现禁区内 xG 数字离谱。
+G10_BOX_X_MIN = 88.5
+G10_BOX_Y_MIN = 13.84
+G10_BOX_Y_MAX = 54.16
+G10_MIN_TEAM_MATCHES = 20            # 少于这个样本数不判(coord/official 都可能是空联赛窗口的噪音)
+G10_MAX_MISMATCH_RATE = 0.01         # 与 97.97% 基线对齐:允许 1% 完全不相等
 
 
 def _parse_iso(ts: str) -> datetime:
@@ -293,6 +305,62 @@ def _gate_source_waf(conn_odds, now_iso) -> dict:
             "waf_hits_last_hour": n}
 
 
+def _gate_box_shot_geometry(conn_core, now_iso) -> dict:
+    """G10:近 30 天内被重新采集过(fact_shotmap 有坐标)的完赛队场,用坐标法
+    (标准 FIFA 禁区几何)聚合出的禁区内射门数,与官方
+    fact_team_match_stats.extra_json.shots_inside_box 计数比对——两者本该
+    在绝大多数队场上完全相等(基线 97.97%,见 backend/queries/matchup.py
+    模块 docstring)。样本不足 G10_MIN_TEAM_MATCHES 时判 skipped,不在小
+    样本上误报。"""
+    lo = _iso(_parse_iso(now_iso) - timedelta(days=30))
+    try:
+        conn_core.execute("SELECT 1 FROM fact_shotmap LIMIT 1")
+        conn_core.execute("SELECT 1 FROM fact_team_match_stats LIMIT 1")
+    except Exception:  # noqa: BLE001 — 表尚不存在(测试用只跑过 migration 的空库),如实 skipped
+        return {"gate": "box_shot_geometry_drift", "level": OK, "detail": "skipped_no_table",
+                "team_matches": 0, "min_required": G10_MIN_TEAM_MATCHES}
+    rows = conn_core.execute(
+        f"""
+        WITH recent AS (
+          SELECT Match_ID FROM dim_match
+           WHERE status='Finish' AND COALESCE(kickoff_at_utc, Date) >= ?
+        ),
+        coord AS (
+          SELECT s.Match_ID, s.Team_ID,
+                 COUNT(*) coord_n
+            FROM fact_shotmap s JOIN recent r ON r.Match_ID = s.Match_ID
+           WHERE s.X_Coord IS NOT NULL AND s.Y_Coord IS NOT NULL
+             AND s.X_Coord >= {G10_BOX_X_MIN}
+             AND s.Y_Coord BETWEEN {G10_BOX_Y_MIN} AND {G10_BOX_Y_MAX}
+           GROUP BY s.Match_ID, s.Team_ID
+        ),
+        official AS (
+          SELECT Match_ID, Team_ID,
+                 CAST(json_extract(extra_json, '$.shots_inside_box') AS REAL) off_n
+            FROM fact_team_match_stats
+           WHERE Period='All' AND Match_ID IN (SELECT Match_ID FROM recent)
+        )
+        SELECT c.coord_n, o.off_n
+          FROM coord c JOIN official o
+            ON o.Match_ID = c.Match_ID AND o.Team_ID = c.Team_ID
+         WHERE o.off_n IS NOT NULL
+        """,
+        (lo,),
+    ).fetchall()
+    n = len(rows)
+    if n < G10_MIN_TEAM_MATCHES:
+        return {"gate": "box_shot_geometry_drift", "level": OK, "detail": "skipped_insufficient_sample",
+                "team_matches": n, "min_required": G10_MIN_TEAM_MATCHES}
+    mismatched = sum(1 for r in rows if r["coord_n"] != r["off_n"])
+    rate = mismatched / n
+    return {
+        "gate": "box_shot_geometry_drift",
+        "level": WARNING if rate > G10_MAX_MISMATCH_RATE else OK,
+        "team_matches": n, "mismatched": mismatched,
+        "mismatch_rate": round(rate, 4), "threshold": G10_MAX_MISMATCH_RATE,
+    }
+
+
 # ── 汇总与告警 ───────────────────────────────────────────────────────
 
 # 门 → notify 的 source(P0 白名单来源见 backend/notify.P0_ALERT_SOURCES;
@@ -307,6 +375,7 @@ _GATE_ALERT_SOURCE = {
     "closing_coverage": "closing_coverage",
     "score_regression": "score_regression",
     "company_scope": "company_scope",
+    "box_shot_geometry_drift": "box_shot_geometry_drift",
 }
 
 
@@ -327,6 +396,7 @@ def run(now_iso: str | None = None, notify_alerts: bool = True) -> dict:
             ("score_regression", lambda: _gate_score_regression(conn_core)),
             ("company_scope", lambda: _gate_company_scope(conn_odds, now)),
             ("source_waf_blocked", lambda: _gate_source_waf(conn_odds, now)),
+            ("box_shot_geometry_drift", lambda: _gate_box_shot_geometry(conn_core, now)),
         )
         for gate_name, check in checks:
             try:
