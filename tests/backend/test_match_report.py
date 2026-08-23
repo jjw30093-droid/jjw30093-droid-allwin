@@ -106,13 +106,29 @@ class TestAvailability:
 
 
 class TestSentinels:
-    def test_first_half_team_stats_never_leak(self, seeded_report, client):
-        """哨兵:Period='FirstHalf' 行的 111.1/222.2 绝不能出现(只取 Period='All')。"""
+    def test_first_half_team_stats_isolated_from_all(self, seeded_report, client):
+        """哨兵:Period='FirstHalf' 行的 111.1/222.2 绝不能混进 team_stats
+        (只取 Period='All')。2026-08-23 起半场数据改为在 team_stats_by_half
+        里单独下发,不再是"绝不出现在响应里"——这条哨兵改为验证隔离,不是
+        验证消失。"""
         r = client.get("/api/v1/matches/9002/report")
-        assert "111.1" not in r.text and "222.2" not in r.text
-        home_stats = r.json()["team_stats"][0]
+        body = r.json()
+        assert all(t["possession"] != 111.1 and t["total_shots"] != 222.2 for t in body["team_stats"])
+        assert all(t["period"] == "All" for t in body["team_stats"])
+        home_stats = body["team_stats"][0]
         assert home_stats["possession"] == 61.0
         assert home_stats["tackles"] == 12.0     # 带点列名 "matchstats.headers.tackles"
+
+    def test_first_half_team_stats_surfaced_in_by_half(self, seeded_report, client):
+        """seed_match_report 只给主队种了一行 FirstHalf(possession=111.1,
+        total_shots=222.2),team_stats_by_half 应该原样带出这一行,且
+        period 标记正确、不掺进主场景 team_stats。"""
+        body = client.get("/api/v1/matches/9002/report").json()
+        by_half = body["team_stats_by_half"]
+        assert len(by_half) == 1
+        assert by_half[0]["period"] == "FirstHalf"
+        assert by_half[0]["possession"] == 111.1
+        assert by_half[0]["total_shots"] == 222.2
 
     def test_orphan_team_shot_filtered(self, seeded_report, client):
         """哨兵:Team_ID=99999 的脏射门行(xG=0.9999)绝不能出现,也不猜归属。"""

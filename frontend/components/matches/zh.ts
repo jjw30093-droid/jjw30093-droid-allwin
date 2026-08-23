@@ -192,6 +192,61 @@ export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "nu
   { key: "red_cards", label: "红牌", format: "num" },
 ];
 
+/** 球队数据的分组(2026-08-23 对照 FotMob 官方安卓包核实:队级统计在 FotMob
+ * 自己的比赛详情 payload 里就是 7 个有序分组——content.stats.Periods.All.stats
+ * 是数组,每个元素带 title/key/stats[],我们的采集端此前把它拍平成
+ * {key: value} 丢掉了分组信息。这里只是把分组信息在展示层补回来,不改
+ * TEAM_STAT_LABELS 的扁平形状(MarketCard.tsx 依赖它是扁平的 key→label 表,
+ * 见该文件 DRIVER_LABEL)。
+ *
+ * "重点数据"组是 FotMob 自己精选的摘要,字段会在其它组里重复出现——
+ * statKeys 允许跨组重复,渲染层不必去重。某组内字段两侧全部缺失时,
+ * 调用方负责整组不渲染(不产生空标题/空 <details>)。 */
+export const TEAM_STAT_GROUPS: { key: string; label: string; statKeys: string[] }[] = [
+  {
+    key: "top_stats", label: "重点数据",
+    statKeys: [
+      "possession", "expected_goals", "total_shots", "shots_on_target",
+      "touches_opp_box", "big_chance", "big_chance_missed", "accurate_passes",
+      "yellow_cards", "corners",
+    ],
+  },
+  {
+    key: "shots", label: "射门",
+    statKeys: [
+      "total_shots", "shots_off_target", "shots_on_target", "blocked_shots",
+      "shots_woodwork", "shots_inside_box", "shots_outside_box",
+    ],
+  },
+  {
+    key: "expected_goals", label: "预期进球",
+    statKeys: [
+      "expected_goals", "expected_goals_open_play", "expected_goals_set_play",
+      "expected_goals_non_penalty", "expected_goals_on_target",
+    ],
+  },
+  {
+    key: "passes", label: "传球",
+    statKeys: [
+      "passes", "accurate_passes", "own_half_passes", "opposition_half_passes",
+      "long_balls_accurate", "accurate_crosses", "player_throws",
+      "touches_opp_box", "offsides",
+    ],
+  },
+  {
+    key: "defence", label: "防守",
+    statKeys: ["tackles", "interceptions", "shot_blocks", "clearances", "keeper_saves"],
+  },
+  {
+    key: "duels", label: "对抗",
+    statKeys: ["duel_won", "ground_duels_won", "aerials_won", "dribbles_succeeded"],
+  },
+  {
+    key: "discipline", label: "纪律",
+    statKeys: ["yellow_cards", "red_cards", "fouls"],
+  },
+];
+
 /** 联赛静态元数据(镜像 backend/queries/leagues.py LEAGUE_META,仅作显示回退) */
 export const LEAGUE_ZH: Record<number, string> = {
   47: "英超",

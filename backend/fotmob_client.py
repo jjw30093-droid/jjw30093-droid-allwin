@@ -62,30 +62,37 @@ def _build_stat_lookup(stats_sections: list) -> dict:
     将 FotMob 新版「分区段列表」格式转换为扁平 {key: value} 字典。
     输入: [{"title": "Top stats", "stats": {"Goals": {"key": "goals", "stat": {"value": 1}}, ...}}, ...]
     输出: {"goals": 1, "minutes_played": 89, "rating_title": 6.59, ...}
+
+    2026-08-23:球员级分数式字段(type="fractionWithPercentage",如
+    accurate_passes: {"value":37,"total":40})额外落一个 "{key}__total" 键——
+    此前只取 value,"成功传球 37 次"没有分母就看不出好坏,37/40 才行。
+    队级统计(parse_team_stats_records)是另一套 [home_str, away_str] 数组
+    格式,没有独立 total 字段(百分比嵌在格式化字符串里,如 "598 (93%)"),
+    不适用本函数,不要混用。
     """
     lookup = {}
     if not isinstance(stats_sections, list):
         return lookup
     for section in stats_sections:
         section_stats = section.get("stats", {})
-        if isinstance(section_stats, dict):
-            for _, stat_obj in section_stats.items():
-                if not isinstance(stat_obj, dict):
-                    continue
-                key = stat_obj.get("key")
-                stat_inner = stat_obj.get("stat", {})
-                if isinstance(stat_inner, dict):
-                    val = stat_inner.get("value")
-                    if key and val is not None:
-                        lookup[key] = val
-        elif isinstance(section_stats, list):
-            for item in section_stats:
-                key = item.get("key")
-                stat_inner = item.get("stat", {})
-                if isinstance(stat_inner, dict):
-                    val = stat_inner.get("value")
-                    if key and val is not None:
-                        lookup[key] = val
+        items = (
+            section_stats.values() if isinstance(section_stats, dict)
+            else section_stats if isinstance(section_stats, list)
+            else []
+        )
+        for stat_obj in items:
+            if not isinstance(stat_obj, dict):
+                continue
+            key = stat_obj.get("key")
+            stat_inner = stat_obj.get("stat", {})
+            if not (key and isinstance(stat_inner, dict)):
+                continue
+            val = stat_inner.get("value")
+            if val is not None:
+                lookup[key] = val
+            total = stat_inner.get("total")
+            if total is not None:
+                lookup[f"{key}__total"] = total
     return lookup
 
 
@@ -1106,6 +1113,7 @@ class FotMobClient:
 
                 # ── 传球 / 创机 ────────────────────────────────────────
                 "accurate_passes":                g("accurate_passes", "accuratePasses"),
+                "accurate_passes_total":          g("accurate_passes__total"),
                 "chances_created":                g("chances_created", "chancesCreated"),
                 "big_chance_created_team_title":  g("big_chance_created_team_title", "bigChanceCreated", "bigChanceCreatedTeamTitle"),
                 "passes_into_final_third":        g("passes_into_final_third", "passesIntoFinalThird"),
@@ -1162,15 +1170,23 @@ class FotMobClient:
                 "saved_penalties_in_shootout":    g("saved_penalties_in_shootout", "savedPenaltiesInShootout"),
 
                 # ── 体能 ──────────────────────────────────────────────
-                # 实测未在样本比赛中出现（不确定是本字段全站未采集还是仅该场
-                # 无数据），驼峰猜测暂保留，未额外加下划线别名——避免在没有
-                # 真实证据支撑的情况下臆造新的错误映射。
-                "physical_metrics_topspeed":          g("topSpeed"),
-                "physical_metrics_distance_covered":  g("distanceCovered"),
-                "physical_metrics_walking":           g("walking"),
-                "physical_metrics_running":           g("running"),
-                "physical_metrics_sprinting":         g("sprinting"),
-                "physical_metrics_number_of_sprints": g("numberOfSprints"),
+                # 2026-08-23 更正:此前这里查的是驼峰猜测的 key(topSpeed/
+                # distanceCovered/...),从未验证过、注释自己写着"暂保留"。
+                # 实测真实 payload 后确认:_build_stat_lookup() 是按 FotMob
+                # 下发的 stat.key 建索引的,而 stat.key 本身就是
+                # "physical_metrics_xxx" 这个下划线形式(与其它字段同构),
+                # 不是驼峰——直接查这个 key 才对。
+                #
+                # 覆盖率实测(2026-08-23):欧冠 100%(12/12 场抽样),英超约
+                # 50%(5/10 场抽样),其余 13 个已接入联赛 0%(未加采欧冠)。
+                # 前端按"有数据才渲染"处理,不是这里要解决的问题。
+                "physical_metrics_topspeed":          g("physical_metrics_topspeed"),
+                "physical_metrics_distance_covered":  g("physical_metrics_distance_covered"),
+                "physical_metrics_walking":           g("physical_metrics_walking"),
+                "physical_metrics_jogging":           g("physical_metrics_jogging"),
+                "physical_metrics_running":           g("physical_metrics_running"),
+                "physical_metrics_sprinting":         g("physical_metrics_sprinting"),
+                "physical_metrics_number_of_sprints": g("physical_metrics_number_of_sprints"),
             }
 
             records.append(rec)

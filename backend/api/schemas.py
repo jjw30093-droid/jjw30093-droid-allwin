@@ -878,6 +878,12 @@ class MatchReportShot(BaseModel):
 class MatchReportTeamStat(BaseModel):
     team_id: int
     is_home: bool
+    # 2026-08-23:fact_team_match_stats 本来就有 FirstHalf/SecondHalf 分段
+    # (近三个赛季覆盖率高,查询层此前写死只取 'All')。team_stats 仍然只装
+    # period='All' 这一档(向后兼容,老消费方按 is_home 找行不会突然拿到
+    # 多条);半场数据单独在 team_stats_by_half 里,period 恒为 FirstHalf
+    # 或 SecondHalf,该场没有半场行时列表为空。
+    period: str = "All"
     goals: Optional[float] = None
     possession: Optional[float] = None
     expected_goals: Optional[float] = None
@@ -948,6 +954,36 @@ class MatchReportPlayerStat(BaseModel):
     saves: Optional[float] = None
     goals_conceded: Optional[float] = None
     goals_prevented: Optional[float] = None
+    # 2026-08-23 对照 FotMob 官方安卓包补充投影(此前已采集但从未下发,
+    # 详见 backend/queries/match_report.py::_player_stats 的口径注释)。
+    passes_into_final_third: Optional[float] = None
+    long_balls_accurate: Optional[float] = None
+    dispossessed: Optional[float] = None
+    shot_blocks: Optional[float] = None
+    recoveries: Optional[float] = None
+    dribbled_past: Optional[float] = None
+    defensive_actions: Optional[float] = None
+    duel_lost: Optional[float] = None
+    ground_duels_won: Optional[float] = None
+    was_fouled: Optional[float] = None
+    expected_goals_on_target_faced: Optional[float] = None
+    keeper_diving_save: Optional[float] = None
+    saves_inside_box: Optional[float] = None
+    keeper_sweeper: Optional[float] = None
+    punches: Optional[float] = None
+    keeper_high_claim: Optional[float] = None
+    # 传球成功的分母(尝试传球总数)——accurate_passes 单独一个数字看不出
+    # 好坏,配上这个才是"37/40"。
+    accurate_passes_total: Optional[float] = None
+    # 体能(阶段 6):有则显示、无则不显示,与 FotMob 自身行为一致。
+    # 覆盖率现实见 backend/fotmob_client.py 里对应字段旁的实测注释。
+    physical_metrics_topspeed: Optional[float] = None
+    physical_metrics_distance_covered: Optional[float] = None
+    physical_metrics_walking: Optional[float] = None
+    physical_metrics_jogging: Optional[float] = None
+    physical_metrics_running: Optional[float] = None
+    physical_metrics_sprinting: Optional[float] = None
+    physical_metrics_number_of_sprints: Optional[float] = None
 
 
 class MatchReportMomentumPoint(BaseModel):
@@ -966,6 +1002,10 @@ class MatchReportAvailableDTO(BaseModel):
     events: list[MatchReportEvent]
     shots: list[MatchReportShot]
     team_stats: list[MatchReportTeamStat]
+    # 2026-08-23:上/下半场分段(period='FirstHalf'/'SecondHalf'),数据已在
+    # fact_team_match_stats 里,约 2/3 场次有(近三个赛季实测)。该场没有
+    # 半场行时为空列表——前端据此决定是否显示切换器,不是显示空的半场。
+    team_stats_by_half: list[MatchReportTeamStat] = []
     player_stats: list[MatchReportPlayerStat]
     # 2026-08-23 起才采集,旧场次/未回填场次恒为空列表——空列表如实表示
     # "这场没有势头数据",不是"这场没有势头这个概念"。

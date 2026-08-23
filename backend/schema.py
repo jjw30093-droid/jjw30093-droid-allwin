@@ -35,6 +35,10 @@ PLAYER_STATS_COLUMNS = [
     ("missed_penalty", "REAL"),
     ("shotmap", "TEXT"),
     ("accurate_passes", "REAL"),
+    # 2026-08-23:传球成功次数的分母(尝试传球总数)。原始 payload 该字段是
+    # fractionWithPercentage 类型({"value":37,"total":40}),此前只取 value,
+    # "成功传球 37 次"没有分母看不出好坏。见 _build_stat_lookup 的 __total 约定。
+    ("accurate_passes_total", "REAL"),
     ("chances_created", "REAL"),
     ("big_chance_created_team_title", "REAL"),
     ("passes_into_final_third", "REAL"),
@@ -82,6 +86,7 @@ PLAYER_STATS_COLUMNS = [
     ("physical_metrics_topspeed", "REAL"),
     ("physical_metrics_distance_covered", "REAL"),
     ("physical_metrics_walking", "REAL"),
+    ("physical_metrics_jogging", "REAL"),
     ("physical_metrics_running", "REAL"),
     ("physical_metrics_sprinting", "REAL"),
     ("physical_metrics_number_of_sprints", "REAL"),

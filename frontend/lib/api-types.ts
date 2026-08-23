@@ -3251,6 +3251,11 @@ export interface components {
             shots: components["schemas"]["MatchReportShot"][];
             /** Team Stats */
             team_stats: components["schemas"]["MatchReportTeamStat"][];
+            /**
+             * Team Stats By Half
+             * @default []
+             */
+            team_stats_by_half: components["schemas"]["MatchReportTeamStat"][];
             /** Player Stats */
             player_stats: components["schemas"]["MatchReportPlayerStat"][];
             /**
@@ -3425,6 +3430,54 @@ export interface components {
             goals_conceded?: number | null;
             /** Goals Prevented */
             goals_prevented?: number | null;
+            /** Passes Into Final Third */
+            passes_into_final_third?: number | null;
+            /** Long Balls Accurate */
+            long_balls_accurate?: number | null;
+            /** Dispossessed */
+            dispossessed?: number | null;
+            /** Shot Blocks */
+            shot_blocks?: number | null;
+            /** Recoveries */
+            recoveries?: number | null;
+            /** Dribbled Past */
+            dribbled_past?: number | null;
+            /** Defensive Actions */
+            defensive_actions?: number | null;
+            /** Duel Lost */
+            duel_lost?: number | null;
+            /** Ground Duels Won */
+            ground_duels_won?: number | null;
+            /** Was Fouled */
+            was_fouled?: number | null;
+            /** Expected Goals On Target Faced */
+            expected_goals_on_target_faced?: number | null;
+            /** Keeper Diving Save */
+            keeper_diving_save?: number | null;
+            /** Saves Inside Box */
+            saves_inside_box?: number | null;
+            /** Keeper Sweeper */
+            keeper_sweeper?: number | null;
+            /** Punches */
+            punches?: number | null;
+            /** Keeper High Claim */
+            keeper_high_claim?: number | null;
+            /** Accurate Passes Total */
+            accurate_passes_total?: number | null;
+            /** Physical Metrics Topspeed */
+            physical_metrics_topspeed?: number | null;
+            /** Physical Metrics Distance Covered */
+            physical_metrics_distance_covered?: number | null;
+            /** Physical Metrics Walking */
+            physical_metrics_walking?: number | null;
+            /** Physical Metrics Jogging */
+            physical_metrics_jogging?: number | null;
+            /** Physical Metrics Running */
+            physical_metrics_running?: number | null;
+            /** Physical Metrics Sprinting */
+            physical_metrics_sprinting?: number | null;
+            /** Physical Metrics Number Of Sprints */
+            physical_metrics_number_of_sprints?: number | null;
         };
         /** MatchReportShot */
         MatchReportShot: {
@@ -3465,6 +3518,11 @@ export interface components {
             team_id: number;
             /** Is Home */
             is_home: boolean;
+            /**
+             * Period
+             * @default All
+             */
+            period: string;
             /** Goals */
             goals?: number | null;
             /** Possession */

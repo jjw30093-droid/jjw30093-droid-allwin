@@ -7,7 +7,26 @@ import {
   matchDayZh,
   MARKET_FIELDS,
   MARKET_ZH,
+  TEAM_STAT_GROUPS,
+  TEAM_STAT_LABELS,
 } from "@/components/matches/zh";
+
+describe("TEAM_STAT_GROUPS(2026-08-23 对照 FotMob 分组)", () => {
+  it("每个分组的 statKeys 在 TEAM_STAT_LABELS 里都能查到——防止手滑打错 key 后静默消失", () => {
+    const labelKeys = new Set(TEAM_STAT_LABELS.map((l) => l.key));
+    for (const g of TEAM_STAT_GROUPS) {
+      for (const key of g.statKeys) {
+        expect(labelKeys.has(key), `分组"${g.label}"里的 key "${key}" 不在 TEAM_STAT_LABELS 里`).toBe(true);
+      }
+    }
+  });
+
+  it("TEAM_STAT_LABELS 的每个字段至少落在一个分组里——新加字段忘记分组会被这条抓到", () => {
+    const grouped = new Set(TEAM_STAT_GROUPS.flatMap((g) => g.statKeys));
+    const orphans = TEAM_STAT_LABELS.map((l) => l.key).filter((k) => !grouped.has(k));
+    expect(orphans).toEqual([]);
+  });
+});
 
 describe("北京时间格式化", () => {
   it("精确 kickoff 换算为北京时间,含跨天场景", () => {

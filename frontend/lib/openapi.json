@@ -12506,6 +12506,14 @@
       "type": "array",
       "title": "Team Stats"
      },
+     "team_stats_by_half": {
+      "items": {
+       "$ref": "#/components/schemas/MatchReportTeamStat"
+      },
+      "type": "array",
+      "title": "Team Stats By Half",
+      "default": []
+     },
      "player_stats": {
       "items": {
        "$ref": "#/components/schemas/MatchReportPlayerStat"
@@ -13202,6 +13210,270 @@
        }
       ],
       "title": "Goals Prevented"
+     },
+     "passes_into_final_third": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Passes Into Final Third"
+     },
+     "long_balls_accurate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Long Balls Accurate"
+     },
+     "dispossessed": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dispossessed"
+     },
+     "shot_blocks": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shot Blocks"
+     },
+     "recoveries": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Recoveries"
+     },
+     "dribbled_past": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dribbled Past"
+     },
+     "defensive_actions": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Defensive Actions"
+     },
+     "duel_lost": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duel Lost"
+     },
+     "ground_duels_won": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ground Duels Won"
+     },
+     "was_fouled": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Was Fouled"
+     },
+     "expected_goals_on_target_faced": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Goals On Target Faced"
+     },
+     "keeper_diving_save": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Keeper Diving Save"
+     },
+     "saves_inside_box": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Saves Inside Box"
+     },
+     "keeper_sweeper": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Keeper Sweeper"
+     },
+     "punches": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Punches"
+     },
+     "keeper_high_claim": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Keeper High Claim"
+     },
+     "accurate_passes_total": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accurate Passes Total"
+     },
+     "physical_metrics_topspeed": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Topspeed"
+     },
+     "physical_metrics_distance_covered": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Distance Covered"
+     },
+     "physical_metrics_walking": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Walking"
+     },
+     "physical_metrics_jogging": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Jogging"
+     },
+     "physical_metrics_running": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Running"
+     },
+     "physical_metrics_sprinting": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Sprinting"
+     },
+     "physical_metrics_number_of_sprints": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Number Of Sprints"
      }
     },
     "type": "object",
@@ -13378,6 +13650,11 @@
      "is_home": {
       "type": "boolean",
       "title": "Is Home"
+     },
+     "period": {
+      "type": "string",
+      "title": "Period",
+      "default": "All"
      },
      "goals": {
       "anyOf": [

@@ -227,11 +227,12 @@ def _shots(conn, match_id, home_team_id, away_team_id, lineup_names, i18n):
     return out
 
 
-def _team_stats(conn, match_id, home_team_id):
+def _team_stats_rows(conn, match_id, home_team_id, periods):
+    ph = ",".join("?" for _ in periods)
     rows = conn.execute(
-        """SELECT Team_ID, Goals, extra_json FROM fact_team_match_stats
-           WHERE Match_ID=? AND Period='All'""",
-        (match_id,),
+        f"""SELECT Team_ID, Period, Goals, extra_json FROM fact_team_match_stats
+             WHERE Match_ID=? AND Period IN ({ph})""",
+        (match_id, *periods),
     ).fetchall()
     out = []
     for r in rows:
@@ -242,13 +243,26 @@ def _team_stats(conn, match_id, home_team_id):
         stat = {
             "team_id": int(r["Team_ID"]),
             "is_home": int(r["Team_ID"]) == home_team_id,
+            "period": r["Period"],
             "goals": _to_float(r["Goals"]),
         }
         for src_key, field in TEAM_STAT_KEYS.items():
             stat[field] = _to_float(extra.get(src_key))
         out.append(stat)
-    out.sort(key=lambda s: not s["is_home"])   # 主队在前
+    out.sort(key=lambda s: (s["period"] != "All", not s["is_home"]))
     return out
+
+
+def _team_stats(conn, match_id, home_team_id):
+    """全场(Period='All')——team_stats 字段的既有口径,不受阶段 2 影响。"""
+    return _team_stats_rows(conn, match_id, home_team_id, ("All",))
+
+
+def _team_stats_by_half(conn, match_id, home_team_id):
+    """2026-08-23:上/下半场分段,数据已在 fact_team_match_stats 里
+    (FirstHalf 19,124 行 / SecondHalf 19,122 行,查询层此前写死只取
+    'All')。该场没有半场行时返回空列表,前端据此决定是否显示切换器。"""
+    return _team_stats_rows(conn, match_id, home_team_id, ("FirstHalf", "SecondHalf"))
 
 
 def _player_stats(conn, match_id, home_team_id, ratings, i18n):
@@ -259,7 +273,17 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
                   touches, touches_opp_box, dribbles_succeeded,
                   "matchstats.headers.tackles" AS tackles,
                   clearances, interceptions, duel_won, aerials_won, fouls,
-                  corners, Offsides, saves, goals_conceded, goals_prevented
+                  corners, Offsides, saves, goals_conceded, goals_prevented,
+                  passes_into_final_third, long_balls_accurate, dispossessed,
+                  shot_blocks, recoveries, dribbled_past, defensive_actions,
+                  duel_lost, ground_duels_won, was_fouled,
+                  expected_goals_on_target_faced, keeper_diving_save,
+                  saves_inside_box, keeper_sweeper, punches, keeper_high_claim,
+                  accurate_passes_total,
+                  physical_metrics_topspeed, physical_metrics_distance_covered,
+                  physical_metrics_walking, physical_metrics_jogging,
+                  physical_metrics_running, physical_metrics_sprinting,
+                  physical_metrics_number_of_sprints
            FROM fact_player_match_stats WHERE Match_ID=?""",
         (match_id,),
     ).fetchall()
@@ -297,6 +321,38 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
             "saves": _to_float(r["saves"]),
             "goals_conceded": _to_float(r["goals_conceded"]),
             "goals_prevented": _round(r["goals_prevented"], 3),
+            # 2026-08-23 对照 FotMob 官方安卓包补充投影(此前已采集但从未
+            # 下发)——按 FotMob 的球员分组(进攻/防守/对抗/门将)补齐高覆盖
+            # 字段,详见 docs/current-state.md 或本次调研 plan 里逐字段的
+            # 近赛季非空率实测。
+            "passes_into_final_third": _to_float(r["passes_into_final_third"]),
+            "long_balls_accurate": _to_float(r["long_balls_accurate"]),
+            "dispossessed": _to_float(r["dispossessed"]),
+            "shot_blocks": _to_float(r["shot_blocks"]),
+            "recoveries": _to_float(r["recoveries"]),
+            "dribbled_past": _to_float(r["dribbled_past"]),
+            "defensive_actions": _to_float(r["defensive_actions"]),
+            "duel_lost": _to_float(r["duel_lost"]),
+            "ground_duels_won": _to_float(r["ground_duels_won"]),
+            "was_fouled": _to_float(r["was_fouled"]),
+            "expected_goals_on_target_faced": _round(r["expected_goals_on_target_faced"], 3),
+            "keeper_diving_save": _to_float(r["keeper_diving_save"]),
+            "saves_inside_box": _to_float(r["saves_inside_box"]),
+            "keeper_sweeper": _to_float(r["keeper_sweeper"]),
+            "punches": _to_float(r["punches"]),
+            "keeper_high_claim": _to_float(r["keeper_high_claim"]),
+            "accurate_passes_total": _to_float(r["accurate_passes_total"]),
+            # 体能(阶段 6):payload 没有该球员这一组时全部为 None,前端
+            # 按"至少一项非空才渲染体能行"处理(有则显示、无则不显示,
+            # 与 FotMob 自己的行为一致)。覆盖率现实见 fotmob_client.py
+            # 里 physical_metrics_* 字段旁的实测注释。
+            "physical_metrics_topspeed": _to_float(r["physical_metrics_topspeed"]),
+            "physical_metrics_distance_covered": _to_float(r["physical_metrics_distance_covered"]),
+            "physical_metrics_walking": _to_float(r["physical_metrics_walking"]),
+            "physical_metrics_jogging": _to_float(r["physical_metrics_jogging"]),
+            "physical_metrics_running": _to_float(r["physical_metrics_running"]),
+            "physical_metrics_sprinting": _to_float(r["physical_metrics_sprinting"]),
+            "physical_metrics_number_of_sprints": _to_float(r["physical_metrics_number_of_sprints"]),
         })
     out.sort(key=lambda p: (not p["is_home"], -(p["rating"] or 0)))
     return out
@@ -339,6 +395,7 @@ def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
     events = _events(conn, match_id, i18n)
     shots = _shots(conn, match_id, home_id, away_id, lineup_names, i18n)
     team_stats = _team_stats(conn, match_id, home_id)
+    team_stats_by_half = _team_stats_by_half(conn, match_id, home_id)
     player_stats = _player_stats(conn, match_id, home_id, ratings, i18n)
     momentum = _momentum(conn, match_id)
 
@@ -362,6 +419,7 @@ def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
         "events": events,
         "shots": shots,
         "team_stats": team_stats,
+        "team_stats_by_half": team_stats_by_half,
         "player_stats": player_stats,
         "momentum": momentum,
     }
