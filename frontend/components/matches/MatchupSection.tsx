@@ -86,24 +86,12 @@ function fmtShots(v: number | null | undefined): string {
 // "近 10 个客场"里其实只有 9 场贡献了这个数字)。不写出来会显得这个数字
 // 和同一屏其它"近 10 场"口径一样,是静默改样本量——这里补一个"(近 N 场)"
 // 让差异可见,不做无声的重新归一化。
-//
-// 2026-08-23 站长发现的第二个问题:「禁区内射门」这一行(comparison_metric
-// ="shots")的 xG 恒为 None——查证全库 28592 条 fact_team_match_stats、
-// 抽样 5000 条,extra_json 里从来没有出现过任何"禁区内射门 xG"这个字段,
-// 数据源压根不提供这个拆分(不是这一场比赛缺,是这个指标本身没有 xG 维度,
-// 100% 场次都会是这样)。这跟运动战/反击/定位球"通常有、这次因为样本
-// 污染而没有"是两种性质完全不同的缺失,却在改动前共用同一句"数据不足",
-// 会让用户误以为是同一类"偶尔缺数据"——用 hasXg 区分,永久无该维度时
-// 显示"无 xG 拆分",不用"数据不足"(那个词该留给"这次真的没算出来"的
-// 场景,即已经不多见的"整窗口全部场次污染"情况)。
 function fmtXg(
   v: number | null | undefined,
   complete: boolean | undefined,
   sampleMatches: number | null | undefined,
   windowMatches: number | undefined,
-  hasXg: boolean,
 ): string {
-  if (!hasXg) return "无 xG 拆分";
   if (v == null) return complete === false ? "数据不足" : "—";
   const base = `xG ${v.toFixed(2)}/场`;
   if (sampleMatches != null && windowMatches != null && sampleMatches < windowMatches) {
@@ -131,10 +119,6 @@ function MatchupBlock({ attackerName, defenderName, attackerMatches, defenderMat
         {rows.map((r) => {
           const key = `${attackerName}:${r.situation.key}`;
           const isHighlighted = highlighted.has(key);
-          // box_shots(禁区内射门)的 comparison_metric 恒为 "shots"——
-          // 这个维度天生没有 xG 拆分,跟其它三类"通常有、这次没算出来"
-          // 不是同一件事,文案要分开(见 fmtXg 顶部注释)。
-          const hasXg = r.situation.comparison_metric !== "shots";
           return (
             <li key={r.situation.key} className={isHighlighted ? styles.rowHighlighted : styles.row}>
               <span className={styles.rowLabel}>{r.situation.label}</span>
@@ -142,13 +126,7 @@ function MatchupBlock({ attackerName, defenderName, attackerMatches, defenderMat
                 <span className={styles.rowSide}>
                   <b className="num">{fmtShots(r.situation.own_shots_pg)}</b>
                   <span className={styles.rowSideSub}>
-                    {fmtXg(
-                      r.situation.own_xg_pg,
-                      r.situation.own_xg_complete,
-                      r.situation.own_xg_matches,
-                      attackerMatches,
-                      hasXg,
-                    )}
+                    {fmtXg(r.situation.own_xg_pg, r.situation.own_xg_complete, r.situation.own_xg_matches, attackerMatches)}
                   </span>
                 </span>
                 <span className={styles.rowArrow}>→</span>
@@ -160,7 +138,6 @@ function MatchupBlock({ attackerName, defenderName, attackerMatches, defenderMat
                       r.defConceded?.conceded_xg_complete,
                       r.defConceded?.conceded_xg_matches,
                       defenderMatches,
-                      hasXg,
                     )}
                   </span>
                 </span>
