@@ -80,14 +80,31 @@ function fmtShots(v: number | null | undefined): string {
   return v == null ? "数据不足" : `${v.toFixed(1)} 次/场`;
 }
 
-function fmtXg(v: number | null | undefined, complete: boolean | undefined): string {
+// 2026-08-23 站长决定:某情境类型下只要有比赛缺 xG,就把那场整场剔除、
+// 用剩下的干净场次重新算均值(不是直接判整类"数据不足")——干净场次数
+// (sampleMatches)可能小于这一侧窗口的名义场次(windowMatches,比如
+// "近 10 个客场"里其实只有 9 场贡献了这个数字)。不写出来会显得这个数字
+// 和同一屏其它"近 10 场"口径一样,是静默改样本量——这里补一个"(近 N 场)"
+// 让差异可见,不做无声的重新归一化。
+function fmtXg(
+  v: number | null | undefined,
+  complete: boolean | undefined,
+  sampleMatches: number | null | undefined,
+  windowMatches: number | undefined,
+): string {
   if (v == null) return complete === false ? "数据不足" : "—";
-  return `xG ${v.toFixed(2)}/场`;
+  const base = `xG ${v.toFixed(2)}/场`;
+  if (sampleMatches != null && windowMatches != null && sampleMatches < windowMatches) {
+    return `${base}(近 ${sampleMatches} 场)`;
+  }
+  return base;
 }
 
-function MatchupBlock({ attackerName, defenderName, rows, highlighted }: {
+function MatchupBlock({ attackerName, defenderName, attackerMatches, defenderMatches, rows, highlighted }: {
   attackerName: string;
   defenderName: string;
+  attackerMatches: number;
+  defenderMatches: number;
   rows: Row[];
   highlighted: Set<string>;
 }) {
@@ -108,13 +125,20 @@ function MatchupBlock({ attackerName, defenderName, rows, highlighted }: {
               <span className={styles.rowStats}>
                 <span className={styles.rowSide}>
                   <b className="num">{fmtShots(r.situation.own_shots_pg)}</b>
-                  <span className={styles.rowSideSub}>{fmtXg(r.situation.own_xg_pg, r.situation.own_xg_complete)}</span>
+                  <span className={styles.rowSideSub}>
+                    {fmtXg(r.situation.own_xg_pg, r.situation.own_xg_complete, r.situation.own_xg_matches, attackerMatches)}
+                  </span>
                 </span>
                 <span className={styles.rowArrow}>→</span>
                 <span className={styles.rowSide}>
                   <b className="num">{fmtShots(r.defConceded?.conceded_shots_pg)}</b>
                   <span className={styles.rowSideSub}>
-                    {fmtXg(r.defConceded?.conceded_xg_pg, r.defConceded?.conceded_xg_complete)}
+                    {fmtXg(
+                      r.defConceded?.conceded_xg_pg,
+                      r.defConceded?.conceded_xg_complete,
+                      r.defConceded?.conceded_xg_matches,
+                      defenderMatches,
+                    )}
                   </span>
                 </span>
               </span>
@@ -167,8 +191,22 @@ export function MatchupSection({
         高于同联赛同场景的基准均值时才标记,不是原始数字大小排的。
       </p>
       <div className={styles.card}>
-        <MatchupBlock attackerName={homeName} defenderName={awayName} rows={homeAttack} highlighted={highlighted} />
-        <MatchupBlock attackerName={awayName} defenderName={homeName} rows={awayAttack} highlighted={highlighted} />
+        <MatchupBlock
+          attackerName={homeName}
+          defenderName={awayName}
+          attackerMatches={home.matches}
+          defenderMatches={away.matches}
+          rows={homeAttack}
+          highlighted={highlighted}
+        />
+        <MatchupBlock
+          attackerName={awayName}
+          defenderName={homeName}
+          attackerMatches={away.matches}
+          defenderMatches={home.matches}
+          rows={awayAttack}
+          highlighted={highlighted}
+        />
         <p className={styles.summary}>{summary}</p>
         <p className={styles.footNote}>
           「禁区内射门」这一行没有 xG 拆分(数据源本身不带),用射门次数代替。

@@ -11904,6 +11904,17 @@
       "title": "Own Xg Complete",
       "default": false
      },
+     "own_xg_matches": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Own Xg Matches"
+     },
      "conceded_shots_pg": {
       "anyOf": [
        {
@@ -11930,6 +11941,17 @@
       "type": "boolean",
       "title": "Conceded Xg Complete",
       "default": false
+     },
+     "conceded_xg_matches": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Conceded Xg Matches"
      },
      "comparison_metric": {
       "type": "string",

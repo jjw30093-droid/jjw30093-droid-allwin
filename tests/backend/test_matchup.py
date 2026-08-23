@@ -88,7 +88,14 @@ class TestTeamMatchupProfile:
             assert s["own_shots_pg"] is None
             assert s["conceded_shots_pg"] is None
 
-    def test_partial_xg_in_situation_flagged_incomplete(self, data_dir):
+    def test_partial_xg_drops_the_contaminated_match_and_averages_the_rest(self, data_dir):
+        """2026-08-23 站长决定(反馈自 miaomiaodi.vip 生产实测:江原FC 客场
+        运动战,52 脚射门里只有 1 脚缺 xG,整格却因此显示"数据不足")——
+        单场比赛只要有 1 脚射门缺 xG,就把那一场整场从 xG 统计里剔除,不是
+        丢那一脚"部分已知"凑合计,也不是让整个情境类型直接判"不完整"。
+        5 场里 j=0 那场缺 xG,应该被整场剔除,剩下 4 场(j=1..4,each 0.3)
+        重新算出真实均值,而不是回退成 None。射门次数(shots_pg)不受这次
+        剔除影响,仍是全量 5 场的次数。"""
         conn = connect_rw("core")
         seed_core_schema(conn)
         for j in range(5):
@@ -103,9 +110,32 @@ class TestTeamMatchupProfile:
 
         result = team_matchup_profile(conn, TEAM, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
         regular = next(s for s in result["situations"] if s["key"] == "regular_play")
-        assert regular["own_shots_pg"] == 1.0  # 5 脚射门/5场
+        assert regular["own_shots_pg"] == 1.0  # 5 脚射门/5场,不受 xG 剔除影响
+        assert regular["own_xg_complete"] is True
+        assert regular["own_xg_matches"] == 4  # 5 场剔除 1 场污染场次,剩 4 场干净
+        assert regular["own_xg_pg"] == 0.3  # (0.3*4)/4,不是 (0.3*4)/5
+
+    def test_all_matches_contaminated_still_reports_insufficient(self, data_dir):
+        """反例对照:如果窗口里每一场都至少缺 1 脚 xG(干净场次数=0),
+        剔除污染场次后没有剩余场次可用,必须诚实回退 None/数据不足,
+        不能凭空生成一个基于 0 场的均值。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        for j in range(5):
+            mid = TEAM * 10 + j
+            opp = 9700 + j
+            insert_match(conn, mid, league_id=LEAGUE, date=f"2025-01-{10+j:02d}",
+                         home_id=TEAM, away_id=opp, home="队A", away="对手",
+                         status="Finish", home_score=1, away_score=0,
+                         kickoff_at_utc=f"2025-01-{10+j:02d}T12:00:00Z")
+            _shot(conn, mid, TEAM, "RegularPlay", None)  # 每场都缺
+        conn.commit()
+
+        result = team_matchup_profile(conn, TEAM, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
+        regular = next(s for s in result["situations"] if s["key"] == "regular_play")
         assert regular["own_xg_complete"] is False
         assert regular["own_xg_pg"] is None
+        assert regular["own_xg_matches"] is None
 
 
 def _seed_league_baseline_team(conn, team_id, *, regular_xg_per_shot=0.3, n=10, start_id=8000):
@@ -264,13 +294,21 @@ class TestLeagueSituationBaseline:
 
     def test_real_data_shape_incomplete_xg_never_falls_back_to_shots(self, data_dir):
         """真实数据复现(比赛 5868022 / 球队 10205,独立复核第二轮报告的
-        原始反例):某类型 own_xg_complete=False 时,own_comparison_value
-        必须是 None,不能悄悄退回 own_shots_pg 去跟 xG 口径的基准比。"""
+        原始反例):own_xg_complete=False 时,own_comparison_value 必须是
+        None,不能悄悄退回 own_shots_pg 去跟 xG 口径的基准比。
+
+        2026-08-23 起,单场缺 xG 只剔除那一场(见
+        test_partial_xg_drops_the_contaminated_match_and_averages_the_rest),
+        所以这里要真正触发"own_xg_complete=False"这条分支,必须让窗口里
+        **每一场**都至少缺 1 脚 xG(剔除污染场次后干净场次数=0),不能再
+        像旧版那样只让 1 场缺 xG(那样现在会被剔除后用剩下 9 场算出真实
+        均值,不再是 incomplete)。"""
         conn = connect_rw("core")
         seed_core_schema(conn)
         for i, tid in enumerate(range(9701, 9706)):
             _seed_league_baseline_team(conn, tid, regular_xg_per_shot=0.3, start_id=9000 + i * 100)
-        # TEAM 窗口:运动战射门次数很高,但故意让其中一场缺 xG(own_xg_complete=False)
+        # TEAM 窗口:运动战射门次数很高,但每一场都至少有 1 脚缺 xG——
+        # 剔除污染场次后干净场次数=0,own_xg_complete 必须保持 False。
         for j in range(10):
             mid = TEAM * 100 + j
             opp = 9800 + j
@@ -279,12 +317,14 @@ class TestLeagueSituationBaseline:
                          status="Finish", home_score=1, away_score=0,
                          kickoff_at_utc=f"2025-01-{10+j:02d}T12:00:00Z")
             _shot(conn, mid, TEAM, "RegularPlay", 6.0)  # 极端大的"xG"次数级数值
-            _shot(conn, mid, TEAM, "RegularPlay", None if j == 0 else 6.0)
+            _shot(conn, mid, TEAM, "RegularPlay", None)  # 每一场都缺,无干净场次
+
         conn.commit()
 
         result = team_matchup_profile(conn, TEAM, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
         regular = next(s for s in result["situations"] if s["key"] == "regular_play")
         assert regular["own_xg_complete"] is False
+        assert regular["own_xg_matches"] is None
         assert regular["own_shots_pg"] is not None and regular["own_shots_pg"] > 0
         assert regular["own_comparison_value"] is None  # 不得退回次数
         assert regular["comparison_complete"] is False

@@ -3055,6 +3055,8 @@ export interface components {
              * @default false
              */
             own_xg_complete: boolean;
+            /** Own Xg Matches */
+            own_xg_matches?: number | null;
             /** Conceded Shots Pg */
             conceded_shots_pg?: number | null;
             /** Conceded Xg Pg */
@@ -3064,6 +3066,8 @@ export interface components {
              * @default false
              */
             conceded_xg_complete: boolean;
+            /** Conceded Xg Matches */
+            conceded_xg_matches?: number | null;
             /**
              * Comparison Metric
              * @default xg

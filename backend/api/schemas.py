@@ -1131,9 +1131,17 @@ class MatchPreviewMatchupSituationDTO(BaseModel):
     own_shots_pg: Optional[float] = None
     own_xg_pg: Optional[float] = None
     own_xg_complete: bool = False
+    # 2026-08-23 站长决定:某场比赛只要有 1 脚射门缺 xG,就把那场整场从这一
+    # 情境类型的 xG 统计里剔除(不是丢那一脚拿"部分已知"凑合计),用剩下的
+    # "干净"场次重新算均值——own_xg_matches 就是这个干净场次数,可能小于
+    # 比赛信息卡展示的窗口场次(profile.matches);own_xg_complete=False
+    # (真的没有任何干净场次可用)时恒为 None。box_shots 没有 xG 拆分,恒为
+    # None,不代表数据缺失。
+    own_xg_matches: Optional[int] = None
     conceded_shots_pg: Optional[float] = None
     conceded_xg_pg: Optional[float] = None
     conceded_xg_complete: bool = False
+    conceded_xg_matches: Optional[int] = None
     # 验收返工二(独立复核第二轮,P1):显式声明这一类该用哪个字段判定
     # "关键对位",前端不得再用 `own_xg_pg ?? own_shots_pg` 隐式猜单位——
     # 那在 xG 不完整时会把射门次数当 xG 用,去跟 xG 口径的联赛基准比

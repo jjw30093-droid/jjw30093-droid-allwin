@@ -61,13 +61,36 @@ _ALL_SITUATION_KEYS = [key for key, _, _ in _SITUATION_GROUPS] + ["box_shots"]
 MIN_BASELINE_SAMPLE = 5
 
 
-def _shots_xg(rows: list[sqlite3.Row]) -> tuple[int, float | None, bool]:
+def _shots_xg(rows: list[sqlite3.Row], all_match_ids: list[int]) -> tuple[int, float | None, bool, int]:
+    """rows 每行须含 Match_ID、xG 两列(该情境类型下己方或对手的全部射门)。
+    all_match_ids 是候选窗口的全部比赛 id(含这类射门次数为 0 的比赛)。
+
+    诚实纪律(Phase 0.2 教训:分子分母必须来自同一批场次)+ 2026-08-23
+    站长决定:单场比赛里哪怕只有 1 脚射门缺 xG,也把这场比赛的这类射门
+    整场从 xG 统计里剔除(不是只丢那一脚"部分已知"凑合计)——分子(xG
+    合计)与分母(参与统计的场次)必须配对来自同一批"这类射门全部有 xG"
+    的干净比赛。射门次数(shots)不受影响,仍按全量候选场次统计(次数
+    不依赖 xG 是否存在,这条口径不变)。
+
+    返回:射门总数(全量口径,给 shots_pg 用)、干净场次的 xG 合计(或
+    None)、是否有干净场次可以展示、干净场次数(调用方用这个数字而不是
+    窗口原始场次做 xG 的分母——分子分母必须配对,不能用全量场次除一个
+    去污染后的合计)。
+    """
     shots = len(rows)
-    xg_rows = [r["xG"] for r in rows if r["xG"] is not None]
-    xg_complete = shots > 0 and len(xg_rows) == shots
-    # 只有全部射门都带 xG 才给合计,否则诚实给 None(不用"部分已知"冒充整类)。
-    xg = sum(xg_rows) if xg_complete else None
-    return shots, xg, xg_complete
+    if shots == 0:
+        # 这类射门在候选窗口里一次都没发生过,维持原有语义:不展示数字
+        # (不是"0.00"——没有观测到不等于观测到了 0 次)。
+        return 0, None, False, 0
+    by_match: dict[int, list[float | None]] = {}
+    for r in rows:
+        by_match.setdefault(int(r["Match_ID"]), []).append(r["xG"])
+    contaminated = {mid for mid, xgs in by_match.items() if any(x is None for x in xgs)}
+    clean_n = sum(1 for mid in all_match_ids if mid not in contaminated)
+    if clean_n == 0:
+        return shots, None, False, 0
+    clean_xg = sum(x for mid, xgs in by_match.items() if mid not in contaminated for x in xgs)
+    return shots, clean_xg, True, clean_n
 
 
 def _own_situation_rows(
@@ -78,7 +101,7 @@ def _own_situation_rows(
     mid_ph = ",".join("?" for _ in match_ids)
     sit_ph = ",".join("?" for _ in situations)
     return conn.execute(
-        f"""SELECT xG FROM fact_shotmap
+        f"""SELECT Match_ID, xG FROM fact_shotmap
              WHERE Team_ID=? AND Match_ID IN ({mid_ph}) AND Situation IN ({sit_ph})""",
         [team_id, *match_ids, *situations],
     ).fetchall()
@@ -92,7 +115,7 @@ def _conceded_situation_rows(
     mid_ph = ",".join("?" for _ in match_ids)
     sit_ph = ",".join("?" for _ in situations)
     return conn.execute(
-        f"""SELECT f.xG xG
+        f"""SELECT f.Match_ID Match_ID, f.xG xG
               FROM dim_match m
               JOIN fact_shotmap f ON f.Match_ID=m.Match_ID
                AND f.Team_ID = (CASE WHEN m.Home_Team_ID=? THEN m.Away_Team_ID ELSE m.Home_Team_ID END)
@@ -170,12 +193,16 @@ def league_situation_baseline(
         ids = w.match_ids
         n = w.matches
         for key, _label, sits in _SITUATION_GROUPS:
-            own_shots, own_xg, own_xg_complete = _shots_xg(_own_situation_rows(conn, ids, tid, sits))
-            conc_shots, conc_xg, conc_xg_complete = _shots_xg(_conceded_situation_rows(conn, ids, tid, sits))
-            if own_xg_complete and n > 0:
-                own_samples[key].append(own_xg / n)
-            if conc_xg_complete and n > 0:
-                conceded_samples[key].append(conc_xg / n)
+            own_shots, own_xg, own_xg_complete, own_clean_n = _shots_xg(
+                _own_situation_rows(conn, ids, tid, sits), ids
+            )
+            conc_shots, conc_xg, conc_xg_complete, conc_clean_n = _shots_xg(
+                _conceded_situation_rows(conn, ids, tid, sits), ids
+            )
+            if own_xg_complete and own_clean_n > 0:
+                own_samples[key].append(own_xg / own_clean_n)
+            if conc_xg_complete and conc_clean_n > 0:
+                conceded_samples[key].append(conc_xg / conc_clean_n)
         box_own_avg, _box_own_n = _box_own(conn, ids, tid)
         box_conc_avg, _box_conc_n = _box_conceded(conn, ids, tid)
         if box_own_avg is not None:
@@ -263,21 +290,31 @@ def team_matchup_profile(
 
     situations = []
     for key, label, sits in _SITUATION_GROUPS:
-        own_shots, own_xg, own_xg_complete = _shots_xg(_own_situation_rows(conn, ids, team_id, sits))
-        conc_shots, conc_xg, conc_xg_complete = _shots_xg(_conceded_situation_rows(conn, ids, team_id, sits))
+        own_shots, own_xg, own_xg_complete, own_clean_n = _shots_xg(
+            _own_situation_rows(conn, ids, team_id, sits), ids
+        )
+        conc_shots, conc_xg, conc_xg_complete, conc_clean_n = _shots_xg(
+            _conceded_situation_rows(conn, ids, team_id, sits), ids
+        )
         own_shots_pg = _pg(own_shots) if n > 0 else None
-        own_xg_pg = _pg(own_xg)
+        # xG 的分母是"干净场次数"(own_clean_n/conc_clean_n),不是窗口原始
+        # 场次 n——2026-08-23 站长决定:单场里只要有 1 脚缺 xG 就把那场整场
+        # 从 xG 统计里剔除,分子分母必须配对来自同一批干净场次,不能拿全量
+        # 场次去除一个去污染后的合计(那等于变相把被剔除的场次按 0 计入)。
+        own_xg_pg = round(own_xg / own_clean_n, 2) if own_xg_complete else None
         conc_shots_pg = _pg(conc_shots) if n > 0 else None
-        conc_xg_pg = _pg(conc_xg)
+        conc_xg_pg = round(conc_xg / conc_clean_n, 2) if conc_xg_complete else None
         situations.append({
             "key": key,
             "label": label,
             "own_shots_pg": own_shots_pg,
             "own_xg_pg": own_xg_pg,
             "own_xg_complete": own_xg_complete,
+            "own_xg_matches": own_clean_n if own_xg_complete else None,
             "conceded_shots_pg": conc_shots_pg,
             "conceded_xg_pg": conc_xg_pg,
             "conceded_xg_complete": conc_xg_complete,
+            "conceded_xg_matches": conc_clean_n if conc_xg_complete else None,
             **_comparison_fields(
                 metric="xg",
                 own_xg_pg=own_xg_pg, own_xg_complete=own_xg_complete, own_shots_pg=own_shots_pg,
@@ -296,9 +333,11 @@ def team_matchup_profile(
         "own_shots_pg": box_own_shots_pg,
         "own_xg_pg": None,
         "own_xg_complete": False,
+        "own_xg_matches": None,
         "conceded_shots_pg": box_conc_shots_pg,
         "conceded_xg_pg": None,
         "conceded_xg_complete": False,
+        "conceded_xg_matches": None,
         **_comparison_fields(
             metric="shots",
             own_xg_pg=None, own_xg_complete=False, own_shots_pg=box_own_shots_pg,
