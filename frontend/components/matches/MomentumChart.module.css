@@ -1,0 +1,36 @@
+.legend {
+  display: flex;
+  gap: 16px;
+  padding: 4px 2px 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.homeDot,
+.awayDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.homeDot {
+  background: var(--brand-teal);
+}
+
+.awayDot {
+  background: var(--brand-blue);
+}
+
+.footNote {
+  margin: 6px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}

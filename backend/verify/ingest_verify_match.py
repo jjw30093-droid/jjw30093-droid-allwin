@@ -39,6 +39,7 @@ from schema import (
     TEAM_STATS_CORE_COLUMNS,
     MATCH_EVENTS_CORE_COLUMNS,
     MATCH_LINEUP_CORE_COLUMNS,
+    MOMENTUM_COLUMNS,
 )
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -72,6 +73,7 @@ def fetch_match_data(
         "player_stats": client.parse_player_stats_records(page_props, match_id),
         "events": client.parse_match_events(page_props, match_id),
         "lineup_rows": client.parse_lineup_records(page_props, match_id),
+        "momentum_rows": client.parse_momentum_records(page_props, match_id),
     }
 
 
@@ -123,6 +125,9 @@ def write_match_data(conn, match_id: Union[int, str], data: dict) -> None:
         MATCH_LINEUP_CORE_COLUMNS + [("extra_json", "TEXT")],
         _rows_with_extra_json(data["lineup_rows"]),
     )
+
+    conn.execute("DELETE FROM fact_match_momentum WHERE Match_ID = ?", (match_id,))
+    _insert_many(conn, "fact_match_momentum", MOMENTUM_COLUMNS, data["momentum_rows"])
 
 
 def ingest_verify_match(

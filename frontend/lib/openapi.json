@@ -12512,6 +12512,14 @@
       },
       "type": "array",
       "title": "Player Stats"
+     },
+     "momentum": {
+      "items": {
+       "$ref": "#/components/schemas/MatchReportMomentumPoint"
+      },
+      "type": "array",
+      "title": "Momentum",
+      "default": []
      }
     },
     "type": "object",
@@ -12548,6 +12556,11 @@
      "player_stats": {
       "type": "boolean",
       "title": "Player Stats"
+     },
+     "momentum": {
+      "type": "boolean",
+      "title": "Momentum",
+      "default": false
      }
     },
     "type": "object",
@@ -12885,6 +12898,24 @@
      "bench"
     ],
     "title": "MatchReportLineupTeam"
+   },
+   "MatchReportMomentumPoint": {
+    "properties": {
+     "minute": {
+      "type": "number",
+      "title": "Minute"
+     },
+     "value": {
+      "type": "number",
+      "title": "Value"
+     }
+    },
+    "type": "object",
+    "required": [
+     "minute",
+     "value"
+    ],
+    "title": "MatchReportMomentumPoint"
    },
    "MatchReportPlayerStat": {
     "properties": {

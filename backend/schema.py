@@ -253,6 +253,20 @@ MATCH_LINEUP_CORE_COLUMNS = [
     ("sub_out_time", "INTEGER"),
 ]
 
+# ── fact_match_momentum: parse_momentum_records() 返回，逐分钟"势头"曲线 ──
+# 2026-08-23 对照 FotMob 官方安卓包核实,payload 里一直有 content.momentum.
+# main.data(约 90-95 个 {minute, value} 点),此前从未解析。value 是 FotMob
+# 自己算的黑箱综合评分(不是本站可复现的口径——不同于 fact_shotmap 能自己
+# 按 xG 重新聚合,这个数字来源方法论未公开),真实一场比赛(5107575)实测
+# 用进球事件反向验证过正负号含义:正值=主队占优,负值=客队占优
+# (63' 主队进球前后动量 27→65,90' 客队进球后动量转负)。
+# 无稳定行 id,按 Match_ID 先删后插,与 fact_shotmap 同一策略。
+MOMENTUM_COLUMNS = [
+    ("Match_ID", "INTEGER"),
+    ("Minute", "REAL"),
+    ("Value", "REAL"),
+]
+
 # ── fact_season_player_stats: parse_season_player_stats() 返回，赛季球员榜单 ──
 # 每个统计维度(stat_name，如 goals/assists/rating 等)一份全量排名，来自联赛 API
 # stats.players[].fetchAllUrl 拉取的完整 JSON(不止 topThree)。

@@ -33,7 +33,10 @@ class TestAvailability:
         assert body["coverage"] == {
             "lineup": True, "events": True, "shots": True,
             "team_stats": True, "player_stats": True,
+            # 2026-08-23 起才采集,这份 fixture 没有势头数据,如实为 False。
+            "momentum": False,
         }
+        assert body["momentum"] == []
         assert len(body["lineups"]) == 2
         home, away = body["lineups"]
         assert home["is_home"] is True and home["formation"] == "4-3-3"
@@ -175,3 +178,38 @@ class TestGateAndCache:
         r = client.get("/api/v1/matches/9002/report")
         assert r.status_code == 200
         assert r.headers["Cache-Control"] == "private, no-store"
+
+
+class TestMomentum:
+    """2026-08-23 起才采集(见 backend/migrations/core/0006_match_momentum.sql),
+    旧场次/未回填场次没有行——空列表如实表示"没有势头数据"。"""
+
+    def test_present_when_rows_exist(self, seeded_report, client):
+        conn = connect_rw("core")
+        conn.executemany(
+            "INSERT INTO fact_match_momentum (Match_ID, Minute, Value) VALUES (?, ?, ?)",
+            [(9002, 0, 0), (9002, 63, 27), (9002, 45.5, -62)],
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.get("/api/v1/matches/9002/report")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["coverage"]["momentum"] is True
+        # 按 Minute 升序返回,不是插入顺序
+        assert body["momentum"] == [
+            {"minute": 0, "value": 0},
+            {"minute": 45.5, "value": -62},
+            {"minute": 63, "value": 27},
+        ]
+
+    def test_absent_does_not_affect_availability(self, seeded_report, client):
+        """五张核心事实表都有数据、势头表没数据:比赛报告仍然可用,
+        势头如实为空列表,不因为缺这一项就整体判"不可用"。"""
+        r = client.get("/api/v1/matches/9002/report")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["available"] is True
+        assert body["coverage"]["momentum"] is False
+        assert body["momentum"] == []

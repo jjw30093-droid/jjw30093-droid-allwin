@@ -797,6 +797,9 @@ class MatchReportCoverage(BaseModel):
     shots: bool
     team_stats: bool
     player_stats: bool
+    # 2026-08-23 起才采集,默认 False——不参与"这场比赛有没有可用内容"的
+    # 判定(见 backend/queries/match_report.py::match_report 的说明)。
+    momentum: bool = False
 
 
 class MatchReportLineupPlayer(BaseModel):
@@ -947,6 +950,14 @@ class MatchReportPlayerStat(BaseModel):
     goals_prevented: Optional[float] = None
 
 
+class MatchReportMomentumPoint(BaseModel):
+    minute: float
+    # FotMob 自己算的黑箱综合评分(不是本站可复现口径),实测区间约
+    # [-100, 100];正值=主队占优,负值=客队占优(2026-08-23 用真实比赛
+    # 5107575 的进球事件反向验证过正负号含义,不是猜测)。
+    value: float
+
+
 class MatchReportAvailableDTO(BaseModel):
     match_id: int
     available: Literal[True]
@@ -956,6 +967,9 @@ class MatchReportAvailableDTO(BaseModel):
     shots: list[MatchReportShot]
     team_stats: list[MatchReportTeamStat]
     player_stats: list[MatchReportPlayerStat]
+    # 2026-08-23 起才采集,旧场次/未回填场次恒为空列表——空列表如实表示
+    # "这场没有势头数据",不是"这场没有势头这个概念"。
+    momentum: list[MatchReportMomentumPoint] = []
 
 
 class MatchReportUnavailableDTO(BaseModel):

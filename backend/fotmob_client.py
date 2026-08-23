@@ -817,6 +817,51 @@ class FotMobClient:
             })
         return records
 
+    def parse_momentum_records(
+        self,
+        page_props: dict,
+        match_id: Union[int, str],
+    ) -> List[dict]:
+        """
+        从 pageProps 中提取 fact_match_momentum 表所需字段(逐分钟"势头"曲线)。
+
+        返回字段列表（对应 fact_match_momentum 列）: Match_ID, Minute, Value
+
+        说明:
+          - 来源: content.momentum.main.data,数组元素形如
+            {"minute": 63, "value": 27}(半场补时用小数分钟,如 45.5)。
+          - Value: FotMob 自己算的黑箱综合评分(不是本站可复现口径),
+            实测区间约 [-100, 100]。正值=主队占优,负值=客队占优——
+            2026-08-23 用真实比赛(5107575)进球事件反向验证过:63' 主队
+            进球前后 27→65,90' 客队进球后转负,不是猜测。
+          - 赛前/未完赛比赛该字段通常是 False 或缺失,返回空列表(不是异常)。
+        """
+        content = page_props.get("content", {})
+        momentum = content.get("momentum")
+        if not isinstance(momentum, dict):
+            return []
+        main = momentum.get("main")
+        if not isinstance(main, dict):
+            return []
+        points = main.get("data")
+        if not isinstance(points, list):
+            return []
+
+        records = []
+        for p in points:
+            if not isinstance(p, dict):
+                continue
+            minute = p.get("minute")
+            value = p.get("value")
+            if minute is None or value is None:
+                continue
+            records.append({
+                "Match_ID": int(match_id),
+                "Minute": minute,
+                "Value": value,
+            })
+        return records
+
     def parse_team_stats_records(
         self,
         page_props: dict,

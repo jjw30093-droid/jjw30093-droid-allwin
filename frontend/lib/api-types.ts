@@ -3253,6 +3253,11 @@ export interface components {
             team_stats: components["schemas"]["MatchReportTeamStat"][];
             /** Player Stats */
             player_stats: components["schemas"]["MatchReportPlayerStat"][];
+            /**
+             * Momentum
+             * @default []
+             */
+            momentum: components["schemas"]["MatchReportMomentumPoint"][];
         };
         /** MatchReportCoverage */
         MatchReportCoverage: {
@@ -3266,6 +3271,11 @@ export interface components {
             team_stats: boolean;
             /** Player Stats */
             player_stats: boolean;
+            /**
+             * Momentum
+             * @default false
+             */
+            momentum: boolean;
         };
         /** MatchReportEvent */
         MatchReportEvent: {
@@ -3347,6 +3357,13 @@ export interface components {
             starters: components["schemas"]["MatchReportLineupPlayer"][];
             /** Bench */
             bench: components["schemas"]["MatchReportLineupPlayer"][];
+        };
+        /** MatchReportMomentumPoint */
+        MatchReportMomentumPoint: {
+            /** Minute */
+            minute: number;
+            /** Value */
+            value: number;
         };
         /** MatchReportPlayerStat */
         MatchReportPlayerStat: {

@@ -22,6 +22,7 @@ from schema import (
     TEAM_STATS_CORE_COLUMNS,
     MATCH_EVENTS_CORE_COLUMNS,
     MATCH_LINEUP_CORE_COLUMNS,
+    MOMENTUM_COLUMNS,
     _quote,
 )
 
@@ -52,6 +53,8 @@ def init_verify_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_v_events_match ON fact_match_events (Match_ID)")
         _create_table(conn, "fact_match_lineup", MATCH_LINEUP_CORE_COLUMNS, extra_sql="extra_json TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_v_lineup_match ON fact_match_lineup (Match_ID)")
+        _create_table(conn, "fact_match_momentum", MOMENTUM_COLUMNS)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_v_momentum_match ON fact_match_momentum (Match_ID)")
         conn.commit()
     finally:
         conn.close()

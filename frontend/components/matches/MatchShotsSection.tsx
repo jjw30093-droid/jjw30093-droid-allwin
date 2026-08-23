@@ -12,6 +12,7 @@
 
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { ThreatTimeline } from "@/components/matches/ThreatTimeline";
+import { MomentumChart } from "@/components/matches/MomentumChart";
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
 import { ShotMapChart } from "@/components/matches/ShotMapChart";
 import styles from "@/app/matches/[matchId]/match-detail.module.css";
@@ -20,12 +21,14 @@ type MatchReport = Extract<MatchReportResponse, { available: true }>;
 
 export function MatchShotsSection({
   shots,
+  momentum,
   homeName,
   awayName,
   homeScore,
   awayScore,
 }: {
   shots: MatchReport["shots"];
+  momentum: MatchReport["momentum"];
   homeName: string;
   awayName: string;
   homeScore?: number | null;
@@ -38,6 +41,13 @@ export function MatchShotsSection({
 
   return (
     <>
+      {momentum.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>势头图</h2>
+          <MomentumChart momentum={momentum} homeName={homeName} awayName={awayName} />
+        </section>
+      )}
+
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>射门威胁时间轴</h2>
         <ThreatTimeline shots={shots} homeName={homeName} awayName={awayName} />

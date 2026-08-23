@@ -447,6 +447,7 @@ export function MatchDetailBody({
           shots={
             <MatchShotsSection
               shots={factReport.shots}
+              momentum={factReport.momentum}
               homeName={m.home.name}
               awayName={m.away.name}
               homeScore={m.home_score}

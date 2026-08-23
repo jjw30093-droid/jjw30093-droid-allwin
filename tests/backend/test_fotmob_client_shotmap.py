@@ -96,3 +96,62 @@ class TestParseShotmapRecords:
     def test_empty_shotmap_returns_empty_list(self):
         client = FotMobClient()
         assert client.parse_shotmap_records(_page_props([]), match_id=1) == []
+
+
+class TestParseMomentumRecords:
+    """2026-08-23 对照 FotMob 官方安卓包核实:content.momentum.main.data
+    (逐分钟"势头"曲线)此前从未解析。fixture 结构照抄真实比赛(5107575)
+    实测到的原始 payload 形状。"""
+
+    def test_extracts_minute_value_pairs(self):
+        page_props = {
+            "content": {
+                "momentum": {
+                    "main": {
+                        "data": [
+                            {"minute": 0, "value": 0},
+                            {"minute": 1, "value": 5},
+                            {"minute": 45.5, "value": -62},
+                        ]
+                    },
+                    "alternateModels": [],
+                }
+            }
+        }
+        client = FotMobClient()
+        records = client.parse_momentum_records(page_props, match_id=5107575)
+        assert records == [
+            {"Match_ID": 5107575, "Minute": 0, "Value": 0},
+            {"Match_ID": 5107575, "Minute": 1, "Value": 5},
+            {"Match_ID": 5107575, "Minute": 45.5, "Value": -62},
+        ]
+
+    def test_missing_momentum_key_returns_empty_list(self):
+        """赛前/未完赛比赛通常没有这个字段(或为 False),不是异常。"""
+        client = FotMobClient()
+        assert client.parse_momentum_records({"content": {}}, match_id=1) == []
+
+    def test_momentum_false_returns_empty_list(self):
+        """真实赛前 fixture(prematch-5104961.json)里 content.momentum 是
+        字面量 False,不是 dict——必须能安全处理,不能当 dict 解引用崩溃。"""
+        client = FotMobClient()
+        assert client.parse_momentum_records({"content": {"momentum": False}}, match_id=1) == []
+
+    def test_malformed_points_are_skipped_not_crashed(self):
+        page_props = {
+            "content": {
+                "momentum": {
+                    "main": {
+                        "data": [
+                            {"minute": 1, "value": 5},
+                            {"minute": None, "value": 5},
+                            {"minute": 2, "value": None},
+                            "not-a-dict",
+                        ]
+                    }
+                }
+            }
+        }
+        client = FotMobClient()
+        records = client.parse_momentum_records(page_props, match_id=1)
+        assert records == [{"Match_ID": 1, "Minute": 1, "Value": 5}]

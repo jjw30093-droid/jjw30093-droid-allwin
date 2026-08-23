@@ -302,6 +302,18 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
     return out
 
 
+def _momentum(conn, match_id):
+    """势头曲线(逐分钟,FotMob 自己的黑箱综合评分,见
+    backend/fotmob_client.py::parse_momentum_records 的口径说明)。2026-08-23
+    起才采集,旧场次/未重新抓取的场次没有行——空列表如实表示"这场没有势头
+    数据",不是"这场没有势头这个概念"。"""
+    rows = conn.execute(
+        "SELECT Minute, Value FROM fact_match_momentum WHERE Match_ID=? ORDER BY Minute",
+        (match_id,),
+    ).fetchall()
+    return [{"minute": r["Minute"], "value": r["Value"]} for r in rows]
+
+
 def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
     """五张事实表的一次性只读投影;五张全空 → None(未完赛或未入库)。"""
     m = conn.execute(
@@ -328,6 +340,7 @@ def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
     shots = _shots(conn, match_id, home_id, away_id, lineup_names, i18n)
     team_stats = _team_stats(conn, match_id, home_id)
     player_stats = _player_stats(conn, match_id, home_id, ratings, i18n)
+    momentum = _momentum(conn, match_id)
 
     coverage = {
         "lineup": bool(lineups),
@@ -336,8 +349,13 @@ def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
         "team_stats": bool(team_stats),
         "player_stats": bool(player_stats),
     }
+    # 势头数据单独统计覆盖率(方便观测采集进度),但不参与"这场比赛有没有
+    # 可展示内容"的判定——势头曲线是补充性的黑箱评分,不能单独撑起一份
+    # "可用"的比赛报告(同一场比赛五张核心事实表全空、只有势头数据这种
+    # 情况理论上不该发生,不给它单独当"有数据"的资格)。
     if not any(coverage.values()):
         return None
+    coverage["momentum"] = bool(momentum)
     return {
         "coverage": coverage,
         "lineups": lineups,
@@ -345,4 +363,5 @@ def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
         "shots": shots,
         "team_stats": team_stats,
         "player_stats": player_stats,
+        "momentum": momentum,
     }

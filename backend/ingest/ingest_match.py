@@ -7,7 +7,7 @@ ingest_match.py — 抓取单场比赛详情并落库。
 幂等策略(按 match 粒度):
     - dim_match / dim_player: INSERT OR REPLACE(upsert)
     - fact_shotmap / fact_player_match_stats / fact_team_match_stats /
-      fact_match_events / fact_match_lineup:
+      fact_match_events / fact_match_lineup / fact_match_momentum:
       先 DELETE WHERE Match_ID=? 再插入,不依赖行级唯一键。
       2026-08-23 更正:此前这里写"shotmap 等原始数据本身没有稳定的行 id",
       不准确——原始 payload 每脚射门都带 `id`(现已落库为 fact_shotmap.Shot_ID,
@@ -34,6 +34,7 @@ from schema import (
     TEAM_STATS_CORE_COLUMNS,
     MATCH_EVENTS_CORE_COLUMNS,
     MATCH_LINEUP_CORE_COLUMNS,
+    MOMENTUM_COLUMNS,
     _quote,
 )
 
@@ -102,6 +103,7 @@ def ingest_match(
     player_stats = client.parse_player_stats_records(page_props, match_id)
     events = client.parse_match_events(page_props, match_id)
     lineup_rows = client.parse_lineup_records(page_props, match_id)
+    momentum_rows = client.parse_momentum_records(page_props, match_id)
 
     conn = get_connection()
     try:
@@ -160,6 +162,9 @@ def ingest_match(
             _rows_with_extra_json(lineup_rows),
         )
 
+        conn.execute("DELETE FROM fact_match_momentum WHERE Match_ID = ?", (match_id,))
+        _insert_many(conn, "fact_match_momentum", MOMENTUM_COLUMNS, momentum_rows)
+
         conn.commit()
     finally:
         conn.close()
@@ -170,7 +175,8 @@ def ingest_match(
           f"fact_player_match_stats={len(player_stats)}, "
           f"fact_team_match_stats={len(team_stats)}, "
           f"fact_match_events={len(events)}, "
-          f"fact_match_lineup={len(lineup_rows)}")
+          f"fact_match_lineup={len(lineup_rows)}, "
+          f"fact_match_momentum={len(momentum_rows)}")
 
 
 if __name__ == "__main__":
