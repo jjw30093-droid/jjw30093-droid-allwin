@@ -294,22 +294,38 @@
   text-decoration: none;
 }
 
-/* 2026-08-23 首页信息架构重排:此前 <900px 靠横向滑动 + nth-child 隐藏第
- * 6、7 张卡,手机端实测只有 5 张卡进入可视区,其余 100+ 场要横向拖才能看到。
- * 改成 <900px 纵向单列列表(不滚动、不隐藏),一次性多看到几场;body 不产生
- * 横向滚动条(E2E 在 360/390/430/1280 四个宽度强制断言)。≥900px 保持原样:
- * 4 列网格,只是把"只露 7 张"的边界从 nth-child(6)/(7) 改成 nth-child(n+8),
- * 因为渲染层现在多塞了几张 DOM(见 SECONDARY_CARD_LIMIT 注释)。 */
+/* <640px:容器自身横向滚动,body 不产生横向滚动条(E2E 在 360/390/430/1280
+ * 四个宽度强制断言);640-899px 与 ≥900px 两档改纯 CSS 网格,见下方媒体查询。
+ * (站长反馈纵向列表不如横滑,2026-08-23 改回横向滚动。) */
 .secondaryViewport {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-auto-columns: 228px;
+  grid-auto-flow: column;
   gap: 8px;
-  padding: 1px;
+  overflow-x: auto;
+  padding: 1px 1px 8px;
+  scroll-padding-inline: 1px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.secondaryViewport::-webkit-scrollbar {
+  display: none;
+}
+
+/* 640px 以下只展示前 5 张卡 + 入口格(第 6、7 张卡隐藏,不是不存在——
+ * 单份 DOM 列表靠 CSS 在三档断点间切换,不为不同宽度渲染两份重复内容) */
+.secondaryViewport > :nth-child(6),
+.secondaryViewport > :nth-child(7) {
+  display: none;
 }
 
 .secondaryCard,
 .secondaryAll {
   min-height: 108px;
+  scroll-snap-align: start;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-card);
   background: var(--surface);
@@ -398,16 +414,14 @@
   font-weight: 700;
 }
 
-/* 独立于 .secondaryViewport 之外的固定一行(2026-08-23):不再是网格/列表
- * 里的一块 tile,是任何断点都稳定可见的"查看全部"入口,不受列表渲染数量
- * 或断点截断影响。 */
 .secondaryAll {
   display: flex;
+  min-width: 124px;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 14px 16px;
+  gap: 2px;
+  padding: 16px;
   background: var(--surface-soft);
   text-align: center;
 }
@@ -436,6 +450,24 @@
   font-size: 14px;
 }
 
+@media (min-width: 640px) {
+  .secondaryViewport {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+}
+
+/* <640px:近期比赛横滑容器出血到屏幕边缘(负外边距 + 等量内边距抵消),
+ * 只在真正横滑这一档需要——640px 以上已经是静态网格,不需要出血。 */
+@media (max-width: 639px) {
+  .secondaryViewport {
+    margin-inline: -12px;
+    padding-inline: 12px;
+    scroll-padding-inline: 12px;
+  }
+}
+
 @media (min-width: 900px) {
   .secondaryHintMobile {
     display: none;
@@ -447,16 +479,13 @@
     gap: 4px;
   }
 
-  /* 桌面网格布局保持不变(§任务范围明确不动):4 列,只露 7 张。渲染层
-   * 现在给了 SECONDARY_CARD_LIMIT=15 张 DOM(供 <900px 纵向列表使用),
-   * 这里把第 8 张及以后隐藏,视觉结果与改造前完全一致。 */
   .secondaryViewport {
-    display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .secondaryViewport > :nth-child(n + 8) {
-    display: none;
+  .secondaryViewport > :nth-child(6),
+  .secondaryViewport > :nth-child(7) {
+    display: block;
   }
 
   .secondaryAllHint {

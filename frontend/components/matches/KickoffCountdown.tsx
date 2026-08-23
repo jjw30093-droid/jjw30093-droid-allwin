@@ -32,16 +32,11 @@ function formatCountdown(ms: number, variant: "suffix" | "prefix"): string {
 export function KickoffCountdown({
   iso,
   variant = "suffix",
-  showPrefixDot = false,
 }: {
   iso: string;
   /** "suffix"(默认,首页用):"1天3小时后开球"。"prefix"(比赛详情页头部用):
    * "还有 1 天 3 小时",配合旁边已经展示的完整开球时间使用。 */
   variant?: "suffix" | "prefix";
-  /** prefix 场景下,是否在倒计时前自带"北京时间 · "这个分隔符。挂载前本
-   * 组件整体返回 null,分隔符必须跟着倒计时文字一起出现/消失——写死在
-   * 父组件里会在 hydration 完成前露出一个孤零零的"·"。 */
-  showPrefixDot?: boolean;
 }) {
   const [nowMs, setNowMs] = useState<number | null>(null);
 
@@ -58,6 +53,7 @@ export function KickoffCountdown({
   }, []);
 
   if (nowMs === null) return null;
-  const text = formatCountdown(new Date(iso).getTime() - nowMs, variant);
-  return <span className="num">{showPrefixDot ? `北京时间 · ${text}` : text}</span>;
+  return (
+    <span className="num">{formatCountdown(new Date(iso).getTime() - nowMs, variant)}</span>
+  );
 }

@@ -8,15 +8,13 @@
  * 两条路径渲染完全相同的 JSX、消费完全相同的数据形状——2026-08-16 权限
  * 口径修正后,比赛内容对任何人(含匿名)恒完整,不再有身份分层投影。
  *
+ * 2026-08-14 重设计(Claude Design 定稿,design_handoff_match_detail):
  * 两种形态按 GET /matches/{id}/report 的 available 判定,不按 status 硬编码:
  * - available===false(含 InPlay,事实表通常还没写入):头部版式 A
- *   (MatchHeaderPre)+ 单栏纵向布局 + 吸顶锚点导航(2026-08-23 重排,站长
- *   批准偏离 CLAUDE.md §11.1 锁定顺序与 2026-08-14 两层 tab 定稿,见
- *   MatchPreTabs.tsx 顶部注释)——赔率、盘口参考、同期事件、球队数据、
- *   数据说明依次纵向铺开,不再需要点击切换才能看到;
+ *   (MatchHeaderPre)+ 赛前三 tab(看点/数据/赔率),内容分组见 OverviewGroups;
  * - available===true:头部版式 B(MatchHeaderFinished)+ 五 tab(总览/射门/
- *   统计/阵容/事件),总览 = 内容依次平铺(不再分 tab,本次改动未触碰)。
- * 内容一项不减,只是重新排序/分组。
+ *   统计/阵容/事件),总览 = 三组内容依次平铺(不再分 tab)。
+ * 内容一项不减,只是从"6 段竖着铺"重组为"按用途分组"。
  */
 
 import Link from "next/link";
@@ -74,30 +72,32 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 /**
  * 本场看点(赛前第一屏)。验收返工五:不再展示"近 N 场胜平负/场均入球"
  * ——用户已明确表示不要这个模块(同类网站已大量提供,不是本站差异化),
- * 不用另一套近期战绩换皮替代。模型未经真实数据训练前不渲染任何概率。
- * 2026-08-23:没有已发布精选时不再展示"推荐待发布"这种内部发布流程
- * 状态——对用户没有信息量,整个提示框直接不渲染;有已发布精选才展示
- * 跳转链接。
+ * 不用另一套近期战绩换皮替代。只保留推荐发布状态提示;模型未经真实数据
+ * 训练前不渲染任何概率。
  */
 function QuickView({ detail }: { detail: MatchDetailResponse }) {
-  if (!detail.reco_published) return null;
   return (
     <section className={styles.quickView} aria-label="本场看点" data-testid="quick-view">
       <div className={styles.quickRecoRow}>
-        <Link href="/reco?tab=daily" className={styles.quickRecoOn}>
-          本场有已发布的每日精选 →
-        </Link>
+        {detail.reco_published ? (
+          <Link href="/reco?tab=daily" className={styles.quickRecoOn}>
+            本场有已发布的每日精选 →
+          </Link>
+        ) : (
+          <span className={styles.quickRecoOff}>推荐待发布</span>
+        )}
       </div>
     </section>
   );
 }
 
-/** 比赛信息卡(球场/天气/主裁)+ 本场看点(仅未完赛)——两者都各自判空,
- * 都没有内容时这里什么都不渲染。 */
-function MatchInfoGroup({
+/** 看点 tab:本场看点(仅未完赛)→ 数据倾向(市场卡)。 */
+function HighlightsGroup({
+  idNum,
   detail,
   finished,
 }: {
+  idNum: number;
   detail: MatchDetailResponse;
   finished: boolean;
 }) {
@@ -105,82 +105,11 @@ function MatchInfoGroup({
     <>
       <MatchInfoCard match={detail.match} />
       {!finished && <QuickView detail={detail} />}
+      <section className={styles.section}>
+        <SectionTitle>数据倾向</SectionTitle>
+        <MarketCardsSection matchId={idNum} />
+      </section>
     </>
-  );
-}
-
-/** 赔率快照(时间轴)。 */
-function OddsTimelineGroup({ idNum }: { idNum: number }) {
-  return (
-    <section className={styles.section}>
-      <SectionTitle>赔率快照</SectionTitle>
-      <OddsTimeline matchId={idNum} />
-    </section>
-  );
-}
-
-/** 数据说明(2026-08-23 单栏重排:从折叠 <details> 改成常驻展开——模型
- * 版本、数据更新时间、赛季这些信息不该需要多点一下才能看到)。免责声明
- * 只在页脚保留一处,这里不再重复。 */
-function NotesGroup({
-  detail,
-  analysis,
-  finished,
-}: {
-  detail: MatchDetailResponse;
-  analysis: AnalysisBundle | null;
-  finished: boolean;
-}) {
-  const m = detail.match;
-  return (
-    <section className={styles.section}>
-      <SectionTitle>数据说明</SectionTitle>
-      <dl className={styles.metaList}>
-        <div>
-          <dt>模型版本</dt>
-          <dd>{analysis?.model_version ?? "暂无已发布预测"}</dd>
-        </div>
-        <div>
-          <dt>数据更新于</dt>
-          <dd>{analysis?.data_cutoff_at ? <LocalTime iso={analysis.data_cutoff_at} /> : "—"}</dd>
-        </div>
-        <div>
-          <dt>赛季</dt>
-          <dd>
-            {(() => {
-              const day = matchDayZh(m.kickoff_at_utc, m.date_utc);
-              return (
-                <>
-                  {m.season} 赛季 · 比赛日 {day.text}
-                  {day.isBeijing
-                    ? "(按北京时间的开球日计)"
-                    : "(来源只提供了比赛日期、没有开球时刻,此处按 UTC 自然日显示,不折算北京时间)"}
-                </>
-              );
-            })()}
-          </dd>
-        </div>
-        {finished && (
-          <div>
-            <dt>赛后记录</dt>
-            <dd>
-              已完赛,赛果{" "}
-              <b className="num">
-                {m.home_score}–{m.away_score}
-              </b>
-              ;正式预测的赛后评估见「模型公开记录」页
-            </dd>
-          </div>
-        )}
-      </dl>
-      {analysis && analysis.source_notes.length > 0 && (
-        <ul className={styles.noteList}>
-          {analysis.source_notes.map((n, i) => (
-            <li key={`${n.kind}-${i}`}>{n.text}</li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -233,7 +162,7 @@ function DataGroup({
 
   return (
     <section className={styles.section}>
-      <SectionTitle>球队数据</SectionTitle>
+      <SectionTitle>数据可视化</SectionTitle>
       {!preview ? (
         <p className={styles.emptyText}>数据暂时无法加载。</p>
       ) : (
@@ -336,9 +265,89 @@ function DataGroup({
   );
 }
 
-/** 已完赛「总览」tab:内容依次平铺,不再分 tab(不渲染本场看点)。顺序
- * 维持 2026-08-14 定稿的看点→数据→赔率——本次单栏重排只改赛前/进行中的
- * MatchPreTabs 分支,已完赛的这个总览 tab 不在站长本次批准的范围内。 */
+/** 赔率 tab:赔率快照 → 关键变化 → 数据来源与说明(折叠)。 */
+function OddsGroup({
+  idNum,
+  detail,
+  analysis,
+  finished,
+}: {
+  idNum: number;
+  detail: MatchDetailResponse;
+  analysis: AnalysisBundle | null;
+  finished: boolean;
+}) {
+  const m = detail.match;
+  return (
+    <>
+      <section className={styles.section}>
+        <SectionTitle>赔率快照</SectionTitle>
+        <OddsTimeline matchId={idNum} />
+      </section>
+
+      {/* 关键变化(时间共现,不声称因果)标题由组件自带,无内容时整体不渲染。 */}
+      <CooccurrenceSection matchId={idNum} />
+
+      <section className={styles.section}>
+        <details className={styles.metaDetails}>
+          <summary className={styles.metaSummary}>数据来源与说明</summary>
+          <dl className={styles.metaList}>
+            <div>
+              <dt>模型版本</dt>
+              <dd>{analysis?.model_version ?? "暂无已发布预测"}</dd>
+            </div>
+            <div>
+              <dt>数据更新于</dt>
+              <dd>
+                {analysis?.data_cutoff_at ? <LocalTime iso={analysis.data_cutoff_at} /> : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>赛季</dt>
+              <dd>
+                {(() => {
+                  const day = matchDayZh(m.kickoff_at_utc, m.date_utc);
+                  return (
+                    <>
+                      {m.season} 赛季 · 比赛日 {day.text}
+                      {day.isBeijing
+                        ? "(按北京时间的开球日计)"
+                        : "(来源只提供了比赛日期、没有开球时刻,此处按 UTC 自然日显示,不折算北京时间)"}
+                    </>
+                  );
+                })()}
+              </dd>
+            </div>
+            {finished && (
+              <div>
+                <dt>赛后记录</dt>
+                <dd>
+                  已完赛,赛果{" "}
+                  <b className="num">
+                    {m.home_score}–{m.away_score}
+                  </b>
+                  ;正式预测的赛后评估见「模型公开记录」页
+                </dd>
+              </div>
+            )}
+          </dl>
+          {analysis && analysis.source_notes.length > 0 && (
+            <ul className={styles.noteList}>
+              {analysis.source_notes.map((n, i) => (
+                <li key={`${n.kind}-${i}`}>{n.text}</li>
+              ))}
+            </ul>
+          )}
+        </details>
+        <p className={styles.disclaimer}>
+          本页为数据研究内容:历史表现不代表未来;不构成任何投注建议。
+        </p>
+      </section>
+    </>
+  );
+}
+
+/** 已完赛「总览」tab:三组内容依次平铺,不再分 tab(不渲染本场看点)。 */
 function OverviewPanel({
   idNum,
   detail,
@@ -354,13 +363,9 @@ function OverviewPanel({
 }) {
   return (
     <>
-      <MatchInfoGroup detail={detail} finished={finished} />
-      <MarketCardsSection matchId={idNum} />
+      <HighlightsGroup idNum={idNum} detail={detail} finished={finished} />
       <DataGroup detail={detail} preview={preview} analysis={analysis} />
-      <OddsTimelineGroup idNum={idNum} />
-      {/* 关键变化(时间共现,不声称因果)标题由组件自带,无内容时整体不渲染。 */}
-      <CooccurrenceSection matchId={idNum} />
-      <NotesGroup detail={detail} analysis={analysis} finished={finished} />
+      <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
     </>
   );
 }
@@ -418,8 +423,8 @@ export function MatchDetailBody({
       ) : (
         <MatchHeaderPre match={m} />
       )}
-      {/* 采集轮询计划、观测点数等内部审计信息不进首屏(下方「数据说明」
-          与后台仍可溯源)。模型概率未经真实训练前不可用,详情页不再
+      {/* 采集轮询计划、观测点数等内部审计信息不进首屏(下方「数据来源与
+          说明」与后台仍可溯源)。模型概率未经真实训练前不可用,详情页不再
           渲染概率或其来源说明。 */}
       {m.sync_state === "STALE" && (
         <p className={styles.staleNotice}>
@@ -474,12 +479,9 @@ export function MatchDetailBody({
         />
       ) : (
         <MatchPreTabs
-          matchInfo={<MatchInfoGroup detail={detail} finished={finished} />}
-          odds={<OddsTimelineGroup idNum={idNum} />}
-          market={<MarketCardsSection matchId={idNum} />}
-          events={<CooccurrenceSection matchId={idNum} />}
+          highlights={<HighlightsGroup idNum={idNum} detail={detail} finished={finished} />}
           data={<DataGroup detail={detail} preview={preview} analysis={analysis} />}
-          notes={<NotesGroup detail={detail} analysis={analysis} finished={finished} />}
+          odds={<OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />}
         />
       )}
     </main>

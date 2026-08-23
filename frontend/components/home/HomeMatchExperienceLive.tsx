@@ -342,13 +342,10 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
 
 /* ── 近期比赛 ────────────────────────────────────────────── */
 
-// 2026-08-23 首页信息架构重排:横向滑动在 <900px 实测只有 5 张卡能被看到
-// (nth-child 隐藏了第 6、7 张,其余场次要横向拖才能看到)。改成 <900px 纵向
-// 单列列表后放宽到 15 张——secondary 本身已经是客户端拿到的未来 7 天全量
-// 候选池(~69 场),这里只是放宽渲染层的截断,不追加任何请求。
-// ≥900px 保持现状:page.module.css 的 :nth-child(n+8) 只在这一档把第 8 张
-// 及以后隐藏,4 列网格仍然只露 7 张,不需要 JS 按断点算不同的数字。
-const SECONDARY_CARD_LIMIT = 15;
+// 单份列表最多渲染 7 张(桌面 4x2 网格的上限);<900px 两档(横滑 5 张 /
+// 640-899px 2x3 网格 5 张)靠纯 CSS 的 :nth-child 隐藏第 6、7 张卡实现,
+// 不为不同断点渲染两份重复 DOM(§落地清单:纯 CSS 媒体查询,不做 JS 测宽)。
+const SECONDARY_CARD_LIMIT = 7;
 
 function SecondaryMatchCard({ card }: { card: HomeMatchCard }) {
   const { match } = card;
@@ -403,7 +400,7 @@ function ThisWeekSection({ cards, total }: { cards: HomeMatchCard[]; total: numb
         <h2 id="this-week-title">近期比赛</h2>
         {items.length > 0 && (
           <>
-            <span className={styles.secondaryHintMobile}>共 {total} 场</span>
+            <span className={styles.secondaryHintMobile}>左右滑动 · 共 {total} 场</span>
             <Link href="/matches" className={styles.secondaryHintDesktop}>
               全部 {total} 场 <span aria-hidden>→</span>
             </Link>
@@ -413,22 +410,19 @@ function ThisWeekSection({ cards, total }: { cards: HomeMatchCard[]; total: numb
       {items.length === 0 ? (
         <p className={styles.secondaryEmpty}>未来 7 天暂无其他已排期比赛。</p>
       ) : (
-        // <900px:纵向单列列表,不再横向滚动;≥900px:纯 CSS 切回 4 列网格
-        // (page.module.css 用 :nth-child(n+8) 隐藏第 8 张及以后)。
-        <>
-          <div className={styles.secondaryViewport}>
-            {items.map((card) => (
-              <SecondaryMatchCard key={card.match.match_id} card={card} />
-            ))}
-          </div>
-          {/* 独立于列表/网格之外,不受 <900px 纵向列表或 ≥900px 4 列网格截断
-              影响,任何断点都能看到"查看全部"。 */}
+        // 站长反馈纵向列表不如横滑(2026-08-23),改回横向滚动:容器自身可
+        // 横向滚动(<640px),body 不产生横向滚动条;640-899px 与 ≥900px 两档
+        // 改纯 CSS 网格(第 6、7 张卡 <900px 下用 :nth-child 隐藏)。
+        <div className={styles.secondaryViewport}>
+          {items.map((card) => (
+            <SecondaryMatchCard key={card.match.match_id} card={card} />
+          ))}
           <Link href="/matches" className={styles.secondaryAll}>
             <strong>全部 {total} 场</strong>
             <span className={styles.secondaryAllHint}>按日期、联赛筛选</span>
             <span aria-hidden>→</span>
           </Link>
-        </>
+        </div>
       )}
     </section>
   );

@@ -254,10 +254,7 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
   const id = seedMatchId();
 
   await page.goto(`/matches/${id}`);
-  // 板块标题 2026-08-23 从"数据倾向"改名"盘口参考"(内部类目名换成竞彩
-  // 用户实际会用的词);MarketCard 内部倾向格下方的小字 caption 仍叫
-  // "数据倾向",与这里的区块大标题是两处不同文本,互不影响。
-  await expect(page.getByRole("heading", { name: "盘口参考" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "数据倾向" })).toBeVisible();
 
   // 两张卡都要出现(2026-08-20 站长要求「数据倾向」板块只保留罚牌/角球,
   // 大小球不展示——backend/queries/market_cards.py::match_market_cards
@@ -289,9 +286,8 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
   const underCount = await page.getByText("偏小").count();
   expect(overCount + underCount).toBe(1);
   await expect(page.getByText("数据倾向").first()).toBeVisible();
-  // "推荐"本身不检测——每日精选相关的合法文案(如"每日精选需要单独授权")
-  // 会用到这个词,不是投注推荐,检测那个词会和自己的功能打架;真正禁止的
-  // 措辞是"必胜"/"稳赚"/"红单"。
+  // "推荐"不检测——"推荐待发布"是 QuickView 的合法状态文案,不是投注推荐,
+  // 检测那个词会和自己的功能打架;真正禁止的措辞是"必胜"/"稳赚"/"红单"。
   await expect(page.getByText("必胜")).toHaveCount(0);
   await expect(page.getByText("稳赚")).toHaveCount(0);
   await expect(page.getByText("红单")).toHaveCount(0);
@@ -361,14 +357,12 @@ test("详情页免费概率投影(API 层)+ 本场看点不渲染任何概率(UI
   await expect(page.getByText("25%")).toHaveCount(0);
 
   // 本场看点(先结论后证据):推荐存在性状态。
-  // 2026-08-23 改版:没有已发布精选时,"推荐待发布"这种内部发布流程状态
-  // 不再展示给用户(对用户没有信息量)——整个 quick-view 区块直接不渲染,
-  // 不是伪造已发布,也不是空话占位。种子未发布任何推荐单,所以这里断言
-  // 整个区块缺席。
+  // 种子未发布任何推荐单 → 如实"推荐待发布",不得伪造已发布。
   // 2026-08-14 重设计:内容分 tab(看点/数据/赔率)后,"查看详细数据↓"
   // 锚点已删除——不再有"往下滚"这件事,断言随之移除。
-  await expect(page.getByTestId("quick-view")).toHaveCount(0);
-  await expect(page.getByText("推荐待发布")).toHaveCount(0);
+  const quick = page.getByTestId("quick-view");
+  await expect(quick).toBeVisible();
+  await expect(quick.getByText("推荐待发布")).toBeVisible();
 });
 
 test("队徽走同源媒体路由:Web 源必须与 API 源返回同一张 PNG", async ({ request }) => {
