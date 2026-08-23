@@ -39,7 +39,14 @@ LIVE_API_PORT="${LIVE_API_PORT:-8000}"
 LIVE_WEB_PORT="${LIVE_WEB_PORT:-3000}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-2048}"
-SMOKE_HTML_MARKER="${SMOKE_HTML_MARKER:-赛程更新}"
+
+# 2026-08-23 首页信息架构重排后,FreshnessBlock 默认态文案从"赛程更新
+# {时间}"改成"数据更新:赛程 {时间} · 赔率 {时间}"("赛程更新"四字连续只在
+# STALE/UNAVAILABLE 才展开的降级态里出现)——原标记在默认(健康)态测不到,
+# 会把一次正常发布误判成业务冒烟失败。"赛程"两字在默认态与降级态都存在,
+# 改用它作为标记,语义不变(仍是确认首页真的渲染出赛程新鲜度这块 API 数据,
+# 不是空页/错误页)。
+SMOKE_HTML_MARKER="${SMOKE_HTML_MARKER:-赛程}"
 # 冒烟重试次数/间隔可覆盖,测试环境用更短的等待,不必等生产的 30×1s
 SMOKE_RETRIES="${SMOKE_RETRIES:-30}"
 SMOKE_INTERVAL="${SMOKE_INTERVAL:-1}"
