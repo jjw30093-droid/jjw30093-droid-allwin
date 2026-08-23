@@ -16,7 +16,7 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
   G7  score_regression            NotStarted 却带比分(清列泄漏兜底)  >0 CRITICAL
   G8  company_scope               近 24h 出现目标外公司 cid          CRITICAL
   G9  source_waf_blocked          近 1h source_health 命中 WAF       CRITICAL
-  G10 box_shot_geometry_drift     坐标法禁区内射门数 vs 官方计数漂移  >1% WARNING
+  G10 box_shot_geometry_drift     坐标法禁区内射门数 vs 官方计数漂移  >5% WARNING
 
 数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
 不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
@@ -57,7 +57,14 @@ G10_BOX_X_MIN = 88.5
 G10_BOX_Y_MIN = 13.84
 G10_BOX_Y_MAX = 54.16
 G10_MIN_TEAM_MATCHES = 20            # 少于这个样本数不判(coord/official 都可能是空联赛窗口的噪音)
-G10_MAX_MISMATCH_RATE = 0.01         # 与 97.97% 基线对齐:允许 1% 完全不相等
+# 全量历史基线是 97.97% 完全相等,即稳态下约 2.03% 队场天然不相等(坐标
+# 缺失行、压线球四舍五入)——这不是异常,是这套坐标法本身的已知误差率。
+# 2026-08-23 部署当天用生产近 30 天窗口实测复核:370 队场、2.16% 不相等,
+# 与全量基线一致,证明这就是正常波动。阈值定得比这更贴近(比如误设成 1%,
+# 我曾经这样设过)会让健康状态天天报 WARNING,两周内被当噪音关掉——门槛
+# 定为基线的约 2.5 倍(5%),只在真正的坐标系漂移(球场朝向反了/换了坐标
+# 约定,那种漂移会把不相等率推到远高于个位数)时才触发。
+G10_MAX_MISMATCH_RATE = 0.05
 
 
 def _parse_iso(ts: str) -> datetime:
