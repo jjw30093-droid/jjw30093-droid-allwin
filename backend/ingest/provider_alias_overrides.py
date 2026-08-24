@@ -40,4 +40,7 @@ MANUAL_OVERRIDES: list[tuple[int, str, str]] = [
     (8702, "Internacional RS",
      "NowGoal 带州名后缀 RS,FotMob 用简称 Internacional——不能用通用规则去掉州名,"
      "否则会跟哥伦比亚/厄瓜多尔等地同名球队撞名"),
+    (10273, "Atletico Paranaense",
+     "NowGoal 拼写 Atletico(无 h),FotMob 拼写 Athletico(带 h)——单字母拼写差异,"
+     "不是结构性词缀/变音符,_canonical_form 不猜拼写,人工核实收录"),
 ]

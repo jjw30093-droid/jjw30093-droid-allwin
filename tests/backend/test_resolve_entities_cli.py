@@ -35,7 +35,7 @@ def _alert_rows():
 class TestResolveEntitiesSeeding:
     def test_seeds_manual_overrides(self, data_dir):
         result = run()
-        assert result["manual_override_added"] == 10   # provider_alias_overrides.py 当前 10 条
+        assert result["manual_override_added"] == 11   # provider_alias_overrides.py 当前 11 条
         conn = connect_ro("odds")
         got = {r[0] for r in conn.execute(
             "SELECT canonical_team_id FROM dim_team_alias WHERE alias='wolves'")}
