@@ -20,6 +20,7 @@ import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { tokensFor } from "@/components/charts/chartMode";
 import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
+import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
@@ -181,6 +182,8 @@ export function XgRaceChart({
   shots,
   homeName,
   awayName,
+  homeTeamColor,
+  awayTeamColor,
   homeScore,
   awayScore,
   mode = "interactive",
@@ -189,6 +192,9 @@ export function XgRaceChart({
   shots: MatchReport["shots"];
   homeName: string;
   awayName: string;
+  /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
+  homeTeamColor?: TeamColorPair | null;
+  awayTeamColor?: TeamColorPair | null;
   homeScore?: number | null;
   awayScore?: number | null;
   mode?: ChartMode;
@@ -197,6 +203,19 @@ export function XgRaceChart({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
   const c = useChartColors();
+  const resolved = useMemo(
+    () =>
+      resolveMatchColors(homeTeamColor, awayTeamColor, {
+        isDark: c.isDark,
+        backgroundHex: c.surface,
+        fallback: { home: c.teal, away: c.navy },
+      }),
+    [homeTeamColor, awayTeamColor, c],
+  );
+  const effectiveColors: ChartColors = useMemo(
+    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
+    [c, resolved],
+  );
 
   useEffect(() => {
     if (mode === "export") return;
@@ -240,8 +259,8 @@ export function XgRaceChart({
   }, [home.length, away.length, hTotal, aTotal, homeName, awayName, homeScore, awayScore]);
 
   const option = useMemo(
-    () => buildOption(home, away, homeName, awayName, endMinute, mode, c),
-    [home, away, homeName, awayName, endMinute, mode, c],
+    () => buildOption(home, away, homeName, awayName, endMinute, mode, effectiveColors),
+    [home, away, homeName, awayName, endMinute, mode, effectiveColors],
   );
 
   if (home.length <= 1 && away.length <= 1) {

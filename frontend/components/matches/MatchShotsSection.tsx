@@ -11,6 +11,7 @@
  */
 
 import type { MatchReportResponse } from "@/lib/api-v1";
+import type { TeamColorPair } from "@/components/charts/matchTeamColors";
 import { ThreatTimeline } from "@/components/matches/ThreatTimeline";
 import { MomentumChart } from "@/components/matches/MomentumChart";
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
@@ -24,6 +25,8 @@ export function MatchShotsSection({
   momentum,
   homeName,
   awayName,
+  homeTeamColor,
+  awayTeamColor,
   homeScore,
   awayScore,
 }: {
@@ -31,6 +34,9 @@ export function MatchShotsSection({
   momentum: MatchReport["momentum"];
   homeName: string;
   awayName: string;
+  /** 2026-08-24:真实球队配色,原样转发给下面 4 张图表,组件内部各自回退。 */
+  homeTeamColor?: TeamColorPair | null;
+  awayTeamColor?: TeamColorPair | null;
   homeScore?: number | null;
   awayScore?: number | null;
 }) {
@@ -44,13 +50,25 @@ export function MatchShotsSection({
       {momentum.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>势头图</h2>
-          <MomentumChart momentum={momentum} homeName={homeName} awayName={awayName} />
+          <MomentumChart
+            momentum={momentum}
+            homeName={homeName}
+            awayName={awayName}
+            homeTeamColor={homeTeamColor}
+            awayTeamColor={awayTeamColor}
+          />
         </section>
       )}
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>射门威胁时间轴</h2>
-        <ThreatTimeline shots={shots} homeName={homeName} awayName={awayName} />
+        <ThreatTimeline
+          shots={shots}
+          homeName={homeName}
+          awayName={awayName}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+        />
       </section>
 
       <section className={styles.section}>
@@ -59,6 +77,8 @@ export function MatchShotsSection({
           shots={shots}
           homeName={homeName}
           awayName={awayName}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
           homeScore={homeScore}
           awayScore={awayScore}
         />
@@ -66,7 +86,13 @@ export function MatchShotsSection({
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>射门落点</h2>
-        <ShotMapChart shots={shots} homeName={homeName} awayName={awayName} />
+        <ShotMapChart
+          shots={shots}
+          homeName={homeName}
+          awayName={awayName}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+        />
       </section>
     </>
   );

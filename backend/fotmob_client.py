@@ -607,7 +607,9 @@ class FotMobClient:
           Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name,
           home_score, away_score, status,
           Temperature, Wind_Speed, Referee, Match_Round, Who_Lost_On_Penalties,
-          Venue_Name, Venue_City, Venue_Country, Weather_Description
+          Venue_Name, Venue_City, Venue_Country, Weather_Description,
+          Home_Team_Color_Light, Home_Team_Color_Dark,
+          Away_Team_Color_Light, Away_Team_Color_Dark
         """
         general = page_props.get("general", {})
         header  = page_props.get("header", {})
@@ -719,6 +721,24 @@ class FotMobClient:
             venue_city    = stadium.get("city")
             venue_country = stadium.get("country")
 
+        # ── 主客配对配色(2026-08-24)──────────────────────────────────────
+        # general.teamColors 是 FotMob 服务端已经按对手做过撞色规避的结果
+        # (主队保持原色，客队在原色/替补色/客场色/客场替补色里挑第一个跟主队
+        # 色差够大的)，不是球队固定色——同一支队换个对手这四个值可能不同，
+        # 这是设计如此。不要跟 content.shotmap.shots[].teamColor 混淆，那是
+        # 每次射门自带的球队原始基础色，没有撞色规避也没有深浅模式区分。
+        home_color_light = home_color_dark = away_color_light = away_color_dark = None
+        team_colors = general.get("teamColors")
+        if isinstance(team_colors, dict):
+            light = team_colors.get("lightMode")
+            if isinstance(light, dict):
+                home_color_light = light.get("home")
+                away_color_light = light.get("away")
+            dark = team_colors.get("darkMode")
+            if isinstance(dark, dict):
+                home_color_dark = dark.get("home")
+                away_color_dark = dark.get("away")
+
         # ── 点球大战失利方 ───────────────────────────────────────────────
         who_lost_penalties = None
         # general.penaltiesInfo 或 general.penaltyScore
@@ -757,6 +777,10 @@ class FotMobClient:
             "Venue_City":           venue_city,
             "Venue_Country":        venue_country,
             "Weather_Description":  weather_description,
+            "Home_Team_Color_Light": home_color_light,
+            "Home_Team_Color_Dark":  home_color_dark,
+            "Away_Team_Color_Light": away_color_light,
+            "Away_Team_Color_Dark":  away_color_dark,
         }
 
     def parse_shotmap_records(

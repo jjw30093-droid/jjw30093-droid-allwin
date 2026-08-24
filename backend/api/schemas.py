@@ -87,6 +87,17 @@ class TeamRef(BaseModel):
     crest_url: Optional[str] = None         # 同源版本化媒体地址;无可验证本地文件时为 null
 
 
+class TeamColorPair(BaseModel):
+    """某一场比赛里某一方的图表配色(浅色/深色模式各一个十六进制值)。
+
+    这是 FotMob 已经按对手做过撞色规避的**配对级**结果,不是球队固定色——
+    同一支球队换个对手,这两个值可能不同。任一模式缺失该场原始快照时为
+    null,前端据此回退到品牌色,不得编造。"""
+
+    light: Optional[str] = None
+    dark: Optional[str] = None
+
+
 class WinProbabilityDTO(BaseModel):
     """Bet365 1x2 赔率去水后的胜平负概率(backend/queries/odds.py::latest_1x2_by_match)。
 
@@ -195,6 +206,11 @@ class MatchDetailSummary(MatchSummary):
     payload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),
     非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响
     其它字段。
+
+    home_team_color/away_team_color(2026-08-24):比赛详情页图表配色,见
+    TeamColorPair 说明——配对级、非球队固定色。本次新增列,历史比赛回填前
+    恒为 null;前端缺失时须回退品牌色,不得等价对待"没有数据"和"数据是
+    某个具体颜色"。
     """
 
     referee: Optional[str] = None
@@ -204,6 +220,8 @@ class MatchDetailSummary(MatchSummary):
     venue_name: Optional[str] = None
     venue_city: Optional[str] = None
     venue_country: Optional[str] = None
+    home_team_color: Optional[TeamColorPair] = None
+    away_team_color: Optional[TeamColorPair] = None
 
 
 class MatchDetailResponse(BaseModel):

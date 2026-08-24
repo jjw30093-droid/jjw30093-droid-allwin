@@ -1,12 +1,14 @@
-"""--write-match-details 回归(裁判/天气/场馆写入路径,2026-08-20 补充场馆
-与天气描述两个字段)。
+"""--write-match-details 回归(裁判/天气/场馆/图表配色写入路径,2026-08-20
+补充场馆与天气描述,2026-08-24 补充主客配对配色四列)。
 
 用真实赛前 payload 的离线 fixture(tests/fixtures/fotmob/prematch-5104961.json)
 驱动 run_snapshot_poll,断言:
 - 不开 --write-match-details 时行为与改动前完全一致,dim_match 不被触碰;
 - 开启后只有 Referee/Temperature/Wind_Speed/Venue_Name/Venue_City/
-  Venue_Country/Weather_Description 七列被更新,status/kickoff/比分等其它
-  列原封不动(不能因为顺带抓了裁判/天气/场馆就影响赛程判定);
+  Venue_Country/Weather_Description/Home_Team_Color_Light/
+  Home_Team_Color_Dark/Away_Team_Color_Light/Away_Team_Color_Dark 十一列被
+  更新,status/kickoff/比分等其它列原封不动(不能因为顺带抓了这些字段就
+  影响赛程判定);
 - COALESCE 语义:新一轮解析对某个字段拿到 None 时,不覆盖已经写入的旧值。
 """
 
@@ -40,6 +42,10 @@ def _seed_match(
     venue_city=None,
     venue_country=None,
     weather_description=None,
+    home_color_light=None,
+    home_color_dark=None,
+    away_color_light=None,
+    away_color_dark=None,
 ):
     conn.execute(
         """
@@ -47,9 +53,11 @@ def _seed_match(
             (Match_ID, Season, League_ID, Date, Home_Team_ID, Away_Team_ID,
              Home_Team_Name, Away_Team_Name, status, Match_Round, Referee,
              Temperature, Wind_Speed, Venue_Name, Venue_City, Venue_Country,
-             Weather_Description, kickoff_at_utc, kickoff_precision, kickoff_source)
+             Weather_Description, Home_Team_Color_Light, Home_Team_Color_Dark,
+             Away_Team_Color_Light, Away_Team_Color_Dark,
+             kickoff_at_utc, kickoff_precision, kickoff_source)
         VALUES (?, '2026', 59, '2026-08-01', 100, 200, 'Home', 'Away', 'NotStarted', '17',
-                ?, ?, ?, ?, ?, ?, ?, '2026-08-01T14:00:00Z', 'exact', 'fotmob:fixtures')
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '2026-08-01T14:00:00Z', 'exact', 'fotmob:fixtures')
         """,
         (
             match_id,
@@ -60,6 +68,10 @@ def _seed_match(
             venue_city,
             venue_country,
             weather_description,
+            home_color_light,
+            home_color_dark,
+            away_color_light,
+            away_color_dark,
         ),
     )
     conn.commit()
@@ -85,17 +97,20 @@ def test_default_behavior_unchanged_without_flag(data_dir, core_conn):
     assert summary["match_details_written"] == 0
 
     row = core_conn.execute(
-        "SELECT Referee, Temperature, Wind_Speed, status, kickoff_at_utc FROM dim_match WHERE Match_ID=?",
+        "SELECT Referee, Temperature, Wind_Speed, Home_Team_Color_Light, Away_Team_Color_Light, "
+        "status, kickoff_at_utc FROM dim_match WHERE Match_ID=?",
         (MATCH_ID,),
     ).fetchone()
     assert row["Referee"] is None
     assert row["Temperature"] is None
     assert row["Wind_Speed"] is None
+    assert row["Home_Team_Color_Light"] is None
+    assert row["Away_Team_Color_Light"] is None
     assert row["status"] == "NotStarted"
     assert row["kickoff_at_utc"] == "2026-08-01T14:00:00Z"
 
 
-def test_write_match_details_updates_only_seven_columns(data_dir, core_conn):
+def test_write_match_details_updates_only_eleven_columns(data_dir, core_conn):
     _seed_match(core_conn)
     payload = _load_payload()
 
@@ -109,8 +124,10 @@ def test_write_match_details_updates_only_seven_columns(data_dir, core_conn):
 
     row = core_conn.execute(
         "SELECT Referee, Temperature, Wind_Speed, Venue_Name, Venue_City, Venue_Country, "
-        "Weather_Description, status, kickoff_at_utc, kickoff_precision, "
-        "kickoff_source, Match_Round, home_score, away_score FROM dim_match WHERE Match_ID=?",
+        "Weather_Description, Home_Team_Color_Light, Home_Team_Color_Dark, "
+        "Away_Team_Color_Light, Away_Team_Color_Dark, status, kickoff_at_utc, "
+        "kickoff_precision, kickoff_source, Match_Round, home_score, away_score "
+        "FROM dim_match WHERE Match_ID=?",
         (MATCH_ID,),
     ).fetchone()
     assert row["Referee"] == "Mischa Kellerhals"
@@ -120,7 +137,11 @@ def test_write_match_details_updates_only_seven_columns(data_dir, core_conn):
     assert row["Venue_City"] == "Fredrikstad"
     assert row["Venue_Country"] == "Norway"
     assert row["Weather_Description"] == "Partly Cloudy/Wind"
-    # 其余列必须原封不动——不能因为顺带抓了裁判/天气/场馆就影响赛程判定。
+    assert row["Home_Team_Color_Light"] == "#f13c26"
+    assert row["Home_Team_Color_Dark"] == "#f13c26"
+    assert row["Away_Team_Color_Light"] == "#104070"
+    assert row["Away_Team_Color_Dark"] == "#035db8"
+    # 其余列必须原封不动——不能因为顺带抓了这些字段就影响赛程判定。
     assert row["status"] == "NotStarted"
     assert row["kickoff_at_utc"] == "2026-08-01T14:00:00Z"
     assert row["kickoff_precision"] == "exact"
@@ -180,6 +201,10 @@ def test_write_match_details_never_regresses_known_value_to_null(data_dir, core_
         venue_city="Old City",
         venue_country="Old Country",
         weather_description="Old Weather",
+        home_color_light="#aaaaaa",
+        home_color_dark="#bbbbbb",
+        away_color_light="#cccccc",
+        away_color_dark="#dddddd",
     )
     empty_payload = {"general": {}, "header": {}, "content": {}}
 
@@ -189,11 +214,12 @@ def test_write_match_details_never_regresses_known_value_to_null(data_dir, core_
         match_ids=[MATCH_ID],
         write_match_details=True,
     )
-    assert summary["match_details_written"] == 0   # 这一轮七个字段全 None,不算"写入"
+    assert summary["match_details_written"] == 0   # 这一轮十一个字段全 None,不算"写入"
 
     row = core_conn.execute(
         "SELECT Referee, Temperature, Wind_Speed, Venue_Name, Venue_City, Venue_Country, "
-        "Weather_Description FROM dim_match WHERE Match_ID=?",
+        "Weather_Description, Home_Team_Color_Light, Home_Team_Color_Dark, "
+        "Away_Team_Color_Light, Away_Team_Color_Dark FROM dim_match WHERE Match_ID=?",
         (MATCH_ID,),
     ).fetchone()
     assert row["Referee"] == "Old Referee"
@@ -203,3 +229,7 @@ def test_write_match_details_never_regresses_known_value_to_null(data_dir, core_
     assert row["Venue_City"] == "Old City"
     assert row["Venue_Country"] == "Old Country"
     assert row["Weather_Description"] == "Old Weather"
+    assert row["Home_Team_Color_Light"] == "#aaaaaa"
+    assert row["Home_Team_Color_Dark"] == "#bbbbbb"
+    assert row["Away_Team_Color_Light"] == "#cccccc"
+    assert row["Away_Team_Color_Dark"] == "#dddddd"

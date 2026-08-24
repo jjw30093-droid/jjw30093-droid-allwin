@@ -17,7 +17,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
+import type { ChartColors } from "@/components/charts/useChartColors";
 import { useChartColors } from "@/components/charts/useChartColors";
+import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { SHOT_OUTCOME_ZH, SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
 import { FootballPitchBackground } from "./FootballPitchBackground";
@@ -83,6 +85,57 @@ function isOnTarget(s: Shot): boolean {
  * 统计数字随筛选结果重算 —— 筛选后的 xG 合计就是所选子集的合计,
  * 不是全场合计,摘要里会说明当前口径。
  */
+const toPoint = (s: Shot) =>
+  s.is_home
+    ? { value: [s.x!, s.y!], shot: s }
+    : { value: [PITCH_LEN - s.x!, PITCH_WID - s.y!], shot: s };
+
+/** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。 */
+export function buildOption(
+  plotted: Shot[],
+  homeName: string,
+  awayName: string,
+  c: ChartColors,
+): EChartsOption {
+  const seriesOf = (isHome: boolean, color: string) =>
+    plotted
+      .filter((s) => s.is_home === isHome)
+      .map((s) => ({
+        ...toPoint(s),
+        symbolSize: symbolSize(s.xg),
+        // 2026-08-24:球场底改中性色(FootballPitchBackground variant="neutral",
+        // 见该文件顶部 FotMob 实测说明)后,标记不再需要靠半透明去"融进"草坪——
+        // 那正是上次改配色时非进球点变隐形的原因(合成后对比度只有 1.09~1.17:1)。
+        // 现在两种结果都不透明 + 描边,只用描边粗细区分进球:
+        //   进球   = 更粗的描边(强调,与 FotMob layer-list 单独一张 goal
+        //            drawable 同一思路——进球必须一眼跳出来);
+        //   非进球 = 细描边,与中性球场底天然可辨。
+        // 描边颜色用 c.ink(--ink)而不是硬编码白色——白色描边在浅色中性球场
+        // (#F8FAFA)上实测只有 1.05:1(近乎白压白,等于没描);--ink 浅色模式深
+        // /深色模式亮,永远跟当前主题的球场底色反向,两个主题都 ≥11:1(见
+        // frontend/tests/shot-map-contrast.test.ts)。
+        itemStyle:
+          s.outcome === "Goal"
+            ? { color, borderColor: c.ink, borderWidth: 2.5 }
+            : { color, borderColor: c.ink, borderWidth: 1 },
+      }));
+
+  return {
+    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+    xAxis: { type: "value", min: 0, max: PITCH_LEN, show: false },
+    yAxis: { type: "value", min: 0, max: PITCH_WID, show: false },
+    tooltip: {
+      trigger: "item",
+      formatter: (p) =>
+        shotTooltip((p as unknown as { data: { shot: Shot } }).data.shot),
+    },
+    series: [
+      { name: homeName, type: "scatter", data: seriesOf(true, c.teal) },
+      { name: awayName, type: "scatter", data: seriesOf(false, c.navy) },
+    ],
+  };
+}
+
 export function filterShots(
   shots: Shot[],
   f: {
@@ -110,11 +163,17 @@ export function ShotMapChart({
   shots,
   homeName,
   awayName,
+  homeTeamColor,
+  awayTeamColor,
   mode = "interactive",
 }: {
   shots: MatchReport["shots"];
   homeName: string;
   awayName: string;
+  /** 2026-08-24:真实球队配色(FotMob 已做撞色规避的配对级结果);缺失或
+   * 对比度不达标时组件内部回退品牌青绿/蓝,调用方不需要自己判空。 */
+  homeTeamColor?: TeamColorPair | null;
+  awayTeamColor?: TeamColorPair | null;
   /** export 模式(Studio 卡片):隐藏筛选控件,截图里的按钮是死的。 */
   mode?: ChartMode;
 }) {
@@ -167,33 +226,15 @@ export function ShotMapChart({
   );
   const filtered = plotted.length !== plottable.length;
 
-  const toPoint = (s: Shot) =>
-    s.is_home
-      ? { value: [s.x!, s.y!], shot: s }
-      : { value: [PITCH_LEN - s.x!, PITCH_WID - s.y!], shot: s };
-
-  const seriesOf = (isHome: boolean, color: string) =>
-    plotted
-      .filter((s) => s.is_home === isHome)
-      .map((s) => ({
-        ...toPoint(s),
-        symbolSize: symbolSize(s.xg),
-        // 2026-08-24:球场底改中性色(FootballPitchBackground variant="neutral",
-        // 见该文件顶部 FotMob 实测说明)后,标记不再需要靠半透明去"融进"草坪——
-        // 那正是上次改配色时非进球点变隐形的原因(合成后对比度只有 1.09~1.17:1)。
-        // 现在两种结果都不透明 + 描边,只用描边粗细区分进球:
-        //   进球   = 更粗的描边(强调,与 FotMob layer-list 单独一张 goal
-        //            drawable 同一思路——进球必须一眼跳出来);
-        //   非进球 = 细描边,与中性球场底天然可辨。
-        // 描边颜色用 c.ink(--ink)而不是硬编码白色——白色描边在浅色中性球场
-        // (#F8FAFA)上实测只有 1.05:1(近乎白压白,等于没描);--ink 浅色模式深
-        // /深色模式亮,永远跟当前主题的球场底色反向,两个主题都 ≥11:1(见
-        // frontend/tests/shot-map-contrast.test.ts)。
-        itemStyle:
-          s.outcome === "Goal"
-            ? { color, borderColor: c.ink, borderWidth: 2.5 }
-            : { color, borderColor: c.ink, borderWidth: 1 },
-      }));
+  // 2026-08-24:真实球队配色对着射门图自己的真实背景(中性球场底 c.pitchBg,
+  // 不是页面卡片背景)算对比度——缺失或不安全时回退品牌色,详见
+  // components/charts/matchTeamColors.ts 模块注释。
+  const resolved = resolveMatchColors(homeTeamColor, awayTeamColor, {
+    isDark: c.isDark,
+    backgroundHex: c.pitchBg,
+    fallback: { home: c.teal, away: c.navy },
+  });
+  const effectiveColors: ChartColors = { ...c, teal: resolved.home, navy: resolved.away };
 
   const sum = (isHome: boolean, f: (s: Shot) => number) =>
     plotted.filter((s) => s.is_home === isHome).reduce((a, s) => a + f(s), 0);
@@ -218,20 +259,7 @@ export function ShotMapChart({
       : "") +
     (shootout > 0 ? `另有 ${shootout} 次点球大战射门未计入本图与 xG 合计。` : "");
 
-  const option: EChartsOption = {
-    grid: { left: 0, right: 0, top: 0, bottom: 0 },
-    xAxis: { type: "value", min: 0, max: PITCH_LEN, show: false },
-    yAxis: { type: "value", min: 0, max: PITCH_WID, show: false },
-    tooltip: {
-      trigger: "item",
-      formatter: (p) =>
-        shotTooltip((p as unknown as { data: { shot: Shot } }).data.shot),
-    },
-    series: [
-      { name: homeName, type: "scatter", data: seriesOf(true, c.teal) },
-      { name: awayName, type: "scatter", data: seriesOf(false, c.navy) },
-    ],
-  };
+  const option = buildOption(plotted, homeName, awayName, effectiveColors);
 
   if (plottable.length === 0) {
     return <p className={styles.empty}>该场比赛暂无射门位置数据。</p>;
@@ -348,8 +376,12 @@ export function ShotMapChart({
         </div>
       )}
       <div className={styles.legend}>
-        <span className={styles.legendHome}>{homeName}(攻向右)</span>
-        <span className={styles.legendAway}>{awayName}(攻向左)</span>
+        <span className={styles.legendHome} style={{ color: resolved.home }}>
+          {homeName}(攻向右)
+        </span>
+        <span className={styles.legendAway} style={{ color: resolved.away }}>
+          {awayName}(攻向左)
+        </span>
       </div>
       <div className={styles.pitchWrap}>
         <FootballPitchBackground variant="neutral" />

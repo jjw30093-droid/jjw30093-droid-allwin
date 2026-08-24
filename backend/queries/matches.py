@@ -78,6 +78,33 @@ def _venue_weather_referee(r) -> dict:
     }
 
 
+def _color_pair(light, dark) -> dict | None:
+    """两个都缺失时返回 None(不是"数据是 null/null"),供前端一次性判断
+    "这场比赛完全没有配色数据" vs "有数据但某个模式缺失"。"""
+    if light is None and dark is None:
+        return None
+    return {"light": light, "dark": dark}
+
+
+def _team_colors(r) -> dict:
+    """详情页图表配色(2026-08-24,MatchDetailSummary.home_team_color/
+    away_team_color)。与 _venue_weather_referee 同一套"列可能不存在于旧测试
+    布景"容错模式,只在 match_by_id 合入。"""
+    keys = r.keys()
+
+    def get(col):
+        return r[col] if col in keys else None
+
+    return {
+        "home_team_color": _color_pair(
+            get("Home_Team_Color_Light"), get("Home_Team_Color_Dark")
+        ),
+        "away_team_color": _color_pair(
+            get("Away_Team_Color_Light"), get("Away_Team_Color_Dark")
+        ),
+    }
+
+
 def _iso_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -278,7 +305,7 @@ def match_by_id(conn: sqlite3.Connection, match_id: int) -> dict | None:
     if r is None:
         return None
     display = team_display_for(conn, {r["Home_Team_ID"], r["Away_Team_ID"]})
-    return {**_row_to_summary(r, display), **_venue_weather_referee(r)}
+    return {**_row_to_summary(r, display), **_venue_weather_referee(r), **_team_colors(r)}
 
 
 def recent_form(

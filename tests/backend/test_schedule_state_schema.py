@@ -123,10 +123,9 @@ def _staged_core_migrations(tmp_path: Path, names: tuple[str, ...]) -> Path:
 
 def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
     db_path = tmp_path / "fresh.db"
-    # 7 = 0001..0007(0007_player_stats_total_and_jogging.sql 2026-08-24
-    # 新增;这个数字随 core migrations 目录里的文件数机械增长,不是本测试
-    # 关心的逻辑)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 7
+    # 8 = 0001..0008(0008_team_colors.sql 2026-08-24 新增;这个数字随 core
+    # migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 8
     assert schedule.apply_schedule_state_schema_v1(db_path) == 0
     conn = sqlite3.connect(db_path)
     try:
@@ -144,6 +143,7 @@ def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
             (5, "0005_shotmap_raw_fields.sql"),
             (6, "0006_match_momentum.sql"),
             (7, "0007_player_stats_total_and_jogging.sql"),
+            (8, "0008_team_colors.sql"),
         ]
     finally:
         conn.close()
@@ -166,15 +166,15 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
     conn.commit()
     conn.close()
 
-    # 5 = 0003(schedule state,不碰 dim_match)+ 0004(venue/weather,给
+    # 6 = 0003(schedule state,不碰 dim_match)+ 0004(venue/weather,给
     # dim_match 追加 4 个可空列)+ 0005(shotmap raw fields,不碰 dim_match,
     # 只给 fact_shotmap 建骨架+加列)+ 0006(match momentum,新表,同样不碰
     # dim_match)+ 0007(player stats total/jogging,只碰
-    # fact_player_match_stats,同样不碰 dim_match)。本测试真正要守住的
-    # 不变量是"已有列/已有行原样不变",不是"dim_match 列数恒定不变"——
-    # 0004 本身就是要给它加列的 migration,这里只验证它是纯追加、不改写/
-    # 不删除已有列。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 5
+    # fact_player_match_stats,同样不碰 dim_match)+ 0008(team colors,给
+    # dim_match 再追加 4 个可空列)。本测试真正要守住的不变量是"已有列/
+    # 已有行原样不变",不是"dim_match 列数恒定不变"——0004/0008 本身就是要
+    # 给它加列的 migration,这里只验证它们是纯追加、不改写/不删除已有列。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 6
     conn = sqlite3.connect(db_path)
     try:
         after_columns = conn.execute("PRAGMA table_info(dim_match)").fetchall()
@@ -182,6 +182,8 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
         new_columns = [c[1] for c in after_columns[len(before_columns):]]
         assert new_columns == [
             "Venue_Name", "Venue_City", "Venue_Country", "Weather_Description",
+            "Home_Team_Color_Light", "Home_Team_Color_Dark",
+            "Away_Team_Color_Light", "Away_Team_Color_Dark",
         ]
         assert conn.execute(
             "SELECT Match_ID, Season, League_ID, Date, status, kickoff_precision "
@@ -193,7 +195,7 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
         conn.close()
 
 
-def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_in_tmp(tmp_path):
+def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_0008_in_tmp(tmp_path):
     staged = _staged_core_migrations(
         tmp_path,
         ("0001_dim_match_kickoff.sql",),
@@ -209,7 +211,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_in
     conn.commit()
     conn.close()
 
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 6
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 7
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -221,7 +223,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_in
         ).fetchone() == ("date_only", None)
         assert conn.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
-        ).fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,)]
+        ).fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)]
     finally:
         conn.close()
 

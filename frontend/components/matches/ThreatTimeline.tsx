@@ -26,6 +26,7 @@ import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { tokensFor } from "@/components/charts/chartMode";
 import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
+import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import styles from "./ThreatTimeline.module.css";
 
@@ -239,12 +240,17 @@ export function ThreatTimeline({
   shots,
   homeName,
   awayName,
+  homeTeamColor,
+  awayTeamColor,
   mode = "interactive",
   height,
 }: {
   shots: MatchReport["shots"];
   homeName: string;
   awayName: string;
+  /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
+  homeTeamColor?: TeamColorPair | null;
+  awayTeamColor?: TeamColorPair | null;
   mode?: ChartMode;
   height?: number;
 }) {
@@ -252,6 +258,19 @@ export function ThreatTimeline({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
   const c = useChartColors();
+  const resolved = useMemo(
+    () =>
+      resolveMatchColors(homeTeamColor, awayTeamColor, {
+        isDark: c.isDark,
+        backgroundHex: c.surface,
+        fallback: { home: c.teal, away: c.navy },
+      }),
+    [homeTeamColor, awayTeamColor, c],
+  );
+  const effectiveColors: ChartColors = useMemo(
+    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
+    [c, resolved],
+  );
 
   useEffect(() => {
     if (mode === "export") return;
@@ -274,8 +293,8 @@ export function ThreatTimeline({
     [buckets, homeName, awayName, effectiveSize],
   );
   const option = useMemo(
-    () => buildOption(buckets, homeName, awayName, effectiveSize, mode, c),
-    [buckets, homeName, awayName, effectiveSize, mode, c],
+    () => buildOption(buckets, homeName, awayName, effectiveSize, mode, effectiveColors),
+    [buckets, homeName, awayName, effectiveSize, mode, effectiveColors],
   );
 
   if (buckets.length === 0) {

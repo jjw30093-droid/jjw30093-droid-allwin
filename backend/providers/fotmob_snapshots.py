@@ -135,14 +135,16 @@ def extract_sideline_snapshot(payload: dict, team_id) -> dict:
 
 def extract_prematch_details(payload: dict, match_id) -> dict:
     """从同一份 match_details payload 定向提取 Referee/Temperature/Wind_Speed/
-    Venue_Name/Venue_City/Venue_Country/Weather_Description 七个 dim_match 列
-    (裁判/天气/场馆赛前数据能力,2026-08-20 补充球场与天气描述)。
+    Venue_Name/Venue_City/Venue_Country/Weather_Description/主客配对配色四列
+    共十一个 dim_match 列(裁判/天气/场馆赛前数据能力,2026-08-20 补充球场与
+    天气描述;2026-08-24 补充图表配色)。
 
-    复用 FotMobClient.parse_match_dim 的裁判(3 级 fallback)/天气/场馆解析逻辑,
-    不重复实现、不产生第二份互相漂移的解析代码。proxy="" 离线构造,不触发任何
-    凭证解析(parse_match_dim 本身也不读取任何实例状态,是纯函数式的方法)。
+    复用 FotMobClient.parse_match_dim 的裁判(3 级 fallback)/天气/场馆/配色
+    解析逻辑,不重复实现、不产生第二份互相漂移的解析代码。proxy="" 离线构造,
+    不触发任何凭证解析(parse_match_dim 本身也不读取任何实例状态,是纯函数式
+    的方法)。
 
-    只返回这 7 个字段——status/kickoff/比分等其余 dim_match 列由
+    只返回这 11 个字段——status/kickoff/比分等其余 dim_match 列由
     ingest_future_fixtures.py / ingest_match.py 各自的写路径负责,调用方(narrow
     UPDATE)绝不覆盖。缺失字段如实为 None,不编造(CLAUDE.md §6.2.1)。
     """
@@ -157,6 +159,10 @@ def extract_prematch_details(payload: dict, match_id) -> dict:
         "Venue_City": row.get("Venue_City"),
         "Venue_Country": row.get("Venue_Country"),
         "Weather_Description": row.get("Weather_Description"),
+        "Home_Team_Color_Light": row.get("Home_Team_Color_Light"),
+        "Home_Team_Color_Dark": row.get("Home_Team_Color_Dark"),
+        "Away_Team_Color_Light": row.get("Away_Team_Color_Light"),
+        "Away_Team_Color_Dark": row.get("Away_Team_Color_Dark"),
     }
 
 

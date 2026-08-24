@@ -24,6 +24,7 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
+import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import styles from "./MomentumChart.module.css";
 
@@ -130,18 +131,41 @@ export function MomentumChart({
   momentum,
   homeName,
   awayName,
+  homeTeamColor,
+  awayTeamColor,
   mode = "interactive",
   height,
 }: {
   momentum: MatchReport["momentum"];
   homeName: string;
   awayName: string;
+  /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
+  homeTeamColor?: TeamColorPair | null;
+  awayTeamColor?: TeamColorPair | null;
   mode?: ChartMode;
   height?: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
   const c = useChartColors();
+  // 势头图铺满卡片背景(--surface),不是中性球场底——每个图表对着自己的
+  // 真实渲染背景算对比度,见 components/charts/matchTeamColors.ts 模块注释。
+  // 包 useMemo:resolveMatchColors 有实际计算(十六进制校验+对比度数学),
+  // 不应该在 c 引用不变时(hook 自己已做主题不变则同引用的缓存)每次渲染
+  // 重算一遍,也不应该让下面 option 的 useMemo 因为新对象引用而失效。
+  const resolved = useMemo(
+    () =>
+      resolveMatchColors(homeTeamColor, awayTeamColor, {
+        isDark: c.isDark,
+        backgroundHex: c.surface,
+        fallback: { home: c.teal, away: c.navy },
+      }),
+    [homeTeamColor, awayTeamColor, c],
+  );
+  const effectiveColors: ChartColors = useMemo(
+    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
+    [c, resolved],
+  );
 
   useEffect(() => {
     if (mode === "export") return;
@@ -170,8 +194,8 @@ export function MomentumChart({
   }, [points, homeShare, awayShare, homeName, awayName]);
 
   const option = useMemo(
-    () => buildOption(points, endMinute, mode, c),
-    [points, endMinute, mode, c],
+    () => buildOption(points, endMinute, mode, effectiveColors),
+    [points, endMinute, mode, effectiveColors],
   );
 
   if (points.length === 0) return null;
@@ -193,11 +217,11 @@ export function MomentumChart({
         <>
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <i className={styles.homeDot} />
+              <i className={styles.homeDot} style={{ background: resolved.home }} />
               {homeName} 占优
             </span>
             <span className={styles.legendItem}>
-              <i className={styles.awayDot} />
+              <i className={styles.awayDot} style={{ background: resolved.away }} />
               {awayName} 占优
             </span>
           </div>

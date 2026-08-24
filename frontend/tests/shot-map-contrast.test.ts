@@ -9,11 +9,16 @@
  * 算合成对比度才能抓到。
  *
  * 本文件把 ShotMapChart.tsx / FootballPitchBackground.tsx / globals.css
- * 里实际生效的十六进制颜色值抄进来(不是从组件里 import,因为颜色来自
- * CSS 自定义属性 + ECharts itemStyle 字面量,没有一个能直接拿到解析后
- * 十六进制值的入口——这正是 ECharts canvas 渲染和普通 DOM/CSS 的差异,见
- * useChartColors.ts 顶部注释),数值变化时人必须回来同步这份 fixture,
- * 这是有意的摩擦——顺手改配色不该在无声无息中溜过这道门槛。
+ * 里实际生效的十六进制颜色值抄进来(颜色来自 CSS 自定义属性 + ECharts
+ * itemStyle 字面量,不是从组件里 import 出运行期解析值——这正是 ECharts
+ * canvas 渲染和普通 DOM/CSS 的差异,见 useChartColors.ts 顶部注释),数值
+ * 变化时人必须回来同步这份 fixture,这是有意的摩擦——顺手改配色不该在
+ * 无声无息中溜过这道门槛。
+ *
+ * 对比度数学本身(hexToRgb/relativeLuminance/contrastRatio)2026-08-24 起
+ * 提到 components/charts/colorContrast.ts——球队真实配色(外部动态值)
+ * 引入后,生产代码第一次需要在运行期真正跑这套数学做安全回退
+ * (matchTeamColors.ts),不能再各写一份,两边必须是同一个实现。
  *
  * **只测「主题内一致」的组合**(浅色标记配浅色球场、深色标记配深色球场)
  * ——`--brand-teal`/`--pitch-neutral-bg` 等自定义属性随 `html[data-theme]`
@@ -28,37 +33,14 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { contrastRatio, hexToRgb, MIN_CONTRAST, type Rgb } from "@/components/charts/colorContrast";
 
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-  return [
-    parseInt(full.slice(0, 2), 16),
-    parseInt(full.slice(2, 4), 16),
-    parseInt(full.slice(4, 6), 16),
-  ];
+/** sRGB alpha 合成(标记半透明时用;当前 ShotMapChart 已不再用半透明,生产
+ * 代码的 resolveTeamColor 也不做透明合成,只在这份测试里留着复现旧回归
+ * 场景——不提进 colorContrast.ts,避免共享模块带一个生产用不到的函数)。 */
+function composite(fg: Rgb, bg: Rgb, alpha: number): Rgb {
+  return fg.map((c, i) => Math.round(c * alpha + bg[i] * (1 - alpha))) as Rgb;
 }
-
-/** sRGB alpha 合成(标记半透明时用;当前 ShotMapChart 已不再用半透明,
- * alpha 恒为 1,但函数保留以便回归到半透明时这份测试仍然如实反映真相)。 */
-function composite(fg: [number, number, number], bg: [number, number, number], alpha: number) {
-  return fg.map((c, i) => Math.round(c * alpha + bg[i] * (1 - alpha))) as [number, number, number];
-}
-
-function relativeLuminance([r, g, b]: [number, number, number]): number {
-  const s = [r, g, b].map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
-}
-
-function contrastRatio(a: [number, number, number], b: [number, number, number]): number {
-  const [l1, l2] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
-  return (l1 + 0.05) / (l2 + 0.05);
-}
-
-const MIN_CONTRAST = 3; // WCAG 非文字图形最低要求
 
 // 与 frontend/app/globals.css 保持同步。每一档只配同主题内会真实出现的
 // 球场底色 + 标记色 + 描边色组合(见模块顶部说明,不做无意义的交叉配对)。

@@ -11135,6 +11135,26 @@
        }
       ],
       "title": "Venue Country"
+     },
+     "home_team_color": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamColorPair"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "away_team_color": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamColorPair"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",
@@ -11148,7 +11168,7 @@
      "away"
     ],
     "title": "MatchDetailSummary",
-    "description": "详情页专属:在 MatchSummary 之上追加球场/天气/裁判字段(2026-08-20)。\n\n刻意不加进 MatchSummary 本体——那会让 /api/v1/matches 列表响应里每张\n卡片都多出这几个恒为 null 的字段(列表接口从不查询这些列,§10.3 契约\n纪律要求\"每个 operation 声明自己的成功响应模型\",不是全站共用一个胖\nDTO)。只有 /matches/{id} 详情端点用这个子类。\n\n全部可空:Referee/Temperature/Wind_Speed 是 dim_match 基线列,产线覆盖\n率分别约 71%/16%/16%(不是每场都有);Venue_*/Weather_Description 是本次\n新增列,历史比赛无 FotMob 原始快照可回填,恒为 NULL。前端按字段各自\n判空隐藏,不得为凑齐卡片而编造占位值。\n\ntemperature_c/wind_speed_kmh 的单位是摄氏度/公里每小时——FotMob 原始\npayload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),\n非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响\n其它字段。"
+    "description": "详情页专属:在 MatchSummary 之上追加球场/天气/裁判字段(2026-08-20)。\n\n刻意不加进 MatchSummary 本体——那会让 /api/v1/matches 列表响应里每张\n卡片都多出这几个恒为 null 的字段(列表接口从不查询这些列,§10.3 契约\n纪律要求\"每个 operation 声明自己的成功响应模型\",不是全站共用一个胖\nDTO)。只有 /matches/{id} 详情端点用这个子类。\n\n全部可空:Referee/Temperature/Wind_Speed 是 dim_match 基线列,产线覆盖\n率分别约 71%/16%/16%(不是每场都有);Venue_*/Weather_Description 是本次\n新增列,历史比赛无 FotMob 原始快照可回填,恒为 NULL。前端按字段各自\n判空隐藏,不得为凑齐卡片而编造占位值。\n\ntemperature_c/wind_speed_kmh 的单位是摄氏度/公里每小时——FotMob 原始\npayload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),\n非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响\n其它字段。\n\nhome_team_color/away_team_color(2026-08-24):比赛详情页图表配色,见\nTeamColorPair 说明——配对级、非球队固定色。本次新增列,历史比赛回填前\n恒为 null;前端缺失时须回退品牌色,不得等价对待\"没有数据\"和\"数据是\n某个具体颜色\"。"
    },
    "MatchListResponse": {
     "properties": {
@@ -17299,6 +17319,35 @@
     ],
     "title": "StudioExportServerDTO",
     "description": "txt/json/srt:服务端生成可下载文件。"
+   },
+   "TeamColorPair": {
+    "properties": {
+     "light": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Light"
+     },
+     "dark": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dark"
+     }
+    },
+    "type": "object",
+    "title": "TeamColorPair",
+    "description": "某一场比赛里某一方的图表配色(浅色/深色模式各一个十六进制值)。\n\n这是 FotMob 已经按对手做过撞色规避的**配对级**结果,不是球队固定色——\n同一支球队换个对手,这两个值可能不同。任一模式缺失该场原始快照时为\nnull,前端据此回退到品牌色,不得编造。"
    },
    "TeamFormEntry": {
     "properties": {

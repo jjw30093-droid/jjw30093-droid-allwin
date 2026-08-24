@@ -15,7 +15,8 @@ import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import { teamInitials } from "@/components/teams/TeamBadge";
-import { useChartColors } from "@/components/charts/useChartColors";
+import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
+import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
 import styles from "./MatchDataModules.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import type { components } from "@/lib/api-types";
@@ -54,53 +55,22 @@ export function quadrantIndex(
   return 3;
 }
 
-export function TeamStyleQuadrant({
-  views,
-  homeTeamId,
-  awayTeamId,
-  homeName,
-  awayName,
-  windowNote,
-}: {
-  views: StyleView[];
-  homeTeamId: number;
-  awayTeamId: number;
-  homeName: string;
-  awayName: string;
-  /** 「近 5 场 · 2026-05-10 至 2026-08-09」——必须带真实日期区间(CLAUDE.md 措辞纪律) */
-  windowNote: string;
-}) {
-  const available = useMemo(() => views.filter(usable), [views]);
-  const [viewId, setViewId] = useState<string | null>(null);
-  const view = available.find((v) => v.id === viewId) ?? available[0];
-
-  const c = useChartColors();
-
-  if (!view) {
-    return (
-      <section className={pageStyles.section}>
-        <h2 className={pageStyles.sectionTitle}>
-          <span className={pageStyles.sectionBar} aria-hidden />
-          球队风格定位
-        </h2>
-        <p className={pageStyles.emptyText}>
-          该联赛该赛季的球队指标不足以绘制象限图(有效球队少于 4 支)。
-        </p>
-      </section>
-    );
-  }
-
-  const pts = view.points.filter(
-    (p): p is StylePoint & { x: number; y: number } => p.x != null && p.y != null,
-  );
-  const mx = mean(pts.map((p) => p.x));
-  const my = mean(pts.map((p) => p.y));
+/** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。 */
+export function buildOption(
+  view: StyleView,
+  pts: (StylePoint & { x: number; y: number })[],
+  mx: number,
+  my: number,
+  homeTeamId: number,
+  awayTeamId: number,
+  c: ChartColors,
+): EChartsOption {
   const sideOf = (p: StylePoint) =>
     p.team_id === homeTeamId ? "home" : p.team_id === awayTeamId ? "away" : null;
   const fmt = (v: number) => v.toFixed(view.digits);
   const quadOf = (p: { x: number; y: number }) => view.quadrants[quadrantIndex(p, mx, my)];
 
-  const option: EChartsOption = {
+  return {
     grid: { left: 42, right: 22, top: 26, bottom: 42 },
     xAxis: {
       type: "value",
@@ -205,6 +175,70 @@ export function TeamStyleQuadrant({
       },
     ],
   };
+}
+
+export function TeamStyleQuadrant({
+  views,
+  homeTeamId,
+  awayTeamId,
+  homeName,
+  awayName,
+  homeTeamColor,
+  awayTeamColor,
+  windowNote,
+}: {
+  views: StyleView[];
+  homeTeamId: number;
+  awayTeamId: number;
+  homeName: string;
+  awayName: string;
+  /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
+  homeTeamColor?: TeamColorPair | null;
+  awayTeamColor?: TeamColorPair | null;
+  /** 「近 5 场 · 2026-05-10 至 2026-08-09」——必须带真实日期区间(CLAUDE.md 措辞纪律) */
+  windowNote: string;
+}) {
+  const available = useMemo(() => views.filter(usable), [views]);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const view = available.find((v) => v.id === viewId) ?? available[0];
+
+  const c = useChartColors();
+  const resolved = useMemo(
+    () =>
+      resolveMatchColors(homeTeamColor, awayTeamColor, {
+        isDark: c.isDark,
+        backgroundHex: c.surface,
+        fallback: { home: c.teal, away: c.navy },
+      }),
+    [homeTeamColor, awayTeamColor, c],
+  );
+  const effectiveColors: ChartColors = useMemo(
+    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
+    [c, resolved],
+  );
+
+  if (!view) {
+    return (
+      <section className={pageStyles.section}>
+        <h2 className={pageStyles.sectionTitle}>
+          <span className={pageStyles.sectionBar} aria-hidden />
+          球队风格定位
+        </h2>
+        <p className={pageStyles.emptyText}>
+          该联赛该赛季的球队指标不足以绘制象限图(有效球队少于 4 支)。
+        </p>
+      </section>
+    );
+  }
+
+  const pts = view.points.filter(
+    (p): p is StylePoint & { x: number; y: number } => p.x != null && p.y != null,
+  );
+  const mx = mean(pts.map((p) => p.x));
+  const my = mean(pts.map((p) => p.y));
+  const fmt = (v: number) => v.toFixed(view.digits);
+  const quadOf = (p: { x: number; y: number }) => view.quadrants[quadrantIndex(p, mx, my)];
+  const option = buildOption(view, pts, mx, my, homeTeamId, awayTeamId, effectiveColors);
 
   const home = pts.find((p) => p.team_id === homeTeamId);
   const away = pts.find((p) => p.team_id === awayTeamId);
@@ -253,11 +287,11 @@ export function TeamStyleQuadrant({
         <EChart option={option} height={320} ariaSummary={ariaSummary} showSummary={false} />
         <div className={styles.legendRow}>
           <span className={styles.legendItem}>
-            <span className={styles.swatchDot} style={{ background: c.teal }} />
+            <span className={styles.swatchDot} style={{ background: resolved.home }} />
             {homeName}
           </span>
           <span className={styles.legendItem}>
-            <span className={styles.swatchDot} style={{ background: c.navy }} />
+            <span className={styles.swatchDot} style={{ background: resolved.away }} />
             {awayName}
           </span>
           <span className={styles.legendItem}>

@@ -35,6 +35,13 @@ export type ChartColors = {
   /** 中性灰(--border-strong)——背景球队/非高亮点 */
   grey: string;
   surface: string;
+  /** 2026-08-24 新增,供 matchTeamColors.ts 的对比度回退逻辑使用。 */
+  /** 当前是否深色模式,与 ThemeToggle.tsx 写入 `document.documentElement.
+   * dataset.theme` 的同一信号源——球队真实配色要按当前主题选浅/深色变体。 */
+  isDark: boolean;
+  /** 中性球场底色(--pitch-neutral-bg),射门落点图的真实渲染背景;球队配色
+   * 要对着这个而不是页面卡片背景算对比度(见 FootballPitchBackground.tsx)。 */
+  pitchBg: string;
 };
 
 /** SSR/首次渲染安全的字面量兜底(浅色值)——真实值在挂载后由 readChartColors() 覆盖。 */
@@ -49,6 +56,8 @@ const FALLBACK_COLORS: ChartColors = {
   ink3: "#5a6b73",
   grey: "#b8c6c6",
   surface: "#ffffff",
+  isDark: false,
+  pitchBg: "#f8fafa",
 };
 
 function readChartColors(): ChartColors {
@@ -66,6 +75,8 @@ function readChartColors(): ChartColors {
     ink3: readVar("--ink-3", FALLBACK_COLORS.ink3),
     grey: readVar("--border-strong", FALLBACK_COLORS.grey),
     surface: readVar("--surface", FALLBACK_COLORS.surface),
+    isDark: document.documentElement.dataset.theme === "dark",
+    pitchBg: readVar("--pitch-neutral-bg", FALLBACK_COLORS.pitchBg),
   };
 }
 

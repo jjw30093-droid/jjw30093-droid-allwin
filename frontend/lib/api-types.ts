@@ -2740,6 +2740,11 @@ export interface components {
          *     payload 不带单位标注,这是其公开网页版的通行展示单位(metric 地区),
          *     非本仓库实测确认;如后续证明有出入,只改这两个字段的换算,不影响
          *     其它字段。
+         *
+         *     home_team_color/away_team_color(2026-08-24):比赛详情页图表配色,见
+         *     TeamColorPair 说明——配对级、非球队固定色。本次新增列,历史比赛回填前
+         *     恒为 null;前端缺失时须回退品牌色,不得等价对待"没有数据"和"数据是
+         *     某个具体颜色"。
          */
         MatchDetailSummary: {
             /** Match Id */
@@ -2795,6 +2800,8 @@ export interface components {
             venue_city?: string | null;
             /** Venue Country */
             venue_country?: string | null;
+            home_team_color?: components["schemas"]["TeamColorPair"] | null;
+            away_team_color?: components["schemas"]["TeamColorPair"] | null;
         };
         /** MatchListResponse */
         MatchListResponse: {
@@ -4639,6 +4646,20 @@ export interface components {
             model_version?: string | null;
             /** Profile Id */
             profile_id: string;
+        };
+        /**
+         * TeamColorPair
+         * @description 某一场比赛里某一方的图表配色(浅色/深色模式各一个十六进制值)。
+         *
+         *     这是 FotMob 已经按对手做过撞色规避的**配对级**结果,不是球队固定色——
+         *     同一支球队换个对手,这两个值可能不同。任一模式缺失该场原始快照时为
+         *     null,前端据此回退到品牌色,不得编造。
+         */
+        TeamColorPair: {
+            /** Light */
+            light?: string | null;
+            /** Dark */
+            dark?: string | null;
         };
         /** TeamFormEntry */
         TeamFormEntry: {

@@ -146,6 +146,13 @@ DIM_MATCH_COLUMNS = [
     ("Venue_City", "TEXT"),
     ("Venue_Country", "TEXT"),
     ("Weather_Description", "TEXT"),
+    # 主客配对配色(2026-08-24,复用 FotMob 已做撞色规避的逐场配色,不是
+    # 球队固定色);migrations/core/0008 补列。历史比赛无原始快照可回填,
+    # 恒为 NULL,不编造。
+    ("Home_Team_Color_Light", "TEXT"),
+    ("Home_Team_Color_Dark", "TEXT"),
+    ("Away_Team_Color_Light", "TEXT"),
+    ("Away_Team_Color_Dark", "TEXT"),
 ]
 
 DIM_PLAYER_COLUMNS = [

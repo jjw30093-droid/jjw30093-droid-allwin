@@ -213,6 +213,8 @@ function DataGroup({
                   awayTeamId={awayTeamId}
                   homeName={homeName}
                   awayName={awayName}
+                  homeTeamColor={m.home_team_color}
+                  awayTeamColor={m.away_team_color}
                   windowNote={windowNote(homeName, awayName, preview.home_window, preview.away_window)}
                 />
               ) : null}
@@ -450,6 +452,8 @@ export function MatchDetailBody({
               momentum={factReport.momentum}
               homeName={m.home.name}
               awayName={m.away.name}
+              homeTeamColor={m.home_team_color}
+              awayTeamColor={m.away_team_color}
               homeScore={m.home_score}
               awayScore={m.away_score}
             />

@@ -12,10 +12,13 @@
   FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS(168h),只为让"首次发现即采"结构上可达;
 - 真实抓取需 THORDATA_PROXY;离线用 --offline-payload 验证同一条代码链路。
 
---write-match-details(裁判/天气/场馆赛前数据能力,2026-08-20 补充场馆与天气描述):
+--write-match-details(裁判/天气/场馆/图表配色赛前数据能力,2026-08-20 补充场馆
+与天气描述,2026-08-24 补充主客配对配色):
 - 用同一份已经抓到的 payload 定向 UPDATE dim_match 的 Referee/Temperature/
-  Wind_Speed/Venue_Name/Venue_City/Venue_Country/Weather_Description 七列,
-  不新发第二次请求,不碰 status/kickoff/比分等其它列;
+  Wind_Speed/Venue_Name/Venue_City/Venue_Country/Weather_Description/
+  Home_Team_Color_Light/Home_Team_Color_Dark/Away_Team_Color_Light/
+  Away_Team_Color_Dark 十一列,不新发第二次请求,不碰 status/kickoff/比分等
+  其它列;
 - 新值为空时不覆盖已知旧值(COALESCE),不用一次解析缺失把已知数据抹成 NULL;
 - 不会写 lineupType='predicted' 的预测阵容进 fact_match_lineup(那是
   ingest_match.py 的职责边界,赛前跑它会把预测阵容与赛后确认阵容混为一谈)。
@@ -65,6 +68,10 @@ _MATCH_DETAILS_COLUMNS = (
     "Venue_City",
     "Venue_Country",
     "Weather_Description",
+    "Home_Team_Color_Light",
+    "Home_Team_Color_Dark",
+    "Away_Team_Color_Light",
+    "Away_Team_Color_Dark",
 )
 
 
@@ -81,7 +88,11 @@ def _write_match_details(conn_core_rw, match_id: int, details: dict) -> bool:
                 Venue_Name = COALESCE(?, Venue_Name),
                 Venue_City = COALESCE(?, Venue_City),
                 Venue_Country = COALESCE(?, Venue_Country),
-                Weather_Description = COALESCE(?, Weather_Description)
+                Weather_Description = COALESCE(?, Weather_Description),
+                Home_Team_Color_Light = COALESCE(?, Home_Team_Color_Light),
+                Home_Team_Color_Dark = COALESCE(?, Home_Team_Color_Dark),
+                Away_Team_Color_Light = COALESCE(?, Away_Team_Color_Light),
+                Away_Team_Color_Dark = COALESCE(?, Away_Team_Color_Dark)
             WHERE Match_ID = ?
             """,
             (*(details.get(k) for k in _MATCH_DETAILS_COLUMNS), match_id),
