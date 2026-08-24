@@ -598,6 +598,106 @@ class TestEntityResolutionSafety:
         assert row["review_status"] == "auto_ok"
 
 
+class TestNeedsReviewRescore:
+    """2026-08-24:needs_review 行不再永久冻结——每次重新遇到都重新评分,别名字典
+    补全后应能自愈(不必人工逐条 confirm)。只允许原地提升到同一个 fotmob_match_id,
+    绝不重新在候选池里搜索、绝不改指向到别的场次。"""
+
+    def test_promotes_to_auto_ok_once_missing_alias_is_added(self, odds_conn, core_db):
+        seed_team_aliases(odds_conn, core_db)
+        row = _arsenal_row()
+        row["home_name"] = "The Gunners"   # 不在别名表里,也不被 canonical_form 桥接
+        r1 = resolve_match(odds_conn, core_db, row)
+        assert r1["created"] is True
+        assert r1["review_status"] == "needs_review"
+        assert r1["confidence"] == 0.5
+        xref_id = r1["xref_id"]
+        assert odds_conn.execute("SELECT COUNT(*) FROM dim_team_xref").fetchone()[0] == 0
+
+        # 别名字典补全(等价于 provider_alias_overrides 人工表生效)
+        odds_conn.execute(
+            "INSERT INTO dim_team_alias (canonical_team_id, alias, source, created_at)"
+            " VALUES (9825, 'the gunners', 'manual_override', '2026-08-24T00:00:00Z')"
+        )
+        odds_conn.commit()
+
+        r2 = resolve_match(odds_conn, core_db, row)
+        assert r2["created"] is False              # UPDATE 复用同一行,绝不 INSERT
+        assert r2["xref_id"] == xref_id
+        assert r2["review_status"] == "auto_ok"
+        assert r2["confidence"] == 1.0
+        n = odds_conn.execute(
+            "SELECT COUNT(*) FROM dim_match_xref WHERE provider_match_id=?", (row["titan_id"],)
+        ).fetchone()[0]
+        assert n == 1                               # 没有产生第二行
+        team = {t[0]: t[1] for t in odds_conn.execute(
+            "SELECT provider_team_id, canonical_team_id FROM dim_team_xref WHERE provider='nowgoal'")}
+        assert team == {"5001": 9825, "5002": 8455}
+
+    def test_stays_needs_review_when_alias_still_missing(self, odds_conn, core_db):
+        seed_team_aliases(odds_conn, core_db)
+        row = _arsenal_row()
+        row["home_name"] = "The Gunners"
+        r1 = resolve_match(odds_conn, core_db, row)
+        assert r1["review_status"] == "needs_review"
+
+        r2 = resolve_match(odds_conn, core_db, row)   # 再遇到一次,别名仍然缺
+        assert r2["created"] is False
+        assert r2["xref_id"] == r1["xref_id"]
+        assert r2["review_status"] == "needs_review"
+        assert odds_conn.execute("SELECT COUNT(*) FROM dim_team_xref").fetchone()[0] == 0
+
+    def test_never_repoints_to_a_different_match(self, odds_conn, core_db):
+        """needs_review 行原本挂在 9001(Arsenal/Chelsea);即使这次日程行的队名精确
+        命中了**另一场**比赛(9004,Newcastle/Fulham),也绝不允许把这一行的
+        fotmob_match_id 改指过去——那属于"配错了整场比赛",只能靠
+        purge_stale_xref 清理后让正常候选池重新发现,不是重评分的职责。"""
+        seed_team_aliases(odds_conn, core_db)
+        row = _arsenal_row()
+        row["home_name"] = "The Gunners"
+        r1 = resolve_match(odds_conn, core_db, row)
+        assert r1["review_status"] == "needs_review"
+
+        row["home_name"] = "Newcastle United"   # 精确命中 9004/9005,但不是本行该指的比赛
+        row["away_name"] = "Fulham"
+        r2 = resolve_match(odds_conn, core_db, row)
+        assert r2["created"] is False
+        assert r2["xref_id"] == r1["xref_id"]
+        assert r2["fotmob_match_id"] == 9001        # 指向不变
+        assert r2["review_status"] == "needs_review"
+        assert odds_conn.execute("SELECT COUNT(*) FROM dim_team_xref").fetchone()[0] == 0
+
+
+class TestHardRejectKickoff:
+    """2026-08-24:新映射候选 kickoff 偏差过大(判定为配错了整场比赛)直接不落库,
+    避免占死 UNIQUE(provider, fotmob_match_id) 名额变成永久墓碑。"""
+
+    def test_diff_over_hard_reject_threshold_writes_nothing(self, odds_conn, core_db):
+        seed_team_aliases(odds_conn, core_db)
+        # NowGoal 21:00 UTC vs core 14:00Z → 差 7 小时 > 6 小时硬拒阈值
+        r = resolve_match(odds_conn, core_db, _arsenal_row(kickoff=_ng_kickoff(QUERY_DATE, 21)))
+        assert r["resolved"] is False
+        assert r["review_status"] is None
+        n = odds_conn.execute(
+            "SELECT COUNT(*) FROM dim_match_xref WHERE provider_match_id='710001'"
+        ).fetchone()[0]
+        assert n == 0
+
+    def test_diff_exactly_at_threshold_still_needs_review(self, odds_conn, core_db):
+        seed_team_aliases(odds_conn, core_db)
+        # 差恰好 6 小时(21600s)——不超过阈值,仍按原有"超容差→needs_review"逻辑落库
+        r = resolve_match(odds_conn, core_db, _arsenal_row(kickoff=_ng_kickoff(QUERY_DATE, 20)))
+        assert r["resolved"] is True
+        assert r["review_status"] == "needs_review"
+
+    def test_diff_within_tolerance_unaffected_by_new_guard(self, odds_conn, core_db):
+        """5 小时偏差(既有 test_5 场景)不应受新硬拒门槛影响,行为不变。"""
+        seed_team_aliases(odds_conn, core_db)
+        r = resolve_match(odds_conn, core_db, _arsenal_row(kickoff=_ng_kickoff(QUERY_DATE, 19)))
+        assert r["resolved"] is True
+        assert r["review_status"] == "needs_review"
+
+
 def _arsenal_named(titan, home, away, ph="5001", pa="5002"):
     """Arsenal(9825)/Chelsea(8455)对阵 9001,可显式改写队名/主客 provider ID。"""
     return {"titan_id": titan, "home_name": home, "away_name": away,

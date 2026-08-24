@@ -17,6 +17,8 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
   G8  company_scope               近 24h 出现目标外公司 cid          CRITICAL
   G9  source_waf_blocked          近 1h source_health 命中 WAF       CRITICAL
   G10 box_shot_geometry_drift     坐标法禁区内射门数 vs 官方计数漂移  >5% WARNING
+  G11 xref_unmapped_upcoming      168h 内不可采比赛(全局聚合,非按联赛)
+                                   距开球≤48h 仍不可采 CRITICAL / 更远 WARNING
 
 数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
 不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
@@ -33,6 +35,7 @@ import statistics
 import sys
 from datetime import datetime, timedelta, timezone
 
+from backend.cli.poll_nowgoal import DISCOVERY_WINDOW_HOURS
 from backend.db.connections import connect_ro
 from backend.db.util import utc_now_iso
 from backend.ingest.poll_windows import upcoming_precise_matches
@@ -47,6 +50,7 @@ CLOSING_WINDOW_SECONDS = 900         # T-15min 收盘覆盖判据
 G4_MIN_MATCHES = 3                   # 窗口内 ≥3 场才判实体解析率
 G5_MIN_MATCHES = 3
 G6_MIN_MATCHES = 5
+G11_NEAR_HOURS = 48                  # 距开球 ≤48h 仍不可采 → CRITICAL,其余 → WARNING
 
 # G10:标准 FIFA 禁区几何(与 backend/queries/matchup.py 的 _BOX_X_MIN/
 # _BOX_Y_MIN/_BOX_Y_MAX 同一套常量),已用 25,984 个队场样本对官方
@@ -185,6 +189,53 @@ def _gate_entity_resolution(conn_core, conn_odds, now_iso) -> dict:
         if _RANK[level] > _RANK[worst]:
             worst = level
     return {"gate": "entity_resolution_degraded", "level": worst, "violations": entries}
+
+
+def _gate_xref_unmapped_upcoming(conn_core, conn_odds, now_iso) -> dict:
+    """G11:全局聚合版"还有多少快开球的比赛抓不到赔率"(2026-08-24 新增,修复
+    36 场比赛零赔率事故暴露的 G4 三个结构性盲点)——
+
+    - **窗口对齐 168h**(`poll_nowgoal.DISCOVERY_WINDOW_HOURS`),不是 G4 的 72h
+      默认窗口:轮询器在 168h 内就会发现候选并尝试映射,72h 窗口看不到这部分;
+    - **全局聚合,不按联赛拆分**:那次事故是 36 场摊在 16 个联赛,每联赛约 2 场,
+      被 G4_MIN_MATCHES=3 逐个跳过,全局合计的严重程度反而被拆没了;
+    - **距开球 ≤48h 仍不可采直接 CRITICAL**:WARNING 会被 notify 的
+      WARNING_DAILY_MAX=2 + 24h 去重压掉,等价于没有告警——这正是那次事故里
+      resolve_entities.py 每天算出数字却没人看到的重演。48h 之外的尾部仍值得
+      记录,降级为 WARNING。
+    """
+    candidates = upcoming_precise_matches(conn_core, now_iso, window_hours=DISCOVERY_WINDOW_HOURS)
+    if not candidates:
+        return {"gate": "xref_unmapped_upcoming", "level": OK, "detail": "no_candidates"}
+    pollable_ids = {
+        int(r["fotmob_match_id"])
+        for r in conn_odds.execute(
+            "SELECT fotmob_match_id FROM dim_match_xref "
+            f"WHERE provider='nowgoal' AND review_status IN ({','.join('?' for _ in POLLABLE_STATUSES)})",
+            POLLABLE_STATUSES,
+        )
+    }
+    now_dt = _parse_iso(now_iso)
+    near, far = [], []
+    for c in candidates:
+        mid = int(c["Match_ID"])
+        if mid in pollable_ids:
+            continue
+        hours_to_kickoff = (_parse_iso(c["kickoff_at_utc"]) - now_dt).total_seconds() / 3600
+        entry = {"match_id": mid, "league_id": int(c["League_ID"]),
+                 "league": _league_name(int(c["League_ID"])),
+                 "hours_to_kickoff": round(hours_to_kickoff, 1)}
+        (near if hours_to_kickoff <= G11_NEAR_HOURS else far).append(entry)
+
+    if near:
+        level = CRITICAL
+    elif far:
+        level = WARNING
+    else:
+        level = OK
+    samples = sorted(near or far, key=lambda e: e["hours_to_kickoff"])[:10]
+    return {"gate": "xref_unmapped_upcoming", "level": level,
+            "near_48h_unpollable": len(near), "far_unpollable": len(far), "samples": samples}
 
 
 def _xref_pollable_map(conn_odds) -> dict[int, str]:
@@ -383,6 +434,7 @@ _GATE_ALERT_SOURCE = {
     "score_regression": "score_regression",
     "company_scope": "company_scope",
     "box_shot_geometry_drift": "box_shot_geometry_drift",
+    "xref_unmapped_upcoming": "xref_unmapped_upcoming",
 }
 
 
@@ -398,6 +450,7 @@ def run(now_iso: str | None = None, notify_alerts: bool = True) -> dict:
             ("league_coverage_regression", lambda: _gate_coverage_regression(ledger)),
             ("kickoff_precision", lambda: _gate_kickoff_precision(conn_core, now)),
             ("entity_resolution_degraded", lambda: _gate_entity_resolution(conn_core, conn_odds, now)),
+            ("xref_unmapped_upcoming", lambda: _gate_xref_unmapped_upcoming(conn_core, conn_odds, now)),
             ("odds_coverage", lambda: _gate_odds_coverage(conn_core, conn_odds, now)),
             ("closing_coverage", lambda: _gate_closing_coverage(conn_core, conn_odds, now)),
             ("score_regression", lambda: _gate_score_regression(conn_core)),

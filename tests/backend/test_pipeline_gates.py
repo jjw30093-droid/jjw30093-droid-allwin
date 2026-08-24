@@ -173,6 +173,70 @@ class TestEntityResolution:
         assert _gate(pg.run(now_iso=NOW), "entity_resolution_degraded")["level"] == "OK"
 
 
+class TestXrefUnmappedUpcoming:
+    """G11(2026-08-24 新增):全局聚合版实体解析门,修 G4 的三个结构性盲点——
+    36 场比赛摊到 16 个联赛时,G4 按联赛判 <3 场直接跳过,事故整整一周没有任何
+    告警;G11 不按联赛拆分,且距开球 ≤48h 仍不可采直接 CRITICAL(不像 G4 止步
+    WARNING,WARNING 会被 notify 的每日配额+24h 去重压掉)。"""
+
+    def test_single_league_two_matches_not_skipped(self, data_dir):
+        """G4 会因为 <3 场跳过这批;G11 全局聚合不受单联赛样本量限制。"""
+        conn_core = connect_rw("core")
+        _seed_match(conn_core, 1, league_id=61, kickoff="2026-08-11T12:00:00Z")  # 36h,近
+        _seed_match(conn_core, 2, league_id=61, kickoff="2026-08-11T18:00:00Z")  # 42h,近
+        conn_core.commit()
+        conn_core.close()
+        report = pg.run(now_iso=NOW)
+        assert _gate(report, "entity_resolution_degraded")["level"] == "OK"       # G4 跳过
+        g = _gate(report, "xref_unmapped_upcoming")                               # G11 不跳过
+        assert g["level"] == "CRITICAL"
+        assert g["near_48h_unpollable"] == 2
+
+    def test_near_48h_unpollable_is_critical(self, data_dir):
+        conn_core = connect_rw("core")
+        _seed_match(conn_core, 1, league_id=48, kickoff="2026-08-11T12:00:00Z")  # 36h
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "xref_unmapped_upcoming")
+        assert g["level"] == "CRITICAL"
+        assert g["near_48h_unpollable"] == 1
+        assert any(r["source"] == "xref_unmapped_upcoming" and r["level"] == "CRITICAL"
+                   for r in _alert_rows())
+
+    def test_far_unpollable_beyond_48h_is_warning_not_critical(self, data_dir):
+        conn_core = connect_rw("core")
+        _seed_match(conn_core, 1, league_id=48, kickoff="2026-08-14T08:00:00Z")  # 104h,远
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "xref_unmapped_upcoming")
+        assert g["level"] == "WARNING"
+        assert g["near_48h_unpollable"] == 0
+        assert g["far_unpollable"] == 1
+
+    def test_pollable_match_not_flagged(self, data_dir):
+        conn_core = connect_rw("core")
+        _seed_match(conn_core, 1, league_id=48, kickoff="2026-08-11T12:00:00Z")
+        conn_core.commit()
+        conn_core.close()
+        conn_odds = connect_rw("odds")
+        _seed_xref(conn_odds, 1, 9001, review_status="confirmed")
+        conn_odds.commit()
+        conn_odds.close()
+        assert _gate(pg.run(now_iso=NOW), "xref_unmapped_upcoming")["level"] == "OK"
+
+    def test_beyond_168h_window_not_counted(self, data_dir):
+        conn_core = connect_rw("core")
+        _seed_match(conn_core, 1, league_id=48, kickoff="2026-08-20T00:00:00Z")  # 240h,超窗口
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "xref_unmapped_upcoming")
+        assert g["level"] == "OK"
+        assert g["detail"] == "no_candidates"
+
+    def test_no_upcoming_matches_ok(self, data_dir):
+        assert _gate(pg.run(now_iso=NOW), "xref_unmapped_upcoming")["level"] == "OK"
+
+
 class TestScoreRegression:
     def test_notstarted_with_score_is_critical(self, data_dir):
         conn_core = connect_rw("core")

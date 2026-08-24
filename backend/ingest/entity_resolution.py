@@ -48,6 +48,7 @@
 
 import re
 import sqlite3
+import unicodedata
 from datetime import date as date_cls
 from datetime import datetime, timedelta, timezone
 
@@ -57,6 +58,13 @@ from backend.db.util import normalize_exact_kickoff, parse_strict_utc, utc_now_i
 PROVIDER = "nowgoal"
 AUTO_OK_THRESHOLD = 0.9
 KICKOFF_TOLERANCE_SECONDS = 1800   # ±30 分钟
+# 新映射候选若开球时刻偏差超过此值,判定为配错了整场比赛(不是"需要人工看一眼"
+# 级别的偏差),直接不落库——避免占死 UNIQUE(provider, fotmob_match_id) 名额变成
+# 永久墓碑(2026-08-24:一批历史孤儿行的教训,5 行 kickoff_diff 30–51 小时,全部
+# 创建于已修复的单边模糊匹配 bug,只能靠 backend/cli/purge_stale_xref.py 一次性
+# 清理;这道门槛从源头拦住同类新增)。6 小时远高于任何合理的双源开球时间误差,
+# 又明显低于孤儿行的 30+ 小时,现有测试的 5 小时偏差场景不受影响。
+HARD_REJECT_KICKOFF_SECONDS = 21600
 
 # NowGoal 墙上时间专用格式:必须真实含时间部分('YYYY-MM-DD HH:MM[:SS]'),
 # 纯日期('YYYY-MM-DD')不匹配——避免 datetime.fromisoformat 把纯日期悄悄当成当天午夜。
@@ -168,14 +176,142 @@ def seed_ascii_fold_aliases(conn_odds: sqlite3.Connection) -> dict:
     return {"added": added, "rejected": rejected, "candidates": len(fold_to_ids)}
 
 
+# 不可通过 NFKD 组合记号剥离折叠成 ASCII 的拉丁字母(ø/ł/đ/æ/œ/ß/ı 等本身就是独立
+# 码点,不是"字母+组合变音符号"),_ascii_fold 对这些字符是恒等变换——需要显式映射表。
+_LATIN_FOLD_MAP = str.maketrans({
+    "ø": "o", "Ø": "o", "ł": "l", "Ł": "l", "đ": "d", "Đ": "d",
+    "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe", "ß": "ss",
+    "ı": "i", "İ": "i", "ð": "d", "Ð": "d", "þ": "th", "Þ": "th",
+    "ħ": "h", "ŧ": "t", "ŋ": "n",
+})
+_CANON_PAREN_RE = re.compile(r"\([^)]*\)")
+# 点号/撇号直接删除(而不是替换成空格),使 "A.F.C" → "afc"(与俱乐部词缀表对齐),
+# 而不是拆成三个独立字母 "a f c"。
+_CANON_DROP_RE = re.compile(r"[.'’]")
+_CANON_PUNCT_RE = re.compile(r"[\-_/,&+:]")
+_CANON_YEAR_TOKEN_RE = re.compile(r"^(?:\d{2}|18\d{2}|19\d{2}|20\d{2})$")
+# 俱乐部法律形式/通名词缀——跨源书写差异的主要来源(NowGoal "AC Milan" vs
+# FotMob "Milan"、FotMob "FC Groningen" vs NowGoal "Groningen")。
+_CANON_AFFIX_TOKENS = frozenset({
+    "fc", "afc", "ac", "as", "sc", "sv", "fsv", "cf", "cd", "aj", "il", "if",
+    "bk", "sk", "ssc", "us", "uc", "rc", "rcd", "vfb", "vfl", "tsg", "bsc",
+    "fk", "nk", "sd", "ud", "ca", "cs", "kv", "rsc", "sbv", "cp", "aa", "ss",
+    "club", "football", "futbol", "fussball", "calcio", "clube",
+    "association", "sportif", "sporting",
+})
+
+
+def _canonical_form(name: str | None) -> str:
+    """跨源队名归一化:剥离俱乐部法律形式词缀、裸年份词元、括号内容与结构标点,
+    消解纯品牌书写差异("AC Milan"↔"Milan"、"FC Groningen"↔"Groningen"、
+    "Sunderland A.F.C"↔"Sunderland")。
+
+    **不改 `_norm`**——`_norm` 的输出是 `dim_team_alias` 的存储键,改它要重播全表;
+    这里是额外的归一化视角,只用于额外播种(seed_canonical_form_aliases)和额外
+    查询探测(_alias_team_ids),原始 `_norm` 别名不受影响、不被覆盖。
+
+    2026-08-24 实测:对当时卡在 needs_review 的 33 个失败队名对,此规则修好 23 个;
+    剩余 10 个(如 "Inter"/"Inter Milan"、"Nacional"/"Nacional da Madeira"、
+    "Wolverhampton Wanderers"/"Wolves")是真正的昵称/限定词差异,没有安全算法能
+    覆盖,写进 provider_alias_overrides 人工表。
+    """
+    if not name:
+        return ""
+    text = str(name).translate(_LATIN_FOLD_MAP)
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = _CANON_PAREN_RE.sub(" ", text)
+    text = _CANON_DROP_RE.sub("", text)
+    text = _CANON_PUNCT_RE.sub(" ", text)
+    tokens = [t for t in text.lower().split() if t]
+    kept = [t for t in tokens if t not in _CANON_AFFIX_TOKENS and not _CANON_YEAR_TOKEN_RE.match(t)]
+    # 词缀剥完导致整串清空(如球队本名恰好只有词缀,罕见)→ 回退未剥离形式,不产出
+    # 空字符串别名。
+    return " ".join(kept) if kept else " ".join(tokens)
+
+
+def seed_canonical_form_aliases(conn_odds: sqlite3.Connection) -> dict:
+    """给既有别名补一份跨源归一化别名(source='canonical_form'),fail-closed。
+
+    与 seed_ascii_fold_aliases 同构:只对"归一化后与原串不同"的别名生成,撞名
+    (≥2 个不同 canonical_team_id 归一到同一串)整串拒绝、列入 rejected 供人工复核,
+    幂等 INSERT OR IGNORE。返回 {added, rejected:[(form, [team_ids])], candidates}。
+    """
+    rows = conn_odds.execute(
+        "SELECT canonical_team_id, alias FROM dim_team_alias"
+    ).fetchall()
+    existing_aliases = {r["alias"] for r in rows}
+    form_to_ids: dict[str, set[int]] = {}
+    for r in rows:
+        form = _canonical_form(r["alias"])
+        if not form or form == r["alias"]:
+            continue
+        form_to_ids.setdefault(form, set()).add(int(r["canonical_team_id"]))
+
+    now = utc_now_iso()
+    added = 0
+    rejected = []
+    with tx(conn_odds):
+        for form, ids in sorted(form_to_ids.items()):
+            if len(ids) >= 2:
+                rejected.append((form, sorted(ids)))
+                continue
+            if form in existing_aliases:
+                other = _alias_team_ids(conn_odds, form)
+                if other and other != ids:
+                    rejected.append((form, sorted(ids | other)))
+                    continue
+            (team_id,) = tuple(ids)
+            cur = conn_odds.execute(
+                "INSERT OR IGNORE INTO dim_team_alias (canonical_team_id, alias, source, created_at)"
+                " VALUES (?, ?, 'canonical_form', ?)",
+                (team_id, form, now),
+            )
+            added += cur.rowcount
+    return {"added": added, "rejected": rejected, "candidates": len(form_to_ids)}
+
+
+def seed_manual_alias_overrides(conn_odds: sqlite3.Connection) -> int:
+    """播种 `backend/ingest/provider_alias_overrides.py` 里人工核实过的别名
+    (source='manual_override')。
+
+    这些是 `_canonical_form` 明确判定为不可约的差异——不是算法漏掉,是故意不让
+    通用规则去猜(去掉限定词有真实撞名风险),只信人工逐条核实过的那张表。
+    幂等 INSERT OR IGNORE,返回本次新增条数。
+    """
+    from backend.ingest.provider_alias_overrides import MANUAL_OVERRIDES
+
+    now = utc_now_iso()
+    added = 0
+    with tx(conn_odds):
+        for canonical_team_id, spelling, _note in MANUAL_OVERRIDES:
+            alias = _norm(spelling)
+            if not alias:
+                continue
+            cur = conn_odds.execute(
+                "INSERT OR IGNORE INTO dim_team_alias (canonical_team_id, alias, source, created_at)"
+                " VALUES (?, ?, 'manual_override', ?)",
+                (canonical_team_id, alias, now),
+            )
+            added += cur.rowcount
+    return added
+
+
 def _alias_team_ids(conn_odds: sqlite3.Connection, name: str) -> set[int]:
-    alias = _norm(name)
-    if not alias:
+    """别名精确查询——同时探测 `_norm` 原始形式与 `_canonical_form` 归一化形式,
+    覆盖两个方向的品牌书写差异(NowGoal 比 FotMob 多带词缀 / 少带词缀)。命中多个
+    形式且指向不同 canonical 时,返回集合含多个元素,交给上层的单元素严格相等
+    检查(_name_resolves_to)fail-closed——绝不因为归一化引入新的静默误判。
+    """
+    forms = {f for f in (_norm(name), _canonical_form(name)) if f}
+    if not forms:
         return set()
+    placeholders = ",".join("?" for _ in forms)
     return {
         int(r[0])
         for r in conn_odds.execute(
-            "SELECT canonical_team_id FROM dim_team_alias WHERE alias=?", (alias,)
+            f"SELECT canonical_team_id FROM dim_team_alias WHERE alias IN ({placeholders})",
+            tuple(forms),
         )
     }
 
@@ -558,6 +694,94 @@ def _revalidate_existing_auto_ok(
                                 team_conflicts=team_conflicts, validation_errors=validation_errors)
 
 
+def _rescore_existing_needs_review(
+    conn_odds: sqlite3.Connection, conn_core: sqlite3.Connection,
+    schedule_row: dict, existing: sqlite3.Row,
+) -> dict:
+    """needs_review 行重新评分(2026-08-24:此前每次遇到都原样返回,永不重新评估——
+    补好别名字典后没有任何代码路径会把行捡回来,这正是一批比赛永久冻结零赔率的
+    直接原因)。
+
+    **只允许原地确认同一个 fotmob_match_id**,不重新在候选池里搜索、也不改指向
+    到别的场次——这样彻底避开 UNIQUE(provider, fotmob_match_id) 冲突,也不会把
+    自动流程的判断范围扩大到"这个 NowGoal 场次其实该配到另一场 FotMob 比赛"这种
+    需要人工判断的情形(那种情形——即当年配错场次的孤儿行——由
+    backend/cli/purge_stale_xref.py 一次性清理,清理后该场次重新进入候选池,由
+    resolve_match 的新映射路径正常发现)。
+
+    复用同一行(UPDATE,绝不 INSERT):`created` 恒为 False,`xref_id` 不变。要求
+    与新映射路径完全一致的 1.0 分(两边都是 alias-only 精确命中,不接受任何模糊
+    命中——模糊命中本就不可能单独凑够 auto_ok 门槛,§ resolve_match 顶部 assert)、
+    kickoff 容差、身份完整性与 team xref 冲突检查全部通过才提升为 auto_ok 并写
+    team xref;任何一项不通过,原样返回、不写库(不产生无意义的 updated_at 抖动)。
+    """
+    cand = conn_core.execute(
+        """SELECT Match_ID, Home_Team_ID, Away_Team_ID, kickoff_at_utc, kickoff_precision,
+                  kickoff_source FROM dim_match WHERE Match_ID=?""",
+        (int(existing["fotmob_match_id"]),),
+    ).fetchone()
+    if cand is None:
+        return _existing_result(existing)
+
+    home_exact = _alias_team_ids(conn_odds, schedule_row.get("home_name")) | _team_xref_ids(
+        conn_odds, schedule_row.get("provider_home_id")
+    )
+    away_exact = _alias_team_ids(conn_odds, schedule_row.get("away_name")) | _team_xref_ids(
+        conn_odds, schedule_row.get("provider_away_id")
+    )
+    h, a = int(cand["Home_Team_ID"]), int(cand["Away_Team_ID"])
+    fwd_ok = h in home_exact and a in away_exact
+    inv_ok = a in home_exact and h in away_exact
+    # 双向都精确命中即方向不明确(理论上不该同时成立,稳妥起见仍按不明确处理,不猜)。
+    if fwd_ok == inv_ok:
+        return _existing_result(existing)
+    inverted = 0 if fwd_ok else 1
+
+    kickoff_diff = _kickoff_diff_seconds(schedule_row, cand)
+    kickoff_ok = kickoff_diff is not None and abs(kickoff_diff) <= KICKOFF_TOLERANCE_SECONDS
+    if not kickoff_ok:
+        return _existing_result(existing)
+
+    exp_home, exp_away = _expected_canonicals(cand, inverted)
+    # alias-only 最终身份证明(与新映射路径同一条纪律,不掺 provider xref 历史召回)。
+    if not _name_resolves_to(conn_odds, schedule_row.get("home_name"), exp_home):
+        return _existing_result(existing)
+    if not _name_resolves_to(conn_odds, schedule_row.get("away_name"), exp_away):
+        return _existing_result(existing)
+
+    team_pairs = _team_xref_pairs(schedule_row, cand, inverted)
+    pair_errors = _new_pair_validation_errors(schedule_row, team_pairs)
+    if pair_errors:
+        return _existing_result(existing, validation_errors=pair_errors)
+
+    now = utc_now_iso()
+    with tx(conn_odds):
+        fresh = conn_odds.execute(
+            "SELECT * FROM dim_match_xref WHERE id=?", (existing["id"],)
+        ).fetchone()
+        if fresh is None or fresh["review_status"] != "needs_review" or fresh["verified"] != 0:
+            # 期间已被人工审核或其它流程改动 → 按当前权威状态返回,不抢跑。
+            return _existing_result(fresh if fresh is not None else existing)
+
+        team_conflicts = _team_xref_conflicts(conn_odds, team_pairs)
+        if team_conflicts:
+            return _existing_result(fresh, team_conflicts=team_conflicts)
+
+        confidence = 1.0
+        conn_odds.execute(
+            """UPDATE dim_match_xref SET review_status='auto_ok', confidence=?,
+               home_away_inverted=?, kickoff_diff_seconds=?, updated_at=?
+               WHERE id=? AND review_status='needs_review' AND verified=0""",
+            (confidence, inverted, kickoff_diff, now, existing["id"]),
+        )
+        _record_team_xrefs(conn_odds, team_pairs, confidence, now)
+        promoted = conn_odds.execute(
+            "SELECT * FROM dim_match_xref WHERE id=?", (existing["id"],)
+        ).fetchone()
+
+    return _existing_result(promoted)
+
+
 def resolve_match(
     conn_odds: sqlite3.Connection, conn_core: sqlite3.Connection, schedule_row: dict
 ) -> dict:
@@ -575,12 +799,13 @@ def resolve_match(
     ).fetchone()
     if existing is not None:
         # confirmed / verified=1 / rejected:保留人工结果或既定拒绝,自动流程绝不覆盖或复活;
-        # needs_review:不得静默升级,原样返回;
+        # needs_review:每次重新遇到都重新评分(2026-08-24 起——见 _rescore_existing_
+        # needs_review;只允许原地提升到同一 fotmob_match_id,不重新指向别的场次);
         # auto_ok:每次重新遇到都必须重新验证,不满足则原子降级(不能只信任历史结论)。
         if existing["review_status"] in ("confirmed", "rejected") or existing["verified"] == 1:
             return _existing_result(existing)
         if existing["review_status"] == "needs_review":
-            return _existing_result(existing)
+            return _rescore_existing_needs_review(conn_odds, conn_core, schedule_row, existing)
         if existing["review_status"] == "auto_ok":
             return _revalidate_existing_auto_ok(conn_odds, conn_core, schedule_row, existing)
         return _existing_result(existing)
@@ -658,6 +883,23 @@ def resolve_match(
     # diff is None(任一侧缺精确 kickoff / 无法解析)→ 不满足 auto_ok(不再放行)。
     kickoff_diff = _kickoff_diff_seconds(schedule_row, best_cand) if best_cand is not None else None
     kickoff_ok = kickoff_diff is not None and abs(kickoff_diff) <= KICKOFF_TOLERANCE_SECONDS
+
+    # 硬拒:偏差大到不是"容差外需要人工看一眼",是"候选选错了整场比赛"——不落库,
+    # 避免占死 UNIQUE(provider, fotmob_match_id) 名额变成永久墓碑(见常量注释)。
+    # 只在候选**确实有明确大偏差**时拒绝;kickoff_diff is None(缺失/不可解析,
+    # 而非"算出来偏差很大")仍按原逻辑走 needs_review,不在此处短路。
+    if kickoff_diff is not None and abs(kickoff_diff) > HARD_REJECT_KICKOFF_SECONDS:
+        return {
+            "resolved": False,
+            "created": False,
+            "xref_id": None,
+            "fotmob_match_id": best_match_id,
+            "confidence": best_score,
+            "home_away_inverted": best_inverted,
+            "review_status": None,
+            "team_conflicts": [],
+            "validation_errors": ["kickoff_diff_exceeds_hard_reject"],
+        }
 
     tentative_auto_ok = (
         best_score >= AUTO_OK_THRESHOLD and unambiguous and kickoff_ok and best_cand is not None
