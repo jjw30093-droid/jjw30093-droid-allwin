@@ -1,10 +1,10 @@
 /**
- * 完赛「射门」tab —— 详情页最有说服力的一屏,也是最适合搬到短视频/小红书的素材。
- *
- * 三张图按"看懂门槛"从低到高排:
- *   1. 射门威胁时间轴(双向柱)—— 不需要懂 xG,柱子高低就是"这段谁在打谁";
- *   2. xG 累积对抗曲线 —— 两条线爬升,谁该赢一眼可见;
- *   3. 射门落点图 —— 空间本身即解释,可按结果/部位/时段筛选。
+ * 完赛「射门」tab(2026-08-25 对齐 FotMob 重排,站长要求):
+ *   1. 射门落点图放最顶部 —— 空间本身即解释,点击射门点看单次详情;
+ *   2. 射门威胁时间轴(双向柱)—— 不需要懂 xG,柱子高低就是"这段谁在打谁";
+ *   3. xG 累积对抗曲线 —— 两条线爬升,谁该赢一眼可见。
+ * 势头图整块挪去「总览」tab 顶部(FotMob 的 moveMomentumAndStatsToTop
+ * 已完赛行为),不在两个 tab 重复。
  *
  * 每张图都自带文字摘要(宪法 §11.2),摘要里把 xG 翻译成人话,不假设读者
  * 知道术语。
@@ -13,7 +13,6 @@
 import type { MatchReportResponse } from "@/lib/api-v1";
 import type { TeamColorPair } from "@/components/charts/matchTeamColors";
 import { ThreatTimeline } from "@/components/matches/ThreatTimeline";
-import { MomentumChart } from "@/components/matches/MomentumChart";
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
 import { ShotMapChart } from "@/components/matches/ShotMapChart";
 import styles from "@/app/matches/[matchId]/match-detail.module.css";
@@ -22,21 +21,26 @@ type MatchReport = Extract<MatchReportResponse, { available: true }>;
 
 export function MatchShotsSection({
   shots,
-  momentum,
+  lineups,
   homeName,
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeCrestUrl,
+  awayCrestUrl,
   homeScore,
   awayScore,
 }: {
   shots: MatchReport["shots"];
-  momentum: MatchReport["momentum"];
+  /** 2026-08-24:射门详情面板要用——展开成球衣号映射表,查得到才显示。 */
+  lineups: MatchReport["lineups"];
   homeName: string;
   awayName: string;
   /** 2026-08-24:真实球队配色,原样转发给下面 4 张图表,组件内部各自回退。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  homeCrestUrl?: string | null;
+  awayCrestUrl?: string | null;
   homeScore?: number | null;
   awayScore?: number | null;
 }) {
@@ -45,20 +49,30 @@ export function MatchShotsSection({
     return <p className={styles.emptyText}>本场暂无射门数据。</p>;
   }
 
+  // 首发 + 替补都要收——漏了替补会导致替补登场球员的射门在详情面板里
+  // 查不到球衣号。
+  const shirtNumberByPlayerId = Object.fromEntries(
+    lineups
+      .flatMap((t) => [...t.starters, ...t.bench])
+      .filter((p) => p.shirt_number != null)
+      .map((p) => [p.player_id, p.shirt_number as string]),
+  );
+
   return (
     <>
-      {momentum.length > 0 && (
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>势头图</h2>
-          <MomentumChart
-            momentum={momentum}
-            homeName={homeName}
-            awayName={awayName}
-            homeTeamColor={homeTeamColor}
-            awayTeamColor={awayTeamColor}
-          />
-        </section>
-      )}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>射门落点</h2>
+        <ShotMapChart
+          shots={shots}
+          homeName={homeName}
+          awayName={awayName}
+          homeTeamColor={homeTeamColor}
+          awayTeamColor={awayTeamColor}
+          homeCrestUrl={homeCrestUrl}
+          awayCrestUrl={awayCrestUrl}
+          shirtNumberByPlayerId={shirtNumberByPlayerId}
+        />
+      </section>
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>射门威胁时间轴</h2>
@@ -81,17 +95,6 @@ export function MatchShotsSection({
           awayTeamColor={awayTeamColor}
           homeScore={homeScore}
           awayScore={awayScore}
-        />
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>射门落点</h2>
-        <ShotMapChart
-          shots={shots}
-          homeName={homeName}
-          awayName={awayName}
-          homeTeamColor={homeTeamColor}
-          awayTeamColor={awayTeamColor}
         />
       </section>
     </>

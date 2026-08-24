@@ -39,3 +39,15 @@
   margin: 0;
   color: var(--ink-2);
 }
+
+/* 球场名地图链接(2026-08-24):普通文字色 + 下划线示意可点,不用品牌青绿
+ * 大面积染整行——这行是信息不是操作入口。 */
+.mapLink {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mapLink:hover {
+  color: var(--brand-teal);
+}

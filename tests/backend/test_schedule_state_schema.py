@@ -123,9 +123,9 @@ def _staged_core_migrations(tmp_path: Path, names: tuple[str, ...]) -> Path:
 
 def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
     db_path = tmp_path / "fresh.db"
-    # 8 = 0001..0008(0008_team_colors.sql 2026-08-24 新增;这个数字随 core
-    # migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 8
+    # 10 = 0001..0010(0010_venue_referee_detail.sql 2026-08-24 新增;这个
+    # 数字随 core migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 10
     assert schedule.apply_schedule_state_schema_v1(db_path) == 0
     conn = sqlite3.connect(db_path)
     try:
@@ -144,6 +144,8 @@ def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
             (6, "0006_match_momentum.sql"),
             (7, "0007_player_stats_total_and_jogging.sql"),
             (8, "0008_team_colors.sql"),
+            (9, "0009_shot_trajectory_fields.sql"),
+            (10, "0010_venue_referee_detail.sql"),
         ]
     finally:
         conn.close()
@@ -166,15 +168,18 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
     conn.commit()
     conn.close()
 
-    # 6 = 0003(schedule state,不碰 dim_match)+ 0004(venue/weather,给
+    # 8 = 0003(schedule state,不碰 dim_match)+ 0004(venue/weather,给
     # dim_match 追加 4 个可空列)+ 0005(shotmap raw fields,不碰 dim_match,
     # 只给 fact_shotmap 建骨架+加列)+ 0006(match momentum,新表,同样不碰
     # dim_match)+ 0007(player stats total/jogging,只碰
     # fact_player_match_stats,同样不碰 dim_match)+ 0008(team colors,给
-    # dim_match 再追加 4 个可空列)。本测试真正要守住的不变量是"已有列/
-    # 已有行原样不变",不是"dim_match 列数恒定不变"——0004/0008 本身就是要
-    # 给它加列的 migration,这里只验证它们是纯追加、不改写/不删除已有列。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 6
+    # dim_match 再追加 4 个可空列)+ 0009(shot trajectory fields,只给
+    # fact_shotmap 追加 7 个可空列,同样不碰 dim_match)+ 0010(venue/referee
+    # detail,给 dim_match 追加 10 个可空列、fact_shotmap 追加 1 列)。
+    # 本测试真正要守住的不变量是"已有列/已有行原样不变",不是"dim_match
+    # 列数恒定不变"——0004/0008/0010 本身就是要给它加列的 migration,这里
+    # 只验证它们是纯追加、不改写/不删除已有列。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 8
     conn = sqlite3.connect(db_path)
     try:
         after_columns = conn.execute("PRAGMA table_info(dim_match)").fetchall()
@@ -184,6 +189,10 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
             "Venue_Name", "Venue_City", "Venue_Country", "Weather_Description",
             "Home_Team_Color_Light", "Home_Team_Color_Dark",
             "Away_Team_Color_Light", "Away_Team_Color_Dark",
+            "Venue_Capacity", "Venue_Surface", "Venue_Lat", "Venue_Long",
+            "Weather_Localized_Key", "Weather_Icon_Code",
+            "Referee_ID", "Referee_Country", "Referee_Country_Code",
+            "Referee_Stats_Json",
         ]
         assert conn.execute(
             "SELECT Match_ID, Season, League_ID, Date, status, kickoff_precision "
@@ -195,7 +204,7 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
         conn.close()
 
 
-def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_0008_in_tmp(tmp_path):
+def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_0008_0009_0010_in_tmp(tmp_path):
     staged = _staged_core_migrations(
         tmp_path,
         ("0001_dim_match_kickoff.sql",),
@@ -211,7 +220,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
     conn.commit()
     conn.close()
 
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 7
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 9
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -223,7 +232,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
         ).fetchone() == ("date_only", None)
         assert conn.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
-        ).fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)]
+        ).fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,)]
     finally:
         conn.close()
 

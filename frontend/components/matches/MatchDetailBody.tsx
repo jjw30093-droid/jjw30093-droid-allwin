@@ -32,6 +32,12 @@ import { MarketCardsSection } from "@/components/matches/MarketCardsSection";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { MatchHeaderPre } from "@/components/matches/MatchHeaderPre";
 import { MatchInfoCard } from "@/components/matches/MatchInfoCard";
+import { RefereeCard } from "@/components/matches/RefereeCard";
+import { MomentumChart } from "@/components/matches/MomentumChart";
+import { TopStatsCard } from "@/components/matches/TopStatsCard";
+import { TopRatedCard } from "@/components/matches/TopRatedCard";
+import { OverviewKeyEvents } from "@/components/matches/OverviewKeyEvents";
+import { hasKeyEvents } from "@/components/matches/overviewKeyEvents.shared";
 import { MatchHeaderFinished } from "@/components/matches/MatchHeaderFinished";
 import { MatchTabs } from "@/components/matches/MatchTabs";
 import { MatchPreTabs } from "@/components/matches/MatchPreTabs";
@@ -91,19 +97,31 @@ function QuickView({ detail }: { detail: MatchDetailResponse }) {
   );
 }
 
-/** 看点 tab:本场看点(仅未完赛)→ 数据倾向(市场卡)。 */
+/** 看点 tab:比赛信息卡 → 裁判卡 → 本场看点(仅未完赛)→ 数据倾向(市场卡)。
+ *
+ * 2026-08-25 对齐 FotMob:赛前 Preview 页里 stadiumAndWeatherCard 与
+ * refereeCard 相邻(APK 装配顺序第 8/10 位),这里同序。已完赛总览走
+ * OverviewPanel,它把两张信息卡放在自己的位置(FotMob 已完赛顺序的第 5/6
+ * 位),所以传 showInfoCards=false 避免同一页渲染两遍。 */
 function HighlightsGroup({
   idNum,
   detail,
   finished,
+  showInfoCards = true,
 }: {
   idNum: number;
   detail: MatchDetailResponse;
   finished: boolean;
+  showInfoCards?: boolean;
 }) {
   return (
     <>
-      <MatchInfoCard match={detail.match} />
+      {showInfoCards && (
+        <>
+          <MatchInfoCard match={detail.match} />
+          <RefereeCard match={detail.match} />
+        </>
+      )}
       {!finished && <QuickView detail={detail} />}
       <section className={styles.section}>
         <SectionTitle>数据倾向</SectionTitle>
@@ -349,23 +367,84 @@ function OddsGroup({
   );
 }
 
-/** 已完赛「总览」tab:三组内容依次平铺,不再分 tab(不渲染本场看点)。 */
+/** 已完赛「总览」tab(2026-08-25 对齐 FotMob 纵向顺序,站长手机比对拍板):
+ * 势头图 → 重点数据 → 最高评分 → 关键事件(精简)→ 比赛信息 → 裁判,
+ * 其后保留既有三组(数据倾向 / 数据可视化 / 赔率)。
+ *
+ * 顺序依据:FotMob APK 卡片装配字节码的 moveMomentumAndStatsToTop 开关
+ * (= match.isFinished(),已完赛把势头+重点数据整块提到事件之前);
+ * 「最高评分」在事件前是站长对着手机确认的顺序。势头图从「射门」tab 整块
+ * 挪来(不重复);关键事件只列进球/红黄牌 + 跳转,与「事件」tab 全量时间线
+ * 职能不重叠。 */
 function OverviewPanel({
   idNum,
   detail,
   analysis,
   preview,
   finished,
+  factReport,
 }: {
   idNum: number;
   detail: MatchDetailResponse;
   analysis: AnalysisBundle | null;
   preview: MatchPreviewResponse | null;
   finished: boolean;
+  factReport: Extract<MatchReportResponse, { available: true }> | null;
 }) {
+  const m = detail.match;
+  const homeStat = factReport?.team_stats.find((t) => t.is_home) ?? null;
+  const awayStat = factReport?.team_stats.find((t) => !t.is_home) ?? null;
   return (
     <>
-      <HighlightsGroup idNum={idNum} detail={detail} finished={finished} />
+      {factReport && factReport.momentum.length > 0 && (
+        <section className={styles.section}>
+          <SectionTitle>势头图</SectionTitle>
+          <MomentumChart
+            momentum={factReport.momentum}
+            homeName={m.home.name}
+            awayName={m.away.name}
+            homeTeamColor={m.home_team_color}
+            awayTeamColor={m.away_team_color}
+          />
+        </section>
+      )}
+      {factReport && (homeStat || awayStat) && (
+        <section className={styles.section}>
+          <SectionTitle>重点数据</SectionTitle>
+          <TopStatsCard
+            homeStat={homeStat}
+            awayStat={awayStat}
+            homeName={m.home.name}
+            awayName={m.away.name}
+            homeTeamColor={m.home_team_color}
+            awayTeamColor={m.away_team_color}
+          />
+        </section>
+      )}
+      {factReport?.top_rated && (
+        <section className={styles.section}>
+          <SectionTitle>最高评分</SectionTitle>
+          <TopRatedCard
+            topRated={factReport.top_rated}
+            homeName={m.home.name}
+            awayName={m.away.name}
+          />
+        </section>
+      )}
+      {factReport && hasKeyEvents(factReport.events) && (
+        <section className={styles.section}>
+          <SectionTitle>关键事件</SectionTitle>
+          <OverviewKeyEvents events={factReport.events} />
+        </section>
+      )}
+      <MatchInfoCard match={m} />
+      <RefereeCard match={m} />
+      <HighlightsGroup
+        idNum={idNum}
+        detail={detail}
+        finished={finished}
+        showInfoCards={false}
+      />
       <DataGroup detail={detail} preview={preview} analysis={analysis} />
       <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
     </>
@@ -444,16 +523,19 @@ export function MatchDetailBody({
               analysis={analysis}
               preview={preview}
               finished={finished}
+              factReport={factReport}
             />
           }
           shots={
             <MatchShotsSection
               shots={factReport.shots}
-              momentum={factReport.momentum}
+              lineups={factReport.lineups}
               homeName={m.home.name}
               awayName={m.away.name}
               homeTeamColor={m.home_team_color}
               awayTeamColor={m.away_team_color}
+              homeCrestUrl={m.home.crest_url}
+              awayCrestUrl={m.away.crest_url}
               homeScore={m.home_score}
               awayScore={m.away_score}
             />

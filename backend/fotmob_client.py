@@ -609,7 +609,17 @@ class FotMobClient:
           Temperature, Wind_Speed, Referee, Match_Round, Who_Lost_On_Penalties,
           Venue_Name, Venue_City, Venue_Country, Weather_Description,
           Home_Team_Color_Light, Home_Team_Color_Dark,
-          Away_Team_Color_Light, Away_Team_Color_Dark
+          Away_Team_Color_Light, Away_Team_Color_Dark,
+          Venue_Capacity, Venue_Surface, Venue_Lat, Venue_Long,
+          Weather_Localized_Key, Weather_Icon_Code,
+          Referee_ID, Referee_Country, Referee_Country_Code, Referee_Stats_Json
+
+        2026-08-24 补齐(migrations/core/0010):场地明细(capacity/surface/
+        lat/long,来源键名是 long 不是 lng)、天气枚举 key(localizedKey 是
+        FotMob 下发的资源名,如 weather_condition_partly_cloudy,比前端关键词
+        正则猜译可靠)、裁判信息卡全量(id 用于拼头像 URL playerimages/{id}.png,
+        imgUrl 是国旗不取;stats[] 原样存 JSON——perMatch 两项自带联赛均值与
+        服务端评级 averageType,客户端不自算阈值,实网 60 样本已证伪可反推)。
         """
         general = page_props.get("general", {})
         header  = page_props.get("header", {})
@@ -674,13 +684,27 @@ class FotMobClient:
             elif isinstance(ref_content, str):
                 referee = ref_content
         # 备选：content.matchFacts.infoBox.Referee（新版 API 位置）
+        info_box = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
+        ref_ib = info_box.get("Referee")
         if not referee:
-            info_box = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
-            ref_ib = info_box.get("Referee")
             if isinstance(ref_ib, dict):
                 referee = ref_ib.get("text") or ref_ib.get("name")
             elif isinstance(ref_ib, str):
                 referee = ref_ib
+
+        # ── 裁判信息卡明细(2026-08-24,只有 infoBox.Referee 这一个来源位置)──
+        # 姓名字段叫 text 不叫 name;imgUrl 是国旗不是头像(头像由前端用 id 拼
+        # playerimages/{id}.png);stats[] 定长 6 项,perMatch 两项(yellowCards/
+        # fouls)自带 average/averageType/fillPercentage——服务端算好的评级,
+        # 原样存 JSON 由 query 层投影,不在采集侧做任何加工。
+        referee_id = referee_country = referee_country_code = referee_stats_json = None
+        if isinstance(ref_ib, dict):
+            referee_id = ref_ib.get("id")
+            referee_country = ref_ib.get("country")
+            referee_country_code = ref_ib.get("countryCode")
+            stats_raw = ref_ib.get("stats")
+            if isinstance(stats_raw, list) and stats_raw:
+                referee_stats_json = json.dumps(stats_raw, ensure_ascii=False)
 
         # ── 轮次 ────────────────────────────────────────────────────────
         match_round = (
@@ -695,6 +719,8 @@ class FotMobClient:
         temperature = None
         wind_speed  = None
         weather_description = None
+        weather_localized_key = None
+        weather_icon_code = None
         weather_raw = content.get("weather") or general.get("weather")
         if isinstance(weather_raw, dict):
             temperature = weather_raw.get("temperature") or weather_raw.get("temp")
@@ -703,6 +729,10 @@ class FotMobClient:
             # 两者都取自英文原始来源，不在这里翻中文（翻译是展示层的事，见 §6.2 —— 库里
             # 只存来源原文，不存加工结果，否则来源文案改了这里也不会同步）。
             weather_description = weather_raw.get("description") or weather_raw.get("defaultTitle")
+            # localizedKey 是 FotMob 下发的枚举 key(weather_condition_* 资源名),
+            # 前端优先按它查中文对照表,查不到再退回 description 关键词匹配。
+            weather_localized_key = weather_raw.get("localizedKey")
+            weather_icon_code = weather_raw.get("iconCode")
             # FotMob 有时把天气包在 .conditions 里
             cond = weather_raw.get("conditions", {})
             if isinstance(cond, dict):
@@ -714,12 +744,20 @@ class FotMobClient:
         # 只有一个真实来源位置(content.matchFacts.infoBox.Stadium)，不像裁判/
         # 天气那样存在多个历史备选位置——没有就是没有，不额外猜测其它路径。
         venue_name = venue_city = venue_country = None
-        info_box_for_venue = (content.get("matchFacts", {}) or {}).get("infoBox", {}) or {}
-        stadium = info_box_for_venue.get("Stadium")
+        venue_capacity = venue_surface = venue_lat = venue_long = None
+        stadium = info_box.get("Stadium")
         if isinstance(stadium, dict):
             venue_name    = stadium.get("name")
             venue_city    = stadium.get("city")
             venue_country = stadium.get("country")
+            # 2026-08-24 补齐:实网抽样 15 场,Stadium 恰好 7 键——
+            # name/city/country/lat/long/capacity/surface。经纬度来源键名是
+            # long(不是 lng/lon);surface 是小写英文("grass"/"artificial
+            # turf"),存原文由展示层翻译。
+            venue_capacity = stadium.get("capacity")
+            venue_surface  = stadium.get("surface")
+            venue_lat      = stadium.get("lat")
+            venue_long     = stadium.get("long")
 
         # ── 主客配对配色(2026-08-24)──────────────────────────────────────
         # general.teamColors 是 FotMob 服务端已经按对手做过撞色规避的结果
@@ -781,6 +819,16 @@ class FotMobClient:
             "Home_Team_Color_Dark":  home_color_dark,
             "Away_Team_Color_Light": away_color_light,
             "Away_Team_Color_Dark":  away_color_dark,
+            "Venue_Capacity":        venue_capacity,
+            "Venue_Surface":         venue_surface,
+            "Venue_Lat":             venue_lat,
+            "Venue_Long":            venue_long,
+            "Weather_Localized_Key": weather_localized_key,
+            "Weather_Icon_Code":     weather_icon_code,
+            "Referee_ID":            referee_id,
+            "Referee_Country":       referee_country,
+            "Referee_Country_Code":  referee_country_code,
+            "Referee_Stats_Json":    referee_stats_json,
         }
 
     def parse_shotmap_records(
@@ -796,7 +844,10 @@ class FotMobClient:
           X_Coord, Y_Coord, xG, xGOT,
           Situation, Outcome, Shot_Type,
           Shot_ID, Is_Blocked, Is_On_Target, Is_From_Inside_Box,
-          Minute_Added, Keeper_ID
+          Minute_Added, Keeper_ID,
+          Blocked_X, Blocked_Y, Goal_Crossed_Y, Goal_Crossed_Z,
+          On_Goal_Shot_X, On_Goal_Shot_Y, On_Goal_Shot_Zoom_Ratio,
+          Is_Own_Goal
 
         说明:
           - Situation: 射门情境（RegularPlay/FromCorner/SetPiece/FreeKick/Penalty）
@@ -820,6 +871,27 @@ class FotMobClient:
           - Minute_Added:       补时分钟（此前缺失导致所有 90+X 分钟射门
             坍缩到第 90 分钟）
           - Keeper_ID:          面对的门将 player id
+
+        2026-08-24 补齐(画射门轨迹线所需,同样是原始 payload 早就带、此前
+        没解析——通过本地生产库 fact_match_events.extra_json.shotmapEvent
+        间接验证过这几个字段确实存在且非空,不是新的抓取权限缺口):
+          - Blocked_X/Blocked_Y:      封堵点，与 X_Coord/Y_Coord 同一原始
+            球场坐标系，可直接用于画轨迹线终点。真正被封堵的射门这两列是否
+            确实非空未 100% 验证（本地样本 Is_Blocked 均为 0），消费方必须
+            按"任一为 None 就不画线"处理，不得假设必然有值。
+          - Goal_Crossed_Y/Goal_Crossed_Z、On_Goal_Shot_X/Y/Zoom_Ratio:
+            球门线穿越点，疑似 FotMob 内部"球门框局部坐标"（Goal_Crossed_Z
+            是高度，2D 俯视球场图没有这根轴）——不是 105x68 球场坐标系，
+            量纲/原点未经真实数值核实。先存不代表可以直接当球场坐标使用，
+            消费方（前端）不得未经验证直接换算。
+
+        2026-08-24 补齐(migrations/core/0010,修乌龙球归属真 bug):
+          - Is_Own_Goal: APK ShotMapShot 第 21 字段 isOwnGoal,与已取的 11 个
+            键同属一份 schema。FotMob 把乌龙球记在"打进自家球门那一队"名下
+            (全库 1022 条 xG 为 NULL 的射门 100% 是乌龙球,avg X_Coord=5.34,
+            即本方球门端),按 is_home 分组数进球必归错队——对照实验 400 场
+            含乌龙球比赛错 392 场。历史行该列 NULL,由 query 层按
+            "xG IS NULL AND Outcome='Goal'"推断并显式标 inferred,不冒充采集值。
         """
         content = page_props.get("content", {})
         shots_raw = content.get("shotmap", {}).get("shots", [])
@@ -845,6 +917,22 @@ class FotMobClient:
                 "Is_From_Inside_Box":  s.get("isFromInsideBox"),
                 "Minute_Added":        s.get("minAdded"),
                 "Keeper_ID":           s.get("keeperId"),
+                # 2026-08-24 补齐(画射门轨迹线所需):Blocked_X/Blocked_Y 与
+                # X_Coord/Y_Coord 同一原始球场坐标系,可直接镜像使用。
+                # Goal_Crossed_Y/Z、On_Goal_Shot_* 疑似 FotMob 内部"球门框
+                # 局部坐标"(Z 是高度,2D 俯视球场图没有这根轴)——量纲/原点
+                # 未经真实数值验证,消费方不得直接当球场坐标换算,只能先存。
+                "Blocked_X":               s.get("blockedX"),
+                "Blocked_Y":               s.get("blockedY"),
+                "Goal_Crossed_Y":          s.get("goalCrossedY"),
+                "Goal_Crossed_Z":          s.get("goalCrossedZ"),
+                "On_Goal_Shot_X":          (s.get("onGoalShot") or {}).get("x"),
+                "On_Goal_Shot_Y":          (s.get("onGoalShot") or {}).get("y"),
+                "On_Goal_Shot_Zoom_Ratio": (s.get("onGoalShot") or {}).get("zoomRatio"),
+                # 乌龙球标志(2026-08-24,migrations/core/0010):缺失时为 None
+                # 不为 False——"来源没给"和"来源明确说不是乌龙"必须可区分,
+                # query 层只对 None 走推断兜底。
+                "Is_Own_Goal":             s.get("isOwnGoal"),
             })
         return records
 

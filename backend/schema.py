@@ -153,6 +153,22 @@ DIM_MATCH_COLUMNS = [
     ("Home_Team_Color_Dark", "TEXT"),
     ("Away_Team_Color_Light", "TEXT"),
     ("Away_Team_Color_Dark", "TEXT"),
+    # 场地明细 + 天气枚举 + 裁判信息卡(2026-08-24 对齐 FotMob);
+    # migrations/core/0010 补列。来源:content.matchFacts.infoBox.Stadium 的
+    # capacity/surface/lat/long(注意来源键名是 long 不是 lng)、
+    # content.weather 的 localizedKey/iconCode、infoBox.Referee 的
+    # id/country/countryCode/stats[](stats 原样存 JSON,由 query 层投影,
+    # 理由见 0010 头注释)。历史比赛恒 NULL,由 backfill_match_details 回填。
+    ("Venue_Capacity", "INTEGER"),
+    ("Venue_Surface", "TEXT"),
+    ("Venue_Lat", "REAL"),
+    ("Venue_Long", "REAL"),
+    ("Weather_Localized_Key", "TEXT"),
+    ("Weather_Icon_Code", "INTEGER"),
+    ("Referee_ID", "INTEGER"),
+    ("Referee_Country", "TEXT"),
+    ("Referee_Country_Code", "TEXT"),
+    ("Referee_Stats_Json", "TEXT"),
 ]
 
 DIM_PLAYER_COLUMNS = [
@@ -182,6 +198,22 @@ SHOTMAP_COLUMNS = [
     ("Is_From_Inside_Box", "INTEGER"),
     ("Minute_Added", "INTEGER"),
     ("Keeper_ID", "TEXT"),
+    # 2026-08-24 见 backend/migrations/core/0009_shot_trajectory_fields.sql——
+    # 画射门轨迹线用。Blocked_X/Y 是可信球场坐标;Goal_Crossed_*/
+    # On_Goal_Shot_* 坐标系未经验证,不得直接当球场坐标换算(见
+    # fotmob_client.py::parse_shotmap_records 同日期注释)。
+    ("Blocked_X", "REAL"),
+    ("Blocked_Y", "REAL"),
+    ("Goal_Crossed_Y", "REAL"),
+    ("Goal_Crossed_Z", "REAL"),
+    ("On_Goal_Shot_X", "REAL"),
+    ("On_Goal_Shot_Y", "REAL"),
+    ("On_Goal_Shot_Zoom_Ratio", "REAL"),
+    # 2026-08-24 见 backend/migrations/core/0010_venue_referee_detail.sql——
+    # FotMob 把乌龙球记在"打进自家球门那一队"名下,按 is_home 分组数进球会
+    # 归错队。历史行 NULL 时由 query 层按"xG IS NULL AND Outcome='Goal'"
+    # 推断并显式标注 inferred(backend/queries/match_report.py::_shots)。
+    ("Is_Own_Goal", "INTEGER"),
 ]
 
 

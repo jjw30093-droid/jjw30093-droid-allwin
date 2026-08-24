@@ -132,6 +132,50 @@ export const SHOT_TYPE_ZH: Record<string, string> = {
   OtherBodyParts: "其他部位",
 };
 
+/** 天气枚举 key(FotMob content.weather.localizedKey)→ 中文。
+ * 12 条全部取自 FotMob 官方安卓包的简体中文资源(2026-08-24 反编译对照表,
+ * 资源名逐字一致),不是自译——命不中的新枚举值由调用方如实展示英文原文
+ * (weather_description),不猜译文(CLAUDE.md §2.2)。 */
+export const WEATHER_CONDITION_ZH: Record<string, string> = {
+  weather_condition_clear: "晴朗",
+  weather_condition_cloudy: "多云",
+  weather_condition_foggy: "雾",
+  weather_condition_heavy_rain: "大雨",
+  weather_condition_light_rain: "小雨",
+  weather_condition_partly_cloudy: "局部多云",
+  weather_condition_rain: "雨",
+  weather_condition_snowy: "雪",
+  weather_condition_stormy: "风暴",
+  weather_condition_sunny: "晴",
+  weather_condition_thunderstorms: "雷暴",
+  weather_condition_windy: "有风",
+};
+
+/** 场地表面(FotMob infoBox.Stadium.surface,来源原文小写英文)→ 中文。
+ * 中文措辞取 FotMob 官方资源 surface_grass=天然草皮 / surface_artificial=
+ * 人造草皮;来源 key 是网页版 payload 实测值("grass"/"artificial turf"),
+ * 命不中的新值如实展示原文。 */
+export const VENUE_SURFACE_ZH: Record<string, string> = {
+  grass: "天然草皮",
+  "artificial turf": "人造草皮",
+};
+
+/** 裁判统计项(infoBox.Referee.stats[].type)→ 中文。只列裁判卡展示的
+ * perMatch 两项;matches/redCards 等 total 项当前不上卡。 */
+export const REFEREE_STAT_ZH: Record<string, string> = {
+  yellowCards: "黄牌",
+  fouls: "犯规",
+};
+
+/** 裁判统计评级(服务端下发的 averageType,不在客户端自算阈值)→ 中文。
+ * 配色注意:判罚尺度没有好坏之分,渲染侧统一中性色、只用文字表达方向,
+ * 不得套用"绿=好/红=坏"(CLAUDE.md §11.2:红只用于真实错误)。 */
+export const REFEREE_AVERAGE_TYPE_ZH: Record<string, string> = {
+  below: "低于平均水平",
+  average: "平均水平",
+  above: "高于平均水平",
+};
+
 /** 球队数据对比行(顺序即展示顺序;format 决定数值渲染方式)。
  * key 与 MatchReportTeamStat 的字段名一一对应(Pydantic 单一真源生成)。 */
 export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "num" | "num1" }[] = [

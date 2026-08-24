@@ -22,6 +22,11 @@ type EChartProps = {
   mode?: ChartMode;
   /** 卡片自带说明文字时可关掉内置摘要,避免重复(a11y label 仍保留在容器上)。 */
   showSummary?: boolean;
+  /** 2026-08-24 新增,可选:透传给底层 ECharts 实例的事件回调(目前只接
+   * click)。借用 echarts-for-react 生态通行的 onEvents 形状,不自创一套。
+   * 调用方业务代码自己抛出的异常不在下面两层错误边界覆盖范围内(那两层
+   * 只兜渲染阶段和 setOption 调用阶段),调用方需自行保持简单防御性写法。 */
+  onEvents?: Partial<Record<string, (params: unknown) => void>>;
 };
 
 /** 外层套 ChartErrorBoundary:兜住 `option` 本身在渲染阶段(如调用方
@@ -45,6 +50,7 @@ function EChartInner({
   className,
   mode = "interactive",
   showSummary = true,
+  onEvents,
 }: EChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -57,6 +63,13 @@ function EChartInner({
   // 变化都会重跑,ResizeObserver 回调读到的仍然是上一次成功渲染后的最新值。
   const optionRef = useRef(option);
   const modeRef = useRef(mode);
+  // 2026-08-24:同一惯用法存住最新的 onEvents。ECharts 的 chart.on() 不按
+  // 函数引用去重——如果每次 onEvents 变化都重新 .on()(调用方大概率每次
+  // 渲染传入新的内联函数,如 ShotMapChart 的 handleChartClick 闭包住
+  // plotted),不配合精确 .off() 会导致监听器不断叠加、同一次点击触发 N 次
+  // 回调。用 ref 间接层:.on() 只在下面挂载 effect 里绑定一次,绑定的是
+  // "读 ref 取最新值"的稳定委托函数,onEvents 怎么变都不需要重新绑定。
+  const onEventsRef = useRef(onEvents);
   // 2026-08-24:ECharts 配置异常(如势头图 visualMap 开区间在 6.x 上抛
   // `reading 'coord'`)是从 ResizeObserver 回调/useEffect 里发起的命令式
   // setOption 调用,不保证被 React 错误边界捕获(边界只可靠捕获渲染阶段的
@@ -95,6 +108,10 @@ function EChartInner({
         const chart = echarts.init(el);
         chartRef.current = chart;
         inited = true;
+        // 固定绑定一次委托监听器,不管调用方有没有传 onEvents.click——
+        // 委托函数内部才判断是否存在,不存在就是空操作。见上面 onEventsRef
+        // 的注释:.on() 只在这里调用一次,onEvents 怎么变都不用重新绑定。
+        chart.on("click", (params) => onEventsRef.current?.click?.(params));
         // 容器变为可见的这一刻,必须用当时最新的 option 渲染一次,不能停
         // 留在 mount 那一刻的旧值(推迟 init 期间 option 可能已经更新过)。
         applyLatestOption();
@@ -118,6 +135,7 @@ function EChartInner({
     // ResizeObserver 回调在容器真正可见时读取(见 applyLatestOption)。
     optionRef.current = option;
     modeRef.current = mode;
+    onEventsRef.current = onEvents;
     // 导出模式关动画:html-to-image 截图时动画未完成会截到半截图形。
     // chartRef.current 在容器还没拿到真实尺寸、图表尚未 init 时是 null,
     // 可选链在这里是安全的空操作——一旦 init 真正发生,会用最新 option
@@ -133,7 +151,7 @@ function EChartInner({
       // 不再算作这个 effect 自己触发的同步重渲染。
       queueMicrotask(() => setHasError(true));
     }
-  }, [option, mode]);
+  }, [option, mode, onEvents]);
 
   if (hasError) {
     return <p style={{ color: "var(--ink-3)", fontSize: 13.5 }}>图表暂时无法显示。</p>;

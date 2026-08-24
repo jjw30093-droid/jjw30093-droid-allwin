@@ -63,18 +63,67 @@ def _int_or_none(value) -> int | None:
         return None
 
 
+def _referee_stats(raw) -> list[dict]:
+    """Referee_Stats_Json(0010)→ RefereeStatDTO 字段名投影。
+
+    来源是 infoBox.Referee.stats[] 的原样 JSON;这里只做 camelCase→snake_case
+    键名映射与类型容错,不做任何数值加工——average_type 评级是服务端算好的
+    (实网 60 样本证伪可反推),原样透传。坏 JSON / 非 list 一律空列表,
+    不让一条脏数据拖垮整个详情端点。"""
+    if not raw:
+        return []
+    try:
+        items = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(items, list):
+        return []
+    out = []
+    for it in items:
+        if not isinstance(it, dict) or it.get("type") is None or it.get("value") is None:
+            continue
+        out.append(
+            {
+                "type": str(it["type"]),
+                "value": it["value"],
+                "value_type": str(it.get("valueType") or ""),
+                "average": it.get("average"),
+                "total": it.get("total"),
+                "average_type": it.get("averageType"),
+                "fill_percentage": it.get("fillPercentage"),
+                "average_percentage": it.get("averagePercentage"),
+            }
+        )
+    return out
+
+
 def _venue_weather_referee(r) -> dict:
-    """详情页专属字段(2026-08-20,MatchDetailSummary)。只在 match_by_id 合入,
-    不进 _row_to_summary——列表端点不需要,也不该为每张卡片多带这几列。"""
+    """详情页专属字段(2026-08-20,MatchDetailSummary;2026-08-24 补 0010 的
+    场地明细/天气枚举/裁判信息卡)。只在 match_by_id 合入,不进
+    _row_to_summary——列表端点不需要,也不该为每张卡片多带这几列。"""
     keys = r.keys()
+
+    def get(col):
+        return r[col] if col in keys else None
+
     return {
-        "referee": r["Referee"] if "Referee" in keys else None,
-        "temperature_c": _int_or_none(r["Temperature"] if "Temperature" in keys else None),
-        "wind_speed_kmh": _int_or_none(r["Wind_Speed"] if "Wind_Speed" in keys else None),
-        "weather_description": r["Weather_Description"] if "Weather_Description" in keys else None,
-        "venue_name": r["Venue_Name"] if "Venue_Name" in keys else None,
-        "venue_city": r["Venue_City"] if "Venue_City" in keys else None,
-        "venue_country": r["Venue_Country"] if "Venue_Country" in keys else None,
+        "referee": get("Referee"),
+        "temperature_c": _int_or_none(get("Temperature")),
+        "wind_speed_kmh": _int_or_none(get("Wind_Speed")),
+        "weather_description": get("Weather_Description"),
+        "venue_name": get("Venue_Name"),
+        "venue_city": get("Venue_City"),
+        "venue_country": get("Venue_Country"),
+        "venue_capacity": get("Venue_Capacity"),
+        "venue_surface": get("Venue_Surface"),
+        "venue_lat": get("Venue_Lat"),
+        "venue_long": get("Venue_Long"),
+        "weather_localized_key": get("Weather_Localized_Key"),
+        "weather_icon_code": get("Weather_Icon_Code"),
+        "referee_id": get("Referee_ID"),
+        "referee_country": get("Referee_Country"),
+        "referee_country_code": get("Referee_Country_Code"),
+        "referee_stats": _referee_stats(get("Referee_Stats_Json")),
     }
 
 

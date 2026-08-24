@@ -2802,6 +2802,29 @@ export interface components {
             venue_country?: string | null;
             home_team_color?: components["schemas"]["TeamColorPair"] | null;
             away_team_color?: components["schemas"]["TeamColorPair"] | null;
+            /** Venue Capacity */
+            venue_capacity?: number | null;
+            /** Venue Surface */
+            venue_surface?: string | null;
+            /** Venue Lat */
+            venue_lat?: number | null;
+            /** Venue Long */
+            venue_long?: number | null;
+            /** Weather Localized Key */
+            weather_localized_key?: string | null;
+            /** Weather Icon Code */
+            weather_icon_code?: number | null;
+            /** Referee Id */
+            referee_id?: number | null;
+            /** Referee Country */
+            referee_country?: string | null;
+            /** Referee Country Code */
+            referee_country_code?: string | null;
+            /**
+             * Referee Stats
+             * @default []
+             */
+            referee_stats: components["schemas"]["RefereeStatDTO"][];
         };
         /** MatchListResponse */
         MatchListResponse: {
@@ -3270,6 +3293,7 @@ export interface components {
              * @default []
              */
             momentum: components["schemas"]["MatchReportMomentumPoint"][];
+            top_rated?: components["schemas"]["MatchReportTopRated"] | null;
         };
         /** MatchReportCoverage */
         MatchReportCoverage: {
@@ -3518,6 +3542,32 @@ export interface components {
             is_blocked?: boolean | null;
             /** Is On Target */
             is_on_target?: boolean | null;
+            /** Shot Id */
+            shot_id?: number | null;
+            /** Blocked X */
+            blocked_x?: number | null;
+            /** Blocked Y */
+            blocked_y?: number | null;
+            /** Goal Crossed Y */
+            goal_crossed_y?: number | null;
+            /** Goal Crossed Z */
+            goal_crossed_z?: number | null;
+            /** On Goal Shot X */
+            on_goal_shot_x?: number | null;
+            /** On Goal Shot Y */
+            on_goal_shot_y?: number | null;
+            /** On Goal Shot Zoom Ratio */
+            on_goal_shot_zoom_ratio?: number | null;
+            /**
+             * Is Own Goal
+             * @default false
+             */
+            is_own_goal: boolean;
+            /**
+             * Is Own Goal Inferred
+             * @default false
+             */
+            is_own_goal_inferred: boolean;
         };
         /** MatchReportTeamStat */
         MatchReportTeamStat: {
@@ -3606,6 +3656,29 @@ export interface components {
             yellow_cards?: number | null;
             /** Red Cards */
             red_cards?: number | null;
+        };
+        /**
+         * MatchReportTopRated
+         * @description 全场评分最高的一名球员(总览「最高评分」卡,2026-08-24)。
+         *
+         *     评分来自 fact_match_lineup.rating(FotMob 球员评分)。库里没有官方
+         *     isPlayerOfTheMatch 标志,标题语义是「最高评分」,不冒充官方 MOTM 评选。
+         *     并列最高分取 player_id 字典序较小者(确定性,见
+         *     backend/queries/match_report.py::_top_rated)。
+         */
+        MatchReportTopRated: {
+            /** Player Id */
+            player_id: string;
+            /** Name */
+            name: string;
+            /** Team Id */
+            team_id: number;
+            /** Is Home */
+            is_home: boolean;
+            /** Rating */
+            rating: number;
+            /** Shirt Number */
+            shirt_number?: string | null;
         };
         /** MatchReportUnavailableDTO */
         MatchReportUnavailableDTO: {
@@ -4389,6 +4462,34 @@ export interface components {
         RecoVoidBody: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * RefereeStatDTO
+         * @description 裁判单项统计(infoBox.Referee.stats[] 的逐项投影,2026-08-24)。
+         *
+         *     type 实测全集:matches/yellowCards/redCards/unknown/penalties/fouls;
+         *     value_type 为 total(累计)或 perMatch(每场均值)。只有 perMatch 两项
+         *     (yellowCards/fouls)带 average/total/average_type/fill_percentage/
+         *     average_percentage 五个扩展字段,其余项这五项恒为 null——这是来源结构
+         *     如此,不是采集缺失。average_percentage 实测恒为 50(均值刻度居中)。
+         */
+        RefereeStatDTO: {
+            /** Type */
+            type: string;
+            /** Value */
+            value: number;
+            /** Value Type */
+            value_type: string;
+            /** Average */
+            average?: number | null;
+            /** Total */
+            total?: number | null;
+            /** Average Type */
+            average_type?: string | null;
+            /** Fill Percentage */
+            fill_percentage?: number | null;
+            /** Average Percentage */
+            average_percentage?: number | null;
         };
         /** RetractBody */
         RetractBody: {

@@ -190,11 +190,28 @@ def _events(conn, match_id, i18n):
     return out
 
 
+def _own_goal_fields(r) -> dict:
+    """乌龙球两字段(is_own_goal / is_own_goal_inferred)的统一出口。
+
+    优先级:采集值(Is_Own_Goal 非 NULL,2026-08-24 起新抓的场次才有)→
+    推断(xG IS NULL AND Outcome='Goal';全库 1022 条 NULL-xG 射门 100% 是
+    乌龙球,avg X_Coord=5.34 即本方球门端,并与 fact_match_events 的
+    extra_json.ownGoal 交叉印证)。inferred 标志让前端能对推断值降级表述,
+    不把推断当采集确证。非进球射门 xG 缺失(理论上不存在,防御)不推断。"""
+    collected = r["Is_Own_Goal"]
+    if collected is not None:
+        return {"is_own_goal": bool(collected), "is_own_goal_inferred": False}
+    inferred = r["xG"] is None and r["Outcome"] == "Goal"
+    return {"is_own_goal": inferred, "is_own_goal_inferred": inferred}
+
+
 def _shots(conn, match_id, home_team_id, away_team_id, lineup_names, i18n):
     rows = conn.execute(
         """SELECT Player_ID, Team_ID, Minute, Period, X_Coord, Y_Coord,
                   xG, xGOT, Situation, Outcome, Shot_Type,
-                  Is_Blocked, Is_On_Target
+                  Is_Blocked, Is_On_Target, Shot_ID, Blocked_X, Blocked_Y,
+                  Goal_Crossed_Y, Goal_Crossed_Z, On_Goal_Shot_X,
+                  On_Goal_Shot_Y, On_Goal_Shot_Zoom_Ratio, Is_Own_Goal
            FROM fact_shotmap
            WHERE Match_ID=? AND Team_ID IN (?, ?)""",
         (match_id, home_team_id, away_team_id),
@@ -222,6 +239,24 @@ def _shots(conn, match_id, home_team_id, away_team_id, lineup_names, i18n):
             "shot_type": r["Shot_Type"],
             "is_blocked": bool(r["Is_Blocked"]) if r["Is_Blocked"] is not None else None,
             "is_on_target": bool(r["Is_On_Target"]) if r["Is_On_Target"] is not None else None,
+            # 2026-08-24 起才采集,画射门轨迹线用——原样透传,不做镜像/换算
+            # (与 x/y 同一架构约定,见 MatchReportShot 字段注释)。
+            "shot_id": r["Shot_ID"],
+            "blocked_x": _round(r["Blocked_X"], 2),
+            "blocked_y": _round(r["Blocked_Y"], 2),
+            "goal_crossed_y": _round(r["Goal_Crossed_Y"], 2),
+            "goal_crossed_z": _round(r["Goal_Crossed_Z"], 2),
+            "on_goal_shot_x": _round(r["On_Goal_Shot_X"], 2),
+            "on_goal_shot_y": _round(r["On_Goal_Shot_Y"], 2),
+            "on_goal_shot_zoom_ratio": _round(r["On_Goal_Shot_Zoom_Ratio"], 2),
+            # 乌龙球(2026-08-24,migrations/core/0010)。FotMob 把乌龙球记在
+            # "打进自家球门那一队"名下,前端按受益方(对方)计进球数,否则
+            # 分队比分归错队(对照实验 400 场含乌龙球比赛错 392 场)。
+            # Is_Own_Goal 采集值缺失(历史行)时按"xG IS NULL 且 Outcome=
+            # 'Goal'"推断——该判据全库 1022/1022 命中且有 fact_match_events
+            # 的 ownGoal 标记交叉印证;推断值必须与采集值可区分,所以配一个
+            # is_own_goal_inferred 标志,不冒充确证(CLAUDE.md §2.2)。
+            **_own_goal_fields(r),
         })
     out.sort(key=lambda s: (_PERIOD_ORDER.get(s["period"], 9), s["minute"] or 0))
     return out
@@ -358,6 +393,35 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
     return out
 
 
+def _top_rated(lineups) -> dict | None:
+    """全场评分最高的一名球员(2026-08-24,总览「最高评分」卡)。
+
+    口径:fact_match_lineup.rating(FotMob 球员评分,与阵容/球员表同一来源,
+    不另起第二套评分)。库里没有 FotMob 的 isPlayerOfTheMatch 官方标志,
+    所以标题语义是「最高评分」(FotMob 自己的 top_rated 口径),不冒充官方
+    MOTM 评选(站长 2026-08-24 拍板)。并列最高分时取 player_id 字典序较小
+    者——确定性优先,不引入随机。全场无评分返回 None,前端整卡不渲染。"""
+    best = None
+    for team in lineups:
+        for p in team["starters"] + team["bench"]:
+            if p["rating"] is None:
+                continue
+            key = (-p["rating"], p["player_id"])
+            if best is None or key < best[0]:
+                best = (key, p, team)
+    if best is None:
+        return None
+    _, p, team = best
+    return {
+        "player_id": p["player_id"],
+        "name": p["name"],
+        "team_id": team["team_id"],
+        "is_home": team["is_home"],
+        "rating": p["rating"],
+        "shirt_number": p["shirt_number"],
+    }
+
+
 def _momentum(conn, match_id):
     """势头曲线(逐分钟,FotMob 自己的黑箱综合评分,见
     backend/fotmob_client.py::parse_momentum_records 的口径说明)。2026-08-23
@@ -422,4 +486,5 @@ def match_report(conn: sqlite3.Connection, match_id: int) -> dict | None:
         "team_stats_by_half": team_stats_by_half,
         "player_stats": player_stats,
         "momentum": momentum,
+        "top_rated": _top_rated(lineups),
     }

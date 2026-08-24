@@ -1,0 +1,121 @@
+"use client";
+
+/**
+ * 射门详情翻页面板(2026-08-24,复刻 FotMob 点击射门弹出详情、上一条/下一条
+ * 翻页的效果)。固定位置卡片,挂在射门落点图下方——不做跟随选中点定位的
+ * 悬浮弹层(全站没有可复用的悬浮弹层组件,FotMob 自己这个面板叫
+ * FullscreenShotInformationContainer,截图显示占相当篇幅,不是跟随光标的
+ * 小气泡)。始终挂载,未选中时显示占位文案,避免首次选中时布局跳动。
+ *
+ * 翻页在数组位置上做(onPrev/onNext 由调用方 ShotMapChart.tsx 实现),不
+ * 依赖 shot_id——历史比赛(未重新抓取)shot_id 可能整场为空。
+ */
+
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { TeamBadge } from "@/components/teams/TeamBadge";
+import type { MatchReportResponse } from "@/lib/api-v1";
+import { SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
+import { outcomeLabelFor } from "./ShotMapChart";
+import styles from "./ShotDetailPanel.module.css";
+
+type MatchReport = Extract<MatchReportResponse, { available: true }>;
+type Shot = MatchReport["shots"][number];
+
+export function ShotDetailPanel({
+  shot,
+  homeName,
+  awayName,
+  homeCrestUrl,
+  awayCrestUrl,
+  shirtNumberByPlayerId,
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+  position,
+  total,
+}: {
+  shot: Shot | null;
+  homeName: string;
+  awayName: string;
+  homeCrestUrl?: string | null;
+  awayCrestUrl?: string | null;
+  shirtNumberByPlayerId?: Record<string, string>;
+  onPrev: () => void;
+  onNext: () => void;
+  hasPrev: boolean;
+  hasNext: boolean;
+  /** 当前选中射门在 plotted 里的 1-based 位置;没有选中时为 null。 */
+  position: number | null;
+  total: number;
+}) {
+  if (!shot) {
+    return (
+      <div className={styles.panel} data-empty="true">
+        <p className={styles.placeholder}>点击球场上的射门查看详情。</p>
+      </div>
+    );
+  }
+
+  const teamName = shot.is_home ? homeName : awayName;
+  const crestUrl = shot.is_home ? homeCrestUrl : awayCrestUrl;
+  const shirtNumber = shirtNumberByPlayerId?.[shot.player_id];
+  const situationLabel = shot.situation
+    ? (SHOT_SITUATION_ZH[shot.situation] ?? shot.situation)
+    : null;
+  const shotTypeLabel = shot.shot_type ? (SHOT_TYPE_ZH[shot.shot_type] ?? shot.shot_type) : null;
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.nav}>
+        <button
+          type="button"
+          className={styles.navButton}
+          onClick={onPrev}
+          disabled={!hasPrev}
+          aria-label="上一条射门"
+        >
+          ‹
+        </button>
+        {position != null && (
+          <span className={styles.navPosition}>
+            {position} / {total}
+          </span>
+        )}
+        <button
+          type="button"
+          className={styles.navButton}
+          onClick={onNext}
+          disabled={!hasNext}
+          aria-label="下一条射门"
+        >
+          ›
+        </button>
+      </div>
+
+      <div className={styles.body}>
+        <PlayerAvatar
+          playerId={shot.player_id}
+          playerName={shot.player_name ?? shot.player_id}
+          shirtNumber={shirtNumber}
+          size={48}
+        />
+        <div className={styles.info}>
+          <div className={styles.playerRow}>
+            <TeamBadge teamName={teamName} crestUrl={crestUrl} size={24} />
+            <span className={styles.playerName}>{shot.player_name ?? shot.player_id}</span>
+            {shot.minute != null && <span className={`${styles.minute} num`}>{shot.minute}&#39;</span>}
+          </div>
+          <p className={styles.outcome}>{outcomeLabelFor(shot)}</p>
+          <p className={styles.meta}>
+            {[situationLabel, shotTypeLabel].filter(Boolean).join(" · ") || "情境/部位未知"}
+          </p>
+          <p className={styles.xg}>
+            xG {shot.xg?.toFixed(3) ?? "—"}
+            {shot.xgot != null && ` · xGOT ${shot.xgot.toFixed(3)}`}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

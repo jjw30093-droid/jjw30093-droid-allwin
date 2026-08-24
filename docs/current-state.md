@@ -6653,3 +6653,81 @@ Fix A 之后仍然空着的卡(9.5/9.0 等映射后仍未定级的线、场次�
   跑过(§42.8 已记录);
 - 降级态下后端仍下发顶层 `hit_rate`(前端已正确隐藏,契约层面可收紧但
   不在本轮范围)。
+
+## 58. 比赛详情页对齐 FotMob:场地/裁判卡 + 总览纵向重排 + 三个真实缺陷修复(2026-08-25)
+
+站长拿手机逐屏比对 FotMob 后拍板的一轮改造(方案经反编译 APK 236.17338 +
+对 FotMob 生产站 15 场实网抽样双重验证)。
+
+### 最高价值发现:三类数据全空的真正根因(已修)
+
+`backend/worker/runner.py` 注册 `fotmob_snapshot` 的 argv 漏了
+**已经完整实现**的 `--write-match-details` 开关——该任务跑了 14665 次,
+每轮抓回整份 pageProps 又当场丢弃场馆/天气/配色,16934 行 dim_match 里
+`Venue_*`/`Weather_Description` 非空数 0、配色仅 1 行,而 CLI 自身测试
+一直全绿。已修 argv 并新增 `tests/backend/test_worker_argv.py`(argv 接线
+回归,CLAUDE.md §6.3 新增纪律);新增 `backend/cli/backfill_match_details.py`
+按范围批量回填(--only-missing 断点续跑,选场逻辑有离线测试)。
+**本机无 THORDATA_PROXY,真实网络回填未执行,标 UNVERIFIED**——生产上
+需跑 `backfill_match_details --season <当前赛季> --commit`。
+
+### 数据与契约(migration 0010)
+
+- dim_match 加 10 列:场地明细 capacity/surface/lat/long(来源
+  infoBox.Stadium,7 键实测)、天气枚举 localizedKey/iconCode、裁判
+  id/country/countryCode/Stats_Json(stats[] 原样 JSON,perMatch 两项自带
+  联赛均值与服务端评级 averageType——60 条实网样本证伪可由
+  fillPercentage 反推,前端一律直用不自算);fact_shotmap 加 Is_Own_Goal。
+- `/matches/{id}` DTO 加同名字段 + RefereeStatDTO;`/report` 加
+  `top_rated`(全场最高 lineup.rating,站长拍板命名「最高评分」不冒充
+  官方 MOTM)与每脚射门的 `is_own_goal`/`is_own_goal_inferred`。
+- APK 资料勘误:`FotMob解析-信息架构.md` 里"赛前赛季均值 5 项对比"实为
+  `Match.isStarted()` 门控的赛中/赛后卡,FotMob 赛前没有这张卡;裁判专用
+  接口 `pub.fotmob.com/prod/db/api/referee/match/{id}` 实测 404,无需接。
+
+### 两个真实缺陷(乌龙球 + NULL xG)
+
+站长报的"筛进球后 6 球 xG 1.67"**不是 bug**(caption 三数字同源自筛选
+集合,git -S 证明从未错过;496 场六球比赛里 36.3% 低于 1.67)。但排查出:
+① FotMob 把乌龙球记在"打进自家球门那队"名下(1022 条 NULL-xG 射门 100%
+是乌龙球),按 is_home 数进球错队率 98%(400 场对照)——现按**受益方**
+计球(采集值优先,历史行按"xG NULL+Goal"推断并带 inferred 标志);
+② `xg ?? 0` 把缺失当 0,与 §6.2 纪律冲突——现缺失即排除并如实标注。
+摘要抽成纯函数 `buildShotMapSummary`/`summarizeSide` 并有随筛选变化的
+断言(CLAUDE.md §11.3 新增"聚合数字必须可独立测试"纪律)。
+
+### 前端
+
+- 赛前「看点」:比赛信息卡(补容纳人数/草皮/官方中文天气/Google Maps
+  链接)→ 新 RefereeCard(头像=playerimages CDN 同一热链例外;黄牌/犯规
+  进度条 + 均值刻度 + 服务端评级中文;中性配色,判罚尺度不套红绿)。
+- 已完赛「总览」纵向:势头图(从射门 tab 整块挪来)→ 重点数据
+  (TopStatsCard,FotMob topStatsCard 字节码还原的固定 5 项,真实队色
+  双向条)→ 最高评分(TopRatedCard)→ 关键事件(精简,只进球/牌,乌龙
+  按受益方侧显示)→ 比赛信息 → 裁判 → 既有三组。跨 tab 跳转经
+  MatchTabs 新增的 context(`useMatchTabSwitch`)。
+- 「射门」tab:射门落点提到最顶,势头图移除。
+- zh.ts 新增 WEATHER_CONDITION_ZH(12 条 FotMob 官方简中)/
+  VENUE_SURFACE_ZH/REFEREE_STAT_ZH/REFEREE_AVERAGE_TYPE_ZH。
+
+### 验证
+
+- 后端 pytest 全量 2069 passed(含新增 22 条);前端 vitest 534 passed、
+  tsc/eslint/next build 干净;OpenAPI 契约无漂移。
+- 浏览器实测(本地真实库,5868028 手工回填了调研时实网抓到的该场真实
+  值):赛前两卡深浅模式渲染与 FotMob 目标形态一致(裁判真实头像 200);
+  已完赛总览六块顺序正确、跳转按钮真实切 tab;射门 tab 顺序正确。
+- 期间抓到并修掉一个 jsdom 测不出的 RSC 边界 bug:`hasKeyEvents` 从
+  "use client" 模块导出导致服务端调用崩页,已拆到无指令共享模块
+  `overviewKeyEvents.shared.ts`(教训:跨 RSC 边界共享的纯函数不得住在
+  client 组件文件里)。
+- 浏览器面板环境发现:内嵌浏览器后台化时不产帧,IntersectionObserver
+  永不回调 → 懒挂载图表不 init;前置面板后 canvas 正常挂载。"真实鼠标
+  点击射门圆点弹详情"这最后一环(纯 ECharts 库自身散点命中)在该环境仍
+  无法稳定触发,标 UNVERIFIED——事件绑定/选中态/轨迹线/面板各自有单测。
+
+### 本轮不做(已记录)
+
+- 阵容 tab 顶部「赛季统计/转会价值/年龄/国家」pill(需四套新数据源);
+- 补采 isPlayerOfTheMatch 官方标志;历史 16934 场全量回填(只回填本赛季);
+- goalCrossed*/onGoalShot 坐标系仍未验证,继续不当球场坐标用。

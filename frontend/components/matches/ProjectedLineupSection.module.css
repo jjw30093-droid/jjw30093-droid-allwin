@@ -145,27 +145,17 @@
   max-width: 74px;
 }
 
-.dot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: none;
+/* 2026-08-24:.dot(纯色圆点+球衣号文字,主客队靠实心青绿/白区分)换成真实
+ * 球员头像(components/players/PlayerAvatar.tsx)后,球场底图固定是绿色
+ * (不随亮/暗主题切换,见 FootballPitchBackground.tsx 顶部注释)这条约束
+ * 还在——头像本身没有"一圈白色描边"这层保护,借这个 ring 包装类保留同样
+ * 的 legibility 处理(与 PitchFormation.module.css 的 .avatarRing 同一
+ * 惯例)。主客队不再靠圆点底色区分(头像本身就能区分球员),不需要
+ * [data-side="away"] 覆写。 */
+.avatarRing {
+  display: inline-flex;
   border-radius: 50%;
-  background: var(--brand-teal);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  /* 球场底图固定是绿色(不随亮/暗主题切换,见 FootballPitchBackground.tsx
-   * 顶部注释),球衣需要一圈白色描边才能在草坪上稳定辨认,不依赖球衣本身
-   * 颜色跟草绿的对比度——与 PitchFormation.module.css 的 .shirt 同一惯例。 */
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
-}
-
-.pitch[data-side="away"] .dot {
-  background: var(--surface);
-  color: var(--ink);
 }
 
 /* 同上,球场固定为绿色,姓名不能用随主题变化的深色字——固定用近白色 + 描边

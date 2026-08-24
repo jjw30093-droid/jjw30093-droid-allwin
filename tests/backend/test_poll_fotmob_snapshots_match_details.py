@@ -233,3 +233,77 @@ def test_write_match_details_never_regresses_known_value_to_null(data_dir, core_
     assert row["Home_Team_Color_Dark"] == "#bbbbbb"
     assert row["Away_Team_Color_Light"] == "#cccccc"
     assert row["Away_Team_Color_Dark"] == "#dddddd"
+
+
+# ── 0010 迁移新列(场地明细/天气枚举/裁判信息卡,2026-08-24)────────────────
+
+
+def test_write_match_details_lands_0010_venue_and_weather_columns(data_dir, core_conn):
+    """真实 fixture 驱动:Stadium 的 capacity/surface/lat/long 与 weather 的
+    localizedKey/iconCode 落进 0010 新列。该 fixture 的 Referee(挪超)没有
+    id/stats——对应列必须如实 NULL,不编造。"""
+    _seed_match(core_conn)
+    payload = _load_payload()
+
+    run_snapshot_poll(
+        now_iso="2026-07-31T00:00:00Z",
+        offline_payloads={str(MATCH_ID): payload},
+        match_ids=[MATCH_ID],
+        write_match_details=True,
+    )
+
+    row = core_conn.execute(
+        "SELECT Venue_Capacity, Venue_Surface, Venue_Lat, Venue_Long, "
+        "Weather_Localized_Key, Weather_Icon_Code, Referee_ID, Referee_Country, "
+        "Referee_Country_Code, Referee_Stats_Json FROM dim_match WHERE Match_ID=?",
+        (MATCH_ID,),
+    ).fetchone()
+    assert row["Venue_Capacity"] == 12565
+    assert row["Venue_Surface"] == "artificial turf"
+    assert row["Venue_Lat"] == pytest.approx(59.21306014)
+    assert row["Venue_Long"] == pytest.approx(10.928134918)
+    assert row["Weather_Localized_Key"] == "weather_condition_windy"
+    assert row["Weather_Icon_Code"] == 24
+    # 该 fixture 的 Referee 没有 id/stats(挪超),country/countryCode 有值。
+    assert row["Referee_ID"] is None
+    assert row["Referee_Country"] == "Norway"
+    assert row["Referee_Country_Code"] == "NOR"
+    assert row["Referee_Stats_Json"] is None
+
+
+def test_write_match_details_lands_referee_stats_json(data_dir, core_conn):
+    """合成 stats 齐全的裁判(实网 LaLiga 形状,含 perMatch 两项的联赛均值与
+    服务端评级)→ Referee_Stats_Json 原样落库,不加工数值。"""
+    _seed_match(core_conn)
+    stats = [
+        {"type": "matches", "value": 38, "valueType": "total"},
+        {"type": "yellowCards", "value": 4.11, "valueType": "perMatch",
+         "average": 4.49, "total": 156, "averageType": "below",
+         "fillPercentage": 37.07, "averagePercentage": 50},
+        {"type": "fouls", "value": 24.74, "valueType": "perMatch",
+         "average": 25.05, "total": 767, "averageType": "average",
+         "fillPercentage": 45.49, "averagePercentage": 50},
+    ]
+    payload = {
+        "general": {}, "header": {},
+        "content": {"matchFacts": {"infoBox": {"Referee": {
+            "text": "Victor García Verdura", "id": 1001072330,
+            "country": "Spain", "countryCode": "ESP", "stats": stats,
+        }}}},
+    }
+
+    run_snapshot_poll(
+        now_iso="2026-07-31T00:00:00Z",
+        offline_payloads={str(MATCH_ID): payload},
+        match_ids=[MATCH_ID],
+        write_match_details=True,
+    )
+
+    row = core_conn.execute(
+        "SELECT Referee, Referee_ID, Referee_Stats_Json FROM dim_match WHERE Match_ID=?",
+        (MATCH_ID,),
+    ).fetchone()
+    assert row["Referee"] == "Victor García Verdura"
+    assert row["Referee_ID"] == 1001072330
+    stored = json.loads(row["Referee_Stats_Json"])
+    assert stored == stats  # 原样落库,零加工——averageType 是服务端评级

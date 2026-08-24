@@ -274,6 +274,14 @@ poll_windows.py` 的代码注释同样把这三条标注为下限）：
   白名单。且任何"新数据只在事件发生的那一刻写入"的落库任务，都必须配一条
   可按 ID 重跑的补采路径（如 `backend/cli/reingest_matches.py`）——没有
   这条路径，任何一次漏检都是永久的，不会被后续轮询自动纠正。
+- **「实现了 CLI 开关但没在 `backend/worker/runner.py` 的 argv 里接线」与
+  「根本没实现」在生产上等价**（2026-08-24 真实事故：`--write-match-details`
+  早已完整实现，但 `runner.py` 注册 `fotmob_snapshot` 的 argv 漏了它，导致
+  该任务跑了 1.4 万+ 次、每轮都抓回整份 payload 又当场丢弃，场馆/天气/球队
+  配色三类数据在 16934 行 dim_match 里非空数为 0/0/1，且 CLI 自身的全部
+  测试一直是绿的——这类缺陷没有任何常规测试能抓到）。任何新增的采集开关，
+  必须同时有一条断言 worker argv 包含它的测试
+  （`tests/backend/test_worker_argv.py`）。
 
 ### 6.4 时间共现
 
@@ -668,6 +676,20 @@ GET  /api/v1/admin/...
   被 React 错误边界捕获）+ 外层 `ChartErrorBoundary`（兜住 `option` 计算
   本身在渲染阶段抛出的异常）。新增图表组件不需要重新实现这两层，只要走
   `EChart` 封装即可自动获得；不要绕开它直接调 `echarts.init`。
+- **图上的聚合数字必须与图上画的点同源，且不得把缺失值当 0。**（2026-08-24
+  真实排查确认）射门图底部「N 次射门、M 球、xG 合计 Z」三个数字必须同时取
+  自筛选后的集合——这一条当时的代码是对的，但**没有任何测试断言过它**：
+  `frontend/tests/` 全目录 grep「次射门」零命中，等于这条正确性完全靠人肉
+  维持。同一次排查还查出两个真实缺陷：① **FotMob 的 shotmap 把乌龙球记在
+  「打进自家球门那一队」名下**（全库 1022 条 xG 为 NULL 的射门 100% 是
+  乌龙球，avg X_Coord=5.34 vs 正常进球 94.78，即本方球门端），直接按
+  `is_home` 分组数进球会归错队——对照实验 400 场含乌龙球比赛错 392 场
+  （98%）；② `xg ?? 0` 把缺失 xG 静默当 0 累加，与 `MatchDataModules.tsx`
+  引用 §6.2 明确拒绝这么做的既有纪律自相矛盾。据此固化：**凡是在图上展示
+  聚合数字的组件，聚合逻辑必须抽成可独立调用的纯函数并有测试断言它随筛选/
+  输入变化；缺失值一律不得静默填 0，要么排除、要么如实标注**（进球数按
+  受益方计乌龙球，见 `buildShotMapSummary` / `summarizeSide` 与
+  `backend/queries/match_report.py::_own_goal_fields`）。
 
 ## 12. Creator Studio
 

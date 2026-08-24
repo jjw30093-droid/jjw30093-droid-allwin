@@ -197,6 +197,67 @@ describe("ShotMapChart.buildOption 渲染冒烟", () => {
     const paths = renderOrThrow(buildShotMapOption(plottedShots, "主队", "客队", NON_BRAND_COLORS));
     expect(paths).toBeGreaterThan(0);
   });
+
+  describe("轨迹线联动(2026-08-24,第 5 个可选参数 selected)", () => {
+    const blockedShot = shot({
+      minute: 26, xg: 0.05, is_home: true, x: 78.43, y: 33.24,
+      outcome: "AttemptSaved", is_blocked: true, blocked_x: 81.13, blocked_y: 33.16,
+    });
+    const goalNoPreciseEndpoint = shot({
+      minute: 9, xg: 0.3, is_home: true, x: 95.44, y: 34.61, outcome: "Goal",
+    });
+    const noTrajectoryData = shot({
+      minute: 60, xg: 0.02, is_home: false, x: 95, y: 30,
+      outcome: "Miss", is_blocked: null, is_on_target: false,
+    });
+
+    it("选中有封堵坐标的射门 → 不抛异常且多画出图形(轨迹线+被挡标记)", () => {
+      const withoutSelection = renderOrThrow(
+        buildShotMapOption(plottedShots, "主队", "客队", COLORS),
+      );
+      const withSelection = renderOrThrow(
+        buildShotMapOption([...plottedShots, blockedShot], "主队", "客队", COLORS, blockedShot),
+      );
+      expect(withSelection).toBeGreaterThan(withoutSelection);
+    });
+
+    it("选中无精确终点的进球(退化到球门正中默认值)→ 不抛异常", () => {
+      expect(() =>
+        renderOrThrow(
+          buildShotMapOption(
+            [...plottedShots, goalNoPreciseEndpoint],
+            "主队",
+            "客队",
+            COLORS,
+            goalNoPreciseEndpoint,
+          ),
+        ),
+      ).not.toThrow();
+    });
+
+    it("选中非射正非封堵射门 → 不抛异常且不应多出轨迹线系列(静默不画线)", () => {
+      const withoutSelection = renderOrThrow(
+        buildShotMapOption([...plottedShots, noTrajectoryData], "主队", "客队", COLORS),
+      );
+      const withSelection = renderOrThrow(
+        buildShotMapOption(
+          [...plottedShots, noTrajectoryData],
+          "主队",
+          "客队",
+          COLORS,
+          noTrajectoryData,
+        ),
+      );
+      expect(withSelection).toBe(withoutSelection);
+    });
+
+    it("选中的 shot 对象不在 plotted 数组里 → 不抛异常(极端情况,正常由 resolveSelectedShot 挡住,这里测 buildOption 自身的健壮性)", () => {
+      const strayShot = shot({ minute: 88, is_home: true, x: 100, y: 34, outcome: "Goal" });
+      expect(() =>
+        renderOrThrow(buildShotMapOption(plottedShots, "主队", "客队", COLORS, strayShot)),
+      ).not.toThrow();
+    });
+  });
 });
 
 describe("TeamStyleQuadrant.buildOption 渲染冒烟", () => {

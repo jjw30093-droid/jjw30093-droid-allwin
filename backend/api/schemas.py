@@ -189,6 +189,26 @@ class TeamFormEntry(BaseModel):
     result: Literal["W", "D", "L"]
 
 
+class RefereeStatDTO(BaseModel):
+    """裁判单项统计(infoBox.Referee.stats[] 的逐项投影,2026-08-24)。
+
+    type 实测全集:matches/yellowCards/redCards/unknown/penalties/fouls;
+    value_type 为 total(累计)或 perMatch(每场均值)。只有 perMatch 两项
+    (yellowCards/fouls)带 average/total/average_type/fill_percentage/
+    average_percentage 五个扩展字段,其余项这五项恒为 null——这是来源结构
+    如此,不是采集缺失。average_percentage 实测恒为 50(均值刻度居中)。
+    """
+
+    type: str
+    value: float
+    value_type: str
+    average: Optional[float] = None
+    total: Optional[int] = None
+    average_type: Optional[str] = None
+    fill_percentage: Optional[float] = None
+    average_percentage: Optional[float] = None
+
+
 class MatchDetailSummary(MatchSummary):
     """详情页专属:在 MatchSummary 之上追加球场/天气/裁判字段(2026-08-20)。
 
@@ -222,6 +242,29 @@ class MatchDetailSummary(MatchSummary):
     venue_country: Optional[str] = None
     home_team_color: Optional[TeamColorPair] = None
     away_team_color: Optional[TeamColorPair] = None
+    # ── 场地明细/天气枚举/裁判信息卡(2026-08-24,migrations/core/0010)──
+    # venue_capacity/venue_surface:infoBox.Stadium 的 capacity/surface;
+    # surface 是来源原文小写英文("grass"/"artificial turf"),中文翻译在
+    # 展示层(frontend/components/matches/zh.ts),不在库/DTO 层加工。
+    # venue_lat/venue_long:球场经纬度,用于 Google Maps 链接;任一缺失时
+    # 前端不渲染链接,不得用 0 兜底(0,0 是几内亚湾,不是"未知")。
+    # weather_localized_key:FotMob 下发的枚举 key(weather_condition_*),
+    # 前端优先按它查中文对照,查不到再退回 description 关键词匹配。
+    # referee_id:用于拼裁判头像 https://images.fotmob.com/image_resources/
+    # playerimages/{id}.png(payload 里没有现成头像 URL,imgUrl 是国旗)。
+    # referee_stats:黄牌/犯规每场均值 + 联赛均值 + 服务端评级。评级
+    # average_type(below/average/above)是 FotMob 服务端算好的,已用 60 条
+    # 实网样本证伪"可由 fill_percentage 反推"——前端一律直用,不自算阈值。
+    venue_capacity: Optional[int] = None
+    venue_surface: Optional[str] = None
+    venue_lat: Optional[float] = None
+    venue_long: Optional[float] = None
+    weather_localized_key: Optional[str] = None
+    weather_icon_code: Optional[int] = None
+    referee_id: Optional[int] = None
+    referee_country: Optional[str] = None
+    referee_country_code: Optional[str] = None
+    referee_stats: list[RefereeStatDTO] = []
 
 
 class MatchDetailResponse(BaseModel):
@@ -891,6 +934,47 @@ class MatchReportShot(BaseModel):
     # 后与官方 ShotsOnTarget 完全一致率从 6.8% 升到 94.5%,误差 ≤1 达 98.8%)。
     is_blocked: Optional[bool] = None
     is_on_target: Optional[bool] = None
+    # 2026-08-24 起才采集(见 backend/migrations/core/0009_shot_trajectory_fields.sql),
+    # 旧场次/未回填场次恒为 None——前端画轨迹线用,原始坐标,前端展示层做
+    # 镜像变换,后端不改数据(与 x/y 同一架构约定)。
+    shot_id: Optional[int] = None
+    # 与 x/y 同一原始球场坐标系,可直接镜像使用;真正被封堵时是否确实非空
+    # 未 100% 验证,前端必须容忍 None。
+    blocked_x: Optional[float] = None
+    blocked_y: Optional[float] = None
+    # 疑似 FotMob 内部"球门框局部坐标"(goal_crossed_z 是高度,2D 俯视球场图
+    # 没有这根轴),量纲/原点未经验证——不是 105x68 球场坐标系,前端不得
+    # 未经验证直接当球场坐标换算使用。
+    goal_crossed_y: Optional[float] = None
+    goal_crossed_z: Optional[float] = None
+    on_goal_shot_x: Optional[float] = None
+    on_goal_shot_y: Optional[float] = None
+    on_goal_shot_zoom_ratio: Optional[float] = None
+    # 乌龙球(2026-08-24,migrations/core/0010)。FotMob 把乌龙球记在"打进
+    # 自家球门那一队"名下——前端分队统计进球数必须把 is_own_goal=true 的球
+    # 计给**对方**(受益方),否则归错队(对照实验 400 场含乌龙球比赛错 392
+    # 场)。is_own_goal_inferred=true 表示该值是查询层按"xG 缺失 + Goal"
+    # 推断的(历史场次无采集值),不是来源确证——前端表述时降级为"记为
+    # 乌龙球",不写死"官方标记"。
+    is_own_goal: bool = False
+    is_own_goal_inferred: bool = False
+
+
+class MatchReportTopRated(BaseModel):
+    """全场评分最高的一名球员(总览「最高评分」卡,2026-08-24)。
+
+    评分来自 fact_match_lineup.rating(FotMob 球员评分)。库里没有官方
+    isPlayerOfTheMatch 标志,标题语义是「最高评分」,不冒充官方 MOTM 评选。
+    并列最高分取 player_id 字典序较小者(确定性,见
+    backend/queries/match_report.py::_top_rated)。
+    """
+
+    player_id: str
+    name: str
+    team_id: int
+    is_home: bool
+    rating: float
+    shirt_number: Optional[str] = None
 
 
 class MatchReportTeamStat(BaseModel):
@@ -1028,6 +1112,9 @@ class MatchReportAvailableDTO(BaseModel):
     # 2026-08-23 起才采集,旧场次/未回填场次恒为空列表——空列表如实表示
     # "这场没有势头数据",不是"这场没有势头这个概念"。
     momentum: list[MatchReportMomentumPoint] = []
+    # 全场评分最高球员(2026-08-24,总览「最高评分」卡);全场无评分为 null,
+    # 前端整卡不渲染。
+    top_rated: Optional[MatchReportTopRated] = None
 
 
 class MatchReportUnavailableDTO(BaseModel):

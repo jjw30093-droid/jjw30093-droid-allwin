@@ -13,12 +13,12 @@
 - 真实抓取需 THORDATA_PROXY;离线用 --offline-payload 验证同一条代码链路。
 
 --write-match-details(裁判/天气/场馆/图表配色赛前数据能力,2026-08-20 补充场馆
-与天气描述,2026-08-24 补充主客配对配色):
-- 用同一份已经抓到的 payload 定向 UPDATE dim_match 的 Referee/Temperature/
-  Wind_Speed/Venue_Name/Venue_City/Venue_Country/Weather_Description/
-  Home_Team_Color_Light/Home_Team_Color_Dark/Away_Team_Color_Light/
-  Away_Team_Color_Dark 十一列,不新发第二次请求,不碰 status/kickoff/比分等
-  其它列;
+与天气描述,2026-08-24 补充主客配对配色 + 0010 迁移的场地明细/天气枚举/裁判
+信息卡):
+- 用同一份已经抓到的 payload 定向 UPDATE dim_match 的
+  backend/providers/fotmob_snapshots.py::MATCH_DETAILS_COLUMNS 列全集(权威
+  定义在那里,SQL 由元组生成不再手写第二份),不新发第二次请求,不碰
+  status/kickoff/比分等其它列;
 - 新值为空时不覆盖已知旧值(COALESCE),不用一次解析缺失把已知数据抹成 NULL;
 - 不会写 lineupType='predicted' 的预测阵容进 fact_match_lineup(那是
   ingest_match.py 的职责边界,赛前跑它会把预测阵容与赛后确认阵容混为一谈)。
@@ -53,6 +53,7 @@ from backend.ingest.poll_windows import (
     upcoming_precise_matches,
 )
 from backend.providers.fotmob_snapshots import (
+    MATCH_DETAILS_COLUMNS,
     extract_lineup_snapshot,
     extract_prematch_details,
     extract_sideline_snapshot,
@@ -60,44 +61,26 @@ from backend.providers.fotmob_snapshots import (
 )
 
 
-_MATCH_DETAILS_COLUMNS = (
-    "Referee",
-    "Temperature",
-    "Wind_Speed",
-    "Venue_Name",
-    "Venue_City",
-    "Venue_Country",
-    "Weather_Description",
-    "Home_Team_Color_Light",
-    "Home_Team_Color_Dark",
-    "Away_Team_Color_Light",
-    "Away_Team_Color_Dark",
+# SET 子句从权威列元组生成——此前 SQL 与列元组各写一份,0010 一次加 10 列
+# 极易漂移;列名全部来自我们自己的常量元组,无注入面。
+_MATCH_DETAILS_SET_SQL = ",\n                ".join(
+    f"{col} = COALESCE(?, {col})" for col in MATCH_DETAILS_COLUMNS
 )
 
 
 def _write_match_details(conn_core_rw, match_id: int, details: dict) -> bool:
-    """COALESCE 式定向更新:只在新值非空时覆盖 _MATCH_DETAILS_COLUMNS 这几列,
+    """COALESCE 式定向更新:只在新值非空时覆盖 MATCH_DETAILS_COLUMNS 这几列,
     绝不覆盖其它列。返回是否至少有一个字段是非空值(供上层汇总统计)。"""
     with tx(conn_core_rw):
         conn_core_rw.execute(
-            """
+            f"""
             UPDATE dim_match
-            SET Referee = COALESCE(?, Referee),
-                Temperature = COALESCE(?, Temperature),
-                Wind_Speed = COALESCE(?, Wind_Speed),
-                Venue_Name = COALESCE(?, Venue_Name),
-                Venue_City = COALESCE(?, Venue_City),
-                Venue_Country = COALESCE(?, Venue_Country),
-                Weather_Description = COALESCE(?, Weather_Description),
-                Home_Team_Color_Light = COALESCE(?, Home_Team_Color_Light),
-                Home_Team_Color_Dark = COALESCE(?, Home_Team_Color_Dark),
-                Away_Team_Color_Light = COALESCE(?, Away_Team_Color_Light),
-                Away_Team_Color_Dark = COALESCE(?, Away_Team_Color_Dark)
+            SET {_MATCH_DETAILS_SET_SQL}
             WHERE Match_ID = ?
             """,
-            (*(details.get(k) for k in _MATCH_DETAILS_COLUMNS), match_id),
+            (*(details.get(k) for k in MATCH_DETAILS_COLUMNS), match_id),
         )
-    return any(details.get(k) is not None for k in _MATCH_DETAILS_COLUMNS)
+    return any(details.get(k) is not None for k in MATCH_DETAILS_COLUMNS)
 
 
 def _snapshot_one(

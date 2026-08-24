@@ -367,9 +367,11 @@ describe("球场底图(2026-08-20,参照 miaomiaodi.cc:真实球场标记替换�
     expect(container.querySelector('[class*="pitchLine"]')).toBeNull();
     expect(container.querySelector('[class*="pitchCircle"]')).toBeNull();
     expect(container.querySelector('[class*="pitchBox"]')).toBeNull();
-    // 门将(id=99,pos_y 最小)与前锋(id=5,pos_y 最大)都真实渲染在球场上
-    expect(screen.getByText("GK")).not.toBeNull();
-    expect(screen.getByText("FW")).not.toBeNull();
+    // 门将(id=99,pos_y 最小)与前锋(id=5,pos_y 最大)都真实渲染在球场上。
+    // 2026-08-24 起标签是"球衣号 姓名"组合(与真实头像下方的展示一致,
+    // 复刻 FotMob 的球场图文案惯例),不再是单独的姓名文本。
+    expect(screen.getByText("1 GK")).not.toBeNull();
+    expect(screen.getByText("9 FW")).not.toBeNull();
   });
 
   it("旧快照(无站位坐标)时不画球场,退化为纯名单——不应误画一个错位的球场", () => {
@@ -382,5 +384,25 @@ describe("球场底图(2026-08-20,参照 miaomiaodi.cc:真实球场标记替换�
       />,
     );
     expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("2026-08-24:球场标记是真实球员头像(img),加载失败时回退成球衣号文字而不是裂图标", () => {
+    const { container } = render(
+      <ProjectedLineupSection
+        {...BASE_PROPS}
+        lineupType="lastStarting11"
+        home={{ team_id: 1, formation: "3-4-2-1", coach: null, subs: [], starters: shuffledStarters }}
+      />,
+    );
+    const images = container.querySelectorAll('[data-testid="player-avatar-image"] img');
+    expect(images.length).toBe(shuffledStarters.length);
+    // 门将(GK,球衣号 1)那张图加载失败——面板必须退回球衣号文字,
+    // 不能留下裂图标或空白,且不影响旁边其它球员的头像。
+    const gkImage = screen.getByText("1 GK").parentElement!.querySelector("img")!;
+    fireEvent.error(gkImage);
+    expect(screen.getByText("1")).not.toBeNull(); // 回退成球衣号文字
+    expect(container.querySelectorAll('[data-testid="player-avatar-image"] img').length).toBe(
+      shuffledStarters.length - 1,
+    );
   });
 });

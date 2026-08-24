@@ -428,7 +428,21 @@ REGISTRY: dict[str, dict] = {
     },
     "fotmob_snapshot": {
         "kind": "subprocess",
-        "argv": [sys.executable, "-m", "backend.cli.poll_fotmob_snapshots", "--due"],
+        # 2026-08-24 真实事故修复:--write-match-details 开关早已实现
+        # (backend/cli/poll_fotmob_snapshots.py::_write_match_details,COALESCE
+        # 窄 UPDATE),但这里的 argv 一直漏了它——该任务跑了 1.4 万+ 次,每轮
+        # 抓回整份 pageProps 后只留 lineup/sidelined 两个子树,场馆/天气/球队
+        # 配色当场丢弃,导致 dim_match 里 Venue_*/Weather_Description 非空数
+        # 为 0、配色仅 1 行。"实现了 CLI 开关但没在 runner argv 里接线"与
+        # "根本没实现"在生产上等价;tests/backend/test_worker_argv.py 断言
+        # 此开关永远在场。
+        "argv": [
+            sys.executable,
+            "-m",
+            "backend.cli.poll_fotmob_snapshots",
+            "--due",
+            "--write-match-details",
+        ],
         "cwd": str(PROJECT_ROOT),
         "require_env": ("THORDATA_PROXY",),
         "max_attempts": 2,

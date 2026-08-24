@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EChartsOption } from "echarts";
+import type { EChartsOption, CustomSeriesRenderItemReturn } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import type { ChartColors } from "@/components/charts/useChartColors";
@@ -23,6 +23,7 @@ import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matc
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { SHOT_OUTCOME_ZH, SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
 import { FootballPitchBackground } from "./FootballPitchBackground";
+import { ShotDetailPanel } from "./ShotDetailPanel";
 import styles from "./ShotMapChart.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
@@ -38,7 +39,7 @@ function symbolSize(xg: number | null | undefined): number {
 /** AttemptSaved 精确结果文案:is_blocked 已知时能区分"被封堵"和"被扑出";
  * 未知(该场未回填,2026-08-23 起才采集,见 backend/migrations/core/
  * 0005_shotmap_raw_fields.sql)时退回 SHOT_OUTCOME_ZH 的"被扑/被挡"。 */
-function outcomeLabelFor(s: Shot): string {
+export function outcomeLabelFor(s: Shot): string {
   if (s.outcome === "AttemptSaved" && s.is_blocked != null) {
     return s.is_blocked ? "被封堵" : "被扑出";
   }
@@ -85,17 +86,141 @@ function isOnTarget(s: Shot): boolean {
  * 统计数字随筛选结果重算 —— 筛选后的 xG 合计就是所选子集的合计,
  * 不是全场合计,摘要里会说明当前口径。
  */
-const toPoint = (s: Shot) =>
-  s.is_home
-    ? { value: [s.x!, s.y!], shot: s }
-    : { value: [PITCH_LEN - s.x!, PITCH_WID - s.y!], shot: s };
+/** 主客队射门在原始数据里都朝同一端(x→105)记录,展示层把客队镜像到
+ * 左半场——这是"原始坐标系里任意一个点"的通用变换,不只用于射门起点,
+ * 轨迹线终点(球门线穿越点/封堵点)同样在这个原始坐标系里,用同一个函数
+ * 镜像,不为终点另外推一套公式。 */
+function mirrorPoint(isHome: boolean, x: number, y: number): [number, number] {
+  return isHome ? [x, y] : [PITCH_LEN - x, PITCH_WID - y];
+}
 
-/** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。 */
+const toPoint = (s: Shot) => {
+  const [x, y] = mirrorPoint(s.is_home, s.x!, s.y!);
+  return { value: [x, y], shot: s };
+};
+
+/** 球门宽 7.32m,中心 y=34(与 backend/queries/match_report.py 模块注释同一
+ * 口径实测验证过)。 */
+const GOAL_CENTER_Y = 34;
+
+/** 2026-08-24 画射门轨迹线:原始(未镜像)坐标系下的终点,null = 没有可靠
+ * 终点数据,调用方静默不画线。
+ *
+ * 优先级:
+ *  1. is_blocked 且 blocked_x/blocked_y 均非空 → 封堵点(真实坐标)。
+ *  2. 否则 outcome==='Goal' 或 is_on_target===true → 退化到球门正中
+ *     (x=105,y=34)——goal_crossed_y/z、on_goal_shot_* 疑似 FotMob 内部
+ *     "球门框局部坐标"(goal_crossed_z 是高度,2D 俯视球场图没有这根轴),
+ *     量纲/原点未经真实数值验证,不直接当球场坐标使用(见后端 fotmob_client.py
+ *     同日期注释)。
+ *  3. 否则(未被封堵的非精确在框内球)→ null,没有可信终点。
+ */
+export function trajectoryEndpoint(
+  s: Shot,
+): { x: number; y: number; blocked: boolean } | null {
+  if (s.is_blocked && s.blocked_x != null && s.blocked_y != null) {
+    return { x: s.blocked_x, y: s.blocked_y, blocked: true };
+  }
+  if (s.outcome === "Goal" || s.is_on_target === true) {
+    return { x: PITCH_LEN, y: GOAL_CENTER_Y, blocked: false };
+  }
+  return null;
+}
+
+/** 筛选变化导致选中射门不在新的 plotted 里时返回 null——这是唯一的处理点,
+ * 组件渲染和测试都只需要认这一个函数。用派生状态而非 useEffect 清空:
+ * selected 只记"最后一次点击/翻页选中的是哪个 shot 对象",真正参与渲染的
+ * 永远是这个函数的返回值——plotted 一变,不在其中的选中项自动"隐形",
+ * 切筛选筛没了、又切回来会重新出现,这是刻意的简化。 */
+export function resolveSelectedShot(plotted: Shot[], selected: Shot | null): Shot | null {
+  if (!selected) return null;
+  return plotted.includes(selected) ? selected : null;
+}
+
+export interface ShotSideSummary {
+  /** 该侧画在图上的射门点数(含该队球员打进自家球门的乌龙球点)。 */
+  n: number;
+  /** 该队进球数,按**受益方**计:本队非乌龙进球 + 对方球员的乌龙球。
+   * FotMob 把乌龙球记在"打进自家球门那一队"名下,直接按 is_home 数
+   * Goal 会归错队(对照实验 400 场含乌龙球比赛错 392 场)。 */
+  goals: number;
+  /** 计入受益方球数的乌龙球数(来自对方球员),>0 时摘要里如实说明。 */
+  ownGoalsBenefited: number;
+  /** 有 xG 值的射门的合计;该侧没有任何带 xG 的射门时为 null(不伪装成 0,
+   * 与 MatchDataModules.tsx 引用 CLAUDE.md §6.2 的既有纪律一致)。 */
+  xg: number | null;
+  /** xG 缺失且非乌龙球的射门数(乌龙球 xG 缺失是已知固定行为,单独口径;
+   * 这里只统计"正常射门却没有 xG"的异常缺失,>0 时摘要里说明)。 */
+  missingXg: number;
+}
+
+/** 2026-08-24 抽出为可独立测试的纯函数(CLAUDE.md §11.3 新增纪律:图上的
+ * 聚合数字必须可独立断言,不能只活在组件渲染路径里)。三个数字(次数/球数/
+ * xG 合计)全部取自同一个 plotted 集合——筛选变化时同步变化。 */
+export function summarizeSide(plotted: Shot[], isHome: boolean): ShotSideSummary {
+  const own = plotted.filter((s) => s.is_home === isHome);
+  const regularGoals = own.filter((s) => s.outcome === "Goal" && !s.is_own_goal).length;
+  const ownGoalsBenefited = plotted.filter(
+    (s) => s.is_home !== isHome && s.outcome === "Goal" && s.is_own_goal,
+  ).length;
+  const withXg = own.filter((s) => s.xg != null);
+  return {
+    n: own.length,
+    goals: regularGoals + ownGoalsBenefited,
+    ownGoalsBenefited,
+    xg: withXg.length > 0 ? withXg.reduce((a, s) => a + s.xg!, 0) : null,
+    missingXg: own.filter((s) => s.xg == null && !s.is_own_goal).length,
+  };
+}
+
+/** 摘要整句的唯一出口(纯函数,测试直接断言它随筛选变化)。 */
+export function buildShotMapSummary(args: {
+  plotted: Shot[];
+  plottableCount: number;
+  shootout: number;
+  homeName: string;
+  awayName: string;
+}): string {
+  const { plotted, plottableCount, shootout, homeName, awayName } = args;
+  const h = summarizeSide(plotted, true);
+  const a = summarizeSide(plotted, false);
+  const filtered = plotted.length !== plottableCount;
+  const xgText = (s: ShotSideSummary) =>
+    s.xg != null ? s.xg.toFixed(2) : s.n === 0 ? "0.00" : "—";
+  const ownGoalTotal = h.ownGoalsBenefited + a.ownGoalsBenefited;
+  const missingTotal = h.missingXg + a.missingXg;
+  return (
+    // "射门图 xG 合计"是逐次射门 xG 相加得出,与上方球队数据表的"官方统计
+    // xG"是两个独立来源,数值可能有细微差异——分别命名,不用同一个"xG"混称。
+    `射门图:${homeName}(攻向右)${h.n} 次射门、${h.goals} 球、射门图 xG 合计 ${xgText(h)};` +
+    `${awayName}(攻向左)${a.n} 次射门、${a.goals} 球、射门图 xG 合计 ${xgText(a)}。` +
+    `圆点大小与该次射门 xG 成正比,描边更粗为进球。` +
+    (ownGoalTotal > 0
+      ? `其中 ${ownGoalTotal} 球为乌龙球,计入受益方球数,不计入射门图 xG。`
+      : "") +
+    (missingTotal > 0
+      ? `另有 ${missingTotal} 次射门缺少 xG 数据,未计入合计。`
+      : "") +
+    // 筛选后的数字是所选子集的合计,不是全场——必须说清楚口径,
+    // 否则用户会把筛出来的 xG 当成全场 xG。
+    (filtered
+      ? `当前按筛选条件显示 ${plotted.length}/${plottableCount} 次射门,以上数字为所选范围的合计。`
+      : "") +
+    (shootout > 0 ? `另有 ${shootout} 次点球大战射门未计入本图与 xG 合计。` : "")
+  );
+}
+
+/** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。
+ * selected 非空时,如果它有可信轨迹终点(trajectoryEndpoint 非 null),
+ * 追加一个 silent 的 custom 系列手绘轨迹线——silent:true 是必须的,不这样
+ * 现有 tooltip.formatter 会对没有 .shot 字段的轨迹线数据点抛异常(渲染
+ * 冒烟测试测不出这个坑,冒烟测试不模拟 hover,这里手动规避)。 */
 export function buildOption(
   plotted: Shot[],
   homeName: string,
   awayName: string,
   c: ChartColors,
+  selected?: Shot | null,
 ): EChartsOption {
   const seriesOf = (isHome: boolean, color: string) =>
     plotted
@@ -120,6 +245,59 @@ export function buildOption(
             : { color, borderColor: c.ink, borderWidth: 1 },
       }));
 
+  // 轨迹线:只在选中射门有可信终点数据时才追加这个系列,没有可信数据就
+  // 干脆不加(不是加一个空系列)——这正是"缺失终点数据就静默不画线"的
+  // 落地方式。终点与起点用同一个 mirrorPoint 变换,保证方向一致。
+  const endpoint = selected ? trajectoryEndpoint(selected) : null;
+  const trajectorySeries: EChartsOption["series"] =
+    selected && endpoint
+      ? [
+          {
+            type: "custom",
+            silent: true,
+            data: [
+              [
+                ...mirrorPoint(selected.is_home, selected.x!, selected.y!),
+                ...mirrorPoint(selected.is_home, endpoint.x, endpoint.y),
+              ],
+            ],
+            renderItem: (_params, api) => {
+              const p1 = api.coord([api.value(0), api.value(1)]);
+              const p2 = api.coord([api.value(2), api.value(3)]);
+              const children: unknown[] = [
+                {
+                  type: "line",
+                  shape: { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1] },
+                  style: { stroke: c.ink, lineWidth: 1.5 },
+                },
+              ];
+              if (endpoint.blocked) {
+                // 垂直短线必须在像素空间算角度——球场纵横比 105:68 不是
+                // 1:1,数据空间里"垂直"的两个方向投影到像素后并不是真的
+                // 90 度;偏移量同样用固定像素长度,不能用数据空间坐标差。
+                const dx = p2[0] - p1[0];
+                const dy = p2[1] - p1[1];
+                const angle = Math.atan2(dy, dx) + Math.PI / 2;
+                const half = 6;
+                const ox = Math.cos(angle) * half;
+                const oy = Math.sin(angle) * half;
+                children.push({
+                  type: "line",
+                  shape: {
+                    x1: p2[0] - ox,
+                    y1: p2[1] - oy,
+                    x2: p2[0] + ox,
+                    y2: p2[1] + oy,
+                  },
+                  style: { stroke: c.ink, lineWidth: 1.5 },
+                });
+              }
+              return { type: "group", children } as unknown as CustomSeriesRenderItemReturn;
+            },
+          },
+        ]
+      : [];
+
   return {
     grid: { left: 0, right: 0, top: 0, bottom: 0 },
     xAxis: { type: "value", min: 0, max: PITCH_LEN, show: false },
@@ -132,6 +310,7 @@ export function buildOption(
     series: [
       { name: homeName, type: "scatter", data: seriesOf(true, c.teal) },
       { name: awayName, type: "scatter", data: seriesOf(false, c.navy) },
+      ...trajectorySeries,
     ],
   };
 }
@@ -165,6 +344,9 @@ export function ShotMapChart({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeCrestUrl,
+  awayCrestUrl,
+  shirtNumberByPlayerId,
   mode = "interactive",
 }: {
   shots: MatchReport["shots"];
@@ -174,6 +356,10 @@ export function ShotMapChart({
    * 对比度不达标时组件内部回退品牌青绿/蓝,调用方不需要自己判空。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  /** 2026-08-24:点击射门后的详情面板要用——队徽与球衣号映射表。 */
+  homeCrestUrl?: string | null;
+  awayCrestUrl?: string | null;
+  shirtNumberByPlayerId?: Record<string, string>;
   /** export 模式(Studio 卡片):隐藏筛选控件,截图里的按钮是死的。 */
   mode?: ChartMode;
 }) {
@@ -187,6 +373,10 @@ export function ShotMapChart({
   const [situations, setSituations] = useState<string[]>([]);
   const [bodyPart, setBodyPart] = useState<string | null>(null);
   const [half, setHalf] = useState<HalfFilter>("all");
+  // 2026-08-24:点击射门画轨迹线 + 详情翻页面板联动的"当前选中射门"——
+  // 只记最后一次点击/翻页选中的是哪个 shot 对象,真正参与渲染的永远是
+  // resolveSelectedShot(plotted, selected) 的返回值(见该函数注释)。
+  const [selected, setSelected] = useState<Shot | null>(null);
 
   // 首次可见才挂图(hidden tab 下容器 0×0);同时按宽度维持球场纵横比
   useEffect(() => {
@@ -236,30 +426,19 @@ export function ShotMapChart({
   });
   const effectiveColors: ChartColors = { ...c, teal: resolved.home, navy: resolved.away };
 
-  const sum = (isHome: boolean, f: (s: Shot) => number) =>
-    plotted.filter((s) => s.is_home === isHome).reduce((a, s) => a + f(s), 0);
-  const stats = (isHome: boolean) => ({
-    n: plotted.filter((s) => s.is_home === isHome).length,
-    goals: plotted.filter((s) => s.is_home === isHome && s.outcome === "Goal").length,
-    xg: sum(isHome, (s) => s.xg ?? 0),
+  // 2026-08-24:摘要整句抽成纯函数 buildShotMapSummary(乌龙球按受益方计球、
+  // 缺失 xG 不再静默当 0),组件只负责调用——聚合逻辑的正确性由
+  // frontend/tests/shot-map-chart.test.ts 直接断言,不再只活在渲染路径里。
+  const summary = buildShotMapSummary({
+    plotted,
+    plottableCount: plottable.length,
+    shootout,
+    homeName,
+    awayName,
   });
-  const h = stats(true);
-  const a = stats(false);
-  const summary =
-    // "射门图 xG 合计"是逐次射门 xG 相加得出,与上方球队数据表的"官方统计
-    // xG"是两个独立来源(前者本组件按 shots[] 求和;后者取自 FotMob 团队
-    // 统计接口),数值可能有细微差异——分别命名,不用同一个"xG"混称。
-    `射门图:${homeName}(攻向右)${h.n} 次射门、${h.goals} 球、射门图 xG 合计 ${h.xg.toFixed(2)};` +
-    `${awayName}(攻向左)${a.n} 次射门、${a.goals} 球、射门图 xG 合计 ${a.xg.toFixed(2)}。` +
-    `圆点大小与该次射门 xG 成正比,描边更粗为进球。` +
-    // 筛选后的数字是所选子集的合计,不是全场 —— 必须说清楚口径,
-    // 否则用户会把筛出来的 xG 当成全场 xG。
-    (filtered
-      ? `当前按筛选条件显示 ${plotted.length}/${plottable.length} 次射门,以上数字为所选范围的合计。`
-      : "") +
-    (shootout > 0 ? `另有 ${shootout} 次点球大战射门未计入本图与 xG 合计。` : "");
 
-  const option = buildOption(plotted, homeName, awayName, effectiveColors);
+  const activeSelected = resolveSelectedShot(plotted, selected);
+  const option = buildOption(plotted, homeName, awayName, effectiveColors, activeSelected);
 
   if (plottable.length === 0) {
     return <p className={styles.empty}>该场比赛暂无射门位置数据。</p>;
@@ -275,6 +454,21 @@ export function ShotMapChart({
     setSituations([]);
     setBodyPart(null);
     setHalf("all");
+  };
+
+  // 只在非导出模式绑定——导出模式(Studio PNG)不接选中态/轨迹线/详情面板,
+  // 避免热链头像跨源污染 html-to-image 的 canvas(见 PlayerAvatar.tsx 头部
+  // 注释),筛选控件本来也在导出模式隐藏,同一个 isExport 判断复用。
+  const handleChartClick = (params: unknown) => {
+    const clicked = (params as { data?: { shot?: Shot } })?.data?.shot;
+    if (clicked) setSelected(clicked);
+  };
+  const activeIndex = activeSelected ? plotted.indexOf(activeSelected) : -1;
+  const goToOffset = (offset: number) => {
+    if (plotted.length === 0) return;
+    const base = activeIndex >= 0 ? activeIndex : 0;
+    const next = (base + offset + plotted.length) % plotted.length;
+    setSelected(plotted[next]);
   };
 
   return (
@@ -396,12 +590,29 @@ export function ShotMapChart({
             className={styles.chart}
             mode={mode}
             showSummary={false}
+            onEvents={isExport ? undefined : { click: handleChartClick }}
           />
         )}
       </div>
       {/* 可见文字摘要固定在球场下方(EChart 内置的那份在球场层里隐藏,
           避免把装饰线的百分比定位基准拉歪;aria-label 仍在图表上) */}
       <p className="chart-summary">{summary}</p>
+      {!isExport && (
+        <ShotDetailPanel
+          shot={activeSelected}
+          homeName={homeName}
+          awayName={awayName}
+          homeCrestUrl={homeCrestUrl}
+          awayCrestUrl={awayCrestUrl}
+          shirtNumberByPlayerId={shirtNumberByPlayerId}
+          onPrev={() => goToOffset(-1)}
+          onNext={() => goToOffset(1)}
+          hasPrev={plotted.length > 1}
+          hasNext={plotted.length > 1}
+          position={activeIndex >= 0 ? activeIndex + 1 : null}
+          total={plotted.length}
+        />
+      )}
     </div>
   );
 }

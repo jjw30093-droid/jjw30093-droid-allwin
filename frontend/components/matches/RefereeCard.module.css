@@ -1,0 +1,133 @@
+/* 裁判信息卡(2026-08-24)。视觉是 MatchInfoCard.module.css 的孪生(同底色
+ * 同圆角同标题规格);统计块配色刻意中性——判罚尺度没有好坏之分,进度条用
+ * 品牌青绿只作"数据主色",评级文字不上红/绿(CLAUDE.md §11.2)。 */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.personText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.country {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+}
+
+@media (max-width: 480px) {
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.statBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.statHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.statLabel {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.statValue b {
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.statUnit {
+  margin-left: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* 进度条:轨道 + 填充 + 联赛均值刻度线。填充宽度与刻度位置都是服务端下发
+ * 的百分比(fill_percentage / average_percentage),前端不重算。 */
+.bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-soft);
+  overflow: visible;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand-teal);
+}
+
+.avgTick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: var(--ink-3);
+}
+
+/* 评级文字:中性色,不上红/绿——"低于/高于平均水平"是尺度描述不是好坏。 */
+.rating {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}

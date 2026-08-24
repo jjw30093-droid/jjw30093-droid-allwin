@@ -24,11 +24,12 @@ const initMock = vi.fn();
 const setOptionMock = vi.fn();
 const resizeMock = vi.fn();
 const disposeMock = vi.fn();
+const onMock = vi.fn();
 
 vi.mock("echarts", () => ({
   init: (...args: unknown[]) => {
     initMock(...args);
-    return { setOption: setOptionMock, resize: resizeMock, dispose: disposeMock };
+    return { setOption: setOptionMock, resize: resizeMock, dispose: disposeMock, on: onMock };
   },
 }));
 
@@ -70,6 +71,7 @@ beforeEach(() => {
   setOptionMock.mockClear();
   resizeMock.mockClear();
   disposeMock.mockClear();
+  onMock.mockClear();
 });
 
 afterEach(() => {
@@ -144,5 +146,48 @@ describe("EChart 挂载时机(隐藏 tab 场景,ECharts 0×0 告警回归护栏)
     unmount();
     expect(disposeMock).toHaveBeenCalledTimes(1);
     expect(roInstances[0].disconnected).toBe(true);
+  });
+});
+
+describe("EChart onEvents(2026-08-24,射门轨迹线点击联动的基础设施)", () => {
+  it("chart.on('click', ...) 在 init 时恰好调用一次", () => {
+    render(<EChart option={{}} ariaSummary="测试摘要" onEvents={{ click: vi.fn() }} />);
+    fireResize(0, { width: 300, height: 280 });
+    const clickBindings = onMock.mock.calls.filter((c) => c[0] === "click");
+    expect(clickBindings.length).toBe(1);
+  });
+
+  it("多次 rerender、每次传入不同内联 onEvents.click 后,触发的是最新一次传入的回调(防 stale closure)", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(
+      <EChart option={{}} ariaSummary="测试摘要" onEvents={{ click: first }} />,
+    );
+    fireResize(0, { width: 300, height: 280 });
+    const handler = onMock.mock.calls.find((c) => c[0] === "click")?.[1] as (p: unknown) => void;
+    expect(handler).toBeTypeOf("function");
+
+    // 第一次渲染的内联函数触发,应该调用 first。
+    handler({ data: {} });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+
+    // rerender 换成新的内联函数——ref 间接层保证不需要重新 .on(),同一个
+    // 已捕获的 handler 现在应该转发给 second,不再是 first(stale closure)。
+    rerender(<EChart option={{}} ariaSummary="测试摘要" onEvents={{ click: second }} />);
+    handler({ data: {} });
+    expect(first).toHaveBeenCalledTimes(1); // 没有再增加
+    expect(second).toHaveBeenCalledTimes(1);
+
+    // .on() 全程只调用过一次,rerender 不会重新绑定。
+    const clickBindings = onMock.mock.calls.filter((c) => c[0] === "click");
+    expect(clickBindings.length).toBe(1);
+  });
+
+  it("不传 onEvents 时,触发捕获的 click handler 不抛异常", () => {
+    render(<EChart option={{}} ariaSummary="测试摘要" />);
+    fireResize(0, { width: 300, height: 280 });
+    const handler = onMock.mock.calls.find((c) => c[0] === "click")?.[1] as (p: unknown) => void;
+    expect(() => handler({ data: {} })).not.toThrow();
   });
 });

@@ -30,6 +30,7 @@
 "use client";
 
 import { useState } from "react";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { FootballPitchBackground } from "./FootballPitchBackground";
 import styles from "./ProjectedLineupSection.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
@@ -177,8 +178,13 @@ function Pitch({ side, isHome }: { side: LineupSide; isHome: boolean }) {
           <div key={ri} className={styles.pitchRow}>
             {row.map((p) => (
               <span key={p.id} className={styles.dotWrap}>
-                <span className={`${styles.dot} num`}>{p.shirt_number ?? ""}</span>
-                <span className={styles.dotName}>{pitchLabel(p.name)}</span>
+                <span className={styles.avatarRing}>
+                  <PlayerAvatar playerId={p.id} playerName={p.name} shirtNumber={p.shirt_number} size={48} />
+                </span>
+                <span className={styles.dotName}>
+                  {p.shirt_number ? `${p.shirt_number} ` : ""}
+                  {pitchLabel(p.name)}
+                </span>
               </span>
             ))}
           </div>
@@ -338,6 +344,11 @@ export function ProjectedLineupSection({
                     首发不代表没教练。 */}
                 <p className={styles.coachRow}>
                   <span className={styles.coachLabel}>主教练</span>
+                  {/* coach.id 2026-08-18 之前的快照没有这个键(可空),没有 id
+                      就没法拼头像 URL,退回不渲染头像(文字名称仍然照常显示)。 */}
+                  {active.coach?.id != null && (
+                    <PlayerAvatar playerId={active.coach.id} playerName={active.coach.name} size={24} />
+                  )}
                   <span className={styles.coachName} data-empty={active.coach == null}>
                     {active.coach?.name ?? "本条快照未包含主教练信息"}
                   </span>
@@ -366,6 +377,7 @@ export function ProjectedLineupSection({
                         <ul className={styles.benchList}>
                           {active.subs.map((p) => (
                             <li key={p.id} className={styles.benchRow}>
+                              <PlayerAvatar playerId={p.id} playerName={p.name} shirtNumber={p.shirt_number} size={24} />
                               <span className={`${styles.benchNo} num`}>
                                 {p.shirt_number ?? "—"}
                               </span>

@@ -1,0 +1,100 @@
+/* 总览「重点数据」卡(2026-08-25)。行结构是 MatchStatsSection.module.css
+ * 对比行的孪生;条的颜色由组件按真实球队配色内联注入(resolveMatchColors,
+ * 缺失回退品牌 teal/navy),CSS 里不写死主客颜色。 */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.legend {
+  display: flex;
+  gap: var(--sp-3);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendDot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.label {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.value {
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 48px;
+}
+
+.value:last-child {
+  text-align: right;
+}
+
+.track {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.track > span {
+  height: 100%;
+}
+
+/* 跳转按钮:文字链形态(不是主按钮),青绿=操作入口(CLAUDE.md §11.2)。 */
+.moreLink {
+  align-self: flex-start;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--brand-teal);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.moreLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

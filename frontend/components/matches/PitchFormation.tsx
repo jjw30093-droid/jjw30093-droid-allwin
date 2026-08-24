@@ -10,6 +10,7 @@
  * 任一队全员缺 pitch 坐标时该队不画点(调用方降级为纯列表,不猜站位)。
  */
 
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { FootballPitchBackground } from "./FootballPitchBackground";
 import styles from "./PitchFormation.module.css";
@@ -46,8 +47,13 @@ export function PitchFormation({ home, away }: { home: LineupTeam; away: LineupT
           className={`${styles.player} ${styles.playerHome}`}
           style={{ left: `${p.left}%`, top: `${p.top}%` }}
         >
-          <span className={`${styles.shirt} num`}>{p.shirt_number ?? ""}</span>
-          <span className={styles.playerName}>{p.name}</span>
+          <span className={styles.avatarRing}>
+            <PlayerAvatar playerId={p.player_id} playerName={p.name} shirtNumber={p.shirt_number} size={40} />
+          </span>
+          <span className={styles.playerName}>
+            {p.shirt_number ? `${p.shirt_number} ` : ""}
+            {p.name}
+          </span>
         </div>
       ))}
       {awayDots.map((p) => (
@@ -56,8 +62,13 @@ export function PitchFormation({ home, away }: { home: LineupTeam; away: LineupT
           className={`${styles.player} ${styles.playerAway}`}
           style={{ left: `${p.left}%`, top: `${p.top}%` }}
         >
-          <span className={`${styles.shirt} num`}>{p.shirt_number ?? ""}</span>
-          <span className={styles.playerName}>{p.name}</span>
+          <span className={styles.avatarRing}>
+            <PlayerAvatar playerId={p.player_id} playerName={p.name} shirtNumber={p.shirt_number} size={40} />
+          </span>
+          <span className={styles.playerName}>
+            {p.shirt_number ? `${p.shirt_number} ` : ""}
+            {p.name}
+          </span>
         </div>
       ))}
     </div>

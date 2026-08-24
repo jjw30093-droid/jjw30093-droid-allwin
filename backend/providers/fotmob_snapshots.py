@@ -133,37 +133,54 @@ def extract_sideline_snapshot(payload: dict, team_id) -> dict:
     return {"team_id": team_id, "sidelined": sidelined}
 
 
+# match-details 窄 UPDATE 通道覆盖的 dim_match 列全集——这里是唯一权威定义,
+# backend/cli/poll_fotmob_snapshots.py 的 SQL 与 backend/cli/
+# backfill_match_details.py 都从这个元组生成,三处列清单不再各写一份互相漂移。
+# 2026-08-24 追加 0010 迁移的 10 列(场地明细/天气枚举/裁判信息卡)。
+MATCH_DETAILS_COLUMNS = (
+    "Referee",
+    "Temperature",
+    "Wind_Speed",
+    "Venue_Name",
+    "Venue_City",
+    "Venue_Country",
+    "Weather_Description",
+    "Home_Team_Color_Light",
+    "Home_Team_Color_Dark",
+    "Away_Team_Color_Light",
+    "Away_Team_Color_Dark",
+    "Venue_Capacity",
+    "Venue_Surface",
+    "Venue_Lat",
+    "Venue_Long",
+    "Weather_Localized_Key",
+    "Weather_Icon_Code",
+    "Referee_ID",
+    "Referee_Country",
+    "Referee_Country_Code",
+    "Referee_Stats_Json",
+)
+
+
 def extract_prematch_details(payload: dict, match_id) -> dict:
-    """从同一份 match_details payload 定向提取 Referee/Temperature/Wind_Speed/
-    Venue_Name/Venue_City/Venue_Country/Weather_Description/主客配对配色四列
-    共十一个 dim_match 列(裁判/天气/场馆赛前数据能力,2026-08-20 补充球场与
-    天气描述;2026-08-24 补充图表配色)。
+    """从同一份 match_details payload 定向提取 MATCH_DETAILS_COLUMNS 那些
+    dim_match 列(裁判/天气/场馆赛前数据能力,2026-08-20 补充球场与天气描述;
+    2026-08-24 补充图表配色与 0010 的场地明细/天气枚举/裁判信息卡)。
 
     复用 FotMobClient.parse_match_dim 的裁判(3 级 fallback)/天气/场馆/配色
     解析逻辑,不重复实现、不产生第二份互相漂移的解析代码。proxy="" 离线构造,
     不触发任何凭证解析(parse_match_dim 本身也不读取任何实例状态,是纯函数式
     的方法)。
 
-    只返回这 11 个字段——status/kickoff/比分等其余 dim_match 列由
-    ingest_future_fixtures.py / ingest_match.py 各自的写路径负责,调用方(narrow
-    UPDATE)绝不覆盖。缺失字段如实为 None,不编造(CLAUDE.md §6.2.1)。
+    只返回 MATCH_DETAILS_COLUMNS 这些字段——status/kickoff/比分等其余
+    dim_match 列由 ingest_future_fixtures.py / ingest_match.py 各自的写路径
+    负责,调用方(narrow UPDATE)绝不覆盖。缺失字段如实为 None,不编造
+    (CLAUDE.md §6.2.1)。
     """
     from backend.fotmob_client import FotMobClient
 
     row = FotMobClient(proxy="").parse_match_dim(payload, match_id=match_id)
-    return {
-        "Referee": row.get("Referee"),
-        "Temperature": row.get("Temperature"),
-        "Wind_Speed": row.get("Wind_Speed"),
-        "Venue_Name": row.get("Venue_Name"),
-        "Venue_City": row.get("Venue_City"),
-        "Venue_Country": row.get("Venue_Country"),
-        "Weather_Description": row.get("Weather_Description"),
-        "Home_Team_Color_Light": row.get("Home_Team_Color_Light"),
-        "Home_Team_Color_Dark": row.get("Home_Team_Color_Dark"),
-        "Away_Team_Color_Light": row.get("Away_Team_Color_Light"),
-        "Away_Team_Color_Dark": row.get("Away_Team_Color_Dark"),
-    }
+    return {col: row.get(col) for col in MATCH_DETAILS_COLUMNS}
 
 
 def fetch_match_payload(match_id):

@@ -2,6 +2,16 @@ import type { NextConfig } from "next";
 import { clientApiBase } from "./lib/api-base";
 
 const nextConfig: NextConfig = {
+  // 2026-08-24 经站长明确批准的一次性例外:球员头像(PlayerAvatar.tsx)
+  // 直接热链 FotMob 图片 CDN,不像队徽那样走同源 rewrite 代理——不代表
+  // CLAUDE.md §11.2"图片自托管、不依赖外链"规则废止,只用于这一个头像
+  // 场景。next/image 即使传了 unoptimized,src 是绝对外部 URL 时仍然要求
+  // remotePatterns 显式放行(不放行会在渲染时报错,不是可选的性能优化项)。
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "images.fotmob.com", pathname: "/image_resources/**" },
+    ],
+  },
   // 仅开发期生效:会话 cookie 是 host-only(127.0.0.1),本地要走通"浏览器带
   // cookie 调 127.0.0.1:8000"的会员链路,页面必须也从 127.0.0.1 打开(同站,
   // SameSite=Lax 才放行)。Next 16 默认拦截非 localhost origin 的 dev 资源,

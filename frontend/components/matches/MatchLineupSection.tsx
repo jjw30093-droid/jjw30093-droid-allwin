@@ -4,6 +4,7 @@
  * 纯展示,无取数(不写 use client,随导入方环境走)。
  */
 
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { PitchFormation } from "@/components/matches/PitchFormation";
 import { RatingChip } from "@/components/matches/RatingChip";
@@ -18,6 +19,7 @@ type LineupPlayer = LineupTeam["starters"][number];
 function PlayerRow({ p, bench }: { p: LineupPlayer; bench?: boolean }) {
   return (
     <li className={styles.playerRow}>
+      <PlayerAvatar playerId={p.player_id} playerName={p.name} shirtNumber={p.shirt_number} size={28} />
       <span className={`${styles.shirtNo} num`}>{p.shirt_number ?? "—"}</span>
       <span className={styles.pos}>
         {p.position_group ? POSITION_ZH[p.position_group] ?? p.position_group : "—"}

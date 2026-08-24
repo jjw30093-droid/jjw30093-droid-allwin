@@ -14,10 +14,20 @@
  * - 视觉沿用 LeagueNav.module.css 的 .active/.link 惯例(金色下划线)。
  */
 
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import styles from "./MatchTabs.module.css";
 
 export type MatchTabKey = "shots" | "stats" | "lineup" | "events" | "overview";
+
+/** 跨 tab 切换入口(2026-08-25):总览里的「查看全部数据 →」「查看完整
+ * 时间线 →」需要切到统计/事件 tab。panels 是 ReactNode 插槽,天然渲染在
+ * 本组件的 React 树内,context 能穿透;不在 MatchTabs 树里(如赛前路径的
+ * 组件)拿到 null,调用方据此隐藏跳转按钮——不做 location.hash 硬跳。 */
+const MatchTabSwitchContext = createContext<((key: MatchTabKey) => void) | null>(null);
+
+export function useMatchTabSwitch(): ((key: MatchTabKey) => void) | null {
+  return useContext(MatchTabSwitchContext);
+}
 
 /**
  * 顺序即优先级,第一个是默认。
@@ -50,6 +60,17 @@ export function MatchTabs({
 }) {
   const [active, setActive] = useState<MatchTabKey>("overview");
 
+  /** 内容区内发起的切换(总览 → 统计/事件):切换后把 tablist 滚回视口,
+   * 用户在长总览页底部点跳转时,不至于停在新 tab 的中部不知道发生了什么。 */
+  const switchTo = (key: MatchTabKey) => {
+    setActive(key);
+    // scrollIntoView 也走可选调用——jsdom 环境没有这个方法,不值得为测试
+    // 环境单独 stub 一个纯视觉行为。
+    document
+      .getElementById(`match-tab-${key}`)
+      ?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
@@ -80,17 +101,19 @@ export function MatchTabs({
           </button>
         ))}
       </div>
-      {TABS.map((t) => (
-        <div
-          key={t.key}
-          id={`match-panel-${t.key}`}
-          role="tabpanel"
-          aria-labelledby={`match-tab-${t.key}`}
-          hidden={active !== t.key}
-        >
-          {panels[t.key]}
-        </div>
-      ))}
+      <MatchTabSwitchContext.Provider value={switchTo}>
+        {TABS.map((t) => (
+          <div
+            key={t.key}
+            id={`match-panel-${t.key}`}
+            role="tabpanel"
+            aria-labelledby={`match-tab-${t.key}`}
+            hidden={active !== t.key}
+          >
+            {panels[t.key]}
+          </div>
+        ))}
+      </MatchTabSwitchContext.Provider>
     </div>
   );
 }

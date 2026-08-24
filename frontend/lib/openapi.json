@@ -11155,6 +11155,113 @@
         "type": "null"
        }
       ]
+     },
+     "venue_capacity": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue Capacity"
+     },
+     "venue_surface": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue Surface"
+     },
+     "venue_lat": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue Lat"
+     },
+     "venue_long": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Venue Long"
+     },
+     "weather_localized_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Weather Localized Key"
+     },
+     "weather_icon_code": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Weather Icon Code"
+     },
+     "referee_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Referee Id"
+     },
+     "referee_country": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Referee Country"
+     },
+     "referee_country_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Referee Country Code"
+     },
+     "referee_stats": {
+      "items": {
+       "$ref": "#/components/schemas/RefereeStatDTO"
+      },
+      "type": "array",
+      "title": "Referee Stats",
+      "default": []
      }
     },
     "type": "object",
@@ -12548,6 +12655,16 @@
       "type": "array",
       "title": "Momentum",
       "default": []
+     },
+     "top_rated": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MatchReportTopRated"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",
@@ -13651,6 +13768,104 @@
        }
       ],
       "title": "Is On Target"
+     },
+     "shot_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shot Id"
+     },
+     "blocked_x": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Blocked X"
+     },
+     "blocked_y": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Blocked Y"
+     },
+     "goal_crossed_y": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Goal Crossed Y"
+     },
+     "goal_crossed_z": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Goal Crossed Z"
+     },
+     "on_goal_shot_x": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "On Goal Shot X"
+     },
+     "on_goal_shot_y": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "On Goal Shot Y"
+     },
+     "on_goal_shot_zoom_ratio": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "On Goal Shot Zoom Ratio"
+     },
+     "is_own_goal": {
+      "type": "boolean",
+      "title": "Is Own Goal",
+      "default": false
+     },
+     "is_own_goal_inferred": {
+      "type": "boolean",
+      "title": "Is Own Goal Inferred",
+      "default": false
      }
     },
     "type": "object",
@@ -14101,6 +14316,51 @@
      "is_home"
     ],
     "title": "MatchReportTeamStat"
+   },
+   "MatchReportTopRated": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "team_id": {
+      "type": "integer",
+      "title": "Team Id"
+     },
+     "is_home": {
+      "type": "boolean",
+      "title": "Is Home"
+     },
+     "rating": {
+      "type": "number",
+      "title": "Rating"
+     },
+     "shirt_number": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shirt Number"
+     }
+    },
+    "type": "object",
+    "required": [
+     "player_id",
+     "name",
+     "team_id",
+     "is_home",
+     "rating"
+    ],
+    "title": "MatchReportTopRated",
+    "description": "全场评分最高的一名球员(总览「最高评分」卡,2026-08-24)。\n\n评分来自 fact_match_lineup.rating(FotMob 球员评分)。库里没有官方\nisPlayerOfTheMatch 标志,标题语义是「最高评分」,不冒充官方 MOTM 评选。\n并列最高分取 player_id 字典序较小者(确定性,见\nbackend/queries/match_report.py::_top_rated)。"
    },
    "MatchReportUnavailableDTO": {
     "properties": {
@@ -16489,6 +16749,85 @@
      "reason"
     ],
     "title": "RecoVoidBody"
+   },
+   "RefereeStatDTO": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "title": "Type"
+     },
+     "value": {
+      "type": "number",
+      "title": "Value"
+     },
+     "value_type": {
+      "type": "string",
+      "title": "Value Type"
+     },
+     "average": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total"
+     },
+     "average_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Type"
+     },
+     "fill_percentage": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fill Percentage"
+     },
+     "average_percentage": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Percentage"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "value",
+     "value_type"
+    ],
+    "title": "RefereeStatDTO",
+    "description": "裁判单项统计(infoBox.Referee.stats[] 的逐项投影,2026-08-24)。\n\ntype 实测全集:matches/yellowCards/redCards/unknown/penalties/fouls;\nvalue_type 为 total(累计)或 perMatch(每场均值)。只有 perMatch 两项\n(yellowCards/fouls)带 average/total/average_type/fill_percentage/\naverage_percentage 五个扩展字段,其余项这五项恒为 null——这是来源结构\n如此,不是采集缺失。average_percentage 实测恒为 50(均值刻度居中)。"
    },
    "RetractBody": {
     "properties": {

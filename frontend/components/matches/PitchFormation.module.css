@@ -20,29 +20,15 @@
   max-width: 72px;
 }
 
-.shirt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
+/* 2026-08-24:.shirt(纯色圆点+球衣号文字)换成真实球员头像
+ * (components/players/PlayerAvatar.tsx)后,球场底图固定是绿色(不随亮/
+ * 暗主题切换,见 FootballPitchBackground.tsx 顶部注释)这条约束还在——
+ * 头像本身没有"一圈白色描边"这层保护,借这个 ring 包装类保留同样的
+ * legibility 处理,不依赖头像内容本身跟草绿的对比度。 */
+.avatarRing {
+  display: inline-flex;
   border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-  /* 球场底图固定是绿色(不随亮/暗主题切换,见 FootballPitchBackground.tsx
-   * 顶部注释),球衣需要一圈白色描边才能在草坪上稳定辨认,不依赖球衣本身
-   * 颜色跟草绿的对比度。 */
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
-}
-
-.playerHome .shirt {
-  background: var(--gold-300);
-  color: var(--bg);
-}
-
-.playerAway .shirt {
-  background: var(--surface);
-  color: var(--ink);
 }
 
 .playerName {
@@ -66,10 +52,5 @@
   .playerName {
     max-width: 52px;
     font-size: 9.5px;
-  }
-  .shirt {
-    width: 22px;
-    height: 22px;
-    font-size: 11px;
   }
 }
