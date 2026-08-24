@@ -9,25 +9,31 @@
   margin-bottom: 6px;
 }
 
+/* 2026-08-24:图例色改成与圆点实际颜色一致的品牌青绿/蓝(此前还是换配色
+ * 之前的 --gold-300/--ink-3,图例和图上圆点对不上——见 ShotMapChart.tsx
+ * 里 itemStyle 用的 c.teal/c.navy)。 */
 .legendHome {
-  color: var(--gold-300);
+  color: var(--brand-teal);
   font-weight: 700;
 }
 
 .legendAway {
-  color: var(--ink-3);
+  color: var(--brand-blue);
   font-weight: 600;
 }
 
-/* 球场底图是 FootballPitchBackground(SVG),铺满本容器,与图表 0..105/0..68
- * 逻辑坐标 1:1 对齐(图表 grid 四边距为 0,轴范围即球场边界;SVG viewBox
- * 同样是 "0 0 105 68",两者共用同一个坐标域,不需要额外换算)。 */
+/* 球场底图是 FootballPitchBackground(SVG,variant="neutral"),铺满本容器,
+ * 与图表 0..105/0..68 逻辑坐标 1:1 对齐(图表 grid 四边距为 0,轴范围即球场
+ * 边界;SVG viewBox 同样是 "0 0 105 68",两者共用同一个坐标域,不需要额外
+ * 换算)。2026-08-24 起改用中性底(见 FootballPitchBackground.tsx 顶部
+ * FotMob 实测说明)——不再是绿茵,球场底色/兜底色都要跟着换,否则圆点半透明
+ * 时会被绿色兜底色（SVG 加载失败前的一瞬）拖累。 */
 .pitchWrap {
   position: relative;
   width: 100%;
   aspect-ratio: 105 / 68; /* 图表挂载前占位同一纵横比,挂载后与图表像素高一致 */
   /* 兜底色,SVG 铺满后理论上不可见,只防极端情况(SVG 加载失败)下露白。 */
-  background: #276e42;
+  background: var(--pitch-neutral-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;

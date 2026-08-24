@@ -97,7 +97,9 @@ function summarize(
   return `${head}${tail}仅统计射门,无射门的时段没有柱子。`;
 }
 
-function buildOption(
+/** 导出供渲染冒烟测试直接调用(frontend/tests/chart-render-smoke.test.ts,
+ * 见 CLAUDE.md §11.3)。 */
+export function buildOption(
   buckets: Bucket[],
   homeName: string,
   awayName: string,

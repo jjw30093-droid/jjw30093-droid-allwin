@@ -31,6 +31,7 @@ scheduler.py — 概率卡更新链路编排(ROADMAP.md Phase C3,选项 1)。
 
 import argparse
 import os
+import sqlite3
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -41,6 +42,12 @@ from ingest.ingest_match import ingest_match
 from silver.build_silver import build_silver
 from models.features.build_match_features import build_match_features
 from models.predict_wdl_future import main as predict_wdl_future_main
+
+from backend.db.util import utc_now_iso
+from backend.ingest.poll_windows import (
+    POSTMATCH_STALE_THRESHOLD_HOURS,
+    league_stale_unresolved_match_ids,
+)
 
 DEFAULT_LEAGUE_ID = 47
 DEFAULT_SEASON = "2026/2027"
@@ -56,18 +63,44 @@ def step1_ingest_newly_finished(league_id: int, season: str) -> list:
     if not ip_info.get("origin"):
         raise RuntimeError("代理连通性检查未拿到出口 IP,停止,不盲试后续抓取")
 
+    # 2026-08-24:候选判据不能只认 status='NotStarted'——赛程同步(schedule_
+    # sync_multi)撞上正在进行的比赛会把 dim_match.status 写成 'InPlay',一旦
+    # 变成 InPlay 就再也不是 'NotStarted',这里原来的精确匹配会把它永久漏掉:
+    # 生产实测 21 场比赛卡在 InPlay、开球早已过去数天,shots/player_stats/
+    # momentum 全部零数据,且没有任何路径能再捞回来。改成与
+    # backend/ingest/poll_windows.py 的 league_stale_unresolved_match_ids 同一
+    # 判据(status != 'Finish' 且已过精确开球 + 阈值)——不再要求"曾经是
+    # NotStarted",只要求"该结束却还没结束"。这不改变下面"是否真的重新落库"
+    # 的判定:仍然只在 FotMob 实时状态确认 finished 才会 ingest,这里只是扩大
+    # 了"要不要去问 FotMob"的候选池。
+    #
+    # league_stale_unresolved_match_ids 只按 League_ID 判定(它是"这个联赛该不
+    # 该触发一轮"的信号,不区分赛季),这里额外交一次 Season——不能让别的赛季
+    # 里同样卡住的比赛,被拿着本次调用的 season 字符串误标进 ingest_match()
+    # (season 会直接覆盖 dim_match.Season,见 ingest_match.py 的 dim_kwargs)。
     conn = get_connection()
+    # get_connection()(legacy backend/db.py 连接)不像 backend.db.connections
+    # 的 connect_ro/connect_rw 那样默认设 row_factory——league_stale_
+    # unresolved_match_ids 用列名取值(r["kickoff_at_utc"]),裸元组会直接
+    # TypeError。sqlite3.Row 同时兼容下面 r[0] 的位置取法,设置了不影响本函数
+    # 其余查询。
+    conn.row_factory = sqlite3.Row
     try:
-        not_started_ids = {
+        stale_ids = league_stale_unresolved_match_ids(
+            conn, league_id, utc_now_iso(), threshold_hours=POSTMATCH_STALE_THRESHOLD_HOURS
+        )
+        season_ids = {
             r[0]
             for r in conn.execute(
-                "SELECT Match_ID FROM dim_match WHERE League_ID=? AND Season=? AND status='NotStarted'",
+                "SELECT Match_ID FROM dim_match WHERE League_ID=? AND Season=? AND status != 'Finish'",
                 (league_id, season),
             ).fetchall()
         }
     finally:
         conn.close()
-    print(f"  库里当前 status='NotStarted' 的场次: {len(not_started_ids)}")
+    candidate_ids = stale_ids & season_ids
+    print(f"  库里当前候选(status≠Finish 且已过开球+{POSTMATCH_STALE_THRESHOLD_HOURS}h,"
+          f"Season={season})的场次: {len(candidate_ids)}")
 
     data = client.league_matches(league_id, season)
     raw = (data.get("fixtures", {}) or {}).get("allMatches") or []
@@ -75,9 +108,9 @@ def step1_ingest_newly_finished(league_id: int, season: str) -> list:
     newly_finished = []
     for m in raw:
         mid = int(m["id"])
-        if mid in not_started_ids and (m.get("status") or {}).get("finished"):
+        if mid in candidate_ids and (m.get("status") or {}).get("finished"):
             newly_finished.append(mid)
-    print(f"  FotMob 实时状态显示已完赛、但库里仍是 NotStarted 的场次: {len(newly_finished)}")
+    print(f"  FotMob 实时状态显示已完赛、但库里仍未落库为 Finish 的场次: {len(newly_finished)}")
 
     # 遇到第一场失败就立即停止(不是"整批都试完再统一报错")——ingest_match()
     # 每场各自独立 commit,批内没有跨场次的事务包裹;continue 试完整批只会让

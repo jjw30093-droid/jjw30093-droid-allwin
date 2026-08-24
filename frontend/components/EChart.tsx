@@ -8,19 +8,13 @@
  * 卡片可读字号。视觉 token 见 components/charts/chartMode.ts。
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import type { ChartMode } from "@/components/charts/chartMode";
+import { ChartErrorBoundary } from "@/components/charts/ChartErrorBoundary";
 
-export function EChart({
-  option,
-  height = 280,
-  ariaSummary,
-  className,
-  mode = "interactive",
-  showSummary = true,
-}: {
+type EChartProps = {
   option: EChartsOption;
   height?: number;
   ariaSummary: string;
@@ -28,7 +22,30 @@ export function EChart({
   mode?: ChartMode;
   /** 卡片自带说明文字时可关掉内置摘要,避免重复(a11y label 仍保留在容器上)。 */
   showSummary?: boolean;
-}) {
+};
+
+/** 外层套 ChartErrorBoundary:兜住 `option` 本身在渲染阶段(如调用方
+ * `useMemo(() => buildOption(...))`)抛出的异常——EChartInner 内部的
+ * try/catch 只能兜住它自己发起的命令式 setOption 调用,兜不住 option 还没
+ * 传进来之前就已经抛出的情况。两层合起来才是完整防线(见模块顶部说明)。 */
+export function EChart(props: EChartProps) {
+  return (
+    <ChartErrorBoundary
+      fallback={<p style={{ color: "var(--ink-3)", fontSize: 13.5 }}>图表暂时无法显示。</p>}
+    >
+      <EChartInner {...props} />
+    </ChartErrorBoundary>
+  );
+}
+
+function EChartInner({
+  option,
+  height = 280,
+  ariaSummary,
+  className,
+  mode = "interactive",
+  showSummary = true,
+}: EChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   // "最新值"引用:MatchTabs 用 hidden 属性(而非条件卸载)保留非激活 tab 的
@@ -40,6 +57,14 @@ export function EChart({
   // 变化都会重跑,ResizeObserver 回调读到的仍然是上一次成功渲染后的最新值。
   const optionRef = useRef(option);
   const modeRef = useRef(mode);
+  // 2026-08-24:ECharts 配置异常(如势头图 visualMap 开区间在 6.x 上抛
+  // `reading 'coord'`)是从 ResizeObserver 回调/useEffect 里发起的命令式
+  // setOption 调用,不保证被 React 错误边界捕获(边界只可靠捕获渲染阶段的
+  // 异常)——线上实测这类异常会一路冒泡到 Next.js 路由级错误边界,把整个
+  // 比赛详情页拖垮成"页面出错了"。这里 try/catch 显式兜底,退化成这一张
+  // 图表的空态,不影响页面其它部分;ChartErrorBoundary(见该文件)是第二层,
+  // 兜住 option 计算本身(如 buildOption 内部)在渲染阶段抛出的异常。
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -51,7 +76,14 @@ export function EChart({
         modeRef.current === "export"
           ? { ...optionRef.current, animation: false }
           : optionRef.current;
-      chartRef.current?.setOption(resolved, { notMerge: true });
+      try {
+        chartRef.current?.setOption(resolved, { notMerge: true });
+      } catch (err) {
+        console.error("[EChart] setOption 异常,已降级为空态:", err);
+        // 与下面第二个 effect 同一处理(见那里的注释):推到微任务,不在
+        // ResizeObserver 回调同步栈里直接 setState。
+        queueMicrotask(() => setHasError(true));
+      }
     };
     const observer = new ResizeObserver((entries) => {
       if (!inited) {
@@ -92,8 +124,20 @@ export function EChart({
     // 显式 setOption 一次(见上面 applyLatestOption),不会漏更新。
     const resolved: EChartsOption =
       mode === "export" ? { ...option, animation: false } : option;
-    chartRef.current?.setOption(resolved, { notMerge: true });
+    try {
+      chartRef.current?.setOption(resolved, { notMerge: true });
+    } catch (err) {
+      console.error("[EChart] setOption 异常,已降级为空态:", err);
+      // react-hooks/set-state-in-effect:不在 effect 体内同步 setState(会
+      // 触发级联渲染)——推到微任务,行为上仍是"这一帧结束前尽快更新",只是
+      // 不再算作这个 effect 自己触发的同步重渲染。
+      queueMicrotask(() => setHasError(true));
+    }
   }, [option, mode]);
+
+  if (hasError) {
+    return <p style={{ color: "var(--ink-3)", fontSize: 13.5 }}>图表暂时无法显示。</p>;
+  }
 
   return (
     <div className={className}>

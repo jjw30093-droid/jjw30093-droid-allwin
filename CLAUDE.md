@@ -263,6 +263,17 @@ poll_windows.py` 的代码注释同样把这三条标注为下限）：
 - 同一轮 FotMob 比赛请求应复用原始 payload，阵容与两队伤停使用相同 `poll_run_id` 和 `observed_at`。
 - 首先支持真实验证过的公司和市场；不得把“抓到一家公司的初盘/最新”描述为完整多公司时间序列。
 - 历史回填能力、时间粒度和公司覆盖写入 `docs/data-sources.md`；不可验证则标 `UNVERIFIED`。
+- 判定"比赛已完赛、该落库明细数据了"不得只精确匹配单一 `status` 值（如
+  `status='NotStarted'`）。赛程同步等其它写路径可能在比赛进行中把 `status`
+  改写成 `InPlay` 等中间态，一旦离开被精确匹配的那个值就永久漏检、且没有
+  任何后续机制能再捞回来（2026-08-24 真实事故：`backend/scheduler.py` 的
+  完赛判据曾经精确匹配 `status='NotStarted'`，21 场比赛卡在 `InPlay` 后
+  永久零数据，直到人工发现）。正确判据是"该结束却还没有明细数据"（如
+  `status != 'Finish'` 且已过开球+阈值，与 `backend/ingest/poll_windows.py`
+  的 `league_stale_unresolved_match_ids` 同一口径），不是某个中间状态的
+  白名单。且任何"新数据只在事件发生的那一刻写入"的落库任务，都必须配一条
+  可按 ID 重跑的补采路径（如 `backend/cli/reingest_matches.py`）——没有
+  这条路径，任何一次漏检都是永久的，不会被后续轮询自动纠正。
 
 ### 6.4 时间共现
 
@@ -619,6 +630,45 @@ GET  /api/v1/admin/...
   三层；赛季等第二层信息进正文行。内部枚举值（MARKET_BASELINE 等）
   不得直接出现在用户界面。
 
+### 11.3 图表实现纪律（2026-08-24，经真实事故确认）
+
+2026-08-23 势头图（`visualMap` 开区间配置在项目实际使用的 ECharts ^6.1.0
+上抛异常，整图不渲染且异常冒泡到路由级错误边界拖垮整个比赛详情页）与射门
+落点图（非进球标记半透明压在绿茵球场上，合成对比度只有 1.09~1.17:1，等于
+隐形）两个 bug，都在 `vitest run` 全绿的情况下上线——现有图表测试全部只测
+`summarizeMomentum`/`buildBuckets`/`filterShots` 这类抽出来的纯函数，从不
+真的把构造出的 `option` 交给 ECharts 渲染一次，也没有任何测试算过标记颜色
+和背景的合成对比度。据此固化以下纪律：
+
+- **纯函数测试不算图表验证。** 凡是构造 ECharts `option` 的组件，必须导出
+  一个可独立调用的 `buildOption`（或等价的纯函数），并有一条测试用项目
+  自带的 echarts 做一次 headless 渲染（`echarts.init(null, null,
+  {ssr:true, renderer:'svg'})` + `setOption` + `renderToSVGString()`）——
+  异常在这里必须真实抛出，不能被组件内部悄悄吞掉。参见
+  `frontend/tests/chart-render-smoke.test.ts`。
+- **ECharts 6 的 `visualMap.pieces` 必须给闭区间。** 只给 `min` 或只给
+  `max`（包括 `gte`/`lt` 写法）在 `MarkLineView` 里会抛
+  `Cannot read properties of undefined (reading 'coord')`；加
+  `type:'piecewise'` 不能规避。边界必须从数据的实际范围算出来，不能留空。
+- **图上标记的可见性必须对着真实渲染背景算合成对比度，不能只挑颜色板看着
+  顺眼。** 换配色时把 `opacity` 合成后的结果与实际背景比，非文字图形
+  ≥3:1（WCAG）。有色背景（球场、热区等）优先用中性底色（浅 `#F8FAFA` 系 /
+  深 `#333333` 系，同 FotMob 官方 App 的射门图做法），把颜色信号完全让给
+  标记，而不是让标记去将就一个高饱和度背景——品牌色压在中性底上能稳定拿到
+  4.5:1 以上，压在高饱和背景上无论怎么调都很难。参见
+  `frontend/tests/shot-map-contrast.test.ts`。改了标记色必须同步检查图例
+  颜色，两者对不上本身就是没有真的看过一眼的信号。
+- **描边/强调色不能跨主题硬编码一个值。** 白色描边在浅色系背景上会失效
+  （近乎白压白），黑色描边在深色系背景上同理。凡是需要"不管当前是浅色
+  模式还是深色模式，都要跟背景反向"的颜色，走 `useChartColors()` 暴露的
+  主题感知 token（如 `ink`），不要在组件里写死一个十六进制值。
+- **单个图表异常不得白屏整页。** 所有图表通过共享的 `EChart` 封装渲染
+  （`frontend/components/EChart.tsx`）；该封装自带两层防线——内部
+  `setOption` 调用 try/catch（兜住命令式 API 抛出的异常，这类异常不保证
+  被 React 错误边界捕获）+ 外层 `ChartErrorBoundary`（兜住 `option` 计算
+  本身在渲染阶段抛出的异常）。新增图表组件不需要重新实现这两层，只要走
+  `EChart` 封装即可自动获得；不要绕开它直接调 `echarts.init`。
+
 ## 12. Creator Studio
 
 网站和内容制作必须共享一个版本化 `analysis_bundle`：
@@ -801,6 +851,10 @@ schedule_sync_multi
 - `npm run build`；
 - Playwright 覆盖：匿名浏览完整比赛内容、微信 Mock 登录、每日精选按场授权与撤销、
   Admin 拒绝、Studio 导出。
+- 新增或修改图表：至少一条渲染冒烟测试（真实调用 `buildOption` + ECharts
+  headless 渲染，异常必须真实抛出，见 §11.3）；标记/背景配色变化附一条
+  合成对比度断言，不能只测"没抛异常"就当作验证完成——渲染出来但肉眼不可见
+  的 bug，纯逻辑测试和渲染冒烟测试都抓不到，只有对比度断言能抓到。
 
 ### 核心链路验收
 

@@ -373,6 +373,13 @@ function ShotMapExplorerReady({
             value: [shot.y, shot.x, shot.xg ?? 0],
             shot,
             symbolSize: 10 + Math.min(21, Math.sqrt(Math.max(0, shot.xg ?? 0)) * 24),
+            // 2026-08-24:球场底改中性色(见下方 FootballPitchBackground
+            // variant="neutral")后没有改这里的配色——已用实际背景值(浅
+            // #F8FAFA / 深 #333333)算过,每种结果的描边始终有 ≥6.7:1 对比度
+            // (goal 描边 #7a5000 对浅底 6.74:1;saved/other 共用描边 #06323a
+            // 对浅底 13.14:1),深色底则由填色本身扛住(7.4~11.5:1)——这里
+            // 一直每种结果都描边(不像 ShotMapChart.tsx 那次的 bug,非进球
+            // 曾经零描边+半透明),所以换底色不需要跟着换点色。
             itemStyle: {
               color:
                 shot.outcome === "Goal"
@@ -633,7 +640,7 @@ function ShotMapExplorerReady({
               让球门(数据 y=105)视觉上移到顶边,与"进攻方向 ↑"和 ECharts
               的渲染方向一致。 */}
           <div className={styles.pitchFlip}>
-            <FootballPitchBackground orientation="portrait" />
+            <FootballPitchBackground orientation="portrait" variant="neutral" />
           </div>
           {pitchChartHeight != null && (
             <EChart

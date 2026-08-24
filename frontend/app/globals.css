@@ -38,6 +38,13 @@
   --border-strong: #b8c6c6;
   /* 首页锁定对照卡底色(= --surface-soft,起独立别名避免组件里写死具体色值) */
   --lock-band: #eef2f2;
+  /* 射门落点图专用中性球场(2026-08-24,FotMob 安卓包 res/drawable/
+   * ic_shotmap_pitch.xml 解包实测的真实颜色值)——不用品牌绿草坪:射门点要用
+   * 半透明/描边表达进球/非进球语义色,压在高饱和绿色上天然低对比(实测合成
+   * 后只有 1.09~1.17:1,非进球点等于隐形)。中性底把颜色信号完全让给标记。 */
+  --pitch-neutral-bg: #f8fafa;
+  --pitch-neutral-line: #d6d5d5;
+  --pitch-neutral-line-strong: #ababab;
   /* 黄牌图标专用色(比赛详情页事件 tab),深浅两套同值——黄牌就是黄牌 */
   --card-yellow: #e5c245;
   /* cool neutrals */
@@ -119,6 +126,11 @@ html[data-theme="dark"] {
   --border: #203842;
   --border-strong: #35515b;
   --lock-band: #0b1d26;
+  /* 射门落点中性球场深色变体(FotMob drawable-night-v8/ic_shotmap_pitch.xml
+   * 解包实测的真实颜色值)。 */
+  --pitch-neutral-bg: #333333;
+  --pitch-neutral-line: #454545;
+  --pitch-neutral-line-strong: #6e6e6e;
   --ink: #eef5f4;
   --ink-2: #bdcbce;
   --ink-3: #82969d;

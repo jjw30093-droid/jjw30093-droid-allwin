@@ -24,6 +24,12 @@ export type ChartColors = {
   win: string;
   loss: string;
   draw: string;
+  /** 最深/最亮的正文墨色(--ink)——浅色模式深、深色模式亮,与背景色永远反向。
+   * 2026-08-24 新增:射门落点图的标记描边需要一个"不管主题怎么切都能跟中性
+   * 球场底色(浅 #F8FAFA / 深 #333333)拉开对比度"的颜色——硬编码白色描边在
+   * 浅色球场上实测只有 1.05:1(近乎全白压全白),换成 --ink 后两个主题下都
+   * ≥11:1(见 frontend/tests/shot-map-contrast.test.ts)。 */
+  ink: string;
   ink2: string;
   ink3: string;
   /** 中性灰(--border-strong)——背景球队/非高亮点 */
@@ -38,6 +44,7 @@ const FALLBACK_COLORS: ChartColors = {
   win: "#287851",
   loss: "#b83b2d",
   draw: "#706c64",
+  ink: "#0d2c3d",
   ink2: "#40535d",
   ink3: "#5a6b73",
   grey: "#b8c6c6",
@@ -54,6 +61,7 @@ function readChartColors(): ChartColors {
     win: readVar("--win", FALLBACK_COLORS.win),
     loss: readVar("--loss", FALLBACK_COLORS.loss),
     draw: readVar("--draw", FALLBACK_COLORS.draw),
+    ink: readVar("--ink", FALLBACK_COLORS.ink),
     ink2: readVar("--ink-2", FALLBACK_COLORS.ink2),
     ink3: readVar("--ink-3", FALLBACK_COLORS.ink3),
     grey: readVar("--border-strong", FALLBACK_COLORS.grey),

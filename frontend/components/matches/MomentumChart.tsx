@@ -47,12 +47,16 @@ export function summarizeMomentum(momentum: MomentumPoint[]): {
   return { points, endMinute, homeShare, awayShare };
 }
 
-function buildOption(
+/** 导出供渲染冒烟测试直接调用(frontend/tests/chart-render-smoke.test.ts)
+ * ——组件里的纯函数从不被真的渲染过是 2026-08-24 势头图崩溃能一路上线的
+ * 根本原因(vitest 424/424 全绿但线上白屏),见 CLAUDE.md §11.3。 */
+export function buildOption(
   points: MomentumPoint[],
   endMinute: number,
   mode: ChartMode,
   c: ChartColors,
 ): EChartsOption {
+  const bound = Math.max(20, ...points.map((p) => Math.abs(p.value)));
   return {
     grid: {
       left: mode === "export" ? 60 : 30,
@@ -88,12 +92,18 @@ function buildOption(
       min: (v: { min: number }) => Math.min(-20, v.min),
       max: (v: { max: number }) => Math.max(20, v.max),
     },
+    // 2026-08-24:pieces 必须给闭区间。项目用的 echarts ^6.1.0 对只给
+    // min 或只给 max 的开区间(即使加 type:'piecewise'/gte/lt 也一样)会在
+    // MarkLineView 里抛 `Cannot read properties of undefined (reading 'coord')`,
+    // 导致整张图一个像素都不画、且异常会冒泡到 React 错误边界把整个比赛详情页
+    // 变成"页面出错了"(线上实测复现)。边界必须是从数据算出的有限值,不能留空。
     visualMap: {
       show: false,
+      type: "piecewise",
       dimension: 1,
       pieces: [
-        { min: 0, color: c.teal },
-        { max: 0, color: c.navy },
+        { min: 0, max: bound, color: c.teal },
+        { min: -bound, max: 0, color: c.navy },
       ],
     },
     series: [

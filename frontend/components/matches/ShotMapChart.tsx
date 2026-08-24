@@ -178,10 +178,21 @@ export function ShotMapChart({
       .map((s) => ({
         ...toPoint(s),
         symbolSize: symbolSize(s.xg),
+        // 2026-08-24:球场底改中性色(FootballPitchBackground variant="neutral",
+        // 见该文件顶部 FotMob 实测说明)后,标记不再需要靠半透明去"融进"草坪——
+        // 那正是上次改配色时非进球点变隐形的原因(合成后对比度只有 1.09~1.17:1)。
+        // 现在两种结果都不透明 + 描边,只用描边粗细区分进球:
+        //   进球   = 更粗的描边(强调,与 FotMob layer-list 单独一张 goal
+        //            drawable 同一思路——进球必须一眼跳出来);
+        //   非进球 = 细描边,与中性球场底天然可辨。
+        // 描边颜色用 c.ink(--ink)而不是硬编码白色——白色描边在浅色中性球场
+        // (#F8FAFA)上实测只有 1.05:1(近乎白压白,等于没描);--ink 浅色模式深
+        // /深色模式亮,永远跟当前主题的球场底色反向,两个主题都 ≥11:1(见
+        // frontend/tests/shot-map-contrast.test.ts)。
         itemStyle:
           s.outcome === "Goal"
-            ? { color, borderColor: "#ffffff", borderWidth: 2 }
-            : { color, opacity: 0.55 },
+            ? { color, borderColor: c.ink, borderWidth: 2.5 }
+            : { color, borderColor: c.ink, borderWidth: 1 },
       }));
 
   const sum = (isHome: boolean, f: (s: Shot) => number) =>
@@ -199,7 +210,7 @@ export function ShotMapChart({
     // 统计接口),数值可能有细微差异——分别命名,不用同一个"xG"混称。
     `射门图:${homeName}(攻向右)${h.n} 次射门、${h.goals} 球、射门图 xG 合计 ${h.xg.toFixed(2)};` +
     `${awayName}(攻向左)${a.n} 次射门、${a.goals} 球、射门图 xG 合计 ${a.xg.toFixed(2)}。` +
-    `圆点大小与该次射门 xG 成正比,实心带白边为进球。` +
+    `圆点大小与该次射门 xG 成正比,描边更粗为进球。` +
     // 筛选后的数字是所选子集的合计,不是全场 —— 必须说清楚口径,
     // 否则用户会把筛出来的 xG 当成全场 xG。
     (filtered
@@ -341,7 +352,7 @@ export function ShotMapChart({
         <span className={styles.legendAway}>{awayName}(攻向左)</span>
       </div>
       <div className={styles.pitchWrap}>
-        <FootballPitchBackground />
+        <FootballPitchBackground variant="neutral" />
         {plotted.length === 0 && (
           <p className={styles.noMatch}>当前筛选条件下没有射门。</p>
         )}

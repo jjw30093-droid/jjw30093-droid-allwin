@@ -48,7 +48,9 @@ export function cumulativeSeries(shots: Shot[], isHome: boolean): Point[] {
   return out;
 }
 
-function buildOption(
+/** 导出供渲染冒烟测试直接调用(frontend/tests/chart-render-smoke.test.ts,
+ * 见 CLAUDE.md §11.3)。 */
+export function buildOption(
   home: Point[],
   away: Point[],
   homeName: string,
