@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 统计 tab:球队数据对比条 → 射门图 → 球员数据表。
+ * 统计 tab:球队数据对比条 → 球员数据表。射门图只在「射门」tab 展示,不在这里
+ * 重复(2026-08-24 站长反馈)。
  * 对比行按 TEAM_STAT_LABELS 顺序;两边都缺的统计项直接跳过(不渲染假 0)。
  * 球员表窄屏砍列不缩字(DESIGN.md 移动端规则)。
  * 2026-08-23:球队数据对比按 FotMob 分组(TEAM_STAT_GROUPS)+ 全场/上半场/
@@ -12,7 +13,6 @@
 
 import { Fragment, useState } from "react";
 import type { MatchReportResponse } from "@/lib/api-v1";
-import { ShotMapChart } from "@/components/matches/ShotMapChart";
 import { RatingChip } from "@/components/matches/RatingChip";
 import { TEAM_STAT_GROUPS, TEAM_STAT_LABELS } from "@/components/matches/zh";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
@@ -329,14 +329,12 @@ const HALF_OPTIONS: { key: "All" | "FirstHalf" | "SecondHalf"; label: string }[]
 export function MatchStatsSection({
   teamStats,
   teamStatsByHalf = [],
-  shots,
   playerStats,
   homeName,
   awayName,
 }: {
   teamStats: MatchReport["team_stats"];
   teamStatsByHalf?: MatchReport["team_stats_by_half"];
-  shots: MatchReport["shots"];
   playerStats: MatchReport["player_stats"];
   homeName: string;
   awayName: string;
@@ -372,9 +370,6 @@ export function MatchStatsSection({
       ) : (
         <p className={pageStyles.emptyText}>该场比赛暂无球队统计数据。</p>
       )}
-
-      <h2 className={pageStyles.sectionTitle}>射门图</h2>
-      <ShotMapChart shots={shots} homeName={homeName} awayName={awayName} />
 
       <h2 className={pageStyles.sectionTitle}>球员数据</h2>
       {playerStats.length === 0 ? (

@@ -61,7 +61,6 @@ function teamStat(overrides: Partial<TeamStat>): TeamStat {
 }
 
 const BASE_PROPS = {
-  shots: [],
   playerStats: [],
   homeName: "主队",
   awayName: "客队",

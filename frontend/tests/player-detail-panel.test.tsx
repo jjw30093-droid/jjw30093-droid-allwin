@@ -40,7 +40,6 @@ function keeper(overrides: Partial<PlayerStat>): PlayerStat {
 
 const BASE_PROPS = {
   teamStats: [],
-  shots: [],
   homeName: "主队",
   awayName: "客队",
 };
