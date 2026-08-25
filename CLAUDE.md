@@ -736,7 +736,38 @@ failed/locked 时非零：
 少、不重复调度（`tests/backend/test_job_order.py` 校验这条不变量）。另有
 独立的 `allwin-digest.timer`（每天 23:30 Asia/Shanghai，`--key <北京日期>`
 幂等）调度 `daily_digest`，它和 `silver_build`（`core_silver_build` 的兼容
-别名）一样，是注册在 Worker 里但不挂在任何链式定时器上的任务。
+别名）一样，是注册在 Worker 里但不挂在任何链式定时器上的任务。同一先例下
+还有 `allwin-physical-stats.timer`（每 30 分钟触发到期判断）调度
+`physical_stats_poll`：FotMob 部分球队体能统计（`physical_metrics_distance_
+covered` 等，落在 `fact_team_match_stats.extra_json`）是异步计算的，常在
+比赛完赛后才出现终值，现有管道只在比赛刚解决时抓一次、之后不再回访；该
+任务只处理 League_ID=47（英超），在 kickoff+6h/12h/24h 三个固定检查点回查
+`ingest_match()`，主客两队 `physical_metrics_distance_covered` 都
+≥50000 米即视为终值并停止，三次检查点后仍未达标则记 `exhausted_at` 并经
+`backend.notify` 告警恰好一次（纯判断逻辑在
+`backend/ingest/physical_stats_poll.py`，落库与调用在
+`backend/cli/poll_physical_stats.py`，状态表 `physical_stats_poll_state`
+落 core/allwin.db，理由见迁移 `0013_physical_stats_poll_state.sql` 头注释）。
+同一先例下还有 `allwin-standings.timer`（每 30 分钟触发到期判断）调度
+`standings_refresh_poll`：联赛积分榜（`fact_league_table`，由
+`GET /api/v1/leagues/{id}/standings` 读取）只由
+`ingest_league.py::ingest_season_tables()` 写入，而该函数从未被任何 worker
+任务调度过——旧的手动 CLI 短路判断（`_season_tables_done()`，多赛季回填场景
+下仍然合法保留）只要该 (League_ID, Season) 有过任何一行就永久跳过，导致
+赛季初始 skeleton（`played=0`）落库后积分榜再也不会自动刷新，即使联赛已经
+踢完多轮（2026-08 英超 2026/2027 真实事故，已手动修复一次，非持久修复）。
+该任务只处理 League_ID=47（英超），触发条件是"该联赛当前赛季最近一场完赛
+比赛（`status='Finish'`）的 `kickoff_at_utc` + 6 小时"——纯粹的时间到期
+判断，不是有限次检查点或有效值重试（这一点与 `physical_stats_poll` 不
+同构：`ingest_season_tables()` 是整体 pull-and-replace，请求成功即结构上
+有效，没有"有效/无效"数据判断）；到期即调用一次
+`ingest_season_tables()`，赛季从"最近一场完赛比赛自身的 `Season` 列"读取
+（该列已由迁移 0011 的触发器保证与 (League_ID, Date) 推导一致），不重新
+调用 `season_for_match()`/`resolve_current_season()`。纯判断逻辑在
+`backend/ingest/standings_refresh_poll.py`（`due_refresh`），落库与调用在
+`backend/cli/poll_standings.py`，状态表 `standings_refresh_state`
+落 core/allwin.db，理由见迁移 `0014_standings_refresh_state.sql` 头注释。
+它同样不挂在 7 个既有定时器上、不进 `DEFAULT_CHAIN`，自己独立一个 timer。
 
 `--chain`（`DEFAULT_CHAIN`）现在只是人工全量重跑/故障排查用的手动逃生舱，
 生产没有任何定时器再周期性调用它；裸 `--chain` 仍按顺序执行、某步

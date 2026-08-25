@@ -6981,3 +6981,32 @@ test_match_preview.py` 既有夹具的历史比赛赛季从与被测比赛(9002,
   14,105 行、幽灵赛季 60 行、shotmap 死列 0 非空——迁移在部署时处理。
 - UNVERIFIED:生产尚未部署本轮代码与迁移(照例待站长指令 commit+部署);
   `--provider-check` 模式需生产代理,离线 fixture 已测、真实网络未跑。
+
+> 2026-08-26 增补:体能统计(`physical_metrics_distance_covered` 等,落
+> `fact_team_match_stats.extra_json`)迟到补采实现——`backend/ingest/
+> physical_stats_poll.py`(纯判断函数,此前已交付)补上落库/调用方
+> `backend/cli/poll_physical_stats.py`:仅英超(League_ID=47),
+> kickoff+6h/12h/24h 三个固定检查点回查 `ingest_match()`,双队距离
+> ≥50000 米即 resolved 并停止,三次仍未达标则 exhausted +
+> `backend.notify` 告警恰好一次(`WHERE exhausted_at IS NULL` 原子声明,
+> 同构 `postmatch_retry.mark_exhausted_and_alert`)。状态表
+> `physical_stats_poll_state` 落 core/allwin.db(migration 0013,理由见其
+> 头注释)。任务注册为 `physical_stats_poll`,不进 `DEFAULT_CHAIN`、不挂
+> 7 个既有定时器,与 `daily_digest` 同一先例进 `NON_CHAIN_JOBS`,新增独立
+> `allwin-physical-stats.timer`(每 30 分钟)。新增
+> `tests/backend/test_physical_stats_poll.py`(25 条:due_checkpoint 全
+> 分支、is_valid_distance 全分支、任务端到端 resolved/exhausted/非英超
+> 不触碰)+ `test_worker_argv.py` 追加 argv 接线断言。migration 0013 在
+> 临时 core 库排练:新库应用 13 个迁移、重放报 `table already exists`
+> (符合预期——单份 DDL 脚本非幂等,幂等性由 `backend/db/migrate.py` 的
+> `schema_migrations` 版本表保证,不是脚本自身职责)、`integrity_check=ok`。
+> 新增 0013 使 core migrations 总数从 12 变为 13,连带修了
+> `tests/backend/test_schedule_state_schema.py` 三处硬编码总迁移数的断言
+> (10/11→11/12,12→13,并把 0013 补进 schema_migrations 期望列表)——这类
+> 断言此前就随 0011/0012 更新过一次,是已知会随 core migrations 目录文件数
+> 机械增长的测试,不是本轮引入的新脆弱性。
+> `.venv/bin/python -m pytest tests/backend -q`(JUnit 统计):2046 passed,
+> 0 failed,0 errors,2 skipped(pre-existing,与本轮无关)。隔离运行新增
+> 文件 `test_physical_stats_poll.py` + `test_worker_argv.py`:28 passed
+> (25 新增 + 3 既有,含本轮追加的 argv 接线断言)。CLAUDE.md §13 已补充
+> physical_stats_poll 独立 timer 说明。

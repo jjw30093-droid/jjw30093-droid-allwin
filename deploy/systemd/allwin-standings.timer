@@ -1,0 +1,11 @@
+# 每 30 分钟触发一次联赛排名榜刷新到期判断(allwin-standings.service)。
+[Unit]
+Description=Run allwin standings refresh every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

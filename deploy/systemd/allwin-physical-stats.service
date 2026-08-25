@@ -1,0 +1,33 @@
+# 体能统计(physical_metrics_distance_covered 等)迟到补采(oneshot,由
+# allwin-physical-stats.timer 每 30 分钟触发到期判断)。
+#
+# 与 allwin-postmatch/allwin-derive 同一节奏(30 分钟)不是巧合——检查点是
+# kickoff+6h/12h/24h,固定粒度,30 分钟足以及时捕捉每个检查点又不至于
+# 浪费;不需要 allwin-odds/allwin-lineup 那种 5 分钟粒度(§13),也不像
+# allwin-digest 那样只需一天一次。范围只限 League_ID=47(英超),三次检查点
+# 双队达标即停,三次仍未达标则 exhausted + 告警一次,内部节流(状态表
+# checks_done/resolved_at/exhausted_at)保证重复触发代价低。
+#
+# 安装:cp allwin-physical-stats.service allwin-physical-stats.timer /etc/systemd/system/
+#       systemctl daemon-reload && systemctl enable --now allwin-physical-stats.timer
+[Unit]
+Description=allwin physical stats late-arrival re-poll (EPL only, kickoff+6h/12h/24h checkpoints)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.cli.poll_physical_stats --due
+TimeoutStartSec=900
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

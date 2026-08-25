@@ -1,0 +1,34 @@
+# 联赛排名榜(fact_league_table)刷新(oneshot,由 allwin-standings.timer
+# 每 30 分钟触发到期判断)。
+#
+# 触发条件与 allwin-physical-stats 不同:不是"检查点+达标即停"的重试语义,
+# 而是"该联赛最近一场完赛比赛的开球时间+6 小时后,如果还没有刷新过就刷新
+# 一次"的纯时间到点语义——ingest_season_tables() 本身是整赛季 DELETE 再
+# INSERT,天然幂等,问题只在触发时机,不在写入安全性。30 分钟粒度同
+# allwin-physical-stats 的理由:足以及时捕捉 +6h 这个节点又不至于浪费,
+# 不需要 allwin-odds/allwin-lineup 那种 5 分钟粒度。范围只限 League_ID=47
+# (英超)。
+#
+# 安装:cp allwin-standings.service allwin-standings.timer /etc/systemd/system/
+#       systemctl daemon-reload && systemctl enable --now allwin-standings.timer
+[Unit]
+Description=allwin standings (fact_league_table) refresh (EPL only, 6h after latest finished match)
+After=network.target
+
+[Service]
+Type=oneshot
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.cli.poll_standings --due
+TimeoutStartSec=900
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/allwin/shared/data
+
+[Install]
+WantedBy=multi-user.target

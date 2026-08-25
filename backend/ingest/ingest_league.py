@@ -17,10 +17,13 @@ ingest_league.py — 批量枚举 + 落库某赛季全部已完赛比赛，并�
       match_id 全局唯一（不同赛季不会撞号），故可安全用于多赛季回填的续跑场景。
 
 多赛季支持:
-    - --season 会透传进 ingest_match() → parse_match_dim()，正确写入每场比赛的
-      Season 列。--season 本身是必填参数（2026-08-25 起不再有默认值——真实
-      事故：旧默认 "2025/2026" 曾在一次 --match-ids 单场补采时因操作者漏带
-      --season 被静默使用，见 CLAUDE.md §6.3）。
+    - --season 本身是必填参数（2026-08-25 起不再有默认值——真实事故：旧默认
+      "2025/2026" 曾在一次 --match-ids 单场补采时因操作者漏带 --season 被
+      静默使用，见 CLAUDE.md §6.3）。2026-08-25 二次收口后 ingest_match()/
+      parse_match_dim() 已彻底删除 season 形参——Season 改为赛程同步独占的
+      派生列，明细抓取（本脚本对每场比赛的调用）不再具备写它的能力；--season
+      只用于本文件自己的 league_matches() 请求参数与 ingest_season_tables()
+      的季级表回填，不再透传进 ingest_match()。
     - 历史赛季回填需逐季分别调用本脚本（--season 不支持一次传多个）。
 
 可靠性 / 续爬机制:

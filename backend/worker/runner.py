@@ -433,6 +433,34 @@ REGISTRY: dict[str, dict] = {
         "backoff_seconds": 0,
         "description": "每日汇总推送(入库场次/赛程/快照/失败步骤;--key <日期> 幂等,由 allwin-digest.timer 调度)",
     },
+    "physical_stats_poll": {
+        "kind": "subprocess",
+        # 体能统计(physical_metrics_*)迟到补采,daily_digest 同类的独立
+        # timer 任务——不进 DEFAULT_CHAIN、不挂在 7 个既有定时器任何一个上
+        # (CLAUDE.md §13):候选范围只有 League_ID=47(英超),kickoff+6h/12h/24h
+        # 三个固定检查点,与 7 个定时器各自的既有语义(赛程/赔率/阵容/赛后链/
+        # 派生/维护)都不同构,单独一个 allwin-physical-stats.timer。
+        "argv": [sys.executable, "-m", "backend.cli.poll_physical_stats", "--due"],
+        "cwd": str(PROJECT_ROOT),
+        "max_attempts": 1,
+        "timeout_seconds": 900,
+        "backoff_seconds": 0,
+        "description": "体能统计(physical_metrics_distance_covered)迟到补采:kickoff+6h/12h/24h 三次检查点,双队达标即停,耗尽告警一次(仅英超)",
+    },
+    "standings_refresh_poll": {
+        "kind": "subprocess",
+        # 联赛积分榜(fact_league_table)迟到刷新,physical_stats_poll 同类的
+        # 独立 timer 任务——不进 DEFAULT_CHAIN、不挂在 7 个既有定时器任何一个
+        # 上(CLAUDE.md §13):候选范围只有 League_ID=47(英超),触发条件是
+        # "该联赛+赛季最近一场完赛比赛开球后 6 小时",不是有限次检查点,也
+        # 不同构于任何既有定时器的语义(赛程/赔率/阵容/赛后链/派生/维护)。
+        "argv": [sys.executable, "-m", "backend.cli.poll_standings", "--due"],
+        "cwd": str(PROJECT_ROOT),
+        "max_attempts": 1,
+        "timeout_seconds": 300,
+        "backoff_seconds": 0,
+        "description": "联赛积分榜(fact_league_table)迟到刷新:最近一场完赛比赛开球+6h 到期即重新拉取一次(仅英超)",
+    },
 }
 
 DEFAULT_CHAIN = [
@@ -456,7 +484,15 @@ DEFAULT_CHAIN = [
 # - daily_digest:由 allwin-digest.timer 每天 23:30(Asia/Shanghai)独立调度,
 #   --key <北京日期> 幂等,天然每天恰好一次,不挂在任何 DEFAULT_CHAIN 的
 #   周期性定时器上(和 7 个新定时器一样,是自己独立的 timer)。
-NON_CHAIN_JOBS = frozenset({"silver_build", "daily_digest"})
+# - physical_stats_poll:由 allwin-physical-stats.timer 每 30 分钟独立调度
+#   (与 daily_digest 同一先例——注册在 Worker 里但不挂链、不占用 7 个既有
+#   定时器中的任何一个,自己单独一个 timer)。
+# - standings_refresh_poll:由 allwin-standings.timer 每 30 分钟独立调度,
+#   同一先例——判断"最近一场完赛比赛开球+6h 是否已过、且尚未刷新"不需要
+#   比 30 分钟更密的检查频率,与 physical_stats_poll 选取同一节奏。
+NON_CHAIN_JOBS = frozenset({
+    "silver_build", "daily_digest", "physical_stats_poll", "standings_refresh_poll",
+})
 
 # 兼容别名:旧名 silver_build 指向 core_silver_build(不在默认链中)
 REGISTRY["silver_build"] = REGISTRY["core_silver_build"]
