@@ -17,8 +17,6 @@ CORE_PAGES = (
     "/matches",
     "/matches/5104968",
     "/pricing",
-    "/about-model",
-    "/track-record",
     "/about",
 )
 ASSET_RE = re.compile(r"""(?:href|src)=["']([^"']+)["']""")
