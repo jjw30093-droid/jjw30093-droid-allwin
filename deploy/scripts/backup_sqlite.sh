@@ -186,6 +186,16 @@ if [ -f "$DEST/platform.db" ]; then
 fi
 
 # ── 保留最近 KEEP 份(只 prune 完整备份目录,不误删 .incomplete-*/manifests) ──
+#
+# 2026-08-25 真实生产发现:旧备份目录可能由不同用户创建(如 systemd 定时器以
+# allwin 用户跑的日常备份,umask 077 → 700 权限),本脚本换一个用户手动/由
+# release.sh 触发执行时对那些目录没有删除权限,plain `rm -rf` 会返回非零、
+# 在 set -euo pipefail 下直接杀死整个备份脚本——此时三库 .backup 已经全部
+# 成功且 integrity_check=ok,只是"清理旧备份"这一步失败,却被上游 release.sh
+# 误判成"备份失败,不执行 migration"。先尝试 plain rm(本地测试/同用户场景不
+# 需要 sudo、不触发交互式密码提示),失败了再退避到 sudo rm(同 release.sh::
+# cleanup_old_releases() 既有先例);两者都失败也只是警告,不让单个 prune
+# 失败拖垮整个备份脚本的退出码。
 prune() {
   local root="$1" label="$2"
   [ -d "$root" ] || return 0
@@ -195,8 +205,11 @@ prune() {
   if [ "$total" -gt "$KEEP" ]; then
     printf '%s\n' "$dirs" | head -n "$((total - KEEP))" | while read -r d; do
       [ -n "$d" ] || continue
-      rm -rf "${root:?}/$d"
-      echo "-- $label: 清理旧备份 $d(保留最近 $KEEP 份)"
+      if rm -rf "${root:?}/$d" 2>/dev/null || sudo -n rm -rf "${root:?}/$d" 2>/dev/null; then
+        echo "-- $label: 清理旧备份 $d(保留最近 $KEEP 份)"
+      else
+        echo "-- $label: 警告:清理旧备份 $d 失败(不影响本次备份结果)" >&2
+      fi
     done
   else
     echo "-- $label: 当前 $total 份 ≤ 保留上限 $KEEP,无需清理"
