@@ -543,6 +543,8 @@ export function MatchDetailBody({
             <MatchShotsSection
               shots={factReport.shots}
               lineups={factReport.lineups}
+              teamStats={factReport.team_stats}
+              teamStatsByHalf={factReport.team_stats_by_half}
               homeName={m.home.name}
               awayName={m.away.name}
               homeTeamColor={m.home_team_color}

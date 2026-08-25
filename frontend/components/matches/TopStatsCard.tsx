@@ -16,7 +16,7 @@
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { useChartColors } from "@/components/charts/useChartColors";
 import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
-import { TEAM_STAT_LABELS } from "@/components/matches/zh";
+import { TEAM_STAT_LABELS, formatTeamStat } from "@/components/matches/zh";
 import { useMatchTabSwitch } from "./MatchTabs";
 import styles from "./TopStatsCard.module.css";
 
@@ -35,12 +35,8 @@ const TOP5_KEYS = [
 
 const LABEL_BY_KEY = new Map(TEAM_STAT_LABELS.map((l) => [l.key, l]));
 
-function fmt(v: number | null | undefined, format: "pct" | "num" | "num1"): string {
-  if (v == null) return "—";
-  if (format === "pct") return `${Math.round(v)}%`;
-  if (format === "num1") return v.toFixed(2);
-  return String(Math.round(v));
-}
+// 数值格式化收敛到 zh.ts::formatTeamStat(2026-08-25,消掉与
+// MatchStatsSection 重复的第二份 fmt)。
 
 export function TopStatsCard({
   homeStat,
@@ -71,7 +67,7 @@ export function TopStatsCard({
     const hv = homeStat ? ((homeStat as Record<string, unknown>)[key] as number | null) : null;
     const av = awayStat ? ((awayStat as Record<string, unknown>)[key] as number | null) : null;
     if (hv == null && av == null) return null; // 两边都缺 → 来源没有这项,跳过
-    return { key, label: meta.label, format: meta.format, hv, av };
+    return { key, meta, hv, av };
   }).filter((r): r is NonNullable<typeof r> => r != null);
 
   if (rows.length === 0) return null;
@@ -96,9 +92,9 @@ export function TopStatsCard({
           return (
             <li key={r.key} className={styles.row}>
               <div className={styles.head}>
-                <span className={`${styles.value} num`}>{fmt(r.hv, r.format)}</span>
-                <span className={styles.label}>{r.label}</span>
-                <span className={`${styles.value} num`}>{fmt(r.av, r.format)}</span>
+                <span className={`${styles.value} num`}>{formatTeamStat(r.hv, r.meta)}</span>
+                <span className={styles.label}>{r.meta.label}</span>
+                <span className={`${styles.value} num`}>{formatTeamStat(r.av, r.meta)}</span>
               </div>
               {!oneSideMissing && (
                 <div className={styles.track} aria-hidden>

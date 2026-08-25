@@ -115,8 +115,9 @@ class TestG14ExtraJsonUnknownKey:
     def test_whitelisted_and_known_unprojected_ok(self, core):
         insert_match(core, 1, league_id=47, date="2026-08-22", status="Finish")
         self._team_stats(core, 1, {
-            "BallPossesion": 60.0,                      # 已投影
-            "physical_metrics_distance_covered": 1.0,   # 已知未投影
+            "BallPossesion": 60.0,                      # 已投影(CORE)
+            "physical_metrics_distance_covered": 1.0,   # 已投影(2026-08-25 体能转正)
+            "physical_metrics": None,                   # 已知未投影(分组表头伪键)
         })
         core.commit()
         g = pg._gate_extra_json_unknown_key(core, NOW)

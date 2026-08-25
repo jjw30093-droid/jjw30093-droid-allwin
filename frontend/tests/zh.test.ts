@@ -4,6 +4,7 @@ import {
   formatBeijingDateTime,
   formatBeijingZh,
   formatDateHeadingZh,
+  formatTeamStat,
   matchDayZh,
   MARKET_FIELDS,
   MARKET_ZH,
@@ -25,6 +26,27 @@ describe("TEAM_STAT_GROUPS(2026-08-23 对照 FotMob 分组)", () => {
     const grouped = new Set(TEAM_STAT_GROUPS.flatMap((g) => g.statKeys));
     const orphans = TEAM_STAT_LABELS.map((l) => l.key).filter((k) => !grouped.has(k));
     expect(orphans).toEqual([]);
+  });
+});
+
+describe("formatTeamStat(2026-08-25 收敛的球队级统计格式化)", () => {
+  it('format:"km" 把米折算成公里,一位小数(121075 → "121.1km")', () => {
+    expect(formatTeamStat(121075, { key: "k", label: "l", format: "km" })).toBe("121.1km");
+  });
+
+  it('unit 是纯后缀:format:"num" + unit:"次" → "78次"', () => {
+    expect(formatTeamStat(78, { key: "k", label: "l", format: "num", unit: "次" })).toBe("78次");
+  });
+
+  it("缺失值恒为 —,不折算不补 0", () => {
+    expect(formatTeamStat(null, { key: "k", label: "l", format: "km" })).toBe("—");
+    expect(formatTeamStat(undefined, { key: "k", label: "l", format: "pct" })).toBe("—");
+  });
+
+  it("既有三种 format 行为不变(pct 取整加 %、num1 两位小数、num 取整)", () => {
+    expect(formatTeamStat(61.4, { key: "k", label: "l", format: "pct" })).toBe("61%");
+    expect(formatTeamStat(2.315, { key: "k", label: "l", format: "num1" })).toBe("2.31");
+    expect(formatTeamStat(13.6, { key: "k", label: "l", format: "num" })).toBe("14");
   });
 });
 

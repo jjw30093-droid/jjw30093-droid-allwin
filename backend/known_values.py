@@ -71,14 +71,11 @@ def table_type_is_known(value: str) -> bool:
 # 告警口径 = extra_json 键 ∉ (match_report.TEAM_STAT_KEYS ∪ 本集合)——
 # 正是这套机制此前缺失,让球队级 physical_metrics_* 在库里躺了数月无人知晓。
 TEAM_EXTRA_JSON_KNOWN_UNPROJECTED = frozenset({
-    # 球队级体能五键(仅英超少量场次有;投影计划见射门/跑动那一轮的方案)
-    "physical_metrics_distance_covered", "physical_metrics_walking",
-    "physical_metrics_running", "physical_metrics_sprinting",
-    "physical_metrics_number_of_sprints",
-    # 来源 UI 分组表头伪键,恒为 null(match_report.py 头部注释的既有认定)
+    # 来源 UI 分组表头伪键,恒为 null(match_report.py 头部注释的既有认定)。
+    # 球队级体能五键与进攻区域三键 2026-08-25 已转正进 match_report.py 的
+    # TEAM_STAT_KEYS_PHYSICAL / TEAM_STAT_KEYS_ZONES(合并视图 TEAM_STAT_KEYS
+    # 含它们,G14 口径不变),按转正流程从本集合移除。
     "shots", "defense", "duels", "discipline", "physical_metrics",
-    # 进攻区域三键(采集方案已批,落库后转正进 TEAM_STAT_KEYS)
-    "attacking_zone_left", "attacking_zone_center", "attacking_zone_right",
 })
 
 # G13 扫描清单:(表, 列, 校验器)。校验器返回 True=已知。

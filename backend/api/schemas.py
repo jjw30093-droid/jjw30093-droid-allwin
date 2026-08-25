@@ -862,9 +862,13 @@ class MatchReportShot(BaseModel):
     # 未 100% 验证,前端必须容忍 None。
     blocked_x: Optional[float] = None
     blocked_y: Optional[float] = None
-    # 疑似 FotMob 内部"球门框局部坐标"(goal_crossed_z 是高度,2D 俯视球场图
-    # 没有这根轴),量纲/原点未经验证——不是 105x68 球场坐标系,前端不得
-    # 未经验证直接当球场坐标换算使用。
+    # 球门线穿越点(2026-08-25 已对生产 fact_shotmap 真实数值验证语义):
+    # goal_crossed_y 是球场 Y 坐标(球门跨 34±3.66 = 30.34..37.66;射正
+    # 结果全部落在框内 [31.26, 37.66],Post 落在框沿,Miss 散布 [17.41,
+    # 62.16] 即框外),goal_crossed_z 是离地高度(米,横梁 2.44)。前端可
+    # 按该语义换算(见 GoalMouthDiagram.normalizeGoalMouthPoint);缺失时
+    # 恒为 None,不得补 0。on_goal_shot_* 仍是 FotMob 内部"球门框局部
+    # 坐标",量纲未验证,不得直接换算。
     goal_crossed_y: Optional[float] = None
     goal_crossed_z: Optional[float] = None
     on_goal_shot_x: Optional[float] = None
@@ -948,6 +952,18 @@ class MatchReportTeamStat(BaseModel):
     fouls: Optional[float] = None
     yellow_cards: Optional[float] = None
     red_cards: Optional[float] = None
+    # 球队级体能(2026-08-25 转正投影;仅英超少量场次覆盖,缺失恒为 None)。
+    # 距离类单位是米(与球员级同),展示层折算 km;沒有 topspeed/jogging。
+    physical_metrics_distance_covered: Optional[float] = None
+    physical_metrics_running: Optional[float] = None
+    physical_metrics_sprinting: Optional[float] = None
+    physical_metrics_walking: Optional[float] = None
+    physical_metrics_number_of_sprints: Optional[float] = None
+    # 进攻区域(2026-08-25 新采集;整数百分比,左/中/右三分区占比,来源
+    # content.attackingZones 按时段并进 extra_json;缺失恒为 None,不补 0)。
+    attacking_zone_left: Optional[float] = None
+    attacking_zone_center: Optional[float] = None
+    attacking_zone_right: Optional[float] = None
 
 
 class MatchReportPlayerStat(BaseModel):

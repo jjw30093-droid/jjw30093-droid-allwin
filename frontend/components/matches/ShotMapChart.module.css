@@ -22,6 +22,60 @@
   font-weight: 600;
 }
 
+/* 形状图例(2026-08-25 标记改形状后必须有——此前用户没有任何地方能查到
+ * 形状含义)。颜色语义由 .legendHome/.legendAway 承担,这里只讲形状,
+ * 样例统一中性 --ink-2。字号 12px 是 §11.2 用户可见文字硬下限。 */
+.shapeLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.shapeItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shapeIcon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+/* 常驻可点击性提示(删除 hover tooltip 后唯一的交互提示,兼任面板空态说明) */
+.hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* 详情面板滑开/收起:grid 行高过渡,未选中时 0 高不占位(此前空面板占
+ * ~93px);不做 JS 高度测量。 */
+.panelSlot {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.18s ease;
+}
+
+.panelSlot[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.panelSlot > * {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panelSlot {
+    transition: none;
+  }
+}
+
 /* 球场底图是 FootballPitchBackground(SVG,variant="neutral"),铺满本容器,
  * 与图表 0..105/0..68 逻辑坐标 1:1 对齐(图表 grid 四边距为 0,轴范围即球场
  * 边界;SVG viewBox 同样是 "0 0 105 68",两者共用同一个坐标域,不需要额外

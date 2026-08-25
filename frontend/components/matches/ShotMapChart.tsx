@@ -1,8 +1,14 @@
 "use client";
 
 /**
- * 单场射门图(ECharts scatter,唯一图表库,复用底层 EChart 封装;不进
+ * 单场射门图(ECharts custom 系列,唯一图表库,复用底层 EChart 封装;不进
  * SpecCharts——那是 analysis_bundle.chart_specs 的封闭类型联合)。
+ *
+ * 2026-08-25 标记形状改版(对齐 FotMob):进球=足球图案、射正=实心圆、
+ * 未射正(偏出/中框/被封堵)=空心圈,不再用"描边粗细"区分。两条 scatter
+ * 合并成一条 custom 系列(进球排最后画在最上层);hover tooltip 整块删除
+ * (与点击详情面板同信息两套渲染,手机上还是伪交互),可发现性由球场下方
+ * 常驻提示行承担。
  *
  * 坐标约定(30 场真实抽样验证的 FotMob 原始数据行为,详见
  * backend/queries/match_report.py 模块注释):主客队射门都朝同一端(x→105)
@@ -46,19 +52,6 @@ export function outcomeLabelFor(s: Shot): string {
   return SHOT_OUTCOME_ZH[s.outcome ?? ""] ?? s.outcome ?? "";
 }
 
-function shotTooltip(s: Shot): string {
-  const parts = [
-    `${s.player_name ?? s.player_id}${s.minute != null ? ` ${s.minute}'` : ""}`,
-    `${outcomeLabelFor(s)} · xG ${s.xg?.toFixed(3) ?? "—"}`,
-  ];
-  const detail = [
-    s.situation ? SHOT_SITUATION_ZH[s.situation] ?? s.situation : null,
-    s.shot_type ? SHOT_TYPE_ZH[s.shot_type] ?? s.shot_type : null,
-  ].filter(Boolean);
-  if (detail.length) parts.push(detail.join(" · "));
-  return parts.join("<br/>");
-}
-
 type SideFilter = "both" | "home" | "away";
 type OutcomeFilter = "all" | "on_target" | "goal";
 type HalfFilter = "all" | "first" | "second";
@@ -81,6 +74,75 @@ function isOnTarget(s: Shot): boolean {
   return s.is_blocked == null ? true : !s.is_blocked;
 }
 
+/* ── 标记形状(2026-08-25,纯函数抽出供测试直接断言,CLAUDE.md §11.3) ── */
+
+export type MarkerKind = "goal" | "on_target" | "off_target";
+
+/** 结果 → 标记形态。射正口径复用既有 isOnTarget(含 is_blocked 精确/退化
+ * 两档)——图上的形状语义必须与"射正"筛选按钮同一口径,不另造第二套。 */
+export function markerKindFor(s: Shot): MarkerKind {
+  if (s.outcome === "Goal") return "goal";
+  return isOnTarget(s) ? "on_target" : "off_target";
+}
+
+/** 单位圆坐标系(-1..1)下的足球图案:中心五边形 + 5 块边缘楔形。
+ * 调用方按 cx/cy/r 缩放。纯几何,零依赖,可单测。顶点朝上(-90°),
+ * 楔形落在五边形顶点之间的间隙方向(+36° 相位),是经典 2D 足球剪影。 */
+export function ballPatchPolygons(): [number, number][][] {
+  const polys: [number, number][][] = [];
+  const deg = (d: number) => (d * Math.PI) / 180;
+  // 中心五边形(半径 0.42)
+  const pentagon: [number, number][] = [];
+  for (let k = 0; k < 5; k++) {
+    const a = deg(-90 + k * 72);
+    pentagon.push([0.42 * Math.cos(a), 0.42 * Math.sin(a)]);
+  }
+  polys.push(pentagon);
+  // 5 块边缘楔形(内沿 r=0.66 宽、外沿 r=0.98 窄的等腰梯形)
+  for (let k = 0; k < 5; k++) {
+    const a = deg(-90 + 36 + k * 72);
+    const wedge: [number, number][] = [
+      [0.66 * Math.cos(a - deg(22)), 0.66 * Math.sin(a - deg(22))],
+      [0.66 * Math.cos(a + deg(22)), 0.66 * Math.sin(a + deg(22))],
+      [0.98 * Math.cos(a + deg(13)), 0.98 * Math.sin(a + deg(13))],
+      [0.98 * Math.cos(a - deg(13)), 0.98 * Math.sin(a - deg(13))],
+    ];
+    polys.push(wedge);
+  }
+  return polys;
+}
+
+/** 进球必须有可读最小直径:xG=0.03 的进球按 symbolSize() 只有 7.7px,
+ * 球形图案在那个尺寸下不可辨识。空心圈也要下限,否则 2px 环几乎糊死。 */
+const GOAL_MIN_D = 18;
+const RING_MIN_D = 9;
+export function markerRadius(s: Shot, kind: MarkerKind): number {
+  const d = symbolSize(s.xg);
+  return Math.max(d, kind === "goal" ? GOAL_MIN_D : RING_MIN_D) / 2;
+}
+
+/** 进球排最后 → custom 系列按 dataIndex 顺序绘制,进球画在最上层
+ * (scatter 双系列时代做不到)。Array.sort 是稳定排序,非进球相对顺序不变。
+ * buildOption 与组件的点击处理都必须用这同一个排序,dataIndex 才对得上。 */
+export function orderShotsForRender(plotted: Shot[]): Shot[] {
+  return [...plotted].sort(
+    (a, b) => Number(markerKindFor(a) === "goal") - Number(markerKindFor(b) === "goal"),
+  );
+}
+
+/** 点击参数 → 被点中的射门。`.shot` 为主(custom 系列实测原样透传 data
+ * 对象,有真实点击测试确认,见 frontend/tests/shot-map-click.test.ts)、
+ * `dataIndex` 为兜底——后者不依赖任何 ECharts 透传行为,只要求调用方传入
+ * 与 buildOption 相同的 orderShotsForRender 结果。 */
+export function resolveClickedShot(params: unknown, ordered: Shot[]): Shot | null {
+  const p = params as { data?: { shot?: Shot }; dataIndex?: number; seriesName?: string };
+  if (p?.data?.shot) return p.data.shot;
+  if (p?.seriesName === "shots" && typeof p?.dataIndex === "number") {
+    return ordered[p.dataIndex] ?? null;
+  }
+  return null;
+}
+
 /**
  * 纯筛选:只做"少显示一些",绝不改动任何一次射门的数值。
  * 统计数字随筛选结果重算 —— 筛选后的 xG 合计就是所选子集的合计,
@@ -94,11 +156,6 @@ function mirrorPoint(isHome: boolean, x: number, y: number): [number, number] {
   return isHome ? [x, y] : [PITCH_LEN - x, PITCH_WID - y];
 }
 
-const toPoint = (s: Shot) => {
-  const [x, y] = mirrorPoint(s.is_home, s.x!, s.y!);
-  return { value: [x, y], shot: s };
-};
-
 /** 球门宽 7.32m,中心 y=34(与 backend/queries/match_report.py 模块注释同一
  * 口径实测验证过)。 */
 const GOAL_CENTER_Y = 34;
@@ -108,12 +165,17 @@ const GOAL_CENTER_Y = 34;
  *
  * 优先级:
  *  1. is_blocked 且 blocked_x/blocked_y 均非空 → 封堵点(真实坐标)。
- *  2. 否则 outcome==='Goal' 或 is_on_target===true → 退化到球门正中
- *     (x=105,y=34)——goal_crossed_y/z、on_goal_shot_* 疑似 FotMob 内部
- *     "球门框局部坐标"(goal_crossed_z 是高度,2D 俯视球场图没有这根轴),
- *     量纲/原点未经真实数值验证,不直接当球场坐标使用(见后端 fotmob_client.py
- *     同日期注释)。
- *  3. 否则(未被封堵的非精确在框内球)→ null,没有可信终点。
+ *  2. 否则 outcome==='Goal' 或 is_on_target===true:
+ *     a. goal_crossed_y 非空且在球场宽度域 [0,68] 内 → 真实球门线穿越点
+ *        (x=105,y=goal_crossed_y)。语义 2026-08-25 已对生产 fact_shotmap
+ *        数值验证:goal_crossed_y 就是球场 Y 坐标(球门跨 30.34..37.66,
+ *        射正样本全部落在框内),这是**已验证映射**,与 GoalMouthDiagram
+ *        画的入网位置同源,不会出现"轨迹指正中、球门框图指左下角"的自相
+ *        矛盾;
+ *     b. goal_crossed_y 缺失(旧场次未采集)→ **兜底**退化到球门正中
+ *        (x=105,y=34)——轨迹线需要一个终点才能画,兜底不是验证过的
+ *        真实落点,只是"朝门方向"的示意。
+ *  3. 否则(未被封堵的非射正球)→ null,没有可信终点。
  */
 export function trajectoryEndpoint(
   s: Shot,
@@ -122,6 +184,9 @@ export function trajectoryEndpoint(
     return { x: s.blocked_x, y: s.blocked_y, blocked: true };
   }
   if (s.outcome === "Goal" || s.is_on_target === true) {
+    if (s.goal_crossed_y != null && s.goal_crossed_y >= 0 && s.goal_crossed_y <= PITCH_WID) {
+      return { x: PITCH_LEN, y: s.goal_crossed_y, blocked: false };
+    }
     return { x: PITCH_LEN, y: GOAL_CENTER_Y, blocked: false };
   }
   return null;
@@ -194,7 +259,9 @@ export function buildShotMapSummary(args: {
     // xG"是两个独立来源,数值可能有细微差异——分别命名,不用同一个"xG"混称。
     `射门图:${homeName}(攻向右)${h.n} 次射门、${h.goals} 球、射门图 xG 合计 ${xgText(h)};` +
     `${awayName}(攻向左)${a.n} 次射门、${a.goals} 球、射门图 xG 合计 ${xgText(a)}。` +
-    `圆点大小与该次射门 xG 成正比,描边更粗为进球。` +
+    // 形状图例语义必须与图上真实画法一致(§11.3:图例文字不能和图对不上)。
+    `标记形状:足球图案为进球,实心圆为射正,空心圈为未射正(偏出、中框或被封堵);` +
+    `标记大小与该次射门 xG 成正比,进球与小 xG 标记设有最小可读尺寸。` +
     (ownGoalTotal > 0
       ? `其中 ${ownGoalTotal} 球为乌龙球,计入受益方球数,不计入射门图 xG。`
       : "") +
@@ -212,9 +279,20 @@ export function buildShotMapSummary(args: {
 
 /** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。
  * selected 非空时,如果它有可信轨迹终点(trajectoryEndpoint 非 null),
- * 追加一个 silent 的 custom 系列手绘轨迹线——silent:true 是必须的,不这样
- * 现有 tooltip.formatter 会对没有 .shot 字段的轨迹线数据点抛异常(渲染
- * 冒烟测试测不出这个坑,冒烟测试不模拟 hover,这里手动规避)。 */
+ * 追加一个 silent 的 custom 系列手绘轨迹线。
+ *
+ * 2026-08-25 标记改版:两条 scatter 合并成一条 custom 系列 "shots",按
+ * markerKindFor 画三种形状。配色纪律(数字见 frontend/tests/
+ * shot-map-contrast.test.ts 的逐条断言):
+ *   - 空心圈环色 = 球队色(resolveMatchColors 已对 c.pitchBg 校验过 ≥3:1,
+ *     品牌回退色实测 4.70~5.53),lineWidth 2 + RING_MIN_D 保证环画得出来;
+ *   - 足球图案色 = c.pitchBg(球场"负空间"色)而**不是** c.ink——墨色
+ *     图案压在球队色球体上四个组合全部 <3:1(浅 2.95/2.56、深 2.16/2.07);
+ *   - 外圈描边 = c.ink(跟主题反向,vs 球场底 ≥11:1);
+ *   - 所有 style 显式 opacity: 1——ECharts scatter 的 itemStyle.opacity
+ *     **默认是 0.8**,此前从未显式设为 1,线上真实渲染的对比度比测试
+ *     fixture 按 alpha=1 断言的低一档(teal 4.70→3.34)。custom 系列探针
+ *     确认不加默认透明度,仍显式写 1,让 fixture 的 alpha=1 是事实不是假设。 */
 export function buildOption(
   plotted: Shot[],
   homeName: string,
@@ -222,28 +300,53 @@ export function buildOption(
   c: ChartColors,
   selected?: Shot | null,
 ): EChartsOption {
-  const seriesOf = (isHome: boolean, color: string) =>
-    plotted
-      .filter((s) => s.is_home === isHome)
-      .map((s) => ({
-        ...toPoint(s),
-        symbolSize: symbolSize(s.xg),
-        // 2026-08-24:球场底改中性色(FootballPitchBackground variant="neutral",
-        // 见该文件顶部 FotMob 实测说明)后,标记不再需要靠半透明去"融进"草坪——
-        // 那正是上次改配色时非进球点变隐形的原因(合成后对比度只有 1.09~1.17:1)。
-        // 现在两种结果都不透明 + 描边,只用描边粗细区分进球:
-        //   进球   = 更粗的描边(强调,与 FotMob layer-list 单独一张 goal
-        //            drawable 同一思路——进球必须一眼跳出来);
-        //   非进球 = 细描边,与中性球场底天然可辨。
-        // 描边颜色用 c.ink(--ink)而不是硬编码白色——白色描边在浅色中性球场
-        // (#F8FAFA)上实测只有 1.05:1(近乎白压白,等于没描);--ink 浅色模式深
-        // /深色模式亮,永远跟当前主题的球场底色反向,两个主题都 ≥11:1(见
-        // frontend/tests/shot-map-contrast.test.ts)。
-        itemStyle:
-          s.outcome === "Goal"
-            ? { color, borderColor: c.ink, borderWidth: 2.5 }
-            : { color, borderColor: c.ink, borderWidth: 1 },
-      }));
+  const ordered = orderShotsForRender(plotted);
+  const markerSeries: EChartsOption["series"] = [
+    {
+      type: "custom",
+      name: "shots", // resolveClickedShot 用它区分轨迹线系列
+      cursor: "pointer",
+      data: ordered.map((s) => ({ value: mirrorPoint(s.is_home, s.x!, s.y!), shot: s })),
+      renderItem: (params, api) => {
+        const s = ordered[params.dataIndex];
+        if (!s) return null;
+        const kind = markerKindFor(s);
+        const [cx, cy] = api.coord([api.value(0) as number, api.value(1) as number]);
+        const r = markerRadius(s, kind);
+        const color = s.is_home ? c.teal : c.navy; // 已经过 resolveMatchColors
+
+        if (kind === "off_target") {
+          return {
+            type: "circle",
+            shape: { cx, cy, r },
+            style: { fill: "none", stroke: color, lineWidth: 2, opacity: 1 },
+          } as unknown as CustomSeriesRenderItemReturn;
+        }
+        if (kind === "on_target") {
+          return {
+            type: "circle",
+            shape: { cx, cy, r },
+            style: { fill: color, stroke: c.ink, lineWidth: 1, opacity: 1 },
+          } as unknown as CustomSeriesRenderItemReturn;
+        }
+        return {
+          type: "group",
+          children: [
+            {
+              type: "circle",
+              shape: { cx, cy, r },
+              style: { fill: color, stroke: c.ink, lineWidth: 1.5, opacity: 1 },
+            },
+            ...ballPatchPolygons().map((pts) => ({
+              type: "polygon",
+              shape: { points: pts.map(([px, py]) => [cx + px * r, cy + py * r]) },
+              style: { fill: c.pitchBg, opacity: 1 },
+            })),
+          ],
+        } as unknown as CustomSeriesRenderItemReturn;
+      },
+    },
+  ];
 
   // 轨迹线:只在选中射门有可信终点数据时才追加这个系列,没有可信数据就
   // 干脆不加(不是加一个空系列)——这正是"缺失终点数据就静默不画线"的
@@ -254,6 +357,11 @@ export function buildOption(
       ? [
           {
             type: "custom",
+            // silent:true 必须保留:轨迹线覆盖在标记上,不 silent 会抢走
+            // 它压住的那些标记的点击事件(点击详情面板的唯一入口)。
+            // (2026-08-25 前这里的理由写的是"防 tooltip.formatter 对无
+            // .shot 数据点抛异常"——tooltip 已整块删除,那个理由不复存在,
+            // 但 silent 本身不能跟着删。)
             silent: true,
             data: [
               [
@@ -298,20 +406,18 @@ export function buildOption(
         ]
       : [];
 
+  // homeName/awayName 不再对应独立系列(合并成一条 custom),仅保留在函数
+  // 签名里维持既有调用形状——图例由 DOM 层渲染,不走 ECharts legend。
+  void homeName;
+  void awayName;
   return {
     grid: { left: 0, right: 0, top: 0, bottom: 0 },
     xAxis: { type: "value", min: 0, max: PITCH_LEN, show: false },
     yAxis: { type: "value", min: 0, max: PITCH_WID, show: false },
-    tooltip: {
-      trigger: "item",
-      formatter: (p) =>
-        shotTooltip((p as unknown as { data: { shot: Shot } }).data.shot),
-    },
-    series: [
-      { name: homeName, type: "scatter", data: seriesOf(true, c.teal) },
-      { name: awayName, type: "scatter", data: seriesOf(false, c.navy) },
-      ...trajectorySeries,
-    ],
+    // 不配置 tooltip(2026-08-25 删除):悬停信息与点击详情面板是同一批
+    // 字段两套渲染路径,且手机上 touch 会同时触发 hover 和 click,弹框和
+    // 面板一起出现。可发现性由球场下方常驻提示行 + cursor:"pointer" 承担。
+    series: [...markerSeries, ...trajectorySeries],
   };
 }
 
@@ -440,6 +546,17 @@ export function ShotMapChart({
   const activeSelected = resolveSelectedShot(plotted, selected);
   const option = buildOption(plotted, homeName, awayName, effectiveColors, activeSelected);
 
+  // Esc 关闭详情面板(2026-08-25,"无法清除选中"修复的键盘路径;鼠标路径
+  // 是面板右上角的关闭按钮)。只在真的有选中时挂监听。
+  useEffect(() => {
+    if (isExport || !activeSelected) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelected(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isExport, activeSelected]);
+
   if (plottable.length === 0) {
     return <p className={styles.empty}>该场比赛暂无射门位置数据。</p>;
   }
@@ -460,7 +577,9 @@ export function ShotMapChart({
   // 避免热链头像跨源污染 html-to-image 的 canvas(见 PlayerAvatar.tsx 头部
   // 注释),筛选控件本来也在导出模式隐藏,同一个 isExport 判断复用。
   const handleChartClick = (params: unknown) => {
-    const clicked = (params as { data?: { shot?: Shot } })?.data?.shot;
+    // 与 buildOption 使用同一个 orderShotsForRender 排序,dataIndex 兜底
+    // 路径才对得上号(见 resolveClickedShot 注释)。
+    const clicked = resolveClickedShot(params, orderShotsForRender(plotted));
     if (clicked) setSelected(clicked);
   };
   const activeIndex = activeSelected ? plotted.indexOf(activeSelected) : -1;
@@ -577,6 +696,37 @@ export function ShotMapChart({
           {awayName}(攻向左)
         </span>
       </div>
+      {/* 形状图例(2026-08-25):颜色语义由上面的队名图例承担,这里只讲
+          形状,统一用中性 --ink-2 画样例(足球图案的负空间用 --surface,
+          与图上"球体色 + 负空间图案"的结构一致);文字 12px 下限(§11.2)。
+          语义同一句话也在下方文字摘要里,图例不 aria-hidden 图标即可。 */}
+      <div className={styles.shapeLegend}>
+        <span className={styles.shapeItem}>
+          <svg viewBox="-1.2 -1.2 2.4 2.4" className={styles.shapeIcon} aria-hidden>
+            <circle cx={0} cy={0} r={1} fill="var(--ink-2)" />
+            {ballPatchPolygons().map((pts, i) => (
+              <polygon
+                key={i}
+                points={pts.map(([px, py]) => `${px},${py}`).join(" ")}
+                fill="var(--surface)"
+              />
+            ))}
+          </svg>
+          进球
+        </span>
+        <span className={styles.shapeItem}>
+          <svg viewBox="-1.2 -1.2 2.4 2.4" className={styles.shapeIcon} aria-hidden>
+            <circle cx={0} cy={0} r={1} fill="var(--ink-2)" />
+          </svg>
+          射正
+        </span>
+        <span className={styles.shapeItem}>
+          <svg viewBox="-1.2 -1.2 2.4 2.4" className={styles.shapeIcon} aria-hidden>
+            <circle cx={0} cy={0} r={0.85} fill="none" stroke="var(--ink-2)" strokeWidth={0.3} />
+          </svg>
+          未射正(偏出/中框/被封堵)
+        </span>
+      </div>
       <div className={styles.pitchWrap}>
         <FootballPitchBackground variant="neutral" />
         {plotted.length === 0 && (
@@ -594,24 +744,37 @@ export function ShotMapChart({
           />
         )}
       </div>
+      {/* 常驻一行小字(2026-08-25):同时承担 (a) 详情面板未选中时的空态
+          说明;(b) 删掉 hover tooltip 后唯一的可点击性提示——没有它,
+          点击交互完全不可发现。 */}
+      {!isExport && <p className={styles.hint}>点击任意射门点查看详情</p>}
       {/* 可见文字摘要固定在球场下方(EChart 内置的那份在球场层里隐藏,
           避免把装饰线的百分比定位基准拉歪;aria-label 仍在图表上) */}
       <p className="chart-summary">{summary}</p>
       {!isExport && (
-        <ShotDetailPanel
-          shot={activeSelected}
-          homeName={homeName}
-          awayName={awayName}
-          homeCrestUrl={homeCrestUrl}
-          awayCrestUrl={awayCrestUrl}
-          shirtNumberByPlayerId={shirtNumberByPlayerId}
-          onPrev={() => goToOffset(-1)}
-          onNext={() => goToOffset(1)}
-          hasPrev={plotted.length > 1}
-          hasNext={plotted.length > 1}
-          position={activeIndex >= 0 ? activeIndex + 1 : null}
-          total={plotted.length}
-        />
+        /* 面板出现/消失走 grid 行高过渡(不做 JS 高度测量),未选中时
+           不占任何高度;面板在球场下方,展开只推动其下的小节,不推球场。 */
+        <div className={styles.panelSlot} data-open={activeSelected != null}>
+          <div>
+            <ShotDetailPanel
+              shot={activeSelected}
+              homeName={homeName}
+              awayName={awayName}
+              homeCrestUrl={homeCrestUrl}
+              awayCrestUrl={awayCrestUrl}
+              homeColor={resolved.home}
+              awayColor={resolved.away}
+              shirtNumberByPlayerId={shirtNumberByPlayerId}
+              onPrev={() => goToOffset(-1)}
+              onNext={() => goToOffset(1)}
+              onClose={() => setSelected(null)}
+              hasPrev={plotted.length > 1}
+              hasNext={plotted.length > 1}
+              position={activeIndex >= 0 ? activeIndex + 1 : null}
+              total={plotted.length}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

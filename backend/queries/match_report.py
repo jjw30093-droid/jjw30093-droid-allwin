@@ -25,9 +25,15 @@ import sqlite3
 from backend.queries.league_stats import _player_i18n_map
 
 # extra_json 来源 key → DTO 字段名(白名单;§10.3 要求响应有静态 schema,
-# 不能把动态 dict 原样透传)。37 个 key 是 2026-08 对真实库全量核对的结果;
-# 来源新增的 key 不会自动出现在响应里——需要时在这里显式加。
-TEAM_STAT_KEYS: dict[str, str] = {
+# 不能把动态 dict 原样透传)。核心 37 个 key 是 2026-08 对真实库全量核对的
+# 结果;来源新增的 key 不会自动出现在响应里——需要时在这里显式加。
+#
+# 2026-08-25 拆成三份 + 一个合并视图(见文件下方 TEAM_STAT_KEYS):
+# - CORE:赛前近 N 场聚合(team_form.py)与单场报告共用;
+# - PHYSICAL / ZONES:只在单场报告里投影,不进赛前聚合——体能/进攻区域
+#   覆盖率低(体能仅英超少量场次),算进"近 10 场均值"永远是 n=0 的空指标,
+#   纯噪声。拆白名单让"这些 key 为什么不进赛前聚合"由代码结构本身说清楚。
+TEAM_STAT_KEYS_CORE: dict[str, str] = {
     "BallPossesion": "possession",              # 来源拼写如此(少一个 s),不是笔误
     "expected_goals": "expected_goals",
     "expected_goals_open_play": "expected_goals_open_play",
@@ -65,6 +71,34 @@ TEAM_STAT_KEYS: dict[str, str] = {
     "fouls": "fouls",
     "yellow_cards": "yellow_cards",
     "red_cards": "red_cards",
+}
+
+# 球队级体能五键(2026-08-25 转正,自 known_values.TEAM_EXTRA_JSON_
+# KNOWN_UNPROJECTED 移入;生产实测仅英超 95 场有 Period='All' 覆盖,
+# walking+running+sprinting 恰好等于 distance_covered;团队级没有
+# topspeed/jogging——那两个只在球员级有)。只进单场报告,不进赛前聚合。
+TEAM_STAT_KEYS_PHYSICAL: dict[str, str] = {
+    "physical_metrics_distance_covered":  "physical_metrics_distance_covered",
+    "physical_metrics_running":           "physical_metrics_running",
+    "physical_metrics_sprinting":         "physical_metrics_sprinting",
+    "physical_metrics_walking":           "physical_metrics_walking",
+    "physical_metrics_number_of_sprints": "physical_metrics_number_of_sprints",
+}
+
+# 进攻区域三键(2026-08-25 转正;来源 content.attackingZones,整数百分比,
+# 采集端按时段并进 fact_team_match_stats.extra_json,见
+# backend/fotmob_client.py::parse_team_stats_records)。只进单场报告。
+TEAM_STAT_KEYS_ZONES: dict[str, str] = {
+    "attacking_zone_left":   "attacking_zone_left",
+    "attacking_zone_center": "attacking_zone_center",
+    "attacking_zone_right":  "attacking_zone_right",
+}
+
+# 单场报告投影用的完整白名单(质量门 G14 的"已投影"口径也用这份合并视图)。
+TEAM_STAT_KEYS: dict[str, str] = {
+    **TEAM_STAT_KEYS_CORE,
+    **TEAM_STAT_KEYS_PHYSICAL,
+    **TEAM_STAT_KEYS_ZONES,
 }
 
 # usual_position_id → 位置分组(已用 fact_player_match_stats.is_goalkeeper

@@ -70,8 +70,26 @@ describe("射门落点标记 vs 中性球场底色 合成对比度(同主题组�
     expect(contrastRatio(composite(navy, pitch, 1), pitch)).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 
-  it.each(THEMES)("$label:标记描边(--ink)≥ 3:1(进球/非进球共用同一描边色)", ({ pitch, ink }) => {
+  // 2026-08-25 起描边只用于实心圆(射正)与足球外圈(进球);空心圈的环色
+  // 是球队色,不再有 --ink 描边——描述随之改写,数值断言不变。
+  it.each(THEMES)("$label:实心圆/足球外圈描边(--ink)vs 球场底 ≥ 3:1", ({ pitch, ink }) => {
     expect(contrastRatio(ink, pitch)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  });
+
+  /* ── 2026-08-25 标记形状改版新增断言(方案 §2) ────────────────────── */
+
+  // 数值与上面"不透明填色"两条相同,但语义不同(空心圈的**环线**色 vs
+  // 填充色)——单独命名,日后有人把空心环改成灰色时这条才会挂掉。
+  it.each(THEMES)("$label:空心圈环色(球队色)vs 球场底 ≥ 3:1", ({ pitch, teal, navy }) => {
+    expect(contrastRatio(teal, pitch)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(navy, pitch)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  });
+
+  // 前景压前景(此前完全没有的一类断言):足球图案(pitchBg 负空间色)画在
+  // 球队色球体上,必须自己够对比,不能只测"标记 vs 背景"。
+  it.each(THEMES)("$label:足球图案色(pitchBg)vs 球体色(球队色)≥ 3:1", ({ pitch, teal, navy }) => {
+    expect(contrastRatio(pitch, teal)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(pitch, navy)).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 
   it("回归护栏 1:半透明(2026-08-23 的真实失败配置)必须被这份测试判定不达标", () => {
@@ -88,5 +106,31 @@ describe("射门落点标记 vs 中性球场底色 合成对比度(同主题组�
     const white = hexToRgb("#ffffff");
     const lightPitch = hexToRgb("#f8fafa");
     expect(contrastRatio(white, lightPitch)).toBeLessThan(MIN_CONTRAST);
+  });
+
+  it.each(THEMES)(
+    "回归护栏 3($label):墨色图案画在球队色球体上不达标——所以足球图案用 pitchBg 而不是 ink",
+    ({ ink, teal, navy }) => {
+      // 实测:浅色 ink vs teal 2.95 / ink vs navy 2.56,深色 2.16 / 2.07,
+      // 四个组合全部 <3:1——把深色墨点画在球队色球体上是"看着顺眼但不达标"
+      // 的典型(方案 §1.5 的数字)。与回归护栏 1/2 同一体例:证明测试能
+      // 抓到这条本次真实踩过的坑,而不是只测正确答案。
+      expect(contrastRatio(ink, teal)).toBeLessThan(MIN_CONTRAST);
+      expect(contrastRatio(ink, navy)).toBeLessThan(MIN_CONTRAST);
+    },
+  );
+
+  it("回归护栏 4:ECharts scatter 默认 opacity 0.8 会实质性降低合成对比度——标记必须显式 opacity: 1", () => {
+    // 2026-08-25 实测发现的既有缺陷:scatter 的 itemStyle.opacity 默认 0.8,
+    // ShotMapChart 从未显式设 1,线上真实渲染 teal 合成后只有 3.34(测试
+    // fixture 按 alpha=1 断言的是 4.70)。resolveMatchColors 拿 @1.0 的
+    // 球队色去比 3.0 阈值,一个恰好 3.05 的球队色经 0.8 合成后 ≈2.4——低于
+    // 本项目硬规则却没有任何测试能抓到。custom 系列所有 style 显式
+    // opacity: 1(探针确认 <circle> 输出无 opacity 属性),让 fixture 的
+    // alpha=1 是事实而不是假设。
+    const lightPitch = hexToRgb("#f8fafa");
+    const teal = hexToRgb("#087e78");
+    const composed = composite(teal, lightPitch, 0.8);
+    expect(contrastRatio(composed, lightPitch)).toBeLessThan(4.7);
   });
 });

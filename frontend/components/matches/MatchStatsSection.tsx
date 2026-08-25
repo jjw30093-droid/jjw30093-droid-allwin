@@ -14,7 +14,12 @@
 import { Fragment, useState } from "react";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { RatingChip } from "@/components/matches/RatingChip";
-import { TEAM_STAT_GROUPS, TEAM_STAT_LABELS } from "@/components/matches/zh";
+import {
+  TEAM_STAT_GROUPS,
+  TEAM_STAT_LABELS,
+  formatTeamStat,
+  type TeamStatLabel,
+} from "@/components/matches/zh";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import styles from "./MatchStatsSection.module.css";
 
@@ -22,16 +27,12 @@ type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type TeamStat = MatchReport["team_stats"][number];
 type PlayerStat = MatchReport["player_stats"][number];
 
-function fmt(v: number | null | undefined, format: "pct" | "num" | "num1"): string {
-  if (v == null) return "—";
-  if (format === "pct") return `${Math.round(v)}%`;
-  if (format === "num1") return v.toFixed(2);
-  return String(Math.round(v));
-}
+// 数值格式化收敛到 zh.ts::formatTeamStat(2026-08-25:此前这里和
+// TopStatsCard 各写了一份相同的 fmt,新增 "km" 前先消掉重复)。
 
 const LABEL_BY_KEY = new Map(TEAM_STAT_LABELS.map((l) => [l.key, l]));
 
-type Row = { key: string; label: string; format: "pct" | "num" | "num1"; hv: number | null; av: number | null };
+type Row = { key: string; meta: TeamStatLabel; hv: number | null; av: number | null };
 
 function buildRows(statKeys: string[], home: TeamStat, away: TeamStat): Row[] {
   return statKeys
@@ -40,7 +41,7 @@ function buildRows(statKeys: string[], home: TeamStat, away: TeamStat): Row[] {
       if (!meta) return null;
       const hv = (home as Record<string, unknown>)[key] as number | null;
       const av = (away as Record<string, unknown>)[key] as number | null;
-      return { key, label: meta.label, format: meta.format, hv, av };
+      return { key, meta, hv, av };
     })
     .filter((r): r is Row => r != null && (r.hv != null || r.av != null)); // 两边都缺 → 来源没有这项,跳过
 }
@@ -59,9 +60,9 @@ function CompareRowList({ rows }: { rows: Row[] }) {
         return (
           <li key={r.key} className={styles.compareRow}>
             <div className={styles.compareHeader}>
-              <span className={`${styles.compareValue} num`}>{fmt(r.hv, r.format)}</span>
-              <span className={styles.compareLabel}>{r.label}</span>
-              <span className={`${styles.compareValue} num`}>{fmt(r.av, r.format)}</span>
+              <span className={`${styles.compareValue} num`}>{formatTeamStat(r.hv, r.meta)}</span>
+              <span className={styles.compareLabel}>{r.meta.label}</span>
+              <span className={`${styles.compareValue} num`}>{formatTeamStat(r.av, r.meta)}</span>
             </div>
             {!bothMissing && (
               <div className={styles.barTrack} aria-hidden>

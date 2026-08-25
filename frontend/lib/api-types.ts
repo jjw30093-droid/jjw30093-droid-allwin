@@ -3296,6 +3296,22 @@ export interface components {
             yellow_cards?: number | null;
             /** Red Cards */
             red_cards?: number | null;
+            /** Physical Metrics Distance Covered */
+            physical_metrics_distance_covered?: number | null;
+            /** Physical Metrics Running */
+            physical_metrics_running?: number | null;
+            /** Physical Metrics Sprinting */
+            physical_metrics_sprinting?: number | null;
+            /** Physical Metrics Walking */
+            physical_metrics_walking?: number | null;
+            /** Physical Metrics Number Of Sprints */
+            physical_metrics_number_of_sprints?: number | null;
+            /** Attacking Zone Left */
+            attacking_zone_left?: number | null;
+            /** Attacking Zone Center */
+            attacking_zone_center?: number | null;
+            /** Attacking Zone Right */
+            attacking_zone_right?: number | null;
         };
         /**
          * MatchReportTopRated

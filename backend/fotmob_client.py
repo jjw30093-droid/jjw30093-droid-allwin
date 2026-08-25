@@ -886,11 +886,15 @@ class FotMobClient:
             球场坐标系，可直接用于画轨迹线终点。真正被封堵的射门这两列是否
             确实非空未 100% 验证（本地样本 Is_Blocked 均为 0），消费方必须
             按"任一为 None 就不画线"处理，不得假设必然有值。
-          - Goal_Crossed_Y/Goal_Crossed_Z、On_Goal_Shot_X/Y/Zoom_Ratio:
-            球门线穿越点，疑似 FotMob 内部"球门框局部坐标"（Goal_Crossed_Z
-            是高度，2D 俯视球场图没有这根轴）——不是 105x68 球场坐标系，
-            量纲/原点未经真实数值核实。先存不代表可以直接当球场坐标使用，
-            消费方（前端）不得未经验证直接换算。
+          - Goal_Crossed_Y/Goal_Crossed_Z:球门线穿越点。2026-08-25 已对
+            生产 fact_shotmap 真实数值验证过语义：Goal_Crossed_Y 是球场 Y
+            坐标（球门跨 34±3.66 = 30.34..37.66；射正结果 Goal n=22 /
+            AttemptSaved n=104 全部落在 [31.26, 37.66]，Post n=5 落在框沿
+            [30.27, 37.74]，Miss n=79 散布 [17.41, 62.16] 即框外），
+            Goal_Crossed_Z 是离地高度（米，横梁 2.44；射正样本 ∈
+            [0.04, 2.2]，Miss 可达 7.6）。消费方可按该语义换算，缺失值仍
+            必须如实置 None，不得补 0。On_Goal_Shot_X/Y/Zoom_Ratio 仍是
+            FotMob 内部"球门框局部坐标"，量纲未验证，不得直接换算。
 
         2026-08-24 补齐(migrations/core/0010,修乌龙球归属真 bug):
           - Is_Own_Goal: APK ShotMapShot 第 21 字段 isOwnGoal,与已取的 11 个
@@ -926,9 +930,10 @@ class FotMobClient:
                 "Keeper_ID":           s.get("keeperId"),
                 # 2026-08-24 补齐(画射门轨迹线所需):Blocked_X/Blocked_Y 与
                 # X_Coord/Y_Coord 同一原始球场坐标系,可直接镜像使用。
-                # Goal_Crossed_Y/Z、On_Goal_Shot_* 疑似 FotMob 内部"球门框
-                # 局部坐标"(Z 是高度,2D 俯视球场图没有这根轴)——量纲/原点
-                # 未经真实数值验证,消费方不得直接当球场坐标换算,只能先存。
+                # Goal_Crossed_Y/Z 语义 2026-08-25 已对生产 fact_shotmap
+                # 真实数值验证:Y=球场 Y 坐标(球门跨 30.34..37.66),
+                # Z=离地高度(米,横梁 2.44)——详见上方 docstring 的样本数字。
+                # On_Goal_Shot_* 仍是 FotMob 内部"球门框局部坐标",未验证。
                 "Blocked_X":               s.get("blockedX"),
                 "Blocked_Y":               s.get("blockedY"),
                 "Goal_Crossed_Y":          s.get("goalCrossedY"),
@@ -1047,6 +1052,19 @@ class FotMobClient:
             "FirstExtraHalf": "FirstHalfExtra",
             "SecondExtraHalf": "SecondHalfExtra",
         }
+        # 进攻区域(2026-08-25):content.attackingZones 是 content 顶层 key
+        # (不在 stats.Periods 里),形状为
+        # {"home": {"total": {"left": 33, "center": 29, "right": 38},
+        #           "firstHalf": {...}, "secondHalf": {...}}, "away": {...}}
+        # (整数百分比;真实 payload 实测)。按时段并进对应 Period 行——
+        # All→total / FirstHalf→firstHalf / SecondHalf→secondHalf;来源缺失
+        # 时该 key 整个不写(不补 0,CLAUDE.md §6.2),落库端会把非核心列
+        # 自动收进 extra_json(见 backend/ingest/ingest_match.py)。
+        attacking_zones = content.get("attackingZones") or {}
+        _ZONE_PERIOD_KEY = {
+            "All": "total", "FirstHalf": "firstHalf", "SecondHalf": "secondHalf",
+        }
+
         records = []
         for period_name, p_data in periods_data.items():
             period_name = _PERIOD_NORMALIZE.get(period_name, period_name)
@@ -1073,6 +1091,15 @@ class FotMobClient:
                             as_[k] = float(str(v[1]).split("%")[0].split("(")[0].strip())
                         except Exception:
                             hs[k], as_[k] = v[0], v[1]
+
+            zone_period = _ZONE_PERIOD_KEY.get(period_name)
+            if zone_period:
+                for rec, side in ((hs, "home"), (as_, "away")):
+                    side_zones = (attacking_zones.get(side) or {}).get(zone_period) or {}
+                    for zone in ("left", "center", "right"):
+                        zv = side_zones.get(zone)
+                        if zv is not None:
+                            rec[f"attacking_zone_{zone}"] = zv
 
             records.extend([hs, as_])
 

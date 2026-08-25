@@ -1,0 +1,114 @@
+.wrap {
+  width: 100%;
+}
+
+.legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+
+.legendHome {
+  font-weight: 700;
+}
+
+.legendAway {
+  font-weight: 600;
+}
+
+/* 与 ShotMapChart.module.css 的 .pitchWrap 同一约定:SVG 底图 + 叠加层
+ * 共用 0..105/0..68 坐标域,容器维持球场纵横比。 */
+.pitchWrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 105 / 68;
+  background: var(--pitch-neutral-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.bandLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 百分比徽章:绝对定位 HTML(不用 SVG 文字,防非等比拉伸);文字压在
+ * 半透明色带上,给徽章一块面板底色保证任意球队色下都可读。 */
+.badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+
+.badgeLabel {
+  font-size: 12px; /* §11.2 用户可见文字硬下限 */
+  color: var(--ink-2);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.badgeValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.noData {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+/* 时段切换:同 MatchStatsSection 的 periodSegmented 观感(组件级复制,
+ * 该样式尚无共享模块;两处都是 12px 起的胶囊段控件)。 */
+.periodSegmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.periodOn,
+.periodOff {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.periodOn {
+  background: var(--brand-teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+.periodOn + .periodOn,
+.periodOn + .periodOff,
+.periodOff + .periodOn,
+.periodOff + .periodOff {
+  border-left: 1px solid var(--border-strong);
+}

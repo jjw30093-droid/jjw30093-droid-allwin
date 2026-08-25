@@ -6,9 +6,11 @@ status='NotStarted' 的比赛精确为 0 行——未开赛比赛唯一能用的
 数据只有模型预测(未来 7 天覆盖 0 场)和 NowGoal 赔率(未来 7 天 47/78 场)。
 第三条路是把两队各自的历史比赛聚合成赛前画像,这是本模块的全部职责。
 
-字段沿用 backend/queries/match_report.py::TEAM_STAT_KEYS 同一份白名单——
-那是已经对真实库全量核对过的 37 个 key,本模块不重新定义一份可能漂移的
-副本。是否对匿名/免费用户可见由调用方(API 路由层)按 entitlement 投影,
+字段沿用 backend/queries/match_report.py::TEAM_STAT_KEYS_CORE 同一份白名单
+——那是已经对真实库全量核对过的核心 37 个 key,本模块不重新定义一份可能
+漂移的副本。2026-08-25 起 match_report 另有 PHYSICAL/ZONES 两份低覆盖
+白名单(体能仅英超少量场次、进攻区域为新采集),那些只进单场报告投影,
+刻意不进本模块的近 N 场聚合——算进来永远是 n=0 的空指标,纯噪声。是否对匿名/免费用户可见由调用方(API 路由层)按 entitlement 投影,
 本模块只管"数据本身是什么",不做权限判断。
 
 诚实纪律(不可放松):
@@ -25,7 +27,7 @@ import json
 import sqlite3
 from typing import Literal
 
-from backend.queries.match_report import TEAM_STAT_KEYS
+from backend.queries.match_report import TEAM_STAT_KEYS_CORE as TEAM_STAT_KEYS
 
 MIN_SAMPLE = 3
 Scope = Literal["same_league", "all"]

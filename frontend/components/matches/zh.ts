@@ -176,9 +176,31 @@ export const REFEREE_AVERAGE_TYPE_ZH: Record<string, string> = {
   above: "高于平均水平",
 };
 
+/** 球队数据对比行的条目形状(2026-08-25 抽出命名类型:formatTeamStat 与
+ * MatchStatsSection/TopStatsCard 共用,不再各写一份漂移的内联联合)。 */
+export type TeamStatLabel = {
+  key: string;
+  label: string;
+  /** "km":来源单位是米,展示折算成公里(121075 → "121.1km")。 */
+  format: "pct" | "num" | "num1" | "km";
+  /** 纯后缀,不改变数值(如 "次");与 MatchStatsSection 里球员级
+   * DetailField.unit 同一约定,不另造第二套。 */
+  unit?: string;
+};
+
+/** 球队级统计数值的唯一格式化出口(2026-08-25 收敛:此前 MatchStatsSection
+ * 与 TopStatsCard 各写了一份完全相同的 fmt,加新 format 前先消掉重复)。 */
+export function formatTeamStat(v: number | null | undefined, meta: TeamStatLabel): string {
+  if (v == null) return "—";
+  if (meta.format === "pct") return `${Math.round(v)}%`;
+  if (meta.format === "num1") return v.toFixed(2);
+  if (meta.format === "km") return `${(v / 1000).toFixed(1)}km`;
+  return `${Math.round(v)}${meta.unit ?? ""}`;
+}
+
 /** 球队数据对比行(顺序即展示顺序;format 决定数值渲染方式)。
  * key 与 MatchReportTeamStat 的字段名一一对应(Pydantic 单一真源生成)。 */
-export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "num" | "num1" }[] = [
+export const TEAM_STAT_LABELS: TeamStatLabel[] = [
   { key: "possession", label: "控球率", format: "pct" },
   // "官方统计 xG"取自 FotMob 团队统计接口,与统计 tab 下方射门图自行按
   // shots[] 求和的"射门图 xG 合计"是两个独立来源,分别命名(不同名混称
@@ -234,6 +256,15 @@ export const TEAM_STAT_LABELS: { key: string; label: string; format: "pct" | "nu
   { key: "offsides", label: "越位", format: "num" },
   { key: "yellow_cards", label: "黄牌", format: "num" },
   { key: "red_cards", label: "红牌", format: "num" },
+  // 球队级体能(2026-08-25 转正投影;仅英超少量场次覆盖,两侧全缺时整组
+  // 不渲染——MatchStatsSection 的既有诚实降级)。中文标签沿用同页球员级
+  // PLAYER_DETAIL_GROUPS 的既有措辞,同一概念不出现两个叫法;来源单位是米,
+  // 球队级数值太大(10 万米级),折算 km 展示。
+  { key: "physical_metrics_distance_covered", label: "跑动距离", format: "km" },
+  { key: "physical_metrics_running", label: "中高速跑动", format: "km" },
+  { key: "physical_metrics_sprinting", label: "冲刺跑动", format: "km" },
+  { key: "physical_metrics_walking", label: "步行", format: "km" },
+  { key: "physical_metrics_number_of_sprints", label: "冲刺次数", format: "num", unit: "次" },
 ];
 
 /** 球队数据的分组(2026-08-23 对照 FotMob 官方安卓包核实:队级统计在 FotMob
@@ -288,6 +319,16 @@ export const TEAM_STAT_GROUPS: { key: string; label: string; statKeys: string[] 
   {
     key: "discipline", label: "纪律",
     statKeys: ["yellow_cards", "red_cards", "fouls"],
+  },
+  // 放最后(FotMob 自己 Physical performance 也是最后一组);覆盖率低的
+  // 场次两侧全 null → buildRows 过滤后整组自动不渲染,无需额外开关。
+  {
+    key: "physical", label: "跑动",
+    statKeys: [
+      "physical_metrics_distance_covered", "physical_metrics_running",
+      "physical_metrics_sprinting", "physical_metrics_walking",
+      "physical_metrics_number_of_sprints",
+    ],
   },
 ];
 

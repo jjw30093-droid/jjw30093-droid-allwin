@@ -4,21 +4,9 @@
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--surface);
-  min-height: 68px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.panel[data-empty="true"] {
-  align-items: center;
-  justify-content: center;
-}
-
-.placeholder {
-  margin: 0;
-  color: var(--ink-3);
-  font-size: 13.5px;
 }
 
 .nav {
@@ -51,10 +39,25 @@
   font-size: 12.5px;
 }
 
+.navRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .body {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  flex-wrap: wrap; /* 窄屏球门框示意图换行到下方 */
+}
+
+/* 球门框示意图:宽屏在右侧,窄屏(flex-wrap)自动落到下一行。
+ * GoalMouthDiagram 渲染空态文案时同样只占一行小字,不撑面板。 */
+.goalMouth {
+  flex: 1 1 160px;
+  min-width: 150px;
+  max-width: 220px;
 }
 
 .info {

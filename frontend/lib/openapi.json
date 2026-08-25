@@ -12876,6 +12876,94 @@
        }
       ],
       "title": "Red Cards"
+     },
+     "physical_metrics_distance_covered": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Distance Covered"
+     },
+     "physical_metrics_running": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Running"
+     },
+     "physical_metrics_sprinting": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Sprinting"
+     },
+     "physical_metrics_walking": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Walking"
+     },
+     "physical_metrics_number_of_sprints": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Physical Metrics Number Of Sprints"
+     },
+     "attacking_zone_left": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Attacking Zone Left"
+     },
+     "attacking_zone_center": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Attacking Zone Center"
+     },
+     "attacking_zone_right": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Attacking Zone Right"
      }
     },
     "type": "object",

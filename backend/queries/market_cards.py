@@ -16,7 +16,7 @@ no_calibration 21%,见 docs/current-state.md):在不碰 predictor 定义、不�
 结论区判定字段(B6)的前提下,把已经算出来但此前被丢弃的数据点亮——
 market.lines 全量标定结果(``lines[]``)、calibrated_at、no_calibration 的
 原因细分,以及折叠归因区补充的高阶指标(``_EXTRA_DRIVER_KEYS_BY_MARKET``,
-零新查询,复用 team_recent_profile 已经算出的全部 TEAM_STAT_KEYS)。
+零新查询,复用 team_recent_profile 已经算出的全部 TEAM_STAT_KEYS_CORE)。
 """
 
 from __future__ import annotations
@@ -136,7 +136,8 @@ def _line_calibration(
 
 
 # Fix 3(数据倾向卡片填充):team_recent_profile 每次请求都算出全部
-# TEAM_STAT_KEYS(37 个),折叠归因区此前只展示 calibrate_markets.py 里的
+# TEAM_STAT_KEYS_CORE(核心 37 个;体能/进攻区域低覆盖键不进赛前聚合,
+# 见 match_report.py 2026-08-25 拆分注释),折叠归因区此前只展示 calibrate_markets.py 里的
 # predictor_key + driver_keys 这一小部分。按市场相关性补充几个已经算好但
 # 被丢弃的高阶指标——纯展示层追加,同一份 profile 内已有,零新查询,不修改
 # calibrate_markets.py(B1/本次不改清单)。accurate_crosses(角球)已经在

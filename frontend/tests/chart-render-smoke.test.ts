@@ -42,14 +42,20 @@ const COLORS: ChartColors = {
  * 碰巧不崩。 */
 const NON_BRAND_COLORS: ChartColors = { ...COLORS, teal: "#f13c26", navy: "#104070" };
 
-/** 真实渲染一次 option,抛异常即测试失败;返回画出的 <path> 数,便于额外
- * 断言"至少画出点东西"(而不是异常被吞掉后返回一个空壳)。 */
+/** 真实渲染一次 option,抛异常即测试失败;返回画出的可见图元数,便于额外
+ * 断言"至少画出点东西"(而不是异常被吞掉后返回一个空壳)。
+ *
+ * 2026-08-25:计数口径从只数 `<path` 扩成全部可见图元——射门图标记从
+ * scatter(symbol → `<path>`)换成 custom 系列后,zrender 的元素→SVG 映射
+ * 是 circle→`<circle>`、polygon→`<polygon>`、line→`<path>`(实测),只数
+ * `<path` 会把画出来的标记全部漏计。这是让计数口径对上实际渲染,不是降低
+ * 断言(返回值语义不变:画出的图元数)。 */
 function renderOrThrow(option: echarts.EChartsOption): number {
   const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 920, height: 200 });
   try {
     chart.setOption(option);
     const svg = chart.renderToSVGString();
-    return (svg.match(/<path/g) || []).length;
+    return (svg.match(/<(path|circle|polygon|rect|line|image)\b/g) || []).length;
   } finally {
     chart.dispose();
   }
