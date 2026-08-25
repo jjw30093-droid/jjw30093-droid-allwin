@@ -15,11 +15,13 @@ import pytest
 from backend import notify as notify_mod
 from backend.db.connections import connect_rw
 from backend.ingest.physical_stats_poll import (
+    CANDIDATE_WINDOW_HOURS,
     MAX_CHECKS,
     VALID_DISTANCE_THRESHOLD_M,
     CheckpointDecision,
     due_checkpoint,
     is_valid_distance,
+    within_candidate_window,
 )
 
 
@@ -75,6 +77,51 @@ class TestDueCheckpoint:
     def test_returns_checkpoint_decision_dataclass(self):
         d = due_checkpoint(T_KICKOFF, 0, False, False, "2026-08-01T18:00:00Z")
         assert isinstance(d, CheckpointDecision)
+
+    def test_multi_year_old_match_never_due_real_incident_regression(self):
+        """2026-08-25 真实生产事故的直接回归测试:上线首次运行时,
+        _candidate_rows() 没有按 kickoff 时间过滤,库里全部历史 Finish
+        英超比赛(2020 年至今)都因为"没有状态行"满足候选条件,due_checkpoint()
+        当时也只判断下限(elapsed_hours >= 6),对一场 2020 年的比赛同样返回
+        due=True——已经对 42 场历史比赛触发了不必要的 ingest_match() 重抓才
+        被人工发现并紧急停服务。这里直接用事故复现的真实开球时间钉住修复:
+        checks_done=0(从未检查过,和事故现场完全一致的状态)+ 一场六年前的
+        比赛,必须返回 not due,理由是超出候选窗口,而不是"due_checkpoint_1"。
+        """
+        d = due_checkpoint(
+            "2020-09-12T00:00:00Z", 0, False, False, "2026-08-25T18:05:21Z"
+        )
+        assert d.due is False
+        assert d.reason == "kickoff_outside_candidate_window"
+
+
+class TestWithinCandidateWindow:
+    def test_no_kickoff_false(self):
+        assert within_candidate_window(None, "2026-08-25T00:00:00Z") is False
+
+    def test_just_inside_window_true(self):
+        from datetime import datetime, timedelta, timezone
+        now = datetime(2026, 8, 25, 18, 0, 0, tzinfo=timezone.utc)
+        kickoff = now - timedelta(hours=CANDIDATE_WINDOW_HOURS - 0.01)
+        assert within_candidate_window(
+            kickoff.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        ) is True
+
+    def test_just_outside_window_false(self):
+        from datetime import datetime, timedelta, timezone
+        now = datetime(2026, 8, 25, 18, 0, 0, tzinfo=timezone.utc)
+        kickoff = now - timedelta(hours=CANDIDATE_WINDOW_HOURS + 0.01)
+        assert within_candidate_window(
+            kickoff.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        ) is False
+
+    def test_years_old_kickoff_false(self):
+        assert within_candidate_window("2020-09-12T00:00:00Z", "2026-08-25T18:05:21Z") is False
+
+    def test_future_kickoff_false(self):
+        """kickoff 晚于 now(比如时钟偏差/脏数据)同样不该判定在候选窗口内——
+        elapsed_hours 为负,不是"刚完赛"的正常状态。"""
+        assert within_candidate_window("2026-08-26T00:00:00Z", "2026-08-25T18:00:00Z") is False
 
 
 # ── is_valid_distance() ─────────────────────────────────────────────────
@@ -269,3 +316,35 @@ class TestNonEplMatchUntouched:
             "SELECT 1 FROM physical_stats_poll_state WHERE match_id=?", (match_id,)
         ).fetchone()
         assert row is None, "非英超比赛不应创建状态行"
+
+
+class TestOldMatchNeverTouchedRealIncidentRegression:
+    """2026-08-25 真实生产事故的端到端回归:直接复现事故现场——一场没有
+    状态行(从未被本任务处理过)、开球时间是六年前的英超已完赛比赛,跑
+    run_due() 必须完全不触碰它(既不建状态行,也不调用 ingest_match())。
+    这条测试覆盖的是 _candidate_rows() 的 SQL 层过滤,不是 due_checkpoint()
+    纯函数本身——事故当时正是 SQL 层完全没有时间过滤,才把 due_checkpoint()
+    从未设计要处理的输入(六年前的 kickoff)喂了进去。"""
+
+    def test_ancient_finished_match_untouched_on_first_ever_run(
+        self, conn_core, monkeypatch, alert_calls
+    ):
+        monkeypatch.setenv("NOTIFY_ENABLED", "0")
+        match_id = 700004
+        _seed_match(conn_core, match_id, EPL, "2020-09-12T00:00:00Z", season="2020/2021")
+        _seed_stats(conn_core, match_id, None, None)
+
+        calls = _stub_ingest_match(monkeypatch, None, lambda mid: None)
+
+        from backend.cli.poll_physical_stats import run_due
+
+        # 首次上线运行,状态表整表为空——正是事故复现的初始条件。
+        result = run_due(now_iso="2026-08-25T18:05:21Z")
+        assert result["acted"] == 0
+        assert calls == [], "开球时间早已超出候选窗口的比赛不得触发 ingest_match"
+
+        row = conn_core.execute(
+            "SELECT 1 FROM physical_stats_poll_state WHERE match_id=?", (match_id,)
+        ).fetchone()
+        assert row is None, "超出候选窗口的比赛不应创建状态行"
+        assert len(alert_calls) == 0

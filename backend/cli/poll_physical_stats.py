@@ -35,10 +35,12 @@ EPL 比赛的行)——candidate 查询本身用 LEFT JOIN 覆盖"还没有状�
 import argparse
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 
 from backend.db.connections import connect_rw, tx
 from backend.db.util import utc_now_iso
 from backend.ingest.physical_stats_poll import (
+    CANDIDATE_WINDOW_HOURS,
     PHYSICAL_STATS_LEAGUE_IDS,
     due_checkpoint,
     is_valid_distance,
@@ -47,10 +49,30 @@ from backend.ingest.physical_stats_poll import (
 ALERT_SOURCE = "physical_stats_poll_exhausted"
 
 
-def _candidate_rows(conn) -> list:
-    """Finish + 联赛范围内 + 有精确 kickoff + 尚未 resolved/exhausted 的比赛,
-    含还没有状态行的(LEFT JOIN 两侧皆 NULL 时天然满足"未 resolved 未
-    exhausted")。"""
+def _candidate_rows(conn, now_iso: str) -> list:
+    """Finish + 联赛范围内 + 有精确 kickoff + 开球时间落在候选窗口内 +
+    尚未 resolved/exhausted 的比赛,含还没有状态行的(LEFT JOIN 两侧皆 NULL
+    时天然满足"未 resolved 未 exhausted")。
+
+    2026-08-25 真实生产事故修复:这里曾经没有任何按 kickoff 时间的过滤,
+    首次上线时把库里全部历史 Finish 英超比赛(2020 年至今)当成候选,批量
+    对多年前的比赛触发 ingest_match() 重抓(见 backend/ingest/
+    physical_stats_poll.py::CANDIDATE_WINDOW_HOURS 的详细事故记录)。现在
+    SQL 层先用 kickoff_at_utc 落在 [now-CANDIDATE_WINDOW_HOURS, now] 内做
+    一次硬过滤,再交给 Python 层的 due_checkpoint()(该函数内部也有等价的
+    上限校验,双保险)。
+
+    边界值特意在 Python 里算好再作为字符串传入,不用 SQLite 的 datetime()——
+    kickoff_at_utc 存储格式是 ISO 'T'/'Z'(如 "2026-08-24T19:00:00Z"),而
+    datetime() 产出的是空格分隔、无时区后缀的格式(如 "2026-08-23 18:05:21");
+    两种格式做 TEXT 比较时,'T'(0x54)恒大于空格(0x20),会导致任何 ISO 'T'
+    格式的时间戳都被判定"大于"任何 datetime() 输出——这正是
+    tests/backend/test_data_hygiene_gates.py::
+    test_timestamp_hygiene_after_migration 已经钉住过的同一类字符串比较
+    陷阱,这里不能重蹈覆辙。"""
+    window_start_iso = (
+        _parse_now(now_iso) - timedelta(hours=CANDIDATE_WINDOW_HOURS)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
     placeholders = ",".join("?" for _ in PHYSICAL_STATS_LEAGUE_IDS)
     rows = conn.execute(
         f"""
@@ -64,12 +86,18 @@ def _candidate_rows(conn) -> list:
         WHERE dm.status = 'Finish'
           AND dm.League_ID IN ({placeholders})
           AND dm.kickoff_at_utc IS NOT NULL
+          AND dm.kickoff_at_utc >= ?
+          AND dm.kickoff_at_utc <= ?
           AND s.resolved_at IS NULL
           AND s.exhausted_at IS NULL
         """,
-        tuple(PHYSICAL_STATS_LEAGUE_IDS),
+        (*PHYSICAL_STATS_LEAGUE_IDS, window_start_iso, now_iso),
     ).fetchall()
     return rows
+
+
+def _parse_now(now_iso: str) -> datetime:
+    return datetime.fromisoformat(now_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
 def _ensure_state_row(conn, match_id: int, league_id: int, kickoff_at_utc: str, now_iso: str) -> None:
@@ -202,7 +230,7 @@ def run_due(now_iso: str | None = None) -> dict:
     now_iso = now_iso or utc_now_iso()
     conn = connect_rw("core")
     try:
-        candidates = _candidate_rows(conn)
+        candidates = _candidate_rows(conn, now_iso)
         results = []
         for row in candidates:
             try:

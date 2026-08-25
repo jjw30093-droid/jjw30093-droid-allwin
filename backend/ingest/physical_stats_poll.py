@@ -39,6 +39,18 @@ PHYSICAL_STATS_LEAGUE_IDS: frozenset[int] = frozenset({47})
 CHECKPOINT_HOURS: tuple[float, ...] = (6.0, 12.0, 24.0)
 MAX_CHECKS = len(CHECKPOINT_HOURS)
 
+# 候选池的开球时间上限(小时):超过这个窗口的比赛永远不再进入候选池,不管
+# 有没有状态行。2026-08-25 真实生产事故:_candidate_rows() 最初只用状态行
+# 是否存在筛候选(LEFT JOIN 两侧皆 NULL 即入选),而 due_checkpoint() 只判断
+# "够没够 N 小时"这个下限、没有上限——首次上线时数据库里所有历史 Finish
+# 英超比赛(2020 年至今)都满足"没有状态行",于是把六年前的比赛也当成刚
+# 完赛的在处理,已经对 2020 赛季批量触发 ingest_match() 重抓,人工发现后
+# 立即停服务、禁用定时器,处理了 42 场后止损(ingest_match 列作用域幂等
+# 写入,未造成数据损坏,纯粹浪费代理请求)。24h(最后一个检查点)+24h
+# 缓冲 = 48h:检查点 3 之后再晚到的 tick 不该把一场已经错过完整检查窗口的
+# 比赛当成"刚发现的新比赛"从头查起。
+CANDIDATE_WINDOW_HOURS = 48.0
+
 # "有效/终值"判定阈值(米)。真实队伍总跑动距离约 95000-125000 米;早期
 # partial 值只有 4000-9500 米量级,50000 是站长指定的、明显区分两者的分界。
 VALID_DISTANCE_THRESHOLD_M = 50000.0
@@ -58,6 +70,24 @@ class CheckpointDecision:
 _NOT_DUE_NO_KICKOFF = CheckpointDecision(False, None, "no_kickoff_at_utc")
 _NOT_DUE_RESOLVED = CheckpointDecision(False, None, "already_resolved")
 _NOT_DUE_EXHAUSTED = CheckpointDecision(False, None, "already_exhausted")
+
+
+def within_candidate_window(kickoff_at_utc: str | None, now_iso: str) -> bool:
+    """开球时间是否还落在候选窗口(CANDIDATE_WINDOW_HOURS)内——超窗的比赛
+    永远不应该进入检查点判断,不管它有没有状态行、checks_done 是多少。
+    这是"候选池"这一层的判断,`_candidate_rows()` 的 SQL 应该做等价的时间
+    过滤(SQL 层先挡一道,避免把六年的历史比赛都拉进 Python 层再逐条丢弃);
+    这里额外在 `due_checkpoint()` 内部也生效一次,双保险,防止未来任何新
+    调用方绕过 SQL 过滤直接调纯函数。"""
+    if not kickoff_at_utc:
+        return False
+    kickoff = _parse_iso(kickoff_at_utc)
+    now = _parse_iso(now_iso)
+    elapsed_hours = (now - kickoff).total_seconds() / 3600.0
+    return 0 <= elapsed_hours <= CANDIDATE_WINDOW_HOURS
+
+
+_NOT_DUE_TOO_OLD = CheckpointDecision(False, None, "kickoff_outside_candidate_window")
 
 
 def due_checkpoint(
@@ -88,6 +118,8 @@ def due_checkpoint(
         return _NOT_DUE_NO_KICKOFF
     if checks_done >= MAX_CHECKS:
         return CheckpointDecision(False, None, "checks_exhausted_pending_finalize")
+    if not within_candidate_window(kickoff_at_utc, now_iso):
+        return _NOT_DUE_TOO_OLD
 
     checkpoint = checks_done + 1  # 1-based,供人读 & 落库
     required_hours = CHECKPOINT_HOURS[checks_done]
