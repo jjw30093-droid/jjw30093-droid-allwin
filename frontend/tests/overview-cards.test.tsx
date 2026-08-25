@@ -119,6 +119,7 @@ describe("TopRatedCard(最高评分)", () => {
           is_home: true,
           rating: 7.7,
           shirt_number: "9",
+          is_official: false,
         }}
         homeName="主队"
         awayName="客队"

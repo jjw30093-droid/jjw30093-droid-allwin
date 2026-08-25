@@ -12988,6 +12988,22 @@
        }
       ],
       "title": "Pitch Y"
+     },
+     "pitch_w": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pitch W"
+     },
+     "is_player_of_the_match": {
+      "type": "boolean",
+      "title": "Is Player Of The Match",
+      "default": false
      }
     },
     "type": "object",
@@ -14336,7 +14352,14 @@
       "title": "Is Home"
      },
      "rating": {
-      "type": "number",
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
       "title": "Rating"
      },
      "shirt_number": {
@@ -14349,6 +14372,11 @@
        }
       ],
       "title": "Shirt Number"
+     },
+     "is_official": {
+      "type": "boolean",
+      "title": "Is Official",
+      "default": false
      }
     },
     "type": "object",
@@ -14356,11 +14384,10 @@
      "player_id",
      "name",
      "team_id",
-     "is_home",
-     "rating"
+     "is_home"
     ],
     "title": "MatchReportTopRated",
-    "description": "全场评分最高的一名球员(总览「最高评分」卡,2026-08-24)。\n\n评分来自 fact_match_lineup.rating(FotMob 球员评分)。库里没有官方\nisPlayerOfTheMatch 标志,标题语义是「最高评分」,不冒充官方 MOTM 评选。\n并列最高分取 player_id 字典序较小者(确定性,见\nbackend/queries/match_report.py::_top_rated)。"
+    "description": "总览「最佳球员/最高评分」卡(2026-08-25 修订)。\n\nis_official=True:FotMob 官方 playerOfTheMatch 标志命中(全库覆盖\n13045/13050 场、每场恰好一个),前端标题用「最佳球员」;\nis_official=False:官方标志缺失时退回全场最高 fact_match_lineup.rating,\n前端标题用「最高评分」,不冒充官方评选。并列最高分取 player_id 字典序\n较小者(确定性,见 backend/queries/match_report.py::_top_rated)。\nrating 理论上官方 MOTM 恒有值(全库 0 例外),仍设 Optional 防御来源\n缺失——缺失时前端不渲染评分胶囊,不编造数字。"
    },
    "MatchReportUnavailableDTO": {
     "properties": {

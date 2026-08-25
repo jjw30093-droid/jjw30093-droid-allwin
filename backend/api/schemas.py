@@ -875,8 +875,18 @@ class MatchReportLineupPlayer(BaseModel):
     rating: Optional[float] = None               # fact_match_lineup.rating(评分唯一真源)
     sub_in_time: Optional[int] = None
     sub_out_time: Optional[int] = None
-    pitch_x: Optional[float] = None              # 0..1 归一化站位(来源已解好,仅首发有)
+    # 0..1 归一化站位(来源已解好,仅首发有)。2026-08-25 起取
+    # extra_json.verticalLayout(纵向双队球场,对齐 FotMob 原生恒纵向布局):
+    # x 是横向轴(0.5=中路),y 是纵深轴(0.1=本方球门端→0.87=进攻端);
+    # 两队各自相对自己半场记录,主客镜像由前端渲染层做。
+    pitch_x: Optional[float] = None
     pitch_y: Optional[float] = None
+    # verticalLayout.width:该球员在本行独占的横向格宽(门将/单箭头=1、
+    # 四后卫=0.25),FotMob 原生用它约束姓名标签宽度防串行——是标签格尺寸
+    # **不是位置**,不得反推坐标。
+    pitch_w: Optional[float] = None
+    # FotMob 官方最佳球员标志(performance.playerOfTheMatch,每场恰好一个)。
+    is_player_of_the_match: bool = False
 
 
 class MatchReportLineupTeam(BaseModel):
@@ -961,20 +971,24 @@ class MatchReportShot(BaseModel):
 
 
 class MatchReportTopRated(BaseModel):
-    """全场评分最高的一名球员(总览「最高评分」卡,2026-08-24)。
+    """总览「最佳球员/最高评分」卡(2026-08-25 修订)。
 
-    评分来自 fact_match_lineup.rating(FotMob 球员评分)。库里没有官方
-    isPlayerOfTheMatch 标志,标题语义是「最高评分」,不冒充官方 MOTM 评选。
-    并列最高分取 player_id 字典序较小者(确定性,见
-    backend/queries/match_report.py::_top_rated)。
+    is_official=True:FotMob 官方 playerOfTheMatch 标志命中(全库覆盖
+    13045/13050 场、每场恰好一个),前端标题用「最佳球员」;
+    is_official=False:官方标志缺失时退回全场最高 fact_match_lineup.rating,
+    前端标题用「最高评分」,不冒充官方评选。并列最高分取 player_id 字典序
+    较小者(确定性,见 backend/queries/match_report.py::_top_rated)。
+    rating 理论上官方 MOTM 恒有值(全库 0 例外),仍设 Optional 防御来源
+    缺失——缺失时前端不渲染评分胶囊,不编造数字。
     """
 
     player_id: str
     name: str
     team_id: int
     is_home: bool
-    rating: float
+    rating: Optional[float] = None
     shirt_number: Optional[str] = None
+    is_official: bool = False
 
 
 class MatchReportTeamStat(BaseModel):

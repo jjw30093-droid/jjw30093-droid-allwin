@@ -17,7 +17,14 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import styles from "./MatchTabs.module.css";
 
-export type MatchTabKey = "shots" | "stats" | "lineup" | "events" | "overview";
+export type MatchTabKey =
+  | "shots"
+  | "stats"
+  | "lineup"
+  | "events"
+  | "overview"
+  | "analysis"
+  | "odds";
 
 /** 跨 tab 切换入口(2026-08-25):总览里的「查看全部数据 →」「查看完整
  * 时间线 →」需要切到统计/事件 tab。panels 是 ReactNode 插槽,天然渲染在
@@ -43,6 +50,12 @@ const TABS: { key: MatchTabKey; label: string }[] = [
   { key: "stats", label: "统计" },
   { key: "lineup", label: "阵容" },
   { key: "events", label: "事件" },
+  // 2026-08-25(站长要求):赛前的"数据可视化/赔率"不再堆在已完赛总览的
+  // 最下方,拆成两个独立 tab——「分析」= 风格/球员/射门三个历史聚合子页
+  // (预计阵容对已完赛不适用,不再渲染),「赔率」= 赛前赔率快照/关键变化,
+  // 与赛前三 tab 里的「赔率」同一套内容,位置对齐(都在最后)。
+  { key: "analysis", label: "分析" },
+  { key: "odds", label: "赔率" },
 ];
 
 export function MatchTabs({
@@ -51,12 +64,16 @@ export function MatchTabs({
   lineup,
   stats,
   events,
+  analysis,
+  odds,
 }: {
   shots: ReactNode;
   overview: ReactNode;
   lineup: ReactNode;
   stats: ReactNode;
   events: ReactNode;
+  analysis: ReactNode;
+  odds: ReactNode;
 }) {
   const [active, setActive] = useState<MatchTabKey>("overview");
 
@@ -80,7 +97,9 @@ export function MatchTabs({
     (document.getElementById(`match-tab-${TABS[next].key}`) as HTMLElement | null)?.focus();
   };
 
-  const panels: Record<MatchTabKey, ReactNode> = { shots, stats, lineup, events, overview };
+  const panels: Record<MatchTabKey, ReactNode> = {
+    shots, stats, lineup, events, overview, analysis, odds,
+  };
 
   return (
     <div className={styles.wrap}>

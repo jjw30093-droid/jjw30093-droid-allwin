@@ -15,30 +15,30 @@
  * 把它们提到组件顶层,不比照原始设计稿把它们塞进每一侧,那样会诱使未来的改动
  * 误以为两队可能有不同的 lineup_type。
  *
- * 球场图(2026-08-19 真修复 H7/H8,不再是止损):真实用户报告马竞 vs 马拉加
- * 一场把奥布拉克画成中卫、卡多索画成门将——根因是后端 _sorted_players 为了
- * hash 稳定按 id 重排过首发数组,数组顺序早就不代表场上位置,组件此前却把
- * starters[0] 当门将、按数组切片当各线。现在后端 extract_lineup_snapshot 会
- * 额外保留每名球员的归一化球场坐标(pos_x/pos_y,来自上游 verticalLayout,
- * 2026-08-19 新增),rowsFor 按坐标重新排序、分行、分列,不再依赖数组顺序——
- * 该字段上线前写入的旧快照没有坐标,rowsFor 对这类快照如实返回 null,组件
- * 退化成不画球场图(纯名单列表),不会用旧顺序继续画错位置。
- * (components/matches/PitchFormation.tsx 是赛后阵型图,那里有 extra_json 的
- *  归一化坐标,两者不是同一份数据,不要复用。)
+ * 球场图(2026-08-25 纵向化,站长验收返工):此前是"半场 + 主/客 tab 切换、
+ * 按阵型字符串分行"的旧结构——FotMob 原生 APP 的阵容图不论预计还是确认首发
+ * 都是**纵向双队同屏**(APK 反编译核实:Compose 自定义 Layout 按服务端
+ * verticalLayout 绝对定位,res/layout-land/ 无横屏变体)。现改为与赛后
+ * 「阵容」tab 共用 VerticalPitchFormation(两队上下各半、面对面),主/客
+ * tab 移除,教练/替补改两列并排(与赛后名单版式统一)。pos_x/pos_y 本来就
+ * 取自上游 verticalLayout(backend/providers/fotmob_snapshots.py),坐标
+ * 语义与赛后侧完全同源。该字段上线前写入的旧快照没有坐标,此时如实退化成
+ * 纯名单列表(不猜站位),不会按数组顺序画错位置。
  */
 
 "use client";
 
-import { useState } from "react";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
-import { FootballPitchBackground } from "./FootballPitchBackground";
+import {
+  VerticalPitchFormation,
+  type VerticalPitchSide,
+} from "./VerticalPitchFormation";
 import styles from "./ProjectedLineupSection.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import { formatBeijingDateTime } from "./zh";
 import type { components } from "@/lib/api-types";
 
 type LineupSide = components["schemas"]["MatchPreviewLineupSideDTO"];
-type Player = components["schemas"]["MatchPreviewPlayerDTO"];
 type SidelinedPlayer = components["schemas"]["MatchPreviewSidelinedPlayerDTO"];
 
 const REASON_ZH: Record<string, string> = {
@@ -46,15 +46,6 @@ const REASON_ZH: Record<string, string> = {
   suspension: "停赛",
   international: "国家队",
 };
-
-/** 拉丁名在球场图上取姓氏;中文名一律完整渲染,截断交给 CSS 省略号 —— slice 会砍掉姓。 */
-function pitchLabel(name: string): string {
-  if (/[A-Za-z]/.test(name)) {
-    const parts = name.trim().split(/\s+/);
-    return parts[parts.length - 1];
-  }
-  return name;
-}
 
 type LineupPresentation = {
   confirmed: boolean;
@@ -127,69 +118,109 @@ function describeLineup(lineupType: string | null, source: string | null): Lineu
   };
 }
 
-/**
- * 按 formation 分行:[门将] + 各线。formation 缺失或首发不足 11 人时退化为
- * 不画球场。
- *
- * 2026-08-19 修复(H8,真实用户报告:马竞 vs 马拉加球场图把奥布拉克画成中卫,
- * 卡多索画成门将)——此前按 side.starters 的数组顺序切片,但后端
- * _sorted_players 为了 hash 稳定按 id 重排过这个数组,数组顺序早就不代表
- * 场上位置,starters[0] 也不可靠是门将。现在改为按数据源真实给出的球场坐标
- * (pos_y 从小到大 = 从己方球门到对方球门,同一行内 pos_x 从小到大 = 从左到
- * 右)重新排序后再按阵型行数切片,不再依赖数组顺序。任一首发缺坐标(旧快照,
- * 该字段上线前写入)时如实返回 null——不能对一部分球员有真坐标、另一部分没有
- * 时还硬画,那样只是把"整体乱"换成"部分乱",一样是编造。
- */
-export function rowsFor(side: LineupSide): Player[][] | null {
-  if (!side.formation || side.starters.length < 11) return null;
-  const lines = side.formation.split("-").map(Number);
-  if (lines.some((n) => !Number.isInteger(n) || n <= 0)) return null;
-  if (side.starters.some((p) => p.pos_x == null || p.pos_y == null)) return null;
-  const ordered = [...side.starters].sort(
-    (a, b) => (a.pos_y as number) - (b.pos_y as number) || (a.pos_x as number) - (b.pos_x as number),
-  );
-  const rows: Player[][] = [[ordered[0]]];
-  let i = 1;
-  for (const n of lines) {
-    rows.push(ordered.slice(i, i + n));
-    i += n;
-  }
-  return rows;
+/** MatchPreviewLineupSideDTO → 纵向双队球场投影。pos_x/pos_y 即上游
+ * verticalLayout(与赛后侧同源);赛前 DTO 不带行格宽,共享组件会按同行
+ * 人数推导。side 为 null(该队无快照)时给空 players,球场组件只画另一队。 */
+function toPitchSide(side: LineupSide | null, name: string): VerticalPitchSide {
+  return {
+    name,
+    formation: side?.formation ?? null,
+    players: (side?.starters ?? []).map((p) => ({
+      key: String(p.id),
+      avatarId: p.id,
+      name: p.name,
+      shirtNumber: p.shirt_number,
+      x: p.pos_x,
+      y: p.pos_y,
+      w: null,
+    })),
+  };
 }
 
-function Pitch({ side, isHome }: { side: LineupSide; isHome: boolean }) {
-  const rows = rowsFor(side);
-  if (!rows) {
-    return (
-      <ul className={styles.plainList}>
-        {side.starters.map((p) => (
-          <li key={p.id} className={styles.plainRow}>
-            {p.name}
-          </li>
-        ))}
-      </ul>
-    );
-  }
+function plottableCount(side: LineupSide | null): number {
+  return (side?.starters ?? []).filter((p) => p.pos_x != null && p.pos_y != null).length;
+}
+
+/** 单队列(教练 + 无坐标时的首发纯名单 + 替补)——与赛后「阵容」tab 的
+ * TeamColumn 同一"两列并排"版式,阵容部分不再有主/客 tab。 */
+function TeamColumn({
+  name,
+  side,
+  benchEmpty,
+  showStartersAsList,
+}: {
+  name: string;
+  side: LineupSide | null;
+  benchEmpty: string;
+  /** 该队首发没有任何坐标(旧快照)时为 true:球场上画不了,退化到本列里
+   * 按纯名单如实列出(不猜站位)。 */
+  showStartersAsList: boolean;
+}) {
   return (
-    <div className={styles.pitch} data-side={isHome ? "home" : "away"}>
-      <FootballPitchBackground orientation="portrait" />
-      <div className={styles.pitchRows}>
-        {rows.map((row, ri) => (
-          <div key={ri} className={styles.pitchRow}>
-            {row.map((p) => (
-              <span key={p.id} className={styles.dotWrap}>
-                <span className={styles.avatarRing}>
-                  <PlayerAvatar playerId={p.id} playerName={p.name} shirtNumber={p.shirt_number} size={48} />
-                </span>
-                <span className={styles.dotName}>
+    <div className={styles.teamCol}>
+      <h3 className={styles.teamTitle}>
+        {name}
+        <span className={`${styles.formation} num`}>
+          {side == null ? "无快照" : (side.formation ?? "阵型未知")}
+        </span>
+      </h3>
+      {side == null ? (
+        <p className={styles.emptyInline}>该队暂无阵容快照,开赛前会再次采集。</p>
+      ) : (
+        <>
+          {/* coach.id 2026-08-18 之前的快照没有这个键(可空),没有 id 就没法
+              拼头像 URL,退回不渲染头像(文字名称仍然照常显示)。 */}
+          <p className={styles.coachRow}>
+            <span className={styles.coachLabel}>主教练</span>
+            {side.coach?.id != null && (
+              <PlayerAvatar playerId={side.coach.id} playerName={side.coach.name} size={24} />
+            )}
+            <span className={styles.coachName} data-empty={side.coach == null}>
+              {side.coach?.name ?? "本条快照未包含主教练信息"}
+            </span>
+          </p>
+
+          {side.starters.length === 0 ? (
+            <p className={styles.emptyNote}>
+              这条快照里没有记录到{name}的首发球员,不代表该队没有阵容,开赛前会再次采集。
+            </p>
+          ) : showStartersAsList ? (
+            <ul className={styles.plainList}>
+              {side.starters.map((p) => (
+                <li key={p.id} className={styles.plainRow}>
                   {p.shirt_number ? `${p.shirt_number} ` : ""}
-                  {pitchLabel(p.name)}
-                </span>
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
+                  {p.name}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {side.subs.length > 0 ? (
+            <details className={styles.bench}>
+              <summary className={styles.benchSummary}>替补席 {side.subs.length} 人</summary>
+              <ul className={styles.benchList}>
+                {side.subs.map((p) => (
+                  <li key={p.id} className={styles.benchRow}>
+                    <PlayerAvatar playerId={p.id} playerName={p.name} shirtNumber={p.shirt_number} size={24} />
+                    <span className={`${styles.benchNo} num`}>{p.shirt_number ?? "—"}</span>
+                    <span className={styles.benchName}>{p.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : (
+            side.starters.length > 0 && (
+              /* 空态绝不套 <details>:把空态折叠起来只是换个说法继续藏
+                 (CLAUDE.md §2.2)。有替补时保持默认折叠——<summary> 上的
+                 "替补席 N 人"本身已是可见披露。 */
+              <div className={styles.bench}>
+                <p className={styles.benchHead}>替补席 暂无名单</p>
+                <p className={styles.emptyNote}>{benchEmpty}</p>
+              </div>
+            )
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -268,8 +299,6 @@ export function ProjectedLineupSection({
   homeSidelined: SidelinedPlayer[];
   awaySidelined: SidelinedPlayer[];
 }) {
-  const [side, setSide] = useState<"home" | "away">(home ? "home" : "away");
-  const active = side === "home" ? home : away;
   const { confirmed, tag, notice, pitchCaption, benchEmpty } = describeLineup(lineupType, source);
   // 赛程相关时间戳按北京时间展示(CLAUDE.md §11.2)。formatBeijingDateTime 是
   // 纯算术(固定 +8,不依赖 Intl/ICU),SSR 与水合结果一致;date_only 或非法
@@ -283,10 +312,13 @@ export function ProjectedLineupSection({
   // 窗口放宽到 72h 后(CLAUDE.md §6.3),远端比赛的第一枪常常拿到空阵容——
   // §6.3 明确"这一枪拿不到数据属正常,不是失败告警"。两侧首发都是 0 人时,
   // describeLineup(null) 的"数据源未标注这份名单的类型"是在对一份不存在的
-  // 名单谈类型,必须换成一句面向"已采集但暂无名单"这个状态的诚实文案,并且
-  // 把 notice/tabs/球场整块换掉,不能让两段互相矛盾的文案同屏。
+  // 名单谈类型,必须换成一句面向"已采集但暂无名单"这个状态的诚实文案。
   const bothStartersEmpty =
     (home?.starters.length ?? 0) === 0 && (away?.starters.length ?? 0) === 0;
+
+  const homePlottable = plottableCount(home);
+  const awayPlottable = plottableCount(away);
+  const pitchVisible = homePlottable > 0 || awayPlottable > 0;
 
   return (
     <>
@@ -316,89 +348,44 @@ export function ProjectedLineupSection({
               <p className={styles.noticeText}>{notice}</p>
             </div>
 
-            <div className={styles.sideTabs}>
-              {([
-                { key: "home" as const, name: homeName, data: home },
-                { key: "away" as const, name: awayName, data: away },
-              ]).map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  disabled={!t.data}
-                  title={t.data ? undefined : "该队暂无阵容快照"}
-                  className={side === t.key ? styles.sideTabOn : styles.sideTab}
-                  onClick={() => setSide(t.key)}
-                >
-                  {t.name}
-                  <span className={`${styles.formation} num`}>
-                    {t.data == null ? "无快照" : (t.data.formation ?? "阵型未知")}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {active && (
+            {/* 2026-08-25:两队同屏纵向球场(主上客下,FotMob 恒纵向布局),
+                主/客 tab 已移除。预计首发用石板灰场(variant="probable",
+                FotMob 用球场底色本身区分预计/确认)。 */}
+            {pitchVisible && (
               <>
-                {/* coach 是每侧属性,必须在 active 内才会跟着主/客 tab 切换,
-                    且放在空首发守卫之外:教练与首发是两份独立数据,一侧没
-                    首发不代表没教练。 */}
-                <p className={styles.coachRow}>
-                  <span className={styles.coachLabel}>主教练</span>
-                  {/* coach.id 2026-08-18 之前的快照没有这个键(可空),没有 id
-                      就没法拼头像 URL,退回不渲染头像(文字名称仍然照常显示)。 */}
-                  {active.coach?.id != null && (
-                    <PlayerAvatar playerId={active.coach.id} playerName={active.coach.name} size={24} />
-                  )}
-                  <span className={styles.coachName} data-empty={active.coach == null}>
-                    {active.coach?.name ?? "本条快照未包含主教练信息"}
-                  </span>
+                <VerticalPitchFormation
+                  home={toPitchSide(home, homeName)}
+                  away={toPitchSide(away, awayName)}
+                  variant="probable"
+                />
+                <p className={styles.pitchNote}>
+                  {pitchCaption}:上{homeName} {home?.formation ?? "阵型未知"},下{awayName}{" "}
+                  {away?.formation ?? "阵型未知"}。站位按真实坐标画的,前后场顺序没错,但不是精确到米的位置。
                 </p>
-
-                {active.starters.length === 0 ? (
-                  <p className={styles.emptyNote}>
-                    这条快照里没有记录到{side === "home" ? homeName : awayName}
-                    的首发球员,不代表该队没有阵容,开赛前会再次采集。
-                  </p>
-                ) : (
-                  <>
-                    <Pitch side={active} isHome={side === "home"} />
-                    <p className={styles.pitchNote}>
-                      {pitchCaption}:{side === "home" ? homeName : awayName}{" "}
-                      {active.formation ?? "阵型未知"}。
-                      {rowsFor(active)
-                        ? "站位按真实坐标画的，前后场顺序没错，但不是精确到米的位置。"
-                        : "这份名单没带坐标，只能按顺序列，位置别当真。开赛前会再拿一次。"}
-                    </p>
-                    {active.subs.length > 0 ? (
-                      <details className={styles.bench}>
-                        <summary className={styles.benchSummary}>
-                          替补席 {active.subs.length} 人
-                        </summary>
-                        <ul className={styles.benchList}>
-                          {active.subs.map((p) => (
-                            <li key={p.id} className={styles.benchRow}>
-                              <PlayerAvatar playerId={p.id} playerName={p.name} shirtNumber={p.shirt_number} size={24} />
-                              <span className={`${styles.benchNo} num`}>
-                                {p.shirt_number ?? "—"}
-                              </span>
-                              <span className={styles.benchName}>{p.name}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : (
-                      /* 空态绝不套 <details>:把空态折叠起来只是换个说法继续
-                         藏(CLAUDE.md §2.2)。有替补时保持默认折叠——
-                         <summary> 上的"替补席 N 人"本身已是可见披露。 */
-                      <div className={styles.bench}>
-                        <p className={styles.benchHead}>替补席 暂无名单</p>
-                        <p className={styles.emptyNote}>{benchEmpty}</p>
-                      </div>
-                    )}
-                  </>
-                )}
               </>
             )}
+            {!pitchVisible && (
+              <p className={styles.pitchNote}>
+                {pitchCaption}:这份名单没带坐标,只能按顺序列,位置别当真。开赛前会再拿一次。
+              </p>
+            )}
+
+            {/* 教练/替补两列并排(与赛后「阵容」tab 的两列名单版式统一);
+                无坐标的旧快照在各自列里退化为首发纯名单。 */}
+            <div className={styles.pairGrid}>
+              <TeamColumn
+                name={homeName}
+                side={home}
+                benchEmpty={benchEmpty}
+                showStartersAsList={(home?.starters.length ?? 0) > 0 && homePlottable === 0}
+              />
+              <TeamColumn
+                name={awayName}
+                side={away}
+                benchEmpty={benchEmpty}
+                showStartersAsList={(away?.starters.length ?? 0) > 0 && awayPlottable === 0}
+              />
+            </div>
 
             {!confirmed && <p className={styles.footNote}>{OFFICIAL_NOTE}</p>}
           </>

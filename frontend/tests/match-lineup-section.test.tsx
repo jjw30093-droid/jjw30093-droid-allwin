@@ -20,6 +20,7 @@ function player(overrides: Partial<LineupPlayer>): LineupPlayer {
     name: "球员",
     is_starter: true,
     is_captain: false,
+    is_player_of_the_match: false,
     ...overrides,
   };
 }

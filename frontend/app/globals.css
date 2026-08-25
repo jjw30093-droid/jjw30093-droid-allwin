@@ -45,6 +45,13 @@
   --pitch-neutral-bg: #f8fafa;
   --pitch-neutral-line: #d6d5d5;
   --pitch-neutral-line-strong: #ababab;
+  /* 阵容球场配色(2026-08-25,FotMob 安卓包 Base.Theme.FotMob.DayNight 主题
+   * 解包实测的真实颜色值):浅色模式下**已确认首发=绿场、预计首发=石板灰**
+   * ——FotMob 用球场底色本身区分"预计 vs 确认",不只靠文字标签。 */
+  --pitch-lineup-bg: #01935c;
+  --pitch-lineup-line: #0d9f68;
+  --pitch-probable-bg: #596470;
+  --pitch-probable-line: #6d7782;
   /* 黄牌图标专用色(比赛详情页事件 tab),深浅两套同值——黄牌就是黄牌 */
   --card-yellow: #e5c245;
   /* cool neutrals */
@@ -131,6 +138,13 @@ html[data-theme="dark"] {
   --pitch-neutral-bg: #333333;
   --pitch-neutral-line: #454545;
   --pitch-neutral-line-strong: #6e6e6e;
+  /* 阵容球场深色变体:FotMob 夜间主题下**确认与预计都转中性近黑,不是绿的**
+   * (nero_black/raisin_black 解包实测)——与 §11.3"有色背景优先中性底、把
+   * 颜色信号让给标记"同一套做法,大绿块不再与深色页面割裂。 */
+  --pitch-lineup-bg: #1d1d1d;
+  --pitch-lineup-line: #262626;
+  --pitch-probable-bg: #1d1d1d;
+  --pitch-probable-line: #262626;
   --ink: #eef5f4;
   --ink-2: #bdcbce;
   --ink-3: #82969d;

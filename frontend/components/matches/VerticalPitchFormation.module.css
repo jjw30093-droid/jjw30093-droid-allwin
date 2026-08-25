@@ -1,0 +1,93 @@
+/* 纵向双队阵容图(2026-08-25)。球场底色/线色由 FootballPitchBackground 的
+ * lineup/probable 变体走 CSS 变量随主题切换(globals.css);本文件只管容器
+ * 比例与球员槽位。 */
+
+.pitch {
+  position: relative;
+  width: 100%;
+  /* 竖版整场真实比例 68:105(宽:长),与 FootballPitchBackground 的
+   * portrait-full viewBox "0 0 68 105" 对齐——preserveAspectRatio="none"
+   * 下容器比例错了球场就会被压扁/拉宽。 */
+  aspect-ratio: 68 / 105;
+  /* 恒纵向(站长拍板,照 FotMob 原生 APP;不做网页版的响应式横竖切换)。
+   * 桌面宽屏下限宽居中,不让球场撑到 1000px 高。420px 时高约 648px,
+   * 与 FotMob 手机端观感一致。 */
+  max-width: 420px;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  /* 兜底色(SVG 铺满容器,理论上不可见):跟随确认档球场底色。 */
+  background: var(--pitch-lineup-bg);
+}
+
+.pitch[data-variant="probable"] {
+  background: var(--pitch-probable-bg);
+}
+
+/* 两端队名+阵型角标。球场四档底色(绿/石板灰/近黑×2)全是中低亮度,
+ * 固定近白字 + 描边阴影在四档上都可读(与 .name 同一 legibility 策略)。 */
+.teamTag {
+  position: absolute;
+  left: 6px;
+  z-index: 1;
+  max-width: 60%;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamTagHome {
+  top: 6px;
+}
+
+.teamTagAway {
+  bottom: 6px;
+}
+
+/* 球员槽位:left/width 由组件按 verticalLayout 的中心-格宽/2 与格宽内联
+ * 注入(FotMob 同款),top 是槽位垂直中心(translateY 居中)。 */
+.slot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translateY(-50%);
+}
+
+/* 头像白色描边环:球场底图不随主题变亮(四档底色全是中低亮度),真实照片
+ * 头像没有自带的边界保护,固定白环在四档底色上都成立(白 vs 绿 #01935C
+ * ≈3.9:1、vs 石板灰 #596470 ≈5.8:1、vs 近黑 #1D1D1D ≈15:1,非文字图形
+ * ≥3:1 达标)。此前 PitchFormation/ProjectedLineupSection 两个 module 各有
+ * 一份相同实现,2026-08-25 收敛到这里(两处旧组件随纵向化一并退役)。 */
+.avatarRing {
+  display: inline-flex;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+/* 姓名:固定近白 + 描边阴影(理由同上,不用随主题的 --ink 系)。11px 是
+ * 图形内部标注,不受 §11.2 用户可见文字 12px 下限约束(既有先例同值)。
+ * max-width:100% 吃满槽位宽——槽位宽即 FotMob 的 verticalLayout.width,
+ * 拥挤行(四后卫 w=0.25)天然截断防串行。 */
+.name {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 2px;
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 0 3px rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

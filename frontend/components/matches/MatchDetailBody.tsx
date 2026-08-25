@@ -35,7 +35,7 @@ import { MatchInfoCard } from "@/components/matches/MatchInfoCard";
 import { RefereeCard } from "@/components/matches/RefereeCard";
 import { MomentumChart } from "@/components/matches/MomentumChart";
 import { TopStatsCard } from "@/components/matches/TopStatsCard";
-import { TopRatedCard } from "@/components/matches/TopRatedCard";
+import { TopRatedCard, topRatedTitle } from "@/components/matches/TopRatedCard";
 import { OverviewKeyEvents } from "@/components/matches/OverviewKeyEvents";
 import { hasKeyEvents } from "@/components/matches/overviewKeyEvents.shared";
 import { MatchHeaderFinished } from "@/components/matches/MatchHeaderFinished";
@@ -156,15 +156,19 @@ function attackSourceNote(rows: AttackSourceRow[]): string {
   return `${top.label}每脚效率最高,平均 xG ${((top.xg as number) / top.shots).toFixed(3)}/脚。`;
 }
 
-/** 数据 tab:近期表现(两队各一张卡)→ 阵容/风格/球员/射门四个子 tab。 */
+/** 数据/分析 tab:阵容/风格/球员/射门子 tab(赛前),或风格/球员/射门
+ * (已完赛「分析」tab——预计阵容对已完赛不适用,真实首发在「阵容」tab,
+ * 2026-08-25 站长要求删除,不是数据缺失而是概念不适用)。 */
 function DataGroup({
   detail,
   preview,
   analysis,
+  includeProjectedLineup = true,
 }: {
   detail: MatchDetailResponse;
   preview: MatchPreviewResponse | null;
   analysis: AnalysisBundle | null;
+  includeProjectedLineup?: boolean;
 }) {
   const m = detail.match;
   const homeName = m.home.name;
@@ -186,17 +190,19 @@ function DataGroup({
       ) : (
         <MatchDataTabs
           lineup={
-            <ProjectedLineupSection
-              homeName={homeName}
-              awayName={awayName}
-              lineupType={preview.lineups.lineup_type ?? null}
-              source={preview.lineups.source ?? null}
-              observedAt={preview.lineups.observed_at ?? null}
-              home={preview.lineups.home ?? null}
-              away={preview.lineups.away ?? null}
-              homeSidelined={preview.sidelined.home}
-              awaySidelined={preview.sidelined.away}
-            />
+            includeProjectedLineup ? (
+              <ProjectedLineupSection
+                homeName={homeName}
+                awayName={awayName}
+                lineupType={preview.lineups.lineup_type ?? null}
+                source={preview.lineups.source ?? null}
+                observedAt={preview.lineups.observed_at ?? null}
+                home={preview.lineups.home ?? null}
+                away={preview.lineups.away ?? null}
+                homeSidelined={preview.sidelined.home}
+                awaySidelined={preview.sidelined.away}
+              />
+            ) : undefined
           }
           style={
             <>
@@ -368,26 +374,23 @@ function OddsGroup({
 }
 
 /** 已完赛「总览」tab(2026-08-25 对齐 FotMob 纵向顺序,站长手机比对拍板):
- * 势头图 → 重点数据 → 最高评分 → 关键事件(精简)→ 比赛信息 → 裁判,
+ * 势头图 → 重点数据 → 最佳球员(官方标志;缺失退「最高评分」)→
+ * 关键事件(精简)→ 比赛信息 → 裁判,
  * 其后保留既有三组(数据倾向 / 数据可视化 / 赔率)。
  *
  * 顺序依据:FotMob APK 卡片装配字节码的 moveMomentumAndStatsToTop 开关
  * (= match.isFinished(),已完赛把势头+重点数据整块提到事件之前);
- * 「最高评分」在事件前是站长对着手机确认的顺序。势头图从「射门」tab 整块
+ * 「最佳球员」在事件前是站长对着手机确认的顺序。势头图从「射门」tab 整块
  * 挪来(不重复);关键事件只列进球/红黄牌 + 跳转,与「事件」tab 全量时间线
  * 职能不重叠。 */
 function OverviewPanel({
   idNum,
   detail,
-  analysis,
-  preview,
   finished,
   factReport,
 }: {
   idNum: number;
   detail: MatchDetailResponse;
-  analysis: AnalysisBundle | null;
-  preview: MatchPreviewResponse | null;
   finished: boolean;
   factReport: Extract<MatchReportResponse, { available: true }> | null;
 }) {
@@ -423,7 +426,7 @@ function OverviewPanel({
       )}
       {factReport?.top_rated && (
         <section className={styles.section}>
-          <SectionTitle>最高评分</SectionTitle>
+          <SectionTitle>{topRatedTitle(factReport.top_rated)}</SectionTitle>
           <TopRatedCard
             topRated={factReport.top_rated}
             homeName={m.home.name}
@@ -439,14 +442,15 @@ function OverviewPanel({
       )}
       <MatchInfoCard match={m} />
       <RefereeCard match={m} />
+      {/* 2026-08-25(站长要求):赛前的"数据可视化/赔率"不再堆在总览最
+          下方——数据可视化(去掉预计阵容)拆到「分析」tab,赔率拆到
+          「赔率」tab。总览只保留数据倾向这一段轻量市场卡。 */}
       <HighlightsGroup
         idNum={idNum}
         detail={detail}
         finished={finished}
         showInfoCards={false}
       />
-      <DataGroup detail={detail} preview={preview} analysis={analysis} />
-      <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
     </>
   );
 }
@@ -520,11 +524,20 @@ export function MatchDetailBody({
             <OverviewPanel
               idNum={idNum}
               detail={detail}
-              analysis={analysis}
-              preview={preview}
               finished={finished}
               factReport={factReport}
             />
+          }
+          analysis={
+            <DataGroup
+              detail={detail}
+              preview={preview}
+              analysis={analysis}
+              includeProjectedLineup={false}
+            />
+          }
+          odds={
+            <OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />
           }
           shots={
             <MatchShotsSection

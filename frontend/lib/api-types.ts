@@ -3380,6 +3380,13 @@ export interface components {
             pitch_x?: number | null;
             /** Pitch Y */
             pitch_y?: number | null;
+            /** Pitch W */
+            pitch_w?: number | null;
+            /**
+             * Is Player Of The Match
+             * @default false
+             */
+            is_player_of_the_match: boolean;
         };
         /** MatchReportLineupTeam */
         MatchReportLineupTeam: {
@@ -3659,12 +3666,15 @@ export interface components {
         };
         /**
          * MatchReportTopRated
-         * @description 全场评分最高的一名球员(总览「最高评分」卡,2026-08-24)。
+         * @description 总览「最佳球员/最高评分」卡(2026-08-25 修订)。
          *
-         *     评分来自 fact_match_lineup.rating(FotMob 球员评分)。库里没有官方
-         *     isPlayerOfTheMatch 标志,标题语义是「最高评分」,不冒充官方 MOTM 评选。
-         *     并列最高分取 player_id 字典序较小者(确定性,见
-         *     backend/queries/match_report.py::_top_rated)。
+         *     is_official=True:FotMob 官方 playerOfTheMatch 标志命中(全库覆盖
+         *     13045/13050 场、每场恰好一个),前端标题用「最佳球员」;
+         *     is_official=False:官方标志缺失时退回全场最高 fact_match_lineup.rating,
+         *     前端标题用「最高评分」,不冒充官方评选。并列最高分取 player_id 字典序
+         *     较小者(确定性,见 backend/queries/match_report.py::_top_rated)。
+         *     rating 理论上官方 MOTM 恒有值(全库 0 例外),仍设 Optional 防御来源
+         *     缺失——缺失时前端不渲染评分胶囊,不编造数字。
          */
         MatchReportTopRated: {
             /** Player Id */
@@ -3676,9 +3686,14 @@ export interface components {
             /** Is Home */
             is_home: boolean;
             /** Rating */
-            rating: number;
+            rating?: number | null;
             /** Shirt Number */
             shirt_number?: string | null;
+            /**
+             * Is Official
+             * @default false
+             */
+            is_official: boolean;
         };
         /** MatchReportUnavailableDTO */
         MatchReportUnavailableDTO: {

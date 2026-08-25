@@ -113,13 +113,18 @@ def seed_match_report(conn, match_id=9002, home_id=1001, away_id=1002):
     - Team_ID=99999 的射门行,xG=0.9999(证明主客队之外的脏数据被过滤);
     - player_stats.rating_title=9.99(证明评分取自 lineup.rating=7.7,不取本表)。
     """
-    layout = lambda x, y: f'{{"horizontalLayout": {{"x": {x}, "y": {y}}}}}'  # noqa: E731
+    # 2026-08-25 起查询层读 verticalLayout(纵向球场):x=横向(0.5=中路),
+    # y=纵深(0.1=本方球门端),width=本行格宽。数值取自真实来源关系
+    # v.x=1-h.y、v.y=h.x(此前 seed 写的是 horizontalLayout 等价坐标)。
+    layout = lambda x, y, w: (  # noqa: E731
+        f'{{"verticalLayout": {{"x": {x}, "y": {y}, "width": {w}}}}}'
+    )
     lineup_rows = [
         # (team, is_home, formation, pid, name, shirt, upos, starter, captain, rating, layout)
-        (home_id, 1, "4-3-3", "p100", "Test Striker", "9", 3, 1, 0, 7.7, layout(0.87, 0.5)),
-        (home_id, 1, "4-3-3", "p101", "Home Keeper", "1", 0, 1, 1, 7.0, layout(0.1, 0.5)),
+        (home_id, 1, "4-3-3", "p100", "Test Striker", "9", 3, 1, 0, 7.7, layout(0.5, 0.87, 1)),
+        (home_id, 1, "4-3-3", "p101", "Home Keeper", "1", 0, 1, 1, 7.0, layout(0.5, 0.1, 1)),
         (home_id, 1, "4-3-3", "p102", "Home Bench", "20", 2, 0, 0, 6.4, None),
-        (away_id, 0, "4-4-2", "p200", "Away Defender", "4", 1, 1, 0, 6.6, layout(0.292, 0.5)),
+        (away_id, 0, "4-4-2", "p200", "Away Defender", "4", 1, 1, 0, 6.6, layout(0.5, 0.292, 0.25)),
         (away_id, 0, "4-4-2", "p201", "Away Bench", "17", 3, 0, 0, None, None),
     ]
     for t, ih, form, pid, name, shirt, upos, st, cap, rating, extra in lineup_rows:

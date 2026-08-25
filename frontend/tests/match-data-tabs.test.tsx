@@ -59,3 +59,30 @@ describe("MatchDataTabs", () => {
     expect(panelHiddenFor("panel-shots")).toBe(true);
   });
 });
+
+describe("MatchDataTabs 不传 lineup(2026-08-25,已完赛「分析」tab)", () => {
+  function renderWithoutLineup() {
+    return render(
+      <MatchDataTabs
+        style={<div data-testid="panel-style">风格内容</div>}
+        players={<div data-testid="panel-players">球员内容</div>}
+        shots={<div data-testid="panel-shots">射门内容</div>}
+      />,
+    );
+  }
+
+  it("「阵容」pill 整个不渲染(概念不适用,不是空态),默认落到风格", () => {
+    renderWithoutLineup();
+    expect(screen.queryByRole("tab", { name: "阵容" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "风格" }).getAttribute("aria-selected")).toBe("true");
+    expect(panelHiddenFor("panel-style")).toBe(false);
+  });
+
+  it("方向键回绕按三个 tab 的环走(射门右键→风格),不会落进不存在的阵容", () => {
+    renderWithoutLineup();
+    fireEvent.click(screen.getByRole("tab", { name: "射门" }));
+    const tablist = screen.getByRole("tablist", { name: "数据模块切换" });
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "风格" }).getAttribute("aria-selected")).toBe("true");
+  });
+});

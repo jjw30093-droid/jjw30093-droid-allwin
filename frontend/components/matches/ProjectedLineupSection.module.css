@@ -57,124 +57,45 @@
   color: var(--ink-2);
 }
 
-/* ── 主/客切换 ─────────────────────────────────── */
+/* ── 教练/替补两列并排(2026-08-25 主/客 tab 移除,与赛后「阵容」tab 的
+   两列名单版式统一;窄屏收成单列,同 .sidelinedGrid 断点)──────────── */
 
-.sideTabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: var(--sp-3);
+.pairGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
 }
 
-.sideTab,
-.sideTabOn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-control);
-  background: var(--surface);
-  color: var(--ink-2);
-  font-family: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
+@media (max-width: 720px) {
+  .pairGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.sideTabOn {
-  border-color: var(--brand-teal);
-  background: var(--brand-teal);
-  color: #fff;
+.teamCol {
+  min-width: 0;
+}
+
+.teamTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: 14px;
   font-weight: 700;
-}
-
-.sideTab:disabled {
-  border-style: dashed;
-  color: var(--ink-3);
-  cursor: not-allowed;
+  color: var(--ink);
 }
 
 .formation {
   font-size: 12px;
   font-weight: 700;
+  color: var(--ink-2);
   opacity: 0.85;
 }
 
-/* ── 球场(竖版,按阵型分行;真实球场底图见 FootballPitchBackground,
-   orientation="portrait")───────────────────── */
-
-.pitch {
-  position: relative;
-  width: 100%;
-  /* 真实 FIFA 半场比例 68:52.5(宽:长)——2026-08-20 由全场改半场(单队
-   * 从来不会同时出现在球场两端,画全场只是把另一端的空禁区当装饰),容器
-   * 比例跟着 FootballPitchBackground 的新 viewBox "0 52.5 68 52.5" 改,
-   * 否则 preserveAspectRatio="none" 会把球场轻微压扁/拉宽。 */
-  aspect-ratio: 68 / 52.5;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  /* 兜底色,FootballPitchBackground 的 SVG 铺满整个容器,这个背景色理论上
-   * 永远不可见,留着只防极端情况(SVG 加载失败)下不至于露白。 */
-  background: #276e42;
-}
-
-.pitchRows {
-  position: absolute;
-  inset: 8px;
-  display: flex;
-  flex-direction: column-reverse;
-  justify-content: space-between;
-  padding: 8px 4px;
-}
-
-.pitchRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-evenly;
-}
-
-.dotWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  max-width: 74px;
-}
-
-/* 2026-08-24:.dot(纯色圆点+球衣号文字,主客队靠实心青绿/白区分)换成真实
- * 球员头像(components/players/PlayerAvatar.tsx)后,球场底图固定是绿色
- * (不随亮/暗主题切换,见 FootballPitchBackground.tsx 顶部注释)这条约束
- * 还在——头像本身没有"一圈白色描边"这层保护,借这个 ring 包装类保留同样
- * 的 legibility 处理(与 PitchFormation.module.css 的 .avatarRing 同一
- * 惯例)。主客队不再靠圆点底色区分(头像本身就能区分球员),不需要
- * [data-side="away"] 覆写。 */
-.avatarRing {
-  display: inline-flex;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
-}
-
-/* 同上,球场固定为绿色,姓名不能用随主题变化的深色字——固定用近白色 + 描边
- * 阴影,不管站点当前是浅色还是深色模式,球场上的字都要能读(与
- * PitchFormation.module.css 的 .playerName 同一惯例)。 */
-.dotName {
-  max-width: 74px;
-  overflow: hidden;
-  padding: 1px 4px;
-  color: rgba(255, 255, 255, 0.96);
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.55),
-    0 0 3px rgba(0, 0, 0, 0.35);
-  font-size: 11px;
-  line-height: 1.25;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* 球场本体(纵向双队)已移交共享组件 VerticalPitchFormation.module.css
+   (2026-08-25),.avatarRing/球员姓名等 legibility 规则也收敛到那里。 */
 
 .pitchNote {
   margin: var(--sp-2) 0 0;

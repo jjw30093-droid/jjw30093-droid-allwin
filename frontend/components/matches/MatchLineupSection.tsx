@@ -6,7 +6,10 @@
 
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { MatchReportResponse } from "@/lib/api-v1";
-import { PitchFormation } from "@/components/matches/PitchFormation";
+import {
+  VerticalPitchFormation,
+  type VerticalPitchSide,
+} from "@/components/matches/VerticalPitchFormation";
 import { RatingChip } from "@/components/matches/RatingChip";
 import { POSITION_ZH } from "@/components/matches/zh";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
@@ -66,6 +69,24 @@ function TeamColumn({ team, teamName }: { team: LineupTeam; teamName: string }) 
   );
 }
 
+/** MatchReportLineupTeam → 纵向双队球场的展示投影(坐标即 verticalLayout,
+ * 查询层已切换,见 backend/queries/match_report.py::_lineups 注释)。 */
+function toPitchSide(team: LineupTeam, name: string): VerticalPitchSide {
+  return {
+    name,
+    formation: team.formation,
+    players: team.starters.map((p) => ({
+      key: p.player_id,
+      avatarId: p.player_id,
+      name: p.name,
+      shirtNumber: p.shirt_number,
+      x: p.pitch_x,
+      y: p.pitch_y,
+      w: p.pitch_w,
+    })),
+  };
+}
+
 export function MatchLineupSection({
   lineups,
   homeName,
@@ -84,7 +105,13 @@ export function MatchLineupSection({
         <p className={pageStyles.emptyText}>该场比赛暂无阵容数据。</p>
       ) : (
         <>
-          {home && away && <PitchFormation home={home} away={away} />}
+          {home && away && (
+            <VerticalPitchFormation
+              home={toPitchSide(home, homeName)}
+              away={toPitchSide(away, awayName)}
+              variant="confirmed"
+            />
+          )}
           <div className={styles.grid}>
             {home && <TeamColumn team={home} teamName={homeName} />}
             {away && <TeamColumn team={away} teamName={awayName} />}

@@ -6731,3 +6731,90 @@ Fix A 之后仍然空着的卡(9.5/9.0 等映射后仍未定级的线、场次�
 - 阵容 tab 顶部「赛季统计/转会价值/年龄/国家」pill(需四套新数据源);
 - 补采 isPlayerOfTheMatch 官方标志;历史 16934 场全量回填(只回填本赛季);
 - goalCrossed*/onGoalShot 坐标系仍未验证,继续不当球场坐标用。
+
+## 59. 阵容图纵向化:两 tab 统一为 FotMob 恒纵向双队同屏(2026-08-25)
+
+站长验收 §58 时发现的返工项:此前只核实了"双队合画"就下结论,漏看了朝向
+——FotMob 不论预计/确认首发都是**纵向**,我们赛前还是"半场+主/客 tab"、
+赛后还是"横向左右并排"。本轮 APK 反编译到字节码级重查后重做。
+
+### 关键证据(反编译 + 实网 + 我方 54 万行数据三方验证)
+
+- FotMob 比赛详情阵容图是 Compose 自定义 Layout,按服务端下发的
+  **verticalLayout.{x,y}** 绝对定位、verticalLayout.width 约束姓名标签宽
+  (getVerticalLayout 6 处调用 vs horizontal 2 处);res/layout-land/ 无任何
+  lineup 横屏变体 → 原生恒纵向。网页版是响应式(≤850px 纵向),站长拍板
+  照 APK 恒纵向。
+- **verticalLayout 早就在我们库里**:fact_match_lineup.extra_json 里与
+  horizontalLayout 同覆盖(287100 行首发各 100%),关系 v.x=1-h.y、v.y=h.x
+  (90° 旋转,不是对调);赛前 pos_x/pos_y 本来就取自 verticalLayout。
+  改纵向**零数据代价零回填**。
+- 球场配色(解 Base.Theme.FotMob.DayNight):浅色确认=绿 #01935C、预计=
+  石板灰 #596470(用底色区分预计/确认);**深色两者都是中性近黑 #1D1D1D**。
+- **更正 §58 的一个错误结论**:performance.playerOfTheMatch 官方最佳球员
+  标志一直在库里(13045/13050 场、每场恰好一个),当时误判"没有"而选了
+  评分口径。现官方优先(标题「最佳球员」)、缺失退最高评分,is_official
+  由后端判定。
+
+### 实现
+
+- 后端:_lineups 切到 verticalLayout(+pitch_w/is_player_of_the_match);
+  _top_rated 官方标志优先 + is_official;首发排序换轴(先 y 后 x)。
+- FootballPitchBackground:新增 orientation="portrait-full"(viewBox
+  0 0 68 105,远端罚球弧 sweep-flag 经独立脚本逐点模拟验证,四个组合里
+  唯一"朝中场鼓且圆心=罚球点"的是 M X0 16.5 A r r 0 0 0 X1 16.5)+
+  variant="lineup"/"probable"(CSS 变量随主题,globals.css 新增两组)。
+- 新共享组件 VerticalPitchFormation(赛前赛后共用):主上客下、客队双轴
+  镜像(实网 22/22 逐人核对),坐标映射纯函数 verticalDotPosition 可独立
+  测;槽位宽=FotMob 的 width(赛前缺 width 按同行人数推导 1/n);
+  pitchLabel(拉丁名取姓)收敛到此,.avatarRing 两份重复实现同步收敛。
+- 赛后 MatchLineupSection 接入(confirmed 绿场);旧横向 PitchFormation
+  删除。赛前 ProjectedLineupSection 重写:主/客 tab 移除、两队同屏
+  (probable 灰场),教练/替补改两列并排;describeLineup 诚实文案链、
+  空态、observed_at 北京时间全部保留。
+
+### 验证
+
+- 后端 pytest 2080 passed(新增 verticalLayout 投影/官方 MOTM 6 条);
+  前端 vitest 538 passed(vertical-pitch-formation 10 条新测试,
+  projected-lineup-section 30 条按新结构重写,诚实文案断言全保留);
+  tsc/eslint/build 干净;契约无漂移。
+- 浏览器实测(生产构建):赛前 5868028(从生产只读拉了 2 条含坐标的真实
+  快照 seed 进本地——本地 odds.db 冻结在 8-19 无坐标):灰场 #596470、
+  viewBox 0 0 68 105、22 槽位主上客下各 11、队名角标 4-4-2/4-3-3、双方
+  教练两列同屏、预计阵容区块 0 个按钮(tab 已除);赛后 5107562:绿场
+  #01935C、11+11、总览标题「最佳球员」+官方 MOTM Isak Bjerkebo(首次
+  加载吐了 ISR 陈旧缓存显示旧标题,刷新即正确——revalidate:300 的
+  stale-while-revalidate,非 bug);深色模式球场 #1D1D1D 中性近黑 ✓。
+
+### 本轮不做(已记录)
+
+- FotMob 网页版的响应式横竖切换(桌面恒纵向 max-width 420px 居中);
+- 替补上球场(FotMob 也不画,替补无坐标);
+- APK 里 40 阵型客户端兜底坐标表(两条数据源都有真实坐标,用不上);
+- 赛后球场上的评分胶囊/黄红牌/换人角标叠加(FotMob 已完赛视图有,属
+  独立增量,本轮只做朝向与布局统一)。
+
+## 60. 已完赛详情页 tab 拆分:总览瘦身,新增「分析」「赔率」两 tab(2026-08-25)
+
+站长要求:已完赛比赛此前把赛前的"数据可视化 + 赔率"整段堆在总览最下方——
+现拆分:
+- 新增「赔率」tab:赔率快照(OddsTimeline)、关键变化(Cooccurrence)、
+  数据来源与说明整组从总览移入,与赛前三 tab 里的「赔率」同内容同位置
+  (都在最后);
+- 新增「分析」tab:数据可视化的 风格/球员/射门 三个子 pill 移入;
+  **预计阵容子页对已完赛删除**——真实首发已在「阵容」tab,预计阵容概念
+  不适用(MatchDataTabs 的 lineup 槽位改为可选,不传=整个 pill 不渲染,
+  与"有数据但为空"的诚实空态是两回事);
+- 已完赛总览保留:势头图 → 重点数据 → 最佳球员 → 关键事件 → 比赛信息 →
+  裁判 → 数据倾向(市场卡,站长未要求移动,留在总览)。
+- 赛前三 tab(看点/数据/赔率)不受影响,数据 tab 仍含预计阵容。
+
+已完赛 tab 现为七个:总览/射门/统计/阵容/事件/分析/赔率(tablist 本就
+横向滚动,375px 宽度可容纳)。
+
+验证:vitest 544 passed(match-data-tabs 新增"不传 lineup"2 条、
+match-detail-order 新增 tab 拆分 4 条);tsc/eslint/build 干净;零后端改动。
+浏览器实测(生产构建,5107562):七 tab 按序渲染,总览无数据可视化/赔率
+且保留数据倾向,「分析」pill 只有风格/球员/射门,「赔率」tab 含赔率快照
+(该场无已验证赔率映射,诚实空态)与数据来源说明。

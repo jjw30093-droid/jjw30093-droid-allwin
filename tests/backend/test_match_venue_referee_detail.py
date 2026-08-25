@@ -256,3 +256,102 @@ class TestTopRated:
         assert body["available"] is True
         assert body["top_rated"]["player_id"] == "p100"
         assert body["top_rated"]["rating"] == 7.7
+
+
+class TestVerticalLayoutProjection:
+    """2026-08-25:查询层从 horizontalLayout 切到 verticalLayout(纵向双队
+    球场)。seed 的坐标已按 vertical 语义写入(GK y=0.1,前锋 y=0.87)。"""
+
+    def test_pitch_coords_are_vertical_semantics(self, data_dir, core_conn):
+        seed_basic_core(data_dir)
+        seed_match_report(core_conn, match_id=9002)
+
+        report = match_report(core_conn, 9002)
+        home = next(t for t in report["lineups"] if t["is_home"])
+        by_pid = {p["player_id"]: p for p in home["starters"]}
+        # 门将:纵深轴 y≈0.1(本方球门端),横向 x=0.5(中路)
+        assert by_pid["p101"]["pitch_y"] == 0.1
+        assert by_pid["p101"]["pitch_x"] == 0.5
+        # 前锋:y=0.87(进攻端)
+        assert by_pid["p100"]["pitch_y"] == 0.87
+        # pitch_w(行格宽)带出;首发排序按 y 分行(门将在前)
+        assert by_pid["p101"]["pitch_w"] == 1
+        assert home["starters"][0]["player_id"] == "p101"
+
+    def test_missing_vertical_layout_yields_none_not_zero(self, data_dir, core_conn):
+        """替补(extra_json 为 NULL)三个坐标字段都如实 None,不补 0。"""
+        seed_basic_core(data_dir)
+        seed_match_report(core_conn, match_id=9002)
+
+        report = match_report(core_conn, 9002)
+        home = next(t for t in report["lineups"] if t["is_home"])
+        bench = home["bench"][0]
+        assert bench["pitch_x"] is None
+        assert bench["pitch_y"] is None
+        assert bench["pitch_w"] is None
+
+
+class TestOfficialPlayerOfTheMatch:
+    """2026-08-25 更正:performance.playerOfTheMatch 官方标志一直在库里
+    (13045/13050 场,每场恰好一个),官方优先、缺失退回最高评分。"""
+
+    def _mark_motm(self, conn, match_id, player_id):
+        conn.execute(
+            "UPDATE fact_match_lineup SET extra_json = json_set("
+            " COALESCE(extra_json, '{}'), '$.performance.playerOfTheMatch', json('true'))"
+            " WHERE Match_ID=? AND Player_ID=?",
+            (match_id, player_id),
+        )
+        conn.commit()
+
+    def test_official_flag_wins_over_higher_rating(self, data_dir, core_conn):
+        """官方标志给了 p200(rating 6.6),即使 p100 评分更高(7.7)也选
+        p200——官方口径优先于评分口径。"""
+        seed_basic_core(data_dir)
+        seed_match_report(core_conn, match_id=9002)
+        self._mark_motm(core_conn, 9002, "p200")
+
+        top = match_report(core_conn, 9002)["top_rated"]
+        assert top["player_id"] == "p200"
+        assert top["is_official"] is True
+        assert top["rating"] == 6.6
+
+    def test_lineup_player_carries_official_flag(self, data_dir, core_conn):
+        seed_basic_core(data_dir)
+        seed_match_report(core_conn, match_id=9002)
+        self._mark_motm(core_conn, 9002, "p200")
+
+        report = match_report(core_conn, 9002)
+        away = next(t for t in report["lineups"] if not t["is_home"])
+        by_pid = {p["player_id"]: p for p in away["starters"] + away["bench"]}
+        assert by_pid["p200"]["is_player_of_the_match"] is True
+        home = next(t for t in report["lineups"] if t["is_home"])
+        assert all(not p["is_player_of_the_match"] for p in home["starters"])
+
+    def test_no_flag_falls_back_to_rating_with_is_official_false(self, data_dir, core_conn):
+        """seed 不带官方标志:退回最高评分(p100 7.7),is_official=False。"""
+        seed_basic_core(data_dir)
+        seed_match_report(core_conn, match_id=9002)
+
+        top = match_report(core_conn, 9002)["top_rated"]
+        assert top["player_id"] == "p100"
+        assert top["is_official"] is False
+
+    def test_report_endpoint_exposes_is_official(self, app, data_dir):
+        seed_basic_core(data_dir)
+        conn = connect_rw("core")
+        try:
+            seed_match_report(conn, match_id=9002)
+            self._mark_motm(conn, 9002, "p100")
+        finally:
+            conn.close()
+
+        r = TestClient(app).get("/api/v1/matches/9002/report")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["top_rated"]["is_official"] is True
+        # 阵容里的官方标志也透出
+        home = next(t for t in body["lineups"] if t["is_home"])
+        flags = {p["player_id"]: p["is_player_of_the_match"] for p in home["starters"]}
+        assert flags["p100"] is True
+        assert flags["p101"] is False

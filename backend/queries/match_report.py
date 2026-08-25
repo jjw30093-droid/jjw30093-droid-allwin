@@ -105,12 +105,23 @@ def _display_name(pid, source_name, i18n):
 
 
 def _lineups(conn, match_id, i18n):
+    # 站位坐标取 verticalLayout(2026-08-25 起,纵向双队球场,对齐 FotMob 原生
+    # APP 的恒纵向布局;此前取 horizontalLayout 画横向图)。两套坐标上游同覆盖
+    # (287100 行首发各 100%),语义:x∈[0.11,0.89] 横向(0.5=中路),
+    # y∈[0.09,0.90] 纵深(0.1=本方球门端→0.87=进攻端);两队各自相对自己的
+    # 半场记录,主客镜像是前端渲染层的事。pitch_w 是 verticalLayout.width——
+    # 该球员在本行独占的横向格宽(门将/单箭头=1、四后卫=0.25),FotMob 原生
+    # 用它约束姓名标签宽度防串行,它是标签格尺寸**不是位置**,不得反推坐标。
+    # performance.playerOfTheMatch 是 FotMob 官方最佳球员标志(全库覆盖
+    # 13045/13050 场、每场恰好一个),供 _top_rated 官方口径优先使用。
     rows = conn.execute(
         """SELECT Team_ID, is_home, formation, Player_ID, player_name, shirt_number,
                   usual_position_id, is_starter, is_captain, country_code, rating,
                   sub_in_time, sub_out_time,
-                  json_extract(extra_json, '$.horizontalLayout.x') AS pitch_x,
-                  json_extract(extra_json, '$.horizontalLayout.y') AS pitch_y
+                  json_extract(extra_json, '$.verticalLayout.x') AS pitch_x,
+                  json_extract(extra_json, '$.verticalLayout.y') AS pitch_y,
+                  json_extract(extra_json, '$.verticalLayout.width') AS pitch_w,
+                  json_extract(extra_json, '$.performance.playerOfTheMatch') AS motm
            FROM fact_match_lineup WHERE Match_ID=?""",
         (match_id,),
     ).fetchall()
@@ -136,10 +147,13 @@ def _lineups(conn, match_id, i18n):
             "sub_out_time": r["sub_out_time"],
             "pitch_x": _round(r["pitch_x"], 3),
             "pitch_y": _round(r["pitch_y"], 3),
+            "pitch_w": _round(r["pitch_w"], 3),
+            "is_player_of_the_match": r["motm"] == 1,
         }
         (team["starters"] if player["is_starter"] else team["bench"]).append(player)
     for team in teams.values():
-        team["starters"].sort(key=lambda p: (p["pitch_x"] or 0, p["pitch_y"] or 0))
+        # verticalLayout 的纵深轴是 y(0.1=门将端):先按 y 分行、行内按 x。
+        team["starters"].sort(key=lambda p: (p["pitch_y"] or 0, p["pitch_x"] or 0))
         team["bench"].sort(key=lambda p: (p["position_group"] or "z", p["shirt_number"] or ""))
     # 主队在前
     return [teams[k] for k in sorted(teams, reverse=True)]
@@ -394,13 +408,33 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
 
 
 def _top_rated(lineups) -> dict | None:
-    """全场评分最高的一名球员(2026-08-24,总览「最高评分」卡)。
+    """总览「最佳球员/最高评分」卡的取数(2026-08-25 修订)。
 
-    口径:fact_match_lineup.rating(FotMob 球员评分,与阵容/球员表同一来源,
-    不另起第二套评分)。库里没有 FotMob 的 isPlayerOfTheMatch 官方标志,
-    所以标题语义是「最高评分」(FotMob 自己的 top_rated 口径),不冒充官方
-    MOTM 评选(站长 2026-08-24 拍板)。并列最高分时取 player_id 字典序较小
-    者——确定性优先,不引入随机。全场无评分返回 None,前端整卡不渲染。"""
+    口径分两档,is_official 告诉前端用哪个标题,判定只在后端做:
+    1. **官方优先**:extra_json.performance.playerOfTheMatch 是 FotMob 官方
+       最佳球员标志(2026-08-25 全库核验:覆盖 13045/13050 场、每场恰好
+       一个)——命中即返回该球员,is_official=True,前端标题「最佳球员」。
+       此前误判"库里没有这个标志"而只做了评分口径,本次更正。
+    2. **退回最高评分**(官方标志缺失的约 5 场):fact_match_lineup.rating
+       最高者,is_official=False,前端标题「最高评分」。并列取 player_id
+       字典序较小者——确定性优先,不引入随机。
+    全场既无官方标志也无评分返回 None,前端整卡不渲染。"""
+
+    def project(p, team, is_official):
+        return {
+            "player_id": p["player_id"],
+            "name": p["name"],
+            "team_id": team["team_id"],
+            "is_home": team["is_home"],
+            "rating": p["rating"],
+            "shirt_number": p["shirt_number"],
+            "is_official": is_official,
+        }
+
+    for team in lineups:
+        for p in team["starters"] + team["bench"]:
+            if p.get("is_player_of_the_match"):
+                return project(p, team, True)
     best = None
     for team in lineups:
         for p in team["starters"] + team["bench"]:
@@ -412,14 +446,7 @@ def _top_rated(lineups) -> dict | None:
     if best is None:
         return None
     _, p, team = best
-    return {
-        "player_id": p["player_id"],
-        "name": p["name"],
-        "team_id": team["team_id"],
-        "is_home": team["is_home"],
-        "rating": p["rating"],
-        "shirt_number": p["shirt_number"],
-    }
+    return project(p, team, False)
 
 
 def _momentum(conn, match_id):

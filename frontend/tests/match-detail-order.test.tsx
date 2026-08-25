@@ -90,7 +90,7 @@ function reportFixture(): MatchReport {
     momentum: [{ minute: 1, value: 10 }, { minute: 2, value: -5 }],
     top_rated: {
       player_id: "p100", name: "Test Striker", team_id: 1001,
-      is_home: true, rating: 7.7, shirt_number: "9",
+      is_home: true, rating: 7.7, shirt_number: "9", is_official: false,
     },
   } as MatchReport;
 }
@@ -213,5 +213,41 @@ describe("「射门」tab 顺序(真实 MatchShotsSection,不用上面的 mock)"
     expect(titles).not.toContain("势头图");
 
     vi.unstubAllGlobals();
+  });
+});
+
+describe("已完赛 tab 拆分(2026-08-25:数据可视化/赔率不再堆在总览底部)", () => {
+  it("七个 tab 按序:总览/射门/统计/阵容/事件/分析/赔率", () => {
+    renderFinishedDetail();
+    const labels = Array.from(
+      document.querySelectorAll('[role="tablist"][aria-label="比赛内容切换"] [role="tab"]'),
+    ).map((t) => t.textContent);
+    expect(labels).toEqual(["总览", "射门", "统计", "阵容", "事件", "分析", "赔率"]);
+  });
+
+  it("总览不再包含数据可视化与赔率内容(只留数据倾向)", () => {
+    renderFinishedDetail();
+    const panel = document.getElementById("match-panel-overview")!;
+    expect(panel.textContent).not.toContain("数据可视化");
+    expect(panel.querySelector('[data-testid="mock-odds-timeline"]')).toBeNull();
+    expect(panel.textContent).toContain("数据倾向");
+  });
+
+  it("「分析」tab 承接数据可视化;「赔率」tab 承接赔率快照", () => {
+    renderFinishedDetail();
+    const analysis = document.getElementById("match-panel-analysis")!;
+    expect(analysis.textContent).toContain("数据可视化");
+    const odds = document.getElementById("match-panel-odds")!;
+    expect(odds.querySelector('[data-testid="mock-odds-timeline"]')).not.toBeNull();
+    expect(odds.textContent).toContain("数据来源与说明");
+  });
+
+  it("「分析」tab 不渲染预计阵容(概念对已完赛不适用,真实首发在阵容 tab)", () => {
+    renderFinishedDetail();
+    const analysis = document.getElementById("match-panel-analysis")!;
+    expect(analysis.textContent).not.toContain("预计阵容");
+    // fixture 的 preview 是 null → DataGroup 渲染诚实空态;这条主要钉的是
+    // 标题层面不出现"预计阵容"字样(有 preview 时的 pill 移除由
+    // match-data-tabs.test.tsx 的"不传 lineup"用例覆盖)。
   });
 });
