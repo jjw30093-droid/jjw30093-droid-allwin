@@ -40,11 +40,15 @@ def seeded(data_dir):
     conn = connect_rw("core")
     rows = [
         # (id, season, league, date, status, venue, color, ref_stats)
-        (1, "2026", 47, "2026-08-01", "Finish", None, None, None),        # 目标
-        (2, "2026", 47, "2026-08-02", "Finish", "Arena", None, None),     # 已有场馆 → 跳过
-        (3, "2026", 47, "2026-08-03", "NotStarted", None, None, None),    # 未完赛 → 跳过
+        # 2026-08-25 起 dim_match 触发器校验 Season 与 (League_ID, Date) 一致:
+        # "2026" 这种自然年标签配英超(47,跨年制)是触发器要拒绝的错标,
+        # 换成真实的自然年联赛挪超(59)——本组测试关心的是"--season 精确
+        # 匹配、不做前缀匹配"这个过滤语义,不关心具体是哪个联赛。
+        (1, "2026", 59, "2026-08-01", "Finish", None, None, None),        # 目标
+        (2, "2026", 59, "2026-08-02", "Finish", "Arena", None, None),     # 已有场馆 → 跳过
+        (3, "2026", 59, "2026-08-03", "NotStarted", None, None, None),    # 未完赛 → 跳过
         (4, "2026/2027", 55, "2026-08-04", "Finish", None, None, None),   # 其它赛季
-        (5, "2026", 47, "2026-08-05", "Finish", None, "#ff0000", None),   # 已有配色 → 跳过
+        (5, "2026", 59, "2026-08-05", "Finish", None, "#ff0000", None),   # 已有配色 → 跳过
     ]
     for mid, season, league, date, status, venue, color, stats in rows:
         conn.execute(

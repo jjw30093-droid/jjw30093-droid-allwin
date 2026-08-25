@@ -30,42 +30,6 @@ def error_responses(*codes: int) -> dict:
     return {code: {"model": ApiErrorDTO} for code in codes}
 
 
-class PredictionMeta(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    model_version_id: str
-    probability_source: Literal["MODEL", "MARKET_BASELINE", "UNAVAILABLE"]
-    generated_at: str
-    published_at: Optional[str] = None
-    locked_at: Optional[str] = None
-    input_cutoff_at: Optional[str] = None
-    status: Literal["published", "locked", "retracted"]
-    confidence: Optional[str] = None
-    edit_count: int = 0
-    last_edited_at: Optional[str] = None
-
-
-class PredictionDTO(BaseModel):
-    """公开正式预测(2026-08-16 起恒为完整 WDL):除"每日精选"外普通比赛内容
-    全部免费,包括匿名——不再有 free/full 两套 DTO,也不再有 tier 字段。"""
-
-    top_outcome: Literal["home", "draw", "away"]
-    home_probability: float
-    draw_probability: float
-    away_probability: float
-    expected_home_goals: Optional[float] = None
-    expected_away_goals: Optional[float] = None
-    prediction_hash: str
-    meta: PredictionMeta
-
-
-class PredictionResponse(BaseModel):
-    match_id: int
-    available: bool
-    reason: Optional[str] = None          # 不可用时的诚实说明
-    prediction: Optional[PredictionDTO] = None
-
-
 class MeUser(BaseModel):
     id: str
     display_name: str
@@ -292,60 +256,6 @@ class LeagueInfo(BaseModel):
     available_seasons: list[str] = []
     data_status: Literal["AVAILABLE", "NOT_SYNCED"]
     data_updated_at: Optional[str] = None
-
-
-class TrackRecordSample(BaseModel):
-    """公开正式样本(永久资格,CLAUDE.md §9.1)。
-
-    撤回(status='retracted')与被取代(superseded_by 非空)的正式样本同样出现
-    在列表并计入指标分母;修正链通过 superseded_by / correction_of 双向可查。
-    """
-
-    model_config = ConfigDict(protected_namespaces=())
-
-    snapshot_id: str                       # 登记簿快照 id(修正链中区分新旧版本)
-    match_id: int
-    kickoff_at_utc: str
-    home: TeamRef
-    away: TeamRef
-    home_probability: float
-    draw_probability: float
-    away_probability: float
-    predicted_outcome: Literal["home", "draw", "away"]
-    actual_outcome: Optional[Literal["home", "draw", "away"]] = None
-    home_goals: Optional[int] = None
-    away_goals: Optional[int] = None
-    hit: Optional[bool] = None
-    status: str                            # locked / retracted(撤回样本透明展示,不退出统计)
-    superseded_by: Optional[str] = None    # 被哪条修正版快照取代(旧版仍公开、仍计入指标)
-    correction_of: Optional[str] = None    # 本条是哪条旧快照的修正版
-    superseded_note: Optional[str] = None  # 被取代时的人话说明
-    edit_count: int = 0                    # 该快照被直接修正过的次数(公开可查,不暴露操作者/原因)
-    last_edited_at: Optional[str] = None   # 最近一次修正时间
-    model_version_id: str
-    published_at: str
-    locked_at: str
-    prediction_hash: str
-
-
-class TrackRecordMetrics(BaseModel):
-    sample_size: int
-    accuracy: Optional[float] = None
-    brier: Optional[float] = None
-    log_loss: Optional[float] = None
-    rps: Optional[float] = None
-    evaluated_at: Optional[str] = None
-
-
-class TrackRecordResponse(BaseModel):
-    total: int
-    retracted_count: int
-    superseded_count: int = 0              # 被修正版取代的正式样本数(透明标注,不从 total 扣除)
-    limit: int
-    offset: int
-    metrics: Optional[TrackRecordMetrics] = None
-    samples: list[TrackRecordSample]
-    empty_reason: Optional[str] = None     # 无正式样本时的诚实说明
 
 
 class FreshnessResponse(BaseModel):
@@ -1422,42 +1332,7 @@ class MatchPreviewResponse(BaseModel):
     keepers: MatchPreviewKeepersDTO
 
 
-# ── 模型指标与产品 ─────────────────────────────────────────
-
-class ModelVersionDTO(BaseModel):
-    id: str
-    algorithm: str
-    description: str
-    trained_at: Optional[str] = None
-    train_range: Optional[str] = None
-    created_at: str
-    params: dict
-    dev_metrics: dict                      # 研发期回测指标(非正式样本口径)
-
-
-class OfficialEvaluationDTO(BaseModel):
-    sample_size: int
-    accuracy: Optional[float] = None
-    brier: Optional[float] = None
-    log_loss: Optional[float] = None
-    rps: Optional[float] = None
-    calibration: list[dict]
-    evaluated_at: str
-
-
-class MarketBaselineDTO(BaseModel):
-    status: str                            # UNVERIFIED:未完成可复现的收盘赔率评估
-    note: str
-
-
-class ModelMetricsResponse(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    model_versions: list[ModelVersionDTO]
-    official_evaluation: Optional[OfficialEvaluationDTO] = None
-    official_evaluation_note: Optional[str] = None
-    market_baseline: MarketBaselineDTO
-
+# ── 产品 ─────────────────────────────────────────────────
 
 class PlanDTO(BaseModel):
     id: str
@@ -1572,48 +1447,6 @@ class GrantResultDTO(BaseModel):
     plan_id: str
     starts_at: str
     ends_at: str
-
-
-class AdminPredictionItem(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    id: str
-    match_id: int
-    kickoff_at_utc: Optional[str] = None
-    model_version_id: str
-    generated_at: str
-    published_at: Optional[str] = None
-    locked_at: Optional[str] = None
-    status: str
-    is_official: int
-    visibility: str
-    home_win: float
-    draw: float
-    away_win: float
-    confidence: Optional[str] = None
-    edit_count: int = 0
-    last_edited_at: Optional[str] = None
-
-
-class AdminPredictionsResponse(BaseModel):
-    counts: dict[str, int]
-    predictions: list[AdminPredictionItem]
-
-
-class EditPredictionResponse(BaseModel):
-    edit_id: Optional[str] = None    # None = 本次调用未产生实质变化(no-op)
-    changed_fields: list[str]
-    edit_count: int
-
-
-class PublishUpcomingFailedItem(BaseModel):
-    id: str
-    reason: str
-
-
-class PublishUpcomingResponse(BaseModel):
-    published: int
-    failed: list[PublishUpcomingFailedItem]
 
 
 class AuditLogItem(BaseModel):
@@ -1764,15 +1597,6 @@ StudioExportResponse = Union[StudioExportServerDTO, StudioExportClientDTO]
 #     在 total_goals=0 时显式为 None),按来源如实标注 Optional;
 #   - score_distribution 的 home_score/away_score 来自仅 status='Finish' 的比赛
 #     (build_silver.py 的 `_matches` 已过滤),此上下文内保证非空,故为必填 int。
-#
-# wdl-predictions 的核心诚实性(CLAUDE.md §3):'upcoming' / 'live+未付费' / 'live+已付费'
-# 是三种物理上不同的 JSON 形状,不是同一个 dict 里若干字段可空/可选——用三个各自
-# `extra="forbid"` 的模型组成 Union(LegacyWdlUpcomingMatch / LiveLockedMatch /
-# LiveFullMatch),而不是把 tendency/locked/p_home 等标成模糊 Optional 掩盖差异。
-# 三个变体的必填字段互不相同且禁止额外字段,故 Pydantic 对任一真实运行时字典只会
-# 匹配唯一一个变体,不存在歧义;legacy 端点错误响应与 v1 共用同一个 ApiErrorDTO
-# (backend.api.error_handlers 统一处理器归一,不再有 legacy 独立错误结构)。
-
 
 class LegacyStanding(BaseModel):
     position: int
@@ -1896,54 +1720,6 @@ class LeagueMatchesResponse(BaseModel):
     league_id: int
     season: str
     matches: list[LegacyMatchRow]
-
-
-class _LegacyWdlMatchBase(BaseModel):
-    """三个 WDL variant 共有的基础字段(entry 字典无条件赋值,key 总是存在,
-    值可能为 None——`Optional[X]` 无默认值,required 但 nullable)。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    match_id: int
-    date: Optional[str]
-    round: Optional[str]
-    status: Optional[str]
-    home_team_id: int
-    away_team_id: int
-    home_team_name_zh: Optional[str]
-    away_team_name_zh: Optional[str]
-    days_until_kickoff: Optional[int]
-
-
-class LegacyWdlUpcomingMatch(_LegacyWdlMatchBase):
-    """distance-to-kickoff >7 天:物理上没有 tendency/confidence/reason/
-    p_home/p_draw/p_away——不是"这几个字段为 null",是这个 JSON 形状根本不含
-    它们(这是数据就绪状态,不是付费墙,2026-08-16 起未改变这条既有规则)。"""
-
-    availability: Literal["upcoming"]
-
-
-class LegacyWdlLiveMatch(_LegacyWdlMatchBase):
-    """distance-to-kickoff ≤7 天:恒下发完整 tendency/confidence/reason/
-    p_home/p_draw/p_away(2026-08-16 起除"每日精选"外全站比赛内容全部免费,
-    不再有 locked 字段区分付费/未付费)。"""
-
-    availability: Literal["live"]
-    tendency: Optional[Literal["home", "draw", "away"]]
-    confidence: Optional[Literal["normal", "low"]]
-    reason: Optional[str]
-    p_home: Optional[float]
-    p_draw: Optional[float]
-    p_away: Optional[float]
-
-
-LegacyWdlMatchEntry = Union[LegacyWdlUpcomingMatch, LegacyWdlLiveMatch]
-
-
-class LeagueWdlPredictionsResponse(BaseModel):
-    league_id: int
-    season: str
-    matches: list[LegacyWdlMatchEntry]
 
 
 # ── 每日精选(reco;人工推荐板块,与模型预测 DTO 彻底分开) ──

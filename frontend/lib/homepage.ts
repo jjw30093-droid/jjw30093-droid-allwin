@@ -1,8 +1,4 @@
-import type {
-  GetJson,
-  MatchSummary,
-  TrackRecordResponse,
-} from "@/lib/api-v1";
+import type { GetJson, MatchSummary } from "@/lib/api-v1";
 import type { FreeTip } from "@/components/matches/MatchRow";
 
 export type AnalysisBundle = GetJson<"/api/v1/matches/{match_id}/analysis">;
@@ -284,31 +280,6 @@ export function selectHomepageEvidence(
     .filter((item): item is AnalysisEvidence => Boolean(item));
 }
 
-export type PublicRecordView =
-  | { status: "error" }
-  | { status: "empty" }
-  | {
-      status: "ready";
-      total: number;
-      evaluated: number;
-      accuracy: number | null;
-      samples: TrackRecordResponse["samples"];
-    };
-
-export function publicRecordView(
-  data: TrackRecordResponse | null,
-  failed = false,
-): PublicRecordView {
-  if (failed || !data) return { status: "error" };
-  if (data.total <= 0) return { status: "empty" };
-  return {
-    status: "ready",
-    total: data.total,
-    evaluated: data.metrics?.sample_size ?? 0,
-    accuracy:
-      typeof data.metrics?.accuracy === "number"
-        ? data.metrics.accuracy
-        : null,
-    samples: data.samples,
-  };
-}
+// 2026-08-25:WDL 模型与正式预测登记簿已整体废弃(胜率改由 bet365 赔率
+// 直接派生),/api/v1/track-record 端点与本文件对应的 PublicRecordView/
+// publicRecordView 已随之删除(此前也已无消费方)。

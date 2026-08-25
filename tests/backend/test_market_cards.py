@@ -25,7 +25,7 @@ def _seed_history(conn, team_id, league_id, *, start_date, n=10, corners=6, yc=3
         mid = 70000 + team_id * 100 + i
         opp = 80000 + team_id * 100 + i
         d = (base + timedelta(days=i)).isoformat()
-        insert_match(conn, mid, league_id=league_id, season="2025/2026", date=d,
+        insert_match(conn, mid, league_id=league_id, date=d,
                      home_id=team_id, away_id=opp, home="队", away=f"陪衬{i}",
                      status="Finish", home_score=1, away_score=0)
         conn.execute(
@@ -95,26 +95,26 @@ def market_fixture(data_dir):
     kickoff_date = (date.today() + timedelta(days=3)).isoformat()
 
     # 9500:免费联赛(47)未开赛比赛,双方都有充足历史
-    insert_match(conn, 9500, league_id=47, season="2025/2026", date=kickoff_date,
+    insert_match(conn, 9500, league_id=47, date=kickoff_date,
                  home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
     _seed_history(conn, 1001, 47, start_date="2025-12-01", corners=6, yc=3)
     _seed_history(conn, 1002, 47, start_date="2025-12-01", corners=5, yc=2)
 
     # 9501:免费联赛,双方历史都不足(每队只有 2 场,< MIN_SAMPLE=3)
-    insert_match(conn, 9501, league_id=47, season="2025/2026", date=kickoff_date,
+    insert_match(conn, 9501, league_id=47, date=kickoff_date,
                  home_id=1003, away_id=1004, home="丙队", away="丁队", status="NotStarted")
     _seed_history(conn, 1003, 47, start_date="2025-12-01", n=2)
     _seed_history(conn, 1004, 47, start_date="2025-12-01", n=2)
 
     # 9502:英冠(48,需登录),完全没有历史事实表(模拟真实的四个空联赛)
-    insert_match(conn, 9502, league_id=48, season="2025/2026", date=kickoff_date,
+    insert_match(conn, 9502, league_id=48, date=kickoff_date,
                  home_id=2001, away_id=2002, home="戊队", away="己队", status="NotStarted")
 
     # 9503/9504:复用 1001/1002 的历史(角球估算值同 9500,恒为 11.0),
     # 分别验证"真实盘口线命中标定档" / "真实盘口线未命中标定档"两条路径。
-    insert_match(conn, 9503, league_id=47, season="2025/2026", date=kickoff_date,
+    insert_match(conn, 9503, league_id=47, date=kickoff_date,
                  home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
-    insert_match(conn, 9504, league_id=47, season="2025/2026", date=kickoff_date,
+    insert_match(conn, 9504, league_id=47, date=kickoff_date,
                  home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
 
     conn.commit()
@@ -354,7 +354,7 @@ class TestMarketCardLinesArray:
         那正是站长报告"角球倾向恒为空"的根因之一)。"""
         conn_core = connect_rw("core")
         kickoff_date = (date.today() + timedelta(days=3)).isoformat()
-        insert_match(conn_core, 9505, league_id=47, season="2025/2026", date=kickoff_date,
+        insert_match(conn_core, 9505, league_id=47, date=kickoff_date,
                      home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
         conn_core.commit()
         conn_core.close()
@@ -388,7 +388,7 @@ class TestMarketCardLinesArray:
         None——等价映射不能凭空造出一个从未通过样本外单调性检验的信号。"""
         conn_core = connect_rw("core")
         kickoff_date = (date.today() + timedelta(days=3)).isoformat()
-        insert_match(conn_core, 9506, league_id=47, season="2025/2026", date=kickoff_date,
+        insert_match(conn_core, 9506, league_id=47, date=kickoff_date,
                      home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
         conn_core.commit()
         conn_core.close()
@@ -429,7 +429,7 @@ class TestMarketCardLinesArray:
         calibration_line 为 None。"""
         conn_core = connect_rw("core")
         kickoff_date = (date.today() + timedelta(days=3)).isoformat()
-        insert_match(conn_core, 9507, league_id=47, season="2025/2026", date=kickoff_date,
+        insert_match(conn_core, 9507, league_id=47, date=kickoff_date,
                      home_id=1001, away_id=1002, home="阿队", away="乙队", status="NotStarted")
         conn_core.commit()
         conn_core.close()

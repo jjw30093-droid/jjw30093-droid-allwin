@@ -135,7 +135,7 @@ class TestMatchCandidatesContent:
         conn = connect_rw("core")
         seed_core_schema(conn)
         kickoff_date = (date.today() + timedelta(days=3)).isoformat()
-        insert_match(conn, 9502, league_id=48, season="2025/2026", date=kickoff_date,
+        insert_match(conn, 9502, league_id=48, date=kickoff_date,
                      home_id=2001, away_id=2002, home="戊队", away="己队", status="NotStarted")
         conn.commit()
         conn.close()

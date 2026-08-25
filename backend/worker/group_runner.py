@@ -38,9 +38,6 @@ JOB_GROUPS: dict[str, tuple[str, ...]] = {
     "postmatch": (
         "fotmob_incremental_multi",
         "core_silver_build",
-        "model_predict",
-        "prediction_register",
-        "postmatch_settle",
         "reco_auto_settle",
     ),
     "derive": (
@@ -49,7 +46,6 @@ JOB_GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "maintenance": (
         "entity_resolution",
-        "metrics_rebuild",
     ),
 }
 

@@ -56,10 +56,11 @@ def fetch_match_data(
     client = FotMobClient()
     page_props = client.match_details(match_id)
 
-    dim_kwargs = {"league_id": league_id, "date": date}
-    if season is not None:
-        dim_kwargs["season"] = season
-    dim = client.parse_match_dim(page_props, match_id, **dim_kwargs)
+    dim = client.parse_match_dim(page_props, match_id, league_id=league_id, date=date)
+    # parse_match_dim 不再输出 Season(2026-08-25,CLAUDE.md §6.3)。验证库
+    # (verify_leagues.db)没有赛程同步这一层,Season 由调用方(verify_league.py
+    # 的 --season,required)显式注入——这是验证专用库的孤立约定,不回流生产。
+    dim["Season"] = season
 
     required = ("Home_Team_ID", "Away_Team_ID", "Date", "status")
     missing = [k for k in required if dim.get(k) is None]

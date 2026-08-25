@@ -4,19 +4,13 @@ api_server.py — FastAPI serving 层(ROADMAP.md Phase 1.3)。
 前端只读 API,不直连 DB(CLAUDE.md §2)。本文件是前端与数据之间的唯一通道。
 
 2026-08-16 产品权限口径修正(经用户批准):除"每日精选"外,网站所有比赛
-内容全部免费,包括匿名用户——本文件 4 个 legacy 端点均不再有任何
+内容全部免费,包括匿名用户——本文件 legacy 端点均不再有任何
 entitlement 门禁:
     - /api/league/{league_id}/overview
     - /api/league/{league_id}/betting         — 此前调用 require_membership,现已移除。
     - /api/league/{league_id}/matches
-    - /api/league/{league_id}/wdl-predictions — 此前"付费核心"的说法已废除
-      (CLAUDE.md §3 旧修订)。仍保留"7 天有效期"闸门(availability,用服务端
-      datetime.now() 动态算,不写死日期)——这是数据就绪状态,不是付费墙:
-        - availability='upcoming'(距开赛 >7 天):概率/倾向一律不下发
-          (p_home/p_draw/p_away/tendency 都不放进响应体)——这时候"还没到
-          能看的时候",与登录/付费无关;
-        - availability='live'(距开赛 ≤7 天):恒下发完整 tendency/
-          confidence/reason/p_home/p_draw/p_away,不再有 locked 字段。
+2026-08-25:WDL 模型与正式预测登记簿已整体废弃(胜率改由 bet365 赔率直接
+派生),/api/league/{league_id}/wdl-predictions 端点随之删除。
 silver_team_season_stats 是混合表:overview 只 SELECT 部分字段(射门/射正/
 控球/xG/xGOT),betting 额外 SELECT 角球/红黄牌/BTTS/零封字段——这只是两个
 端点各自的历史字段选择差异,不再是免费/付费投影边界。
@@ -30,7 +24,6 @@ silver_team_season_stats 是混合表:overview 只 SELECT 部分字段(射门/�
 
 import os
 import sqlite3
-from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -47,7 +40,6 @@ from backend.api.schemas import (
     LeagueBettingResponse,
     LeagueMatchesResponse,
     LeagueOverviewResponse,
-    LeagueWdlPredictionsResponse,
     error_responses,
 )
 from backend.media.team_crests import resolve_team_crest_url
@@ -346,123 +338,6 @@ def league_matches(league_id: int, season: Optional[str] = None):
             d["home_team_name_zh"] = team_zh.get(home_id)
             d["away_team_name_zh"] = team_zh.get(away_id)
             matches.append(d)
-
-        return {
-            "league_id": league_id,
-            "season": season,
-            "matches": matches,
-        }
-    finally:
-        conn.close()
-
-
-# ── GET /api/league/{league_id}/wdl-predictions ───────────────────────
-# 2026-08-16 起不再要求任何 entitlement;仍保留"7 天有效期"数据就绪闸门
-# (与登录/付费无关,详见文件头 docstring)。
-def _resolve_prediction_season(conn: sqlite3.Connection, league_id: int, season: Optional[str]) -> str:
-    rows = conn.execute(
-        "SELECT DISTINCT season FROM gold_wdl_predictions WHERE league_id = ? ORDER BY season",
-        (league_id,),
-    ).fetchall()
-    seasons = [r["season"] for r in rows]
-    if not seasons:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "no_wdl_predictions_for_league",
-                "message": f"league_id={league_id} 没有任何 WDL 预测数据",
-            },
-        )
-    if season is None:
-        return seasons[-1]
-    if season not in seasons:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "invalid_season",
-                "message": f"非法 season={season!r},league_id={league_id} 可用预测赛季: {seasons}",
-            },
-        )
-    return season
-
-
-WDL_LIVE_WINDOW_DAYS = 7
-
-
-def _wdl_availability(match_date_str: Optional[str]) -> tuple:
-    """distance-to-kickoff 用服务端当前时间动态算(datetime.now()),不写死
-    任何日期——"7 天有效期"这条线每次请求都是新算的,过了明天这条线本身
-    也会跟着往后移一天。"""
-    if not match_date_str:
-        return "upcoming", None
-    match_date = datetime.strptime(match_date_str, "%Y-%m-%d").date()
-    days_until = (match_date - datetime.now().date()).days
-    availability = "live" if days_until <= WDL_LIVE_WINDOW_DAYS else "upcoming"
-    return availability, days_until
-
-
-@app.get(
-    "/api/league/{league_id}/wdl-predictions",
-    response_model=LeagueWdlPredictionsResponse,
-    responses=error_responses(400, 422),
-)
-def league_wdl_predictions(league_id: int, season: Optional[str] = None):
-    conn = get_readonly_connection()
-    try:
-        season = _resolve_prediction_season(conn, league_id, season)
-        team_zh = _team_i18n_map(conn)
-
-        rows = conn.execute(
-            """
-            SELECT g.match_id, g.p_home, g.p_draw, g.p_away, g.confidence, g.reason,
-                   m.Date, m.Match_Round, m.Home_Team_ID, m.Away_Team_ID, m.status
-            FROM gold_wdl_predictions g
-            JOIN dim_match m ON g.match_id = m.Match_ID
-            WHERE g.league_id = ? AND g.season = ?
-            ORDER BY m.Date, g.match_id
-            """,
-            (league_id, season),
-        ).fetchall()
-
-        matches = []
-        for r in rows:
-            d = dict(r)
-            home_id, away_id = d["Home_Team_ID"], d["Away_Team_ID"]
-            p_home, p_draw, p_away = d["p_home"], d["p_draw"], d["p_away"]
-            availability, days_until = _wdl_availability(d["Date"])
-
-            entry = {
-                "match_id": d["match_id"],
-                "date": d["Date"],
-                "round": d["Match_Round"],
-                "status": d["status"],
-                "home_team_id": home_id,
-                "away_team_id": away_id,
-                "home_team_name_zh": team_zh.get(home_id),
-                "away_team_name_zh": team_zh.get(away_id),
-                "availability": availability,
-                "days_until_kickoff": days_until,
-            }
-
-            # 🔴 'upcoming'(距开赛 >7 天):概率/倾向一律不下发——
-            # p_home/p_draw/p_away/tendency/confidence/reason 这些 key 在
-            # 这一分支根本不存在,这是数据就绪状态,与登录/付费无关。
-            # 'live':2026-08-16 起恒下发完整概率(不再有 locked 字段区分
-            # 付费/未付费,除"每日精选"外全站比赛内容全部免费)。
-            if availability == "live":
-                tendency = None
-                if p_home is not None and p_draw is not None and p_away is not None:
-                    probs = {"home": p_home, "draw": p_draw, "away": p_away}
-                    tendency = max(probs, key=probs.get)
-
-                entry["tendency"] = tendency
-                entry["confidence"] = d["confidence"]
-                entry["reason"] = d["reason"]
-                entry["p_home"] = p_home
-                entry["p_draw"] = p_draw
-                entry["p_away"] = p_away
-
-            matches.append(entry)
 
         return {
             "league_id": league_id,

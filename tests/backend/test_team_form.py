@@ -45,14 +45,13 @@ def five_matches(data_dir):
         (7104, 3, 3, None),   # 又一场缺失
         (7105, 5, 1, 30),
     ]):
-        insert_match(conn, mid, league_id=47, season="2025/2026",
-                     date=f"2026-01-{10+i:02d}", home_id=1001, away_id=2000+i,
+        insert_match(conn, mid, league_id=47, date=f"2026-01-{10+i:02d}", home_id=1001, away_id=2000+i,
                      home="阿队", away=f"对手{i}", status="Finish",
                      home_score=1, away_score=0)
         _seed_stats(conn, mid, 1001, corners=corners, yellow_cards=yc, touches_opp_box=tob)
         _seed_stats(conn, mid, 2000 + i, corners=corners - 1, yellow_cards=yc + 1)
     # 目标比赛之后的一场(不应被纳入"近期")
-    insert_match(conn, 7200, league_id=47, season="2025/2026", date="2026-02-01",
+    insert_match(conn, 7200, league_id=47, date="2026-02-01",
                  home_id=1001, away_id=2099, home="阿队", away="未来对手",
                  status="Finish", home_score=2, away_score=0)
     _seed_stats(conn, 7200, 1001, corners=99, yellow_cards=99)
@@ -107,10 +106,10 @@ class TestTeamRecentProfile:
 
         # 再造一个只出现 2 场的场景验证真正 < MIN_SAMPLE 的情况
         conn2 = connect_rw("core")
-        insert_match(conn2, 7301, league_id=87, season="2025/2026", date="2026-01-11",
+        insert_match(conn2, 7301, league_id=87, date="2026-01-11",
                      home_id=5001, away_id=5002, home="丙队", away="丁队",
                      status="Finish", home_score=1, away_score=1)
-        insert_match(conn2, 7302, league_id=87, season="2025/2026", date="2026-01-15",
+        insert_match(conn2, 7302, league_id=87, date="2026-01-15",
                      home_id=5001, away_id=5003, home="丙队", away="戊队",
                      status="Finish", home_score=0, away_score=0)
         _seed_stats(conn2, 7301, 5001, corners=6)
@@ -126,7 +125,7 @@ class TestTeamRecentProfile:
         """same_league 只看阿队在英超(47)的比赛;跨联赛的比赛不该混入,
         否则会把不同强度联赛的角球数据错误地平均在一起。"""
         conn = connect_rw("core")
-        insert_match(conn, 7400, league_id=87, season="2025/2026", date="2026-01-05",
+        insert_match(conn, 7400, league_id=87, date="2026-01-05",
                      home_id=1001, away_id=3000, home="阿队", away="西甲对手",
                      status="Finish", home_score=1, away_score=1)
         _seed_stats(conn, 7400, 1001, corners=1)  # 极端值,如果泄漏进来均值会明显偏低

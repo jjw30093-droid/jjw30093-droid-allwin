@@ -33,12 +33,12 @@ def recent_form_with_english_opponent(data_dir):
     )
 
     insert_match(
-        conn, 8001, league_id=47, season="2025/2026", date="2026-01-01",
+        conn, 8001, league_id=47, date="2026-01-01",
         home_id=1001, away_id=1003, home="阿队", away="Urawa Red Diamonds",
         status="Finish", home_score=2, away_score=1,
     )
     insert_match(
-        conn, 9500, league_id=47, season="2025/2026", date="2026-01-20",
+        conn, 9500, league_id=47, date="2026-01-20",
         home_id=1001, away_id=1002, home="阿队", away="乙队",
         status="NotStarted",
     )

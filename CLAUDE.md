@@ -12,8 +12,7 @@ all-win 是面向中文足球用户的专业数据分析订阅平台，同时也
 
 1. 用中文把一场比赛的数据、模型概率和不确定性讲清楚。
 2. 将 FotMob 比赛事件与 NowGoal 赔率快照放在同一时间轴上，展示“同一时段观察到了什么”，不声称因果。
-3. 公开、连续、不可选择性删除地记录正式预测和赛后评估。
-4. 同一份分析数据同时驱动网站页面、竖屏图卡、视频文案与字幕。
+3. 同一份分析数据同时驱动网站页面、竖屏图卡、视频文案与字幕。
 
 不得使用“因为盘口变化”“导致盘口变化”“必胜”“稳赚”“红单”“连红”等无法证实或收益承诺式表述。
 
@@ -282,6 +281,41 @@ poll_windows.py` 的代码注释同样把这三条标注为下限）：
   测试一直是绿的——这类缺陷没有任何常规测试能抓到）。任何新增的采集开关，
   必须同时有一条断言 worker argv 包含它的测试
   （`tests/backend/test_worker_argv.py`）。
+- **任何"标识一条记录属于哪个赛季/哪个分区"的参数，绝不能有一个看起来合理、
+  实际可能是错的字面量默认值**（2026-08-25 真实事故：`backend/fotmob_client.py::
+  parse_match_dim()` 的 `season` 参数曾硬编码默认值 `"2025/2026"`，
+  `backend/ingest/ingest_match.py` 只在调用方显式传参时才透传 `season`、
+  不传就静默漏给这个旧默认值兜底；`backend/ingest/ingest_league.py` 和
+  `backend/verify/verify_league.py` 的命令行 `--season` 参数同样默认
+  `"2025/2026"`。一次用 `ingest_league.py --match-ids ...` 对个别场次做手动
+  补采、忘了带 `--season`，把 2026-08-21/22 的 5 场英超新赛季揭幕战全部
+  错标成上赛季 `Season='2025/2026'`——分数、xG、射门、阵容等比赛本身的数据
+  全部正确，只有赛季这一个字段错了，而且这类错误**不会被下游任何一致性检查
+  发现**：这 5 场很快变成 `status='Finish'`，此后 `scheduler.py` 的"新完赛"
+  扫描（`league_stale_unresolved_match_ids`）判定"已解决、不需要再管"，
+  `job_runs` 里再也不会出现这几场的踪迹；按赛季过滤的查询（球队风格象限、
+  联赛列表、榜单……）会把它们连同数据一起悄悄漏掉，而不是报错或留白——
+  站长凭真实赛程"英超揭幕轮应该有 10 场"的常识才发现只查到 5 场。
+  当日先做了"season 改必填"的止血，随即发现那仍是"靠调用方传对"——打错字、
+  复制旧命令产生完全一样的损坏；且按同一推导全量核对生产 18,056 行，共
+  **878 行**错标（不止那 5 场），全部错行的标签恰好都是旧默认值 `2025/2026`。
+  终版修复（2026-08-25 当日二次收口）按 FotMob 架构（APK 反编译实证：其
+  Match 模型**没有 Season 字段**，赛季由比赛 id 隐含、按需从服务端派生）：
+  **`Season` 是赛程同步独占的派生列，明细抓取根本没有写它的能力**——
+  `parse_match_dim()`/`ingest_match()` 彻底删除 `season` 形参，`ingest_match`
+  的 dim_match 写入改为列作用域 upsert（`MATCH_DETAIL_OWNED_COLUMNS`，
+  不含 Season；此前整行 `INSERT OR REPLACE` 会把赛程同步写对的赛季用手填值
+  冲掉，正是事故机制），行不存在时在任何网络请求前 fail closed；赛季值只来自
+  provider 回声校验/发现（`backend/ingest/season_identity.py`，五份散落实现
+  收敛为一份）；存储层由 `dim_league_season_regime` 制度表（按 effective_from
+  分版本——日职 2026-07 真实换制）+ `dim_match` 触发器
+  （`migrations/core/0011`）保证写入的 Season 必须等于按 (League_ID, Date)
+  推导的赛季，未登记联赛直接拒绝；质量门 G12 盯超出存量基线的新增漂移。
+  存量 878 行**只报不改**（`backend/cli/season_audit.py`，无 --commit），
+  修复需另行决策（牵涉 Silver 分区重建/SEO URL/模型切分）。通用纪律：
+  **标识"这行数据属于哪个时间分区/赛季/批次"的值，能派生就绝不手填；
+  必须外部提供时只认来源回报的值，且写入端要有与派生一致性的存储层校验**——
+  "必填参数"只是把静默错误变成大声错误，仍不是正确性保证。
 
 ### 6.4 时间共现
 
@@ -475,69 +509,6 @@ reco_access_grants
   完全可见，可以按需纳入可索引范围；每日精选正文页面仍需登录+授权，不
   纳入 sitemap。
 
-## 9. 预测完整性与模型评估
-
-### 9.1 可编辑但强制留痕的预测登记簿
-
-> 适用范围（2026-08 修订，经用户批准）：本节的锁定、哈希、永久公开资格等不变量
-> 只约束**模型预测**。付费独家推荐板块是人工内容，独立建表、不纳入本登记簿，
-> 其内容与战绩允许管理员修改；作为交换，推荐板块的战绩页必须与模型公开战绩
-> 在产品与代码上明确区分，不得混用 track_record 查询、评估口径或"锁定不可改"
-> 的可信度表述。**不得为容纳人工推荐而放松 `prediction_snapshots` 的任何既有
-> 保护**（三概率和为 1 的 CHECK、`model_version_id NOT NULL`、
-> `trg_pred_snap_locked_immutable` 触发器均为全表级，动之即削弱全部模型样本）。
-
-现有 `gold_wdl_predictions` 是模型当前产物，不是公开历史账本。正式记录使用 `platform.db` 中的：
-
-```text
-model_versions
-prediction_runs
-prediction_snapshots
-prediction_outcomes
-prediction_evaluations
-prediction_manifests
-```
-
-正式快照必须包含：
-
-```text
-match_id / model_version_id / generated_at / published_at / locked_at
-input_cutoff_at / input_snapshot_hash / prediction_hash
-home_win / draw / away_win / expected_home_goals / expected_away_goals
-confidence / visibility / status / is_official
-last_edited_at / edit_count
-```
-
-规则：
-
-- 三项概率在容差内等于 1。
-- 开球后生成的预测不得进入正式赛前统计。
-- 锁定后的概率等预测内容允许直接编辑，但必须经统一的 `edit_snapshot` 写入
-  `prediction_snapshot_edits`（修正前后值、操作者、原因、时间），不得绕过留痕
-  直接 UPDATE；`prediction_snapshot_edits` 本身 append-only，不可再改或删。
-- 公开 track record 默认展示全部正式样本。
-- 每日正式预测 manifest 生成稳定 hash，可上传 S3 版本桶；启用 Object Lock 时优先 governance 模式。
-
-正式样本集合具有公开样本口径不变量：
-
-- 一条快照一旦满足 `is_official=1`、`locked_at IS NOT NULL` 且 `published_at < kickoff_at_utc`，就永久属于公开正式样本集合，这条资格判据只看是否曾经合格地锁定过，不因内容后续被编辑而改变；
-- `status='retracted'`、`superseded_by`、管理员撤回或后续修正版不得使旧样本从公开列表、manifest 或评估分母中消失；
-- 修正版可以追加为新快照（`supersede`，旧版和新版均可查询并显示修正链），也可以直接编辑已有快照（`edit_snapshot`，留痕但不产生新记录）；两种机制并存，互不替代；
-- 开球后禁止创建 supersede 版本；直接编辑不受开球/结算前后限制；
-- 赛后撤回只能作为公开说明和审计状态，不能改变评估资格；
-- track record 和 evaluation 查询不得使用 `status` 或 `superseded_by` 选择性排除已经成为正式样本的记录；
-- 内容修正必须通过 `edit_snapshot` 留痕，修正历史（次数、最近时间）在公开战绩页可查，不得静默覆盖。
-
-任何能让已经公开的失败预测从公开列表或指标分母中消失的实现都属于 P0 数据完整性缺陷；未经留痕直接覆盖正式预测内容同样属于 P0 数据完整性缺陷。
-
-历史 `gold_wdl_predictions` 如果无法证明生成时间早于开球，只能导入为 `legacy_unverified` 或 draft，不能冒充正式历史战绩。
-
-### 9.2 评估口径
-
-实现 Accuracy、Brier、Multiclass Log Loss、RPS、Calibration buckets 和样本量。评估命令离线运行，不进入在线 FastAPI 请求。
-
-市场基线需要固定并记录：公司集合、去水公式、缺失规则、聚合方式、配对样本和 RPS 公式。
-
 ## 10. API 与缓存
 
 ### 10.1 路径
@@ -552,11 +523,8 @@ GET  /api/v1/leagues/{id}/standings
 GET  /api/v1/leagues/{id}/fixtures
 GET  /api/v1/matches
 GET  /api/v1/matches/{id}
-GET  /api/v1/matches/{id}/prediction
 GET  /api/v1/matches/{id}/odds
 GET  /api/v1/matches/{id}/cooccurrence
-GET  /api/v1/track-record
-GET  /api/v1/model/metrics
 GET  /api/v1/products
 
 POST /api/v1/auth/wechat/device
@@ -758,12 +726,11 @@ failed/locked 时非零：
 - `allwin-gates`（每 30 分钟）→ `pipeline_gates`（质量门，故意独立于其它任何
   定时器的成败，发现问题只通过告警表达，不通过任务失败表达）；
 - `allwin-postmatch`（每 30 分钟，任务组）→ `fotmob_incremental_multi` →
-  `core_silver_build` → `model_predict` → `prediction_register` →
-  `postmatch_settle` → `reco_auto_settle`；
+  `core_silver_build` → `reco_auto_settle`；
 - `allwin-derive`（每 30 分钟，任务组）→ `odds_silver_build` →
   `analysis_bundle_build`；
 - `allwin-maintenance`（每天 04:00 Asia/Shanghai，任务组）→
-  `entity_resolution` → `metrics_rebuild`。
+  `entity_resolution`。
 
 以上 7 个定时器合起来的任务集合必须恰好等于下面手动全链的全部任务，不多不
 少、不重复调度（`tests/backend/test_job_order.py` 校验这条不变量）。另有
@@ -784,12 +751,8 @@ schedule_sync_multi
 → entity_resolution
 → core_silver_build
 → odds_silver_build
-→ model_predict
-→ prediction_register
 → analysis_bundle_build
-→ postmatch_settle
 → reco_auto_settle
-→ metrics_rebuild
 → pipeline_gates
 ```
 
@@ -885,14 +848,6 @@ schedule_sync_multi
 - 同一链路重跑必须幂等；
 - 真实外部访问与离线 fixture 验证必须分别汇报。
 
-### 预测账本验收
-
-- retract 后公开样本数和评估分母不变；
-- supersede 后旧样本仍公开并进入评估；
-- 开球后 supersede 被拒绝；
-- 旧版、新版、撤回版均能通过 track record 查询；
-- manifest 不得只包含修正链最新版。
-
 ### 登录与导出验收
 
 - Playwright 必须覆盖完整扫码登录（浏览器创建 → webhook 签名批准 → 轮询领取），不得只覆盖 claim 单端点；
@@ -915,8 +870,6 @@ schedule_sync_multi
 - `docs/architecture.md`：模块、数据库和运行拓扑。
 - `docs/auth-wechat.md`：公众号后台配置、带参二维码 + webhook 扫码登录和账号恢复。
 - `docs/data-sources.md`：来源、验证状态、时间粒度、降级方式。
-- `docs/model-api-contract.md`：模型输入输出和评估口径。
-- `docs/prediction-integrity.md`：锁定、哈希、撤回和公开战绩规则。
 - `docs/deployment-aws-cloudflare.md`：东京 AWS、Nginx、systemd、Cloudflare、备份和回滚。
 - `docs/audits/`：逐模块独立复核报告，`docs/current-state.md` 的证据层。
 - `README.md`：安装、开发、测试和常用命令。
@@ -944,7 +897,7 @@ schedule_sync_multi
 1. 实现与本文件的架构边界一致；
 2. 原有功能和用户改动未被破坏；
 3. migration、测试、构建和必要冒烟实际运行；
-4. 权限、缓存、预测锁定/编辑留痕和认证安全测试通过；
+4. 权限、缓存和认证安全测试通过；
 5. 文档描述与真实代码一致；
 6. 所有无法验证的外部能力明确标记 `UNVERIFIED`；
 7. 最终汇报列出真实命令、退出码、失败项和未完成项，以及仍需用户提供的外部凭证。

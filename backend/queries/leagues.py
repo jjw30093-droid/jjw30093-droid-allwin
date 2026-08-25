@@ -16,33 +16,38 @@ from __future__ import annotations
 import sqlite3
 
 LEAGUE_META = {
-    47: {"code": "epl", "name_zh": "英超", "name_en": "Premier League", "entitlement": "league:epl"},
-    87: {"code": "laliga", "name_zh": "西甲", "name_en": "La Liga", "entitlement": "league:top5"},
-    55: {"code": "seriea", "name_zh": "意甲", "name_en": "Serie A", "entitlement": "league:top5"},
-    54: {"code": "bundesliga", "name_zh": "德甲", "name_en": "Bundesliga", "entitlement": "league:top5"},
-    53: {"code": "ligue1", "name_zh": "法甲", "name_en": "Ligue 1", "entitlement": "league:top5"},
+    47: {"code": "epl", "name_zh": "英超", "name_en": "Premier League", "entitlement": "league:epl", "season_kind": "cross_year"},
+    87: {"code": "laliga", "name_zh": "西甲", "name_en": "La Liga", "entitlement": "league:top5", "season_kind": "cross_year"},
+    55: {"code": "seriea", "name_zh": "意甲", "name_en": "Serie A", "entitlement": "league:top5", "season_kind": "cross_year"},
+    54: {"code": "bundesliga", "name_zh": "德甲", "name_en": "Bundesliga", "entitlement": "league:top5", "season_kind": "cross_year"},
+    53: {"code": "ligue1", "name_zh": "法甲", "name_en": "Ligue 1", "entitlement": "league:top5", "season_kind": "cross_year"},
     # FotMob league id 67 = Allsvenskan(瑞典,自然年赛季,真实核对见
     # docs/current-state.md:2026-07-21 real probe,country=SWE)。
-    67: {"code": "allsvenskan", "name_zh": "瑞典超", "name_en": "Allsvenskan", "entitlement": "league:lottery"},
+    67: {"code": "allsvenskan", "name_zh": "瑞典超", "name_en": "Allsvenskan", "entitlement": "league:lottery", "season_kind": "calendar_year"},
     # FotMob 59 was revalidated against the live 2026 response for the active-
     # league content MVP. Like Allsvenskan, this is a lottery-relevant free
     # league, not an expansion of the top-five entitlement.
-    59: {"code": "eliteserien", "name_zh": "挪威超", "name_en": "Eliteserien", "entitlement": "league:lottery"},
+    59: {"code": "eliteserien", "name_zh": "挪威超", "name_en": "Eliteserien", "entitlement": "league:lottery", "season_kind": "calendar_year"},
     # 2026-08-07 接入:J1/K1/澳超(FotMob 223/9080/113,id 已经真实 ingest
     # 2,050 场逐场数据核对)。三者同为中国竞彩常见联赛,与挪超/瑞超同档
     # league:lottery,不并入 top5 付费墙。中文名按竞彩/主流媒体惯用简称。
-    223: {"code": "j1league", "name_zh": "日职联", "name_en": "J1 League", "entitlement": "league:lottery"},
-    9080: {"code": "kleague1", "name_zh": "韩K联", "name_en": "K League 1", "entitlement": "league:lottery"},
-    113: {"code": "aleague", "name_zh": "澳超", "name_en": "A-League", "entitlement": "league:lottery"},
+    223: {"code": "j1league", "name_zh": "日职联", "name_en": "J1 League", "entitlement": "league:lottery", "season_kind": "cross_year"},
+    9080: {"code": "kleague1", "name_zh": "韩K联", "name_en": "K League 1", "entitlement": "league:lottery", "season_kind": "calendar_year"},
+    113: {"code": "aleague", "name_zh": "澳超", "name_en": "A-League", "entitlement": "league:lottery", "season_kind": "cross_year"},
     # 2026-08-10 数据管道重建接入(Phase 0 真实网络探测确证 details.id,
     # runtime/research/pipeline-v2-probe/summary.json)。均为中国竞彩常见赛事,同档
-    # league:lottery(匿名可浏览,匿名仍只见最高一项概率)。season_kind 供 T+7 赛程
-    # 同步的赛季解析使用:cross_year=跨年串(2026/2027),calendar=自然年(2026)。
+    # league:lottery(匿名可浏览,匿名仍只见最高一项概率)。season_kind 是展示性
+    # 元数据(取值与 backend/season_resolver.py::SeasonKind 枚举一致:
+    # cross_year=跨年串(2026/2027),calendar_year=自然年(2026);2026-08-25 起
+    # 全联赛补齐并统一词汇)。⚠️ 赛季推导/校验的**权威**是 core 库的
+    # dim_league_season_regime 制度表(migrations/core/0011,按 effective_from
+    # 分版本——日职 2026-07 真实换制,标量表达不了),这里的 season_kind 只反映
+    # 当前制度,不承担推导。223 标 cross_year 即"当前制度"。
     # 欧战三项资格赛天然不在 FotMob id 42/73/10216 的返回里,round='playoff' 保留。
     48: {"code": "championship", "name_zh": "英冠", "name_en": "Championship", "entitlement": "league:lottery", "season_kind": "cross_year"},
     57: {"code": "eredivisie", "name_zh": "荷甲", "name_en": "Eredivisie", "entitlement": "league:lottery", "season_kind": "cross_year"},
     61: {"code": "primeira", "name_zh": "葡超", "name_en": "Liga Portugal", "entitlement": "league:lottery", "season_kind": "cross_year"},
-    268: {"code": "brasileirao", "name_zh": "巴甲", "name_en": "Brasileirão Série A", "entitlement": "league:lottery", "season_kind": "calendar"},
+    268: {"code": "brasileirao", "name_zh": "巴甲", "name_en": "Brasileirão Série A", "entitlement": "league:lottery", "season_kind": "calendar_year"},
     # 2026-08-11 权限矩阵互换(用户拍板):欧战三项从 league:lottery 改挂
     # league:european_cup,与五大联赛同批进入免费面(见 migrations/platform/0012)。
     # 实测这三项联赛 dim_match 里 0 行数据(见 docs/current-state.md),开放免费

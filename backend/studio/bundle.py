@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from backend.db.util import normalize_exact_kickoff, sha256_hex, utc_now_iso
 from backend.queries import matches as q_matches
 from backend.queries.odds import legacy_summary_points
-from backend.queries.predictions import current_public_snapshot
 from backend.studio.team_style import (
     DOUYIN_SAFE_PROFILE,
     build_douyin_safe_profile,
@@ -143,7 +142,10 @@ def build_analysis_bundle(
     away_form = q_matches.recent_form(conn_core, away["team_id"], match["date_utc"])
     hs, as_ = _form_summary(home_form), _form_summary(away_form)
 
-    snap = current_public_snapshot(conn_platform, match_id)
+    # 2026-08-25:WDL 模型与正式预测登记簿已废弃(胜率改由 bet365 赔率直接
+    # 派生,见 CLAUDE.md 决策);analysis bundle 不再查询 prediction_snapshots,
+    # snap 恒为 None,下方 prediction_public/prediction_member 恒为 None。
+    snap = None
     model_version = snap["model_version_id"] if snap else None
     model_row = (
         conn_platform.execute(

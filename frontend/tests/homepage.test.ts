@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { MatchSummary, TrackRecordResponse, WinProbability } from "@/lib/api-v1";
+import type { MatchSummary, WinProbability } from "@/lib/api-v1";
 import type { HomeMatchCard } from "@/lib/homepage";
 import {
   FEATURED_WINDOW_HOURS,
   marqueeRank,
-  publicRecordView,
   selectFeaturedMatch,
   selectHomepageEvidence,
   selectHomepageMatches,
@@ -373,23 +372,6 @@ describe("selectHomepageEvidence", () => {
       "客队近期状态",
       "两队休息时间",
     ]);
-  });
-});
-
-describe("publicRecordView", () => {
-  it("零样本与接口失败是两个不同状态", () => {
-    const empty = {
-      total: 0,
-      retracted_count: 0,
-      superseded_count: 0,
-      limit: 40,
-      offset: 0,
-      metrics: null,
-      samples: [],
-    } as TrackRecordResponse;
-
-    expect(publicRecordView(empty)).toEqual({ status: "empty" });
-    expect(publicRecordView(null, true)).toEqual({ status: "error" });
   });
 });
 

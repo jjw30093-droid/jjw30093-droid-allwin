@@ -41,7 +41,7 @@ class TestParseMatchDimTeamColors:
         四个值必须原样提取,不得漏取或错位(light/dark、home/away 四组
         不能互相搭错)。"""
         client = FotMobClient(proxy="")
-        row = client.parse_match_dim(_load_fixture(), match_id=5104961, league_id=59, season="2026")
+        row = client.parse_match_dim(_load_fixture(), match_id=5104961, league_id=59)
 
         assert row["Home_Team_Color_Light"] == "#f13c26"
         assert row["Home_Team_Color_Dark"] == "#f13c26"
@@ -54,7 +54,7 @@ class TestParseMatchDimTeamColors:
         payload = _load_fixture()
         payload["general"].pop("teamColors", None)
         client = FotMobClient(proxy="")
-        row = client.parse_match_dim(payload, match_id=5104961, league_id=59, season="2026")
+        row = client.parse_match_dim(payload, match_id=5104961, league_id=59)
 
         assert row["Home_Team_Color_Light"] is None
         assert row["Home_Team_Color_Dark"] is None
@@ -67,7 +67,7 @@ class TestParseMatchDimTeamColors:
         payload = _load_fixture()
         payload["general"]["teamColors"] = {"lightMode": {"home": "#111111", "away": "#222222"}}
         client = FotMobClient(proxy="")
-        row = client.parse_match_dim(payload, match_id=5104961, league_id=59, season="2026")
+        row = client.parse_match_dim(payload, match_id=5104961, league_id=59)
 
         assert row["Home_Team_Color_Light"] == "#111111"
         assert row["Away_Team_Color_Light"] == "#222222"

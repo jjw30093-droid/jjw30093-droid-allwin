@@ -95,7 +95,7 @@ class TestGenericWatermarkMechanism:
 
 
 class TestRealJobsWiredToWatermarkFn:
-    @pytest.mark.parametrize("job_name", ["core_silver_build", "odds_silver_build", "model_predict"])
+    @pytest.mark.parametrize("job_name", ["core_silver_build", "odds_silver_build"])
     def test_watermark_fn_is_registered(self, job_name):
         assert callable(runner.REGISTRY[job_name].get("watermark_fn")), (
             f"{job_name} 必须声明 watermark_fn(全量 DELETE+INSERT 重建,空转 tick 不应真的重跑)"
@@ -238,50 +238,3 @@ class TestOddsSilverBuildWatermarkSignal:
         )
 
 
-class TestModelPredictWatermarkSignal:
-    def test_new_finished_match_in_league_47_changes_watermark(self, data_dir):
-        conn = connect_rw("core")
-        seed_core_schema(conn)
-        conn.commit()
-        wm_before = runner._watermark_model_predict()
-
-        conn.execute(
-            "INSERT INTO dim_match (Match_ID, League_ID, Season, status) VALUES (1, 47, '2025/2026', 'Finish')"
-        )
-        conn.commit()
-        conn.close()
-        wm_after = runner._watermark_model_predict()
-        assert wm_before != wm_after
-
-    def test_new_notstarted_fixture_in_target_season_changes_watermark(self, data_dir):
-        """model_predict 对 NotStarted 场次重算,新增/减少目标赛季的赛程也算"新工作"。"""
-        conn = connect_rw("core")
-        seed_core_schema(conn)
-        conn.commit()
-        wm_before = runner._watermark_model_predict()
-
-        conn.execute(
-            "INSERT INTO dim_match (Match_ID, League_ID, Season, status) VALUES (2, 47, '2026/2027', 'NotStarted')"
-        )
-        conn.commit()
-        conn.close()
-        wm_after = runner._watermark_model_predict()
-        assert wm_before != wm_after
-
-    def test_other_league_changes_do_not_affect_watermark(self, data_dir):
-        """model_predict 硬编码只对 League_ID=47 重算,其它联赛的完赛/赛程变化不应误判为新工作。"""
-        conn = connect_rw("core")
-        seed_core_schema(conn)
-        conn.commit()
-        wm_before = runner._watermark_model_predict()
-
-        conn.execute(
-            "INSERT INTO dim_match (Match_ID, League_ID, Season, status) VALUES (3, 87, '2026/2027', 'NotStarted')"
-        )
-        conn.execute(
-            "INSERT INTO dim_match (Match_ID, League_ID, Season, status) VALUES (4, 87, '2025/2026', 'Finish')"
-        )
-        conn.commit()
-        conn.close()
-        wm_after = runner._watermark_model_predict()
-        assert wm_before == wm_after

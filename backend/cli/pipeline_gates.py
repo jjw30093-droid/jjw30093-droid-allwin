@@ -19,6 +19,11 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
   G10 box_shot_geometry_drift     坐标法禁区内射门数 vs 官方计数漂移  >5% WARNING
   G11 xref_unmapped_upcoming      168h 内不可采比赛(全局聚合,非按联赛)
                                    距开球≤48h 仍不可采 CRITICAL / 更远 WARNING
+  G12 season_label_drift          Season 与制度表推导不一致:超出 878 存量基线
+                                   的新增/未登记联赛行 CRITICAL;features 交叉
+                                   漂移新增 WARNING(CLAUDE.md §6.3)
+  G13 unknown_enum_value          enum 型列出现 known_values.py 登记外取值 WARNING
+  G14 extra_json_unknown_key      球队统计 extra_json 出现白名单外新键 WARNING
 
 数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
 不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
@@ -31,6 +36,7 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
 
 import argparse
 import json
+import sqlite3
 import statistics
 import sys
 from datetime import datetime, timedelta, timezone
@@ -419,6 +425,133 @@ def _gate_box_shot_geometry(conn_core, now_iso) -> dict:
     }
 
 
+# G12 基线(2026-08-25 上线时生产实测,SQL 与门内推导完全一致):
+#   season_drift=878(2026-08-25 事故的全部存量,站长决定"只报不改",清单见
+#   backend/cli/season_audit.py)、features_drift=77(int_match_features 与
+#   dim_match 的赛季不一致,且已证实是 dim_match 侧错)。门只对**超出基线的
+#   新增**告警——上线当天就按存量刷 CRITICAL 会立刻把告警变噪音(G10 注释
+#   与模块 docstring 的既有教训)。存量清零后应把基线改回 0。
+G12_BASELINE_SEASON_DRIFT = 878
+G12_BASELINE_FEATURES_DRIFT = 77
+
+
+def _gate_season_label_drift(conn_core) -> dict:
+    """G12:dim_match.Season 与制度表推导不一致的行数(CLAUDE.md §6.3)。
+
+    0011 触发器挡新写入;本门是纵深防御——盯"触发器被绕过/未部署/制度表被
+    改坏"造成的**新增**漂移,以及未登记联赛的行。制度表缺失(migration 未
+    应用)时如实 skipped。
+    """
+    from backend.season_regime import derived_season_sql
+
+    try:
+        drift = conn_core.execute(
+            "SELECT COUNT(*) FROM dim_match m"
+            " WHERE m.Season IS NOT NULL AND m.Date IS NOT NULL"
+            f" AND m.Season <> {derived_season_sql('m.Date', 'm.League_ID')}"
+        ).fetchone()[0]
+        unregistered = conn_core.execute(
+            "SELECT COUNT(*) FROM dim_match m WHERE m.League_ID IS NOT NULL"
+            " AND NOT EXISTS (SELECT 1 FROM dim_league_season_regime r"
+            "                  WHERE r.league_id = m.League_ID)"
+        ).fetchone()[0]
+    except sqlite3.OperationalError:
+        return {"gate": "season_label_drift", "level": OK,
+                "detail": "skipped_regime_table_missing"}
+    try:
+        features_drift = conn_core.execute(
+            "SELECT COUNT(*) FROM int_match_features f"
+            " JOIN dim_match m ON m.Match_ID = f.match_id"
+            " WHERE f.season IS NOT NULL AND m.Season IS NOT NULL"
+            "   AND f.season <> m.Season"
+        ).fetchone()[0]
+    except sqlite3.OperationalError:
+        features_drift = None
+    new_drift = max(0, drift - G12_BASELINE_SEASON_DRIFT)
+    new_features = (
+        max(0, features_drift - G12_BASELINE_FEATURES_DRIFT)
+        if features_drift is not None else 0
+    )
+    level = OK
+    if new_features > 0:
+        level = WARNING
+    if new_drift > 0 or unregistered > 0:
+        level = CRITICAL
+    return {
+        "gate": "season_label_drift", "level": level,
+        "season_drift": drift, "baseline": G12_BASELINE_SEASON_DRIFT,
+        "new_drift": new_drift, "unregistered_league_rows": unregistered,
+        "features_drift": features_drift,
+        "features_baseline": G12_BASELINE_FEATURES_DRIFT,
+    }
+
+
+def _gate_unknown_enum_value(conn_core) -> dict:
+    """G13:enum 型列出现登记外取值(backend/known_values.py 是唯一登记处)。
+
+    只告警不拒写(来源新增枚举不该变成采集事故);表/列在当前库不存在时
+    如实跳过该项。这一门补的是 FotMob `Unknown` 枚举成员的"被看见"半边
+    ——DTO 层继续用 str 保证"不崩"(schemas.py:851 的既有立场不变)。
+    """
+    from backend.known_values import ENUM_REGISTRY
+
+    unknown: dict[str, list] = {}
+    checked = 0
+    for table, column, is_known in ENUM_REGISTRY:
+        try:
+            rows = conn_core.execute(
+                f'SELECT DISTINCT "{column}" FROM {table}'
+                f' WHERE "{column}" IS NOT NULL'
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        checked += 1
+        bad = sorted(str(r[0]) for r in rows if not is_known(r[0]))
+        if bad:
+            unknown[f"{table}.{column}"] = bad[:10]
+    return {
+        "gate": "unknown_enum_value",
+        "level": WARNING if unknown else OK,
+        "columns_checked": checked, "unknown": unknown,
+    }
+
+
+G14_WINDOW_DAYS = 90  # 只扫近 90 天的比赛:控制 json_each 展开成本,又足以在新键到达后 3 个月内持续可见
+
+
+def _gate_extra_json_unknown_key(conn_core, now_iso) -> dict:
+    """G14:fact_team_match_stats.extra_json 出现白名单外的新键。
+
+    正是这套告警此前缺失,让球队级 physical_metrics_* 在库里躺了数月、任何
+    读路径都看不见(match_report.TEAM_STAT_KEYS 是读取侧唯一投影,来源新增
+    键"不会自动出现在响应里"是该白名单文档写明的行为——本门把"也没人知道
+    它来了"这半个问题补上)。白名单 = TEAM_STAT_KEYS ∪ 已知未投影集合
+    (backend/known_values.py)。
+    """
+    from backend.known_values import TEAM_EXTRA_JSON_KNOWN_UNPROJECTED
+    from backend.queries.match_report import TEAM_STAT_KEYS
+
+    lo = _iso(_parse_iso(now_iso) - timedelta(days=G14_WINDOW_DAYS))[:10]
+    allowed = set(TEAM_STAT_KEYS) | set(TEAM_EXTRA_JSON_KNOWN_UNPROJECTED)
+    try:
+        rows = conn_core.execute(
+            "SELECT DISTINCT j.key FROM fact_team_match_stats t"
+            " JOIN dim_match m ON m.Match_ID = t.Match_ID, json_each(t.extra_json) j"
+            " WHERE t.Period='All' AND m.Date >= ?",
+            (lo,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {"gate": "extra_json_unknown_key", "level": OK,
+                "detail": "skipped_table_missing"}
+    unknown = sorted(r[0] for r in rows if r[0] not in allowed)
+    return {
+        "gate": "extra_json_unknown_key",
+        "level": WARNING if unknown else OK,
+        "window_days": G14_WINDOW_DAYS, "unknown_keys": unknown[:20],
+        "unknown_count": len(unknown),
+    }
+
+
 # ── 汇总与告警 ───────────────────────────────────────────────────────
 
 # 门 → notify 的 source(P0 白名单来源见 backend/notify.P0_ALERT_SOURCES;
@@ -435,6 +568,9 @@ _GATE_ALERT_SOURCE = {
     "company_scope": "company_scope",
     "box_shot_geometry_drift": "box_shot_geometry_drift",
     "xref_unmapped_upcoming": "xref_unmapped_upcoming",
+    "season_label_drift": "season_label_drift",
+    "unknown_enum_value": "unknown_enum_value",
+    "extra_json_unknown_key": "extra_json_unknown_key",
 }
 
 
@@ -457,6 +593,9 @@ def run(now_iso: str | None = None, notify_alerts: bool = True) -> dict:
             ("company_scope", lambda: _gate_company_scope(conn_odds, now)),
             ("source_waf_blocked", lambda: _gate_source_waf(conn_odds, now)),
             ("box_shot_geometry_drift", lambda: _gate_box_shot_geometry(conn_core, now)),
+            ("season_label_drift", lambda: _gate_season_label_drift(conn_core)),
+            ("unknown_enum_value", lambda: _gate_unknown_enum_value(conn_core)),
+            ("extra_json_unknown_key", lambda: _gate_extra_json_unknown_key(conn_core, now)),
         )
         for gate_name, check in checks:
             try:

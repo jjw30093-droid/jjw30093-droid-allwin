@@ -81,21 +81,44 @@ def legacy_core(data_dir, monkeypatch):
         " Home_Team_Name, Away_Team_Name, status, Match_Round)"
         " VALUES (3,'2026/2027',47,?,100,200,'A','B','NotStarted','5')", (LIVE_DATE,))
     conn.execute("INSERT INTO dim_team_i18n (Team_ID, name_zh) VALUES (100,'阿森纳'),(200,'切尔西')")
+    # 2026-08-25 起 migration 0012 会先按 backend/schema.py 建全量骨架,本
+    # 夹具自带的窄版 CREATE IF NOT EXISTS 变成 no-op——全部改用具名列插入,
+    # 不再依赖"本地窄表的列序"。
     conn.execute(
-        "INSERT INTO fact_league_table VALUES (47,'2025/2026','all',100,1,10,7,2,1,20,10,10,23,NULL)")
+        "INSERT INTO fact_league_table (League_ID,Season,table_type,Team_ID,position,"
+        "played,wins,draws,losses,goals_for,goals_against,goal_diff,points,qual_color)"
+        " VALUES (47,'2025/2026','all',100,1,10,7,2,1,20,10,10,23,NULL)")
     conn.execute(
-        "INSERT INTO fact_season_player_stats"
+        "INSERT INTO fact_season_player_stats (League_ID,Season,stat_name,Player_ID,"
+        "Player_Name,Team_ID,Team_Name,rank,value)"
         " VALUES (47,'2025/2026','goals','p1','Player One',100,'A',1,9.0)")
     conn.execute(
-        "INSERT INTO silver_league_season_summary VALUES (47,'2025/2026',10,50.0,20.0,30.0,2.75)")
+        "INSERT INTO silver_league_season_summary (League_ID,Season,total_matches,"
+        "home_win_pct,draw_pct,away_win_pct,avg_total_goals)"
+        " VALUES (47,'2025/2026',10,50.0,20.0,30.0,2.75)")
     conn.execute(
-        "INSERT INTO silver_team_season_stats"
+        "INSERT INTO silver_team_season_stats (League_ID,Season,Team_ID,matches_played,"
+        "avg_total_shots,avg_shots_on_target,avg_possession,avg_expected_goals,"
+        "avg_expected_goals_on_target,avg_corners,avg_yellow_cards,avg_red_cards,"
+        "clean_sheets,btts_matches,btts_pct)"
         " VALUES (47,'2025/2026',100,10,12.0,5.0,55.0,1.8,0.9,5.0,1.0,0.1,3,4,40.0)")
-    conn.execute("INSERT INTO silver_over_under_thresholds VALUES (47,'2025/2026',2.5,6,4,60.0,40.0)")
-    conn.execute("INSERT INTO silver_score_distribution VALUES (47,'2025/2026',2,1,3,30.0)")
-    conn.execute("INSERT INTO silver_goal_minute_buckets VALUES (47,'2025/2026','0-15',2,20.0)")
-    conn.execute("INSERT INTO gold_wdl_predictions VALUES (2,47,'2026/2027',0.5,0.3,0.2,'normal','ok')")
-    conn.execute("INSERT INTO gold_wdl_predictions VALUES (3,47,'2026/2027',0.4,0.35,0.25,'normal','ok')")
+    conn.execute(
+        "INSERT INTO silver_over_under_thresholds (League_ID,Season,threshold,"
+        "over_count,under_count,over_pct,under_pct)"
+        " VALUES (47,'2025/2026',2.5,6,4,60.0,40.0)")
+    conn.execute(
+        "INSERT INTO silver_score_distribution (League_ID,Season,home_score,away_score,"
+        "match_count,pct)"
+        " VALUES (47,'2025/2026',2,1,3,30.0)")
+    conn.execute(
+        "INSERT INTO silver_goal_minute_buckets (League_ID,Season,bucket,goal_count,pct)"
+        " VALUES (47,'2025/2026','0-15',2,20.0)")
+    conn.execute(
+        "INSERT INTO gold_wdl_predictions (match_id,league_id,season,p_home,p_draw,"
+        "p_away,confidence,reason) VALUES (2,47,'2026/2027',0.5,0.3,0.2,'normal','ok')")
+    conn.execute(
+        "INSERT INTO gold_wdl_predictions (match_id,league_id,season,p_home,p_draw,"
+        "p_away,confidence,reason) VALUES (3,47,'2026/2027',0.4,0.35,0.25,'normal','ok')")
     conn.commit()
     conn.close()
 
@@ -174,65 +197,3 @@ class TestLeagueBetting:
         assert with_param.json() == without_param.json()
 
 
-class TestWdlPredictionsFieldGating:
-    """两态判别联合(LegacyWdlUpcomingMatch / LegacyWdlLiveMatch,
-    backend/api/schemas.py):两种 JSON 形状物理上互斥(每个变体 extra=forbid)。
-
-    2026-08-16 产品权限口径修正(除"每日精选"外全站比赛内容全部免费,包括
-    匿名):'live' 阶段不再区分"付费/未付费"——locked 字段与按付费二分的
-    第三个 variant(原 LegacyWdlLiveLockedMatch/LegacyWdlLiveFullMatch)已
-    彻底删除,'live' 恒下发完整 tendency/confidence/reason/p_home/p_draw/
-    p_away。唯一仍然存在的判别只是"upcoming"(距开赛 >7 天,数据尚未生成)
-    与"live"(数据已存在)——这是数据就绪状态,不是付费墙,本次任务不改变
-    这条既有规则。"""
-
-    def test_upcoming_entry_lacks_gated_keys_entirely(self, legacy_core, legacy_client):
-        r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
-        assert r.status_code == 200, r.text
-        matches = r.json()["matches"]
-        upcoming = next(m for m in matches if m["availability"] == "upcoming")
-        for key in ("tendency", "confidence", "reason", "locked", "p_home", "p_draw", "p_away"):
-            assert key not in upcoming, f"{key} 不应出现在 upcoming 条目里(应完全缺席,不是 null)"
-        # 始终存在的字段(即便值可能为 None)确实存在
-        for key in ("date", "round", "status", "home_team_name_zh", "days_until_kickoff"):
-            assert key in upcoming
-
-    def test_live_entry_has_full_probabilities_and_no_locked_field(self, legacy_core, legacy_client):
-        """2026-08-16 起:'live' 恒下发完整概率,不再有 locked 字段——这条断言
-        正是要推翻的旧规则(此前"未付费只给 tendency,精确概率缺席")。"""
-        r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
-        assert r.status_code == 200, r.text
-        live = next(m for m in r.json()["matches"] if m["availability"] == "live")
-        assert "locked" not in live, "locked 是旧付费裁剪字段,不应再出现"
-        assert live["tendency"] == "home"
-        assert live["p_home"] == 0.4
-        assert live["p_draw"] == 0.35
-        assert live["p_away"] == 0.25
-
-    def test_upcoming_branch_still_lacks_gated_keys_regardless_of_login(
-        self, legacy_core, legacy_client, fresh_ip
-    ):
-        """upcoming 分支(距开赛 >7 天,数据尚未生成)依旧完全缺席门禁字段——
-        这是数据就绪状态,与登录/付费无关,本次任务不改变这条既有规则。"""
-        from .authflow import wechat_scan_login
-
-        wechat_scan_login(legacy_client, ip=fresh_ip)
-        r = legacy_client.get("/api/league/47/wdl-predictions?season=2026/2027")
-        upcoming = next(m for m in r.json()["matches"] if m["availability"] == "upcoming")
-        assert not any(
-            k in upcoming for k in ("tendency", "confidence", "reason", "locked",
-                                    "p_home", "p_draw", "p_away")
-        )
-
-    def test_openapi_declares_two_named_variants_no_locked_variant(self, legacy_core, legacy_client, app):
-        """OpenAPI 契约层面是两个具名模型的 Union(Upcoming/Live),不再有按
-        付费状态二分的第三个 variant,也不再有 locked 字段。"""
-        spec = app.openapi()
-        comps = spec["components"]["schemas"]
-        assert "LegacyWdlUpcomingMatch" in comps
-        assert "LegacyWdlLiveMatch" in comps
-        assert "LegacyWdlLiveLockedMatch" not in comps, "LegacyWdlLiveLockedMatch 应已删除"
-        assert "LegacyWdlLiveFullMatch" not in comps, "LegacyWdlLiveFullMatch 应已删除"
-        assert "p_home" not in comps["LegacyWdlUpcomingMatch"]["properties"]
-        assert "p_home" in comps["LegacyWdlLiveMatch"]["properties"]
-        assert "locked" not in comps["LegacyWdlLiveMatch"]["properties"]

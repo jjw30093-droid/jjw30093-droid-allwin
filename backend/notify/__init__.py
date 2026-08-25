@@ -46,6 +46,7 @@ P0_ALERT_SOURCES = frozenset({
     "fixtures_window_empty",
     "entity_resolution_degraded",
     "postmatch_match_retry_exhausted",
+    "season_label_drift",
 })
 
 DEDUP_HOURS = 24

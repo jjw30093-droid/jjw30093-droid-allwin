@@ -21,14 +21,11 @@ from .deps import (
 )
 from .schemas import (
     AdminJobsResponse,
-    AdminPredictionsResponse,
     AdminSourceHealthResponse,
     AdminUsersResponse,
     AuditLogsResponse,
-    EditPredictionResponse,
     GrantResultDTO,
     OkDTO,
-    PublishUpcomingResponse,
     error_responses,
 )
 
@@ -120,161 +117,6 @@ def revoke_user_subscription(
     if not ok:
         raise HTTPException(status_code=404, detail="订阅不存在或已撤销")
     return {"status": "ok"}
-
-
-# ── 预测登记簿管理(P0.5) ─────────────────────────────────
-
-@router.get("/predictions", response_model=AdminPredictionsResponse)
-def list_predictions(
-    response: Response,
-    status: str = "",
-    limit: int = 100,
-    offset: int = 0,
-    ctx: AuthContext = Depends(require_admin),
-    conn=Depends(platform_ro),
-):
-    _no_store(response)
-    limit = max(1, min(limit, 500))
-    rows = conn.execute(
-        """SELECT id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at,
-                  locked_at, status, is_official, visibility, home_win, draw, away_win, confidence,
-                  edit_count, last_edited_at
-           FROM prediction_snapshots WHERE (?='' OR status=?)
-           ORDER BY kickoff_at_utc, match_id LIMIT ? OFFSET ?""",
-        (status, status, limit, offset),
-    ).fetchall()
-    counts = conn.execute(
-        "SELECT status, COUNT(*) AS n FROM prediction_snapshots GROUP BY status"
-    ).fetchall()
-    return {"counts": {r["status"]: r["n"] for r in counts}, "predictions": [dict(r) for r in rows]}
-
-
-def _prediction_action(conn, action_fn, snapshot_id, actor, **kw):
-    from backend.commands.predictions import PredictionError
-
-    try:
-        with tx(conn):
-            action_fn(conn, snapshot_id, actor, **kw)
-    except PredictionError as e:
-        raise HTTPException(status_code=409, detail={"code": e.reason, "message": str(e)})
-
-
-@router.post("/predictions/{snapshot_id}/publish", response_model=OkDTO)
-def publish_prediction(
-    snapshot_id: str,
-    response: Response,
-    ctx: AuthContext = Depends(require_admin_csrf),
-    conn=Depends(platform_rw),
-):
-    from backend.commands.predictions import publish_snapshot
-
-    _no_store(response)
-    _prediction_action(conn, publish_snapshot, snapshot_id, ctx.user_id)
-    return {"status": "ok"}
-
-
-@router.post("/predictions/{snapshot_id}/lock", response_model=OkDTO)
-def lock_prediction(
-    snapshot_id: str,
-    response: Response,
-    ctx: AuthContext = Depends(require_admin_csrf),
-    conn=Depends(platform_rw),
-):
-    from backend.commands.predictions import lock_snapshot
-
-    _no_store(response)
-    _prediction_action(conn, lock_snapshot, snapshot_id, ctx.user_id)
-    return {"status": "ok"}
-
-
-class RetractBody(BaseModel):
-    reason: str = Field(min_length=2, max_length=500)
-
-
-@router.post("/predictions/{snapshot_id}/retract", response_model=OkDTO)
-def retract_prediction(
-    snapshot_id: str,
-    body: RetractBody,
-    response: Response,
-    ctx: AuthContext = Depends(require_admin_csrf),
-    conn=Depends(platform_rw),
-):
-    from backend.commands.predictions import retract_snapshot
-
-    _no_store(response)
-    _prediction_action(conn, retract_snapshot, snapshot_id, ctx.user_id, reason=body.reason)
-    return {"status": "ok"}
-
-
-class EditPredictionBody(BaseModel):
-    reason: str = Field(min_length=2, max_length=500)
-    home_win: float | None = None
-    draw: float | None = None
-    away_win: float | None = None
-    expected_home_goals: float | None = None
-    expected_away_goals: float | None = None
-    confidence: str | None = None
-
-
-@router.post("/predictions/{snapshot_id}/edit", response_model=EditPredictionResponse)
-def edit_prediction(
-    snapshot_id: str,
-    body: EditPredictionBody,
-    response: Response,
-    ctx: AuthContext = Depends(require_admin_csrf),
-    conn=Depends(platform_rw),
-):
-    """直接修正一条预测(任意状态、任意时刻,含已锁定/已开球——见 CLAUDE.md §9.1)。
-
-    每次真正产生变化的修正都会写入 prediction_snapshot_edits(append-only),
-    不是静默覆盖;结果里的 changed_fields 为空表示这次调用没有产生实质变化。
-    """
-    from backend.commands.predictions import PredictionError, edit_snapshot
-
-    _no_store(response)
-    kwargs = {
-        k: v for k, v in body.model_dump().items() if k != "reason"
-    }
-    try:
-        with tx(conn):
-            result = edit_snapshot(conn, snapshot_id, ctx.user_id, reason=body.reason, **kwargs)
-    except PredictionError as e:
-        raise HTTPException(status_code=409, detail={"code": e.reason, "message": str(e)})
-    return result
-
-
-class PublishUpcomingBody(BaseModel):
-    lock: bool = True
-
-
-@router.post("/predictions/publish-upcoming", response_model=PublishUpcomingResponse)
-def publish_upcoming(
-    body: PublishUpcomingBody,
-    response: Response,
-    ctx: AuthContext = Depends(require_admin_csrf),
-    conn=Depends(platform_rw),
-):
-    """批量:尝试发布全部 draft(可选同时锁定)。逐条独立事务,失败不拖累其余。
-
-    候选集不再按 kickoff_at_utc 预筛(候选行可能因 date_only/unknown provenance 而
-    kickoff_at_utc 为 NULL,仍应被尝试并拿到明确失败原因,而不是被 SQL 悄悄排除在外)——
-    唯一验证入口是 publish_snapshot/lock_snapshot 内部的门禁,这里只负责收集结果。
-    """
-    from backend.commands.predictions import PredictionError, lock_snapshot, publish_snapshot
-
-    _no_store(response)
-    ids = [r[0] for r in conn.execute("SELECT id FROM prediction_snapshots WHERE status='draft'")]
-    done, failed = 0, []
-    for sid in ids:
-        try:
-            with tx(conn):
-                publish_snapshot(conn, sid, ctx.user_id)
-                if body.lock:
-                    lock_snapshot(conn, sid, ctx.user_id)
-            done += 1
-        except PredictionError as e:
-            failed.append({"id": sid, "reason": e.reason})
-    return {"published": done, "failed": failed}
 
 
 @router.get("/audit-logs", response_model=AuditLogsResponse)

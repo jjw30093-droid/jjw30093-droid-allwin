@@ -33,7 +33,7 @@ PLAYER_STATS_COLUMNS = [
     ("big_chance_missed_title", "REAL"),
     ("shots_woodwork", "REAL"),
     ("missed_penalty", "REAL"),
-    ("shotmap", "TEXT"),
+    # shotmap 列已删除(migrations/core/0012):生产 44 万行 100% NULL 的死列。
     ("accurate_passes", "REAL"),
     # 2026-08-23:传球成功次数的分母(尝试传球总数)。原始 payload 该字段是
     # fractionWithPercentage 类型({"value":37,"total":40}),此前只取 value,

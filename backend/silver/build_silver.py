@@ -84,12 +84,18 @@ def _col_names(columns: list) -> list:
 def _insert_many(conn, table: str, columns: list, rows: list) -> None:
     if not rows:
         return
+    # updated_at 统一走 utc_now_iso(20 字符 ISO Z;2026-08-25,
+    # migrations/core/0012):此前 datetime('now') 产出 19 字符无时区格式,
+    # 与 ISO Z 混排后按字符串排序/取 MAX 语义错误。
+    from backend.db.util import utc_now_iso
+
+    now = utc_now_iso()
     names = _col_names(columns)
     placeholders = ", ".join("?" for _ in names)
     cols_sql = ", ".join(_quote(n) for n in names)
     conn.executemany(
-        f"INSERT INTO {table} ({cols_sql}, updated_at) VALUES ({placeholders}, datetime('now'))",
-        [tuple(row.get(n) for n in names) for row in rows],
+        f"INSERT INTO {table} ({cols_sql}, updated_at) VALUES ({placeholders}, ?)",
+        [tuple(row.get(n) for n in names) + (now,) for row in rows],
     )
 
 

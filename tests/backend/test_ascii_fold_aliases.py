@@ -87,12 +87,25 @@ class TestCrossLeagueCandidateFilter:
         migrate.apply_all("odds", quiet=True)
         conn_core = connect_rw("core")
         seed_core_schema(conn_core)
-        # 47(英超,已登记)+ 9999(未登记)同日各一场
-        conn_core.executemany(
+        # 47(英超,已登记)+ 9999(未登记)同日各一场。
+        # 9999 那行是"制度表登记之前遗留的历史行"的模拟:0011 触发器已让这类
+        # 行无法再经正常写路径产生,但存量库里理论上可能残留(触发器不改存量,
+        # §"只报不改")——本测试守的正是读取侧对这类残留的过滤。绕过触发器的
+        # 唯一方式是暂时移除再原样重建(重放 0011 的触发器 DDL,幂等)。
+        conn_core.execute(
             "INSERT INTO dim_match (Match_ID,Season,League_ID,Date,Home_Team_ID,Away_Team_ID,"
             "Home_Team_Name,Away_Team_Name,status) VALUES (?,?,?,?,?,?,?,?,'NotStarted')",
-            [(1, "2026/2027", 47, "2026-08-12", 100, 200, "H", "A"),
-             (2, "2026", 9999, "2026-08-12", 300, 400, "X", "Y")])
+            (1, "2026/2027", 47, "2026-08-12", 100, 200, "H", "A"))
+        conn_core.execute("DROP TRIGGER IF EXISTS trg_dim_match_season_insert")
+        conn_core.execute(
+            "INSERT INTO dim_match (Match_ID,Season,League_ID,Date,Home_Team_ID,Away_Team_ID,"
+            "Home_Team_Name,Away_Team_Name,status) VALUES (?,?,?,?,?,?,?,?,'NotStarted')",
+            (2, "2026", 9999, "2026-08-12", 300, 400, "X", "Y"))
+        from backend.db.migrate import MIGRATIONS_ROOT, split_statements
+        sql_0011 = (MIGRATIONS_ROOT / "core" / "0011_season_integrity.sql").read_text(
+            encoding="utf-8")
+        for stmt in split_statements(sql_0011):
+            conn_core.execute(stmt)
         conn_core.commit()
         conn_core.close()
         conn_odds = connect_ro("odds")

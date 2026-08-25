@@ -45,10 +45,18 @@ def test_european_cup_leagues_are_european_cup_tier():
 
 
 def test_new_leagues_declare_season_kind():
-    # T+7 赛程同步的赛季解析依赖它;巴甲是自然年,其余跨年(Phase 0 实测)
-    assert LEAGUE_META[268]["season_kind"] == "calendar"
+    # 2026-08-25 起:全部联赛都声明 season_kind,取值与
+    # backend.season_resolver.SeasonKind 枚举词汇一致(旧值 "calendar" 与
+    # 枚举 "calendar_year" 不兼容,SeasonKind(...) 会直接抛——那正是这条
+    # 测试要钉死的词汇契约)。赛季推导的权威在 dim_league_season_regime
+    # 制度表(migrations/core/0011),这里只是展示性元数据。
+    from backend.season_resolver import SeasonKind
+
+    assert LEAGUE_META[268]["season_kind"] == "calendar_year"
     for lid in NEW_LEAGUE_IDS - {268}:
         assert LEAGUE_META[lid]["season_kind"] == "cross_year"
+    for lid, meta in LEAGUE_META.items():
+        SeasonKind(meta["season_kind"])  # 词汇不兼容会抛 ValueError
 
 
 def test_anonymous_cacheable_is_universal():
@@ -83,9 +91,3 @@ def test_content_pipeline_registry_does_not_drift():
     assert ids <= set(LEAGUE_META) | {130}, f"content_pipeline 出现未登记联赛: {ids - set(LEAGUE_META) - {130}}"
 
 
-def test_model_future_league_still_epl_only():
-    """扩联赛 ≠ 扩模型。wdl_baseline 只按英超拟合,误扩会把无意义概率
-    经 prediction_register 永久写进公开账本(CLAUDE.md §9.1,不可撤销)。"""
-    from backend.models.predict_wdl_future import FUTURE_LEAGUE_ID
-
-    assert FUTURE_LEAGUE_ID == 47

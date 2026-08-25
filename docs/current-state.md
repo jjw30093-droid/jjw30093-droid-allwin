@@ -1,5 +1,13 @@
 # 当前状态(docs/current-state.md)
 
+> 2026-08-25:WDL 模型与正式预测登记簿（`model_versions` / `prediction_runs` /
+> `prediction_snapshots` / `prediction_outcomes` / `prediction_evaluations` /
+> `prediction_manifests` / `gold_wdl_predictions`，含 `/track-record`、
+> `/about-model`、联赛详情"概率卡"页与相关后端代码）已整体废弃并删除代码；
+> 胜率改由 bet365 赔率直接派生。下文提到这套系统之处均为历史记录，不代表
+> 当前状态。SQLite 表本身未删除（历史数据保留决策另行），只是不再有代码
+> 读写它们。
+
 > 可更新的真实当前状态。最后全面更新:2026-07-19(收口轮:数据链路闭环 / 预测账本不变量 /
 > 生产 API 地址 / 认证三态 / 契约单一真源)。2026-07-20 增补:kickoff provenance +
 > 实体映射安全性收口(见 §7);同日第二轮封口 5 缺陷(provider ID 完整性 / existing auto_ok
@@ -6818,3 +6826,158 @@ match-detail-order 新增 tab 拆分 4 条);tsc/eslint/build 干净;零后端改
 浏览器实测(生产构建,5107562):七 tab 按序渲染,总览无数据可视化/赔率
 且保留数据倾向,「分析」pill 只有风格/球员/射门,「赔率」tab 含赔率快照
 (该场无已验证赔率映射,诚实空态)与数据来源说明。
+
+## 61. 球队风格定位散点图跨赛季泄漏:富勒姆 vs 切尔西画出 31 支英超球队(2026-08-25)
+
+站长验收发现:富勒姆 vs 切尔西的「分析」tab 里「球队风格定位」象限图画出
+30+ 支球队,而英超单赛季只有 20 支。
+
+根因:`backend/queries/team_style_preview.py` 的四个近 N 场聚合查询
+(`_single_team_stat`/`_team_stat_points`/`_xg_for_against_points`/
+`_fastbreak_share_by_team`,以及 `team_window_bounds`/`team_attack_sources`)
+此前只按 `dim_match.League_ID` 圈定候选球队池,没有同时限定 `Season`。
+`League_ID` 在本库是跨赛季持久的联赛实体(英超 47 号从 2020/2021 一路用到
+2026/2027),任何历史上打过这个联赛、此后已降级再没打过顶级联赛的球队,
+只要在 before_date 之前有过一场历史记录,就会被 `ROW_NUMBER() PARTITION BY
+Team_ID` 选中当作"它自己最近的 N 场"(哪怕那 N 场是 2021~2024 年打的),
+进而出现在当前赛季的散点图里。实测(生产 `data/allwin.db` 副本,英超
+2025/2026 赛季,`before_date=2026-01-07`):修复前该联赛 `League_ID=47` 全
+历史一共 31 支球队命中查询(20 支本赛季 + 9 支已降级多年的历史球队,另有
+2 支是本地测试夹具污染,与生产无关,见下);修复后按 `Season='2025/2026'`
+过滤,精确返回 20 支。
+
+修复:`league_style_views`/`team_window_bounds`/`team_attack_sources` 及其
+内部四个 SQL 辅助函数新增 `season` 形参,`WHERE` 子句同时按
+`League_ID=? AND Season=?` 过滤;`match_preview.py` 从 `match["season"]`
+(`dim_match.Season`,production 全量 16934 行无 NULL)取值传入。赛季初
+样本不足(该队本赛季近 N 场比赛数不足 5)时如实返回更少的点,不跨赛季借
+历史数据——与本文件既有的"样本不足如实返回实际场次数,不是 None"降级
+哲学一致,不需要额外的兜底逻辑。响应 DTO 形状不变(`season` 只是内部查询
+参数,不新增/不修改任何输出字段),故 OpenAPI 契约无漂移,前端零改动。
+
+其余"其他联赛也要避免这种情况"——同一套四个内部查询函数是所有联赛共用
+的唯一实现(`league_style_views` 按调用方传入的 `league_id`+`season` 参数
+化,没有按联赛特判的分支代码),此修复对全部已接入联赛统一生效,不需要
+逐联赛检查。
+
+顺带发现且已排除的干扰项(未改动,不在本次修复范围):本地 `data/
+allwin.db` 里混入了两行 `Team_ID=1001/1002`(`Match_ID=9001/9002`)的
+英超比赛记录,与 `tests/backend/coreseed.py::seed_basic_core` 的测试夹具
+ID 完全一致——是本地开发库被某次脚本操作意外写入的测试数据残留,不是
+生产数据(生产 `vip-lightsail` 上的 `allwin.db` 未受影响,只读 SSH 核实
+过 Fulham/Chelsea 真实 Team_ID 分别是 9879/8455)。这两行本身也会被本次
+的赛季过滤天然排除(其 `Season='2026/2027'`,不在 2025/2026 的查询窗口
+内),不影响本次修复的正确性,但如果本地继续用这个库做开发/浏览器验证,
+建议重新从生产只读拉一份干净副本,不要在这份库上直接跑写入型 pytest。
+
+验证:`.venv/bin/python -m pytest -q` 全量通过(含新增
+`tests/backend/test_team_style_preview.py::TestSeasonScoping` 两条回归——
+一条直接构造"已降级球队"场景断言其被排除,一条构造三个赛季各 20 支球队
+断言只返回被查询赛季自己的球队,不是历史并集);`tests/backend/
+test_match_preview.py` 既有夹具的历史比赛赛季从与被测比赛(9002,赛季
+2026/2027)不一致的 "2025/2026" 改成一致,否则会被本次修复的赛季过滤天然
+清空(这本身也是本次修复生效的证据);OpenAPI 导出确认零漂移。用生产
+`allwin.db` 只读副本直接调用 `league_style_views(conn, 47, "2025/2026",
+"2026-01-07", window=5)` 实测:47 号联赛 2025/2026 赛季精确返回 20 支球队
+(此前不限定赛季会返回 31 支,含污染)。
+
+## 62. 赛季归属重构:Season 从可写字段改为赛程同步独占的派生列(2026-08-25)
+
+§61 之后站长要求"按 FotMob APK 的架构把赛季问题根治,并顺带找出数据层其它
+值得借鉴之处一并改"。本节记录终版实现与实测结果。
+
+### 调研结论(APK 反编译 + 三个并行审计,证据保真)
+
+- **FotMob 的 Match 模型没有 Season 字段**(androguard 全量导出
+  `Lcom/fotmob/models/Match;` 约 70 个字段与全部 getter,无 Season/getSeason;
+  `League` 模型同样没有)。赛季只以"列表级请求参数"与"统计聚合对象"存在——
+  一场比赛的赛季由不可变 match id 隐含,客户端没有写它的机会,也就没有写错
+  的可能。
+- **我方 Season 有 6 个互不协调的来源**(S1 provider 发现 / S2 回声校验×5 份
+  拷贝 / S3 无校验人工 CLI / S4 从库里读回自繁殖 / S5 硬编码字面量×6 /
+  S6 season_resolver 仅 1 调用方),事故是 S3+S5 的必然产物;
+  `reingest_matches` 的 S4 路径意味着"用补采工具修复"反而会把错标焊死。
+- **事故机制**:赛程同步(`upsert_fixture_row`,列作用域,Season 来自
+  provider)其实一直在写对的赛季;是 `ingest_match` 的整行
+  `INSERT OR REPLACE` 用调用方手填值把它冲掉。正确与错误做法在仓里并存。
+- **错标规模 878 行**(生产 18,056 行全量,非抽样),且**全部错行标签都是
+  旧默认值 '2025/2026'**;除该值外每个标签与"(League_ID, Date) 推导"100%
+  吻合(14,138/14,138)。三类:揭幕轮 248(11 个联赛,不止英超 5 场!)/
+  自然年联赛标成跨年串 229 / 历史回填盖当时赛季 401(恰好是降级队场次——
+  西布罗姆 20/21、诺维奇/沃特福德/伯恩利/利兹 21/22)。7 月在所有跨年联赛
+  整月为空(切分月 M=7 两侧有整月余量);唯一真制度例外是日职 2026-07
+  自然年→跨年换制。int_match_features 有 77 行与 dim_match 不一致,且是
+  **特征表对、dim_match 错**——独立佐证。
+
+### 实现(全部落地,细节见 CLAUDE.md §6.3 终版条目)
+
+1. `backend/season_regime.py`:制度表唯一 Python 出口(REGIME_SEED 22 行、
+   `derived_season_sql`、`season_for_match`);与 `resolve_current_season`
+   明确分工(那边"现在是哪个赛季"无日期不猜;这边"这场比赛属哪个赛季"
+   有日期可确定性回答)。
+2. `migrations/core/0011_season_integrity.sql`:`dim_league_season_regime`
+   (按 effective_from 分版本,日职两条制度)+ dim_match 触发器(INSERT/
+   UPDATE OF Season,Date,League_ID 时校验推导一致;未登记联赛拒绝;
+   League_ID 为 NULL 的 canonical 占位行放行)+ `(League_ID, Season)` 索引
+   (该表此前零业务索引)。存量 878 行不动。
+3. `ingest_match`/`parse_match_dim` 删除 season 形参;`MATCH_DETAIL_OWNED_
+   COLUMNS` 列作用域 upsert(不含 Season);行不存在 fail closed。
+   `reingest_matches`/`scheduler`(DEFAULT_SEASON 删除,--season 必填)/
+   `ingest_league`(枚举与季表路径补回声校验 + 先落赛程骨架再补明细)/
+   `active_league_mvp._insert_match`(逐行按制度推导,未登记联赛行如实跳过
+   ——team_data 跨赛季滚动窗口整体打 context.season 的潜伏缺陷随之消除)
+   全部随新契约调整。verify 子系统(隔离验证库)由调用方显式注入 Season。
+4. `backend/ingest/season_identity.py`:回声校验/发现/allAvailableSeasons
+   提取的唯一实现;ingest_future_fixtures 原实现迁入并 re-export 兼容,
+   backfill_season_tables / backfill_kickoff_from_fotmob / active_league_mvp
+   改为调用,fotmob_schedule(休眠子系统)保留内联单行比较并注明唯一出处。
+5. 质量门 G12 season_label_drift(基线 878/77,只对新增告警,CRITICAL 进
+   notify P0 白名单)。
+6. `backend/cli/season_audit.py`:只报不改(无 --commit),分类逐行清单 +
+   features 交叉证据 + 历史赛季 provider 证据如实标 UNVERIFIED;
+   `--provider-check` 对"当前赛季错标"类做逐联赛 provider 实证。
+   生产报告已生成(878 行 CSV 已交站长)。
+
+### 第二部分:对照 FotMob 数据层的 P0/P1 收口
+
+自评结论:"严谨度长在错误的层"——0003 迁移证明我们会写教科书级 schema
+(NOT NULL/CHECK/跨列约束/append-only 触发器/recursive_triggers 缺口修复),
+但装着全部数据的 15 张老表 375 列零约束。已落地:
+
+- `migrations/core/0012`:五个自然键唯一索引(生产实测 0 重复;迁移内先按
+  keep-latest 去重保证任意副本可重放——本地开发库的测试污染行在排练时
+  正好验证了这层防御)+ 加时段拼写统一(FirstExtraHalf→FirstHalfExtra,
+  生产 28 行;写侧在 parse_team_stats_records 归一;两表加时段 join 从
+  恒零行变为可用)+ 9 张表 updated_at 19 字符无时区行补全 ISO Z
+  (dim_team_i18n 曾两种格式混排,MAX() 语义错误;5 个 datetime('now')
+  写者全部改 utc_now_iso)+ 删死列 fact_player_match_stats.shotmap
+  (44 万行 100% NULL)+ 删 fact_league_table (47,'2024') 60 行全零幽灵
+  占位。空库骨架按 schema.py 脚本生成(0001/0005/0007 先例)。
+- `backend/known_values.py`:封闭词表唯一登记处(status/kickoff_precision/
+  射门四列/事件两列/table_type 复合模式/extra_json 已知未投影键),与
+  fotmob_client STATUS_* 写侧常量由测试交叉钉住;质量门 G13
+  unknown_enum_value(登记外取值 WARNING——上线即会暴露 event_type 实际
+  9 种 vs 旧注释 5 种这类"静默到达")与 G14 extra_json_unknown_key
+  (90 天窗,白名单=TEAM_STAT_KEYS∪已知未投影——正是这套告警缺失让球队级
+  physical_metrics_* 在库里躺了数月无人知晓)。
+- FotMob 的 `Unknown` 枚举兜底成员哲学落地为"DTO 用 str 保证不崩
+  (schemas.py:851 立场不变)+ 质量门保证被看见";**不抄**它的 ID 类型混乱、
+  单位不进名/型、展示态入模型(zoomRatio 等)。
+- P2(能力清单 declared/observed 两层、单位进类型)按计划只留设计,未落地。
+
+### 验证(真实命令)
+
+- `.venv/bin/python -m pytest -q`:**0 failed**(多轮;新增
+  test_season_regime 18 条、test_ingest_match_season_required 重写 6 条、
+  test_data_hygiene_gates 14 条、test_known_values 6 条;存量测试中与新
+  触发器矛盾的赛季/日期布景逐一修正——它们编码的正是事故那套错误语义,
+  coreseed.insert_match 未显式给 season 时改为按日期推导,与生产同一份逻辑)。
+- migration 排练:生产同构本地副本(596MB)上 0011+0012 全部应用、重放
+  幂等、`integrity_check=ok`,六项卫生断言全过(旧拼写 0/19 字符 0/幽灵 0/
+  死列 0/唯一索引 5/制度 22 行)。
+- `npm run check:api-drift`:OK(本轮零 DTO 变更,前端零改动)。
+- 生产基线实测:season_drift=878 / unregistered=0 / features_drift=77
+  (与 G12 常量一致);Period 旧拼写 28 行、19 字符 updated_at 九表合计
+  14,105 行、幽灵赛季 60 行、shotmap 死列 0 非空——迁移在部署时处理。
+- UNVERIFIED:生产尚未部署本轮代码与迁移(照例待站长指令 commit+部署);
+  `--provider-check` 模式需生产代理,离线 fixture 已测、真实网络未跑。

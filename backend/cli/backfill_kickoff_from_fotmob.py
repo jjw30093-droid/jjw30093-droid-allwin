@@ -41,35 +41,13 @@ from typing import Any
 from backend.db.util import normalize_utc_iso
 
 
-class SeasonIdentityError(RuntimeError):
-    """league_matches() 响应的 details.id/selectedSeason 与请求参数不一致。"""
-
-
-def _verify_season_identity(data: dict, league_id: int, season: str) -> None:
-    """与 backend/ingest/ingest_future_fixtures.py::_verify_season_identity 同一口径
-    (details.id == league_id 且 selectedSeason == season,否则拒绝该分区)。
-    不直接 import:那个模块顶部有 `from ingest_match import _upsert` 的脚本式
-    旧导入,作为包模块导入会 ModuleNotFoundError——此处内联同款校验。"""
-    details = data.get("details") or {}
-    observed_id = details.get("id")
-    try:
-        observed_id = int(observed_id)
-    except (TypeError, ValueError):
-        raise SeasonIdentityError(
-            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
-            f"details.id 无法解析为整数: {observed_id!r}"
-        )
-    if observed_id != league_id:
-        raise SeasonIdentityError(
-            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
-            f"details.id={observed_id} 与请求的 league_id 不一致,拒绝落库"
-        )
-    observed_season = details.get("selectedSeason") or details.get("season")
-    if observed_season != season:
-        raise SeasonIdentityError(
-            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
-            f"selectedSeason={observed_season!r} 与请求的 season 不一致,拒绝落库"
-        )
+# 2026-08-25 收敛(CLAUDE.md §6.3):赛季回声校验统一到
+# backend/ingest/season_identity.py(该模块无脚本式旧导入,可安全包导入——
+# 此前"内联同款校验"的理由随之消失)。同名 re-export 兼容既有测试引用。
+from backend.ingest.season_identity import (  # noqa: F401 — re-export 兼容
+    SeasonIdentityError,
+    verify_season_echo as _verify_season_identity,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CORE_DB = _REPO_ROOT / "data" / "allwin.db"

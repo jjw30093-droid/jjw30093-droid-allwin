@@ -174,7 +174,7 @@ class TestGateAndCache:
         比赛内容全部免费,匿名与登录后同样 200——这条断言正是要推翻的旧规则
         (此前匿名 401)。"""
         conn = connect_rw("core")
-        insert_match(conn, 9301, league_id=67, season="2026", date="2026-05-10",
+        insert_match(conn, 9301, league_id=67, date="2026-05-10",
                      home_id=2001, away_id=2002, home="Vasteras SK", away="Orgryte IS")
         seed_match_report(conn, match_id=9301, home_id=2001, away_id=2002)
         conn.commit()

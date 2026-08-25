@@ -86,26 +86,23 @@ class TestEveryJsonOperationHasSchema:
                         )
 
 
-class TestPredictionSchemaAlwaysFull:
-    """2026-08-16 产品权限口径修正:除"每日精选"外普通比赛内容全部免费,
-    包括匿名——预测响应不再有 free/full 两套 variant,PredictionResponse.
-    prediction 是单一 DTO,在 schema 层就恒含完整胜平负三项概率,不再有
-    只为付费裁剪服务的 tier 字段。"""
+class TestPredictionSchemaRemoved:
+    """2026-08-25:WDL 模型与正式预测登记簿整体废弃(胜率改由 bet365 赔率
+    直接派生),/matches/{id}/prediction 端点与 PredictionDTO/PredictionResponse/
+    PredictionMeta 已从 schema 与路由中一并删除,不应再以任何形式出现在
+    OpenAPI 组件里。"""
 
-    def test_free_and_full_variant_dtos_removed(self, app):
+    def test_prediction_dtos_removed(self, app):
         comps = app.openapi()["components"]["schemas"]
-        assert "PredictionFreeDTO" not in comps, "PredictionFreeDTO 应已删除(不再有免费裁剪 DTO)"
-        assert "PredictionFullDTO" not in comps, "PredictionFullDTO 应已删除(不再有 free/full 两套 DTO)"
+        for name in ("PredictionFreeDTO", "PredictionFullDTO", "PredictionDTO",
+                     "PredictionResponse", "PredictionMeta"):
+            assert name not in comps, f"{name} 应已随 WDL 模型删除"
 
-    def test_prediction_dto_has_complete_wdl_and_no_tier(self, app):
-        comps = app.openapi()["components"]["schemas"]
-        assert "PredictionDTO" in comps, "应存在单一的 PredictionDTO"
-        props = comps["PredictionDTO"]["properties"]
-        for key in ("home_probability", "draw_probability", "away_probability",
-                    "top_outcome", "prediction_hash"):
-            assert key in props, f"PredictionDTO 缺少 {key}"
-        assert "tier" not in props, "tier 是旧付费裁剪字段,不应再出现"
-        assert "top_probability" not in props, "top_probability 是旧免费单项字段,不应再出现"
+    def test_prediction_endpoint_removed(self, app):
+        spec = app.openapi()
+        assert "/api/v1/matches/{match_id}/prediction" not in spec["paths"]
+        assert "/api/v1/track-record" not in spec["paths"]
+        assert "/api/v1/model/metrics" not in spec["paths"]
 
 
 class TestOpenapiExportSync:
@@ -225,7 +222,10 @@ class TestUnifiedErrorContractRuntime:
     ):
         from backend import api_server
 
-        sentinel_league_id = 987654
+        # 2026-08-25 起 dim_match 触发器要求联赛已在制度表登记且赛季与日期
+        # 一致——sentinel 改用 42(欧冠,已登记、本布景无其它种子数据,
+        # 隔离性等价),2099-08-01 → 跨年推导正是 2099/2100。
+        sentinel_league_id = 42
         sentinel_season = "2099/2100"
         temp_core = data_dir / "allwin.db"
         assert Path(api_server.DB_PATH).resolve() == temp_core.resolve()

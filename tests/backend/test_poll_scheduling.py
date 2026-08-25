@@ -118,19 +118,19 @@ class TestGatesIndependentOfOtherTimers:
     调用之间没有共享的锁/进程内状态/CLI 标志。"""
 
     def test_pipeline_gates_runs_after_upstream_group_job_fails(self, registry, data_dir):
-        def model_predict_boom():
-            raise RuntimeError("模拟 allwin-postmatch 本轮 model_predict 崩溃")
+        def core_silver_build_boom():
+            raise RuntimeError("模拟 allwin-postmatch 本轮 core_silver_build 崩溃")
 
         for job in group_runner.JOB_GROUPS["postmatch"]:
-            if job == "model_predict":
-                runner.register_job(job, fn=model_predict_boom, max_attempts=1)
+            if job == "core_silver_build":
+                runner.register_job(job, fn=core_silver_build_boom, max_attempts=1)
             else:
                 runner.register_job(job, fn=lambda: {"input_count": 0, "output_count": 0}, max_attempts=1)
 
         rc, results = group_runner.run_group("postmatch")
         assert rc == 1
         statuses = {r["job"]: r["status"] for r in results}
-        assert statuses["model_predict"] == "failed"
+        assert statuses["core_silver_build"] == "failed"
 
         gates_calls = []
 

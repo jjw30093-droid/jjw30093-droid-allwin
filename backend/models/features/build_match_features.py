@@ -36,6 +36,7 @@ sys.path.insert(
 )
 
 from db import get_connection
+from db.util import utc_now_iso
 from schema import FEATURE_ROLLING_STATS, FEATURE_WINDOWS, INT_MATCH_FEATURES_COLUMNS, _quote
 
 DECAY_RATE = 0.0015
@@ -205,8 +206,8 @@ def write_features(conn, df: pd.DataFrame, league_id: int) -> int:
     cols_sql = ", ".join(_quote(n) for n in col_names)
     conn.executemany(
         f"INSERT INTO int_match_features ({cols_sql}, updated_at) "
-        f"VALUES ({placeholders}, datetime('now'))",
-        [tuple(row) for row in df.itertuples(index=False, name=None)],
+        f"VALUES ({placeholders}, ?)",
+        [tuple(row) + (utc_now_iso(),) for row in df.itertuples(index=False, name=None)],
     )
     conn.commit()
     return len(df)

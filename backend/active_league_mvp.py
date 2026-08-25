@@ -15,12 +15,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from backend.commands.predictions import (
-    get_or_create_model_version,
-    publish_snapshot,
-    register_snapshot,
-    supersede_snapshot,
-)
 from backend.db.connections import connect_rw, tx
 from backend.db.util import new_uuid, utc_now_iso
 from backend.fotmob_client import FotMobClient
@@ -175,7 +169,22 @@ def _fixture_row(
     }
 
 
-def _insert_match(conn: sqlite3.Connection, row: dict) -> None:
+def _insert_match(conn: sqlite3.Connection, row: dict) -> bool:
+    """写入一行 dim_match;返回是否真的写了。
+
+    2026-08-25(CLAUDE.md §6.3 事故收口):Season 不再采用调用方 context 的
+    单一赛季字符串,改为按 (League_ID, Date) 从制度表推导——team_data 的
+    fixtures 是跨赛季、跨赛事的滚动窗口(backend/fotmob_client.py:577-581
+    实测注释),把它们整体打上 context.season 正是被 0011 触发器如实拒绝的
+    错标写法。未登记联赛(杯赛等)的行如实跳过并计数,不猜赛季、不写
+    (fail closed,与触发器同一立场)。
+    """
+    from backend.season_regime import season_for_match
+
+    derived = season_for_match(conn, row["League_ID"], row["Date"])
+    if derived is None:
+        return False
+    row = {**row, "Season": derived}
     columns = [r[1] for r in conn.execute("PRAGMA table_info(dim_match)")]
     values = {key: value for key, value in row.items() if key in columns}
     names = list(values)
@@ -184,6 +193,7 @@ def _insert_match(conn: sqlite3.Connection, row: dict) -> None:
         f"INSERT OR REPLACE INTO dim_match ({','.join(names)}) VALUES ({placeholders})",
         [values[name] for name in names],
     )
+    return True
 
 
 def _league_fixture_rows(
@@ -395,10 +405,16 @@ def apply_saved_artifacts(
     odds_payload = _read_json(paths["odds"])
 
     details = league.get("details") if isinstance(league.get("details"), dict) else {}
-    if (
-        details.get("name") != context.league_name
-        or str(details.get("selectedSeason")) != context.season
-    ):
+    # 赛季/联赛身份回声校验走统一实现(backend/ingest/season_identity.py,
+    # 2026-08-25 收敛,CLAUDE.md §6.3);league_name 是本管线额外的人读校验,
+    # 保留在这里(统一实现只管 id + season 这两个机器身份)。
+    from backend.ingest.season_identity import SeasonIdentityError, verify_season_echo
+
+    try:
+        verify_season_echo(league, context.league_id, context.season)
+    except SeasonIdentityError as e:
+        raise ActiveLeagueMVPError(f"competition or season mismatch: {e}") from e
+    if details.get("name") != context.league_name:
         raise ActiveLeagueMVPError("competition or season mismatch")
     general = match.get("general") if isinstance(match.get("general"), dict) else {}
     if int(general.get("matchId") or context.match_id) != context.match_id:
@@ -419,10 +435,19 @@ def apply_saved_artifacts(
     recent_rows = _team_fixture_rows(home, context) + _team_fixture_rows(
         away, context
     )
+    skipped_unregistered = 0
     with connect_rw("core") as conn:
         with tx(conn):
             for row in fixture_rows + recent_rows:
-                _insert_match(conn, row)
+                if not _insert_match(conn, row):
+                    skipped_unregistered += 1
+            if skipped_unregistered:
+                # 未登记联赛(杯赛等)的行如实跳过——此前这些行会被打上错误的
+                # context.season 落库,现在既不猜也不写(§2.2)。
+                print(
+                    f"[active_league_mvp] 跳过 {skipped_unregistered} 行未登记联赛的"
+                    f"比赛(dim_league_season_regime 无制度记录,不猜赛季)"
+                )
             team_names = (
                 (context.home_id, context.home_name_en, context.home_name_zh),
                 (context.away_id, context.away_name_en, context.away_name_zh),
@@ -493,69 +518,11 @@ def apply_saved_artifacts(
             market_phase="pre_match",
         )
 
-    with connect_rw("platform") as conn:
-        get_or_create_model_version(
-            conn,
-            MODEL_VERSION,
-            "market_baseline",
-            description="NowGoal Bet365 latest 1X2 de-vig baseline; not a proprietary model",
-            params={"company_id": "8", "method": "inverse_odds_normalized"},
-            applicable_league_ids=[context.league_id],
-        )
-        existing = conn.execute(
-            """SELECT id,home_win,draw,away_win FROM prediction_snapshots
-               WHERE match_id=? AND model_version_id=? AND superseded_by IS NULL
-               ORDER BY created_at DESC LIMIT 1""",
-            (context.match_id, MODEL_VERSION),
-        ).fetchone()
-        probability_tuple = (
-            probabilities["home"],
-            probabilities["draw"],
-            probabilities["away"],
-        )
-        if existing is None:
-            snapshot_id = register_snapshot(
-                conn,
-                match_id=context.match_id,
-                kickoff_at_utc=sample["kickoff_at_utc"],
-                kickoff_precision="exact",
-                kickoff_source="fotmob:league_fixture",
-                league_id=context.league_id,
-                model_version_id=MODEL_VERSION,
-                home_win=probabilities["home"],
-                draw=probabilities["draw"],
-                away_win=probabilities["away"],
-                generated_at=observed_at,
-                input_cutoff_at=observed_at,
-                input_snapshot_hash=_sha256(paths["odds"]),
-                confidence="market_baseline",
-            )
-            publish_snapshot(conn, snapshot_id, actor=None)
-            conn.commit()
-        elif all(
-            abs(float(existing[key]) - probabilities[outcome]) < 0.000001
-            for key, outcome in (
-                ("home_win", "home"),
-                ("draw", "draw"),
-                ("away_win", "away"),
-            )
-        ):
-            snapshot_id = existing["id"]
-        else:
-            snapshot_id = supersede_snapshot(
-                conn,
-                existing["id"],
-                actor=None,
-                home_win=probability_tuple[0],
-                draw=probability_tuple[1],
-                away_win=probability_tuple[2],
-                generated_at=observed_at,
-                input_cutoff_at=observed_at,
-                input_snapshot_hash=_sha256(paths["odds"]),
-                confidence="market_baseline",
-            )
-            publish_snapshot(conn, snapshot_id, actor=None)
-            conn.commit()
+    # 2026-08-25:WDL 模型与正式预测登记簿(prediction_snapshots)已整体废弃
+    # (胜率改由 bet365 赔率直接派生,CLAUDE.md 决策);本管线不再写入登记簿,
+    # market_baseline 概率只作为下方 script_sections/analysis_points 的口径
+    # 展示,不再落库、不再有 snapshot_id。
+    snapshot_id = None
 
     core = connect_rw("core")
     platform = connect_rw("platform")

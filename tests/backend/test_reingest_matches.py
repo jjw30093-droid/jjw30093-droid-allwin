@@ -28,7 +28,7 @@ class TestReingestMatches:
         calls = []
         monkeypatch.setattr(
             "backend.cli.reingest_matches.ingest_match",
-            lambda mid, league_id=None, season=None: calls.append(mid),
+            lambda mid, league_id=None: calls.append(mid),
         )
         result = reingest([5795371, 5868022], commit=False)
         assert result["mode"] == "dry-run"
@@ -39,22 +39,25 @@ class TestReingestMatches:
         assert targets[5795371]["season"] == "2026/2027"
         assert targets[5795371]["status_before"] == "InPlay"
 
-    def test_commit_calls_ingest_with_league_and_season_from_db(self, core, monkeypatch):
+    def test_commit_calls_ingest_with_league_from_db_and_no_season(self, core, monkeypatch):
+        """2026-08-25(CLAUDE.md §6.3):ingest_match 不再接受 season——此前这里
+        把库里的 Season 读回再传回去,是错误赛季的自我繁殖路径。League_ID 仍从
+        库里读;season 只出现在 dry-run 的展示字段里,不进任何写调用。"""
         calls = []
         monkeypatch.setattr(
             "backend.cli.reingest_matches.ingest_match",
-            lambda mid, league_id=None, season=None: calls.append((mid, league_id, season)),
+            lambda mid, league_id=None: calls.append((mid, league_id)),
         )
         result = reingest([5795371], commit=True)
         assert result["mode"] == "commit"
-        assert calls == [(5795371, 47, "2026/2027")]
+        assert calls == [(5795371, 47)]
         assert result["results"][0]["result"] == "ok"
 
     def test_unknown_match_id_reported_not_crashed(self, core, monkeypatch):
         calls = []
         monkeypatch.setattr(
             "backend.cli.reingest_matches.ingest_match",
-            lambda mid, league_id=None, season=None: calls.append(mid),
+            lambda mid, league_id=None: calls.append(mid),
         )
         result = reingest([9999999], commit=True)
         assert calls == []
@@ -66,7 +69,7 @@ class TestReingestMatches:
         (与 scheduler.py 那种链式任务遇错即停是刻意不同的行为)。"""
         calls = []
 
-        def fake_ingest(mid, league_id=None, season=None):
+        def fake_ingest(mid, league_id=None):
             calls.append(mid)
             if mid == 5795371:
                 raise ValueError("模拟页面结构漂移")

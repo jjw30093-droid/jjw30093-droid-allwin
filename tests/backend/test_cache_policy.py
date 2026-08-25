@@ -20,7 +20,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.cli.create_admin import create_admin
-from backend.commands.predictions import get_or_create_model_version, publish_snapshot, register_snapshot
 from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_rw
 
@@ -81,28 +80,6 @@ def _admin_free_client(app, ip, username="audit-admin"):
     return c
 
 
-def _seed_prediction(match_id, home_win, draw, away_win, kickoff=None):
-    if kickoff is None:
-        kickoff_dt = (
-            datetime.now(timezone.utc) + timedelta(days=3)
-        ).replace(microsecond=0)
-        kickoff = kickoff_dt.isoformat().replace("+00:00", "Z")
-    else:
-        kickoff_dt = datetime.fromisoformat(kickoff.replace("Z", "+00:00"))
-
-    conn = connect_rw("platform")
-    get_or_create_model_version(conn, "m-cache", "dixon-coles")
-    sid = register_snapshot(
-        conn, match_id=match_id, kickoff_at_utc=kickoff,
-        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
-        model_version_id="m-cache", home_win=home_win, draw=draw, away_win=away_win,
-        expected_home_goals=1.5, expected_away_goals=1.1, status="draft",
-    )
-    assert kickoff_dt > datetime.now(timezone.utc)
-    publish_snapshot(conn, sid, actor=None)
-    conn.close()
-
-
 def _insert_xref(conn, provider_match_id, fotmob_match_id, status="auto_ok"):
     conn.execute(
         """INSERT INTO dim_match_xref
@@ -154,7 +131,7 @@ class TestEntitlementMatrixLeagueAccess:
         需要登录。这条断言正是要推翻的旧规则(此前匿名 401)。"""
         seed_basic_core(data_dir)
         conn = connect_rw("core")
-        insert_match(conn, 9301, league_id=67, season="2026", date="2026-05-10",
+        insert_match(conn, 9301, league_id=67, date="2026-05-10",
                      home_id=3001, away_id=3002, home="Vasteras SK", away="Orgryte IS")
         conn.commit()
         conn.close()
@@ -191,63 +168,20 @@ class TestEntitlementMatrixLeagueAccess:
         assert admin.get("/api/v1/matches/9101").status_code == 200
 
 
-class TestEntitlementMatrixPrediction:
-    """A.3:2026-08-16 产品权限口径修正——预测响应恒为完整胜平负三项概率,
-    不再有免费(仅 top_outcome)/付费(完整三项)两套投影;匿名与已登录
-    用户(含 admin+free plan)逐字段一致,不再有 tier 字段。"""
-
-    @pytest.fixture
-    def seeded(self, data_dir):
-        seed_basic_core(data_dir)
-        _seed_prediction(9001, 0.612, 0.239, 0.149)
-        return data_dir
-
-    def _assert_full_projection(self, r):
-        assert r.status_code == 200
-        body = r.json()
-        pred = body["prediction"]
-        assert pred["top_outcome"] == "home"
-        assert pred["home_probability"] == 0.612
-        assert pred["draw_probability"] == 0.239
-        assert pred["away_probability"] == 0.149
-        assert "tier" not in pred, "tier 是旧付费裁剪字段,不应再出现"
-        assert r.headers["cache-control"] == STRICT_NO_STORE
-
-    def test_anonymous_gets_full_projection(self, app, seeded):
-        """这条断言正是要推翻的旧规则(此前匿名只有 top_outcome/top_probability,
-        受限字段 key 物理不存在)。"""
-        self._assert_full_projection(TestClient(app).get("/api/v1/matches/9001/prediction"))
-
-    def test_registered_user_gets_identical_projection_to_anonymous(self, app, seeded, fresh_ip):
-        c = TestClient(app)
-        _login(c, fresh_ip)
-        self._assert_full_projection(c.get("/api/v1/matches/9001/prediction"))
-
-    def test_admin_login_gets_same_projection_not_reco(self, app, seeded, fresh_ip):
-        """admin 也是已登录用户 → 与匿名相同的完整投影;
-        Role⊥Entitlement 不变量改由付费板块承载(admin 不自动获得 reco:*)。"""
-        admin = _admin_free_client(app, fresh_ip)
-        self._assert_full_projection(admin.get("/api/v1/matches/9001/prediction"))
-        me = admin.get("/api/v1/me").json()
-        assert "reco:daily" not in me["entitlements"]   # 付费板块不随 role/登录赠送
-
-    def test_member_client_gets_identical_projection(self, app, seeded, fresh_ip):
-        c = _member_client(app, fresh_ip)
-        self._assert_full_projection(c.get("/api/v1/matches/9001/prediction"))
-
-
 class TestEntitlementMatrixAnalysisBundle:
     """A.4:2026-08-16 产品权限口径修正——analysis bundle 恒完整返回
-    (prediction_member/chart_specs/counter_evidence/odds_timeline 等),
-    不再按 entitlement 投影;匿名与登录用户拿到逐字段一致的内容。"""
+    (chart_specs/counter_evidence/odds_timeline 等),不再按 entitlement
+    投影;匿名与登录用户拿到逐字段一致的内容。
 
-    HOME, DRAW, AWAY = 0.501, 0.317, 0.182   # draw>=0.28 触发 bundle.py 的 draw_risk 分支
-    NUMERIC_SENTINELS = ("0.501", "0.317", "0.182", "50.1", "31.7", "18.2")
+    2026-08-25:WDL 模型与正式预测登记簿已整体废弃(胜率改由 bet365 赔率
+    直接派生),analysis bundle 不再查询 prediction_snapshots——
+    prediction_public/prediction_member 恒为 None(见 backend/studio/
+    bundle.py),本类不再断言这两个字段的数值投影,只保留 odds/图表相关
+    的逐字段一致性覆盖。"""
 
     @pytest.fixture
     def seeded(self, data_dir):
         seed_basic_core(data_dir)
-        _seed_prediction(9001, self.HOME, self.DRAW, self.AWAY)
         conn = connect_rw("odds")
         _insert_xref(conn, "700001", 9001)
         _insert_odds_snap(conn, "700001", "2026-07-19T09:00:00Z", "ODDS_SENTINEL_X1")
@@ -256,22 +190,13 @@ class TestEntitlementMatrixAnalysisBundle:
         return data_dir
 
     def test_anonymous_gets_full_bundle_at_any_depth(self, app, seeded):
-        """这条断言正是要推翻的旧规则(此前匿名 prediction_member 恒为 None、
-        odds_timeline 恒为空、counter_evidence 里的 draw_risk 条目被过滤)。"""
         r = TestClient(app).get("/api/v1/matches/9001/analysis")
         assert r.status_code == 200
         body = r.json()
-        assert body["prediction_member"]["home_probability"] == self.HOME
-        assert body["prediction_member"]["draw_probability"] == self.DRAW
-        raw = json.dumps(body, ensure_ascii=False)
-        hits = []
-        for s in self.NUMERIC_SENTINELS:
-            hits += _recursive_scan(body, s)
-        assert hits, f"完整概率数值应在响应体中出现,实际未命中任何位置\n{raw[:500]}"
-        assert any(cs["type"] == "probability_bar" for cs in body["chart_specs"])
+        assert body["prediction_public"] is None
+        assert body["prediction_member"] is None
         assert len(body["odds_timeline"]) == 1
         assert body["odds_timeline"][0]["payload"]["sentinel"] == "ODDS_SENTINEL_X1"
-        assert any(c.get("kind") == "draw_risk" for c in body["counter_evidence"])
         assert "subtitle_cues" not in body   # 页面用不到,整体不下发(与权限无关)
         assert r.headers["cache-control"] == STRICT_NO_STORE
 
@@ -285,11 +210,6 @@ class TestEntitlementMatrixAnalysisBundle:
         anon.pop("built_at", None)
         member.pop("built_at", None)
         assert member == anon
-
-    def test_admin_login_gets_full_bundle(self, app, seeded, fresh_ip):
-        admin = _admin_free_client(app, fresh_ip)
-        body = admin.get("/api/v1/matches/9001/analysis").json()
-        assert body["prediction_member"] is not None
 
 
 class TestEntitlementMatrixOdds:
@@ -485,11 +405,9 @@ class TestCacheMatrixEntitlementVaryingAlwaysPrivate:
     @pytest.fixture
     def seeded(self, data_dir):
         seed_basic_core(data_dir)
-        _seed_prediction(9001, 0.4, 0.3, 0.3)
         return data_dir
 
     @pytest.mark.parametrize("path", [
-        "/api/v1/matches/9001/prediction",
         "/api/v1/matches/9001/analysis",
         "/api/v1/matches/9001/odds",
         "/api/v1/matches/9001/cooccurrence",

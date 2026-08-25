@@ -36,7 +36,7 @@ def _load_fixture() -> dict:
 class TestParseMatchDimVenueRefereeDetail:
     def test_real_payload_extracts_stadium_detail_and_weather_enum(self):
         row = FotMobClient(proxy="").parse_match_dim(
-            _load_fixture(), match_id=5104961, league_id=59, season="2026"
+            _load_fixture(), match_id=5104961, league_id=59
         )
         assert row["Venue_Capacity"] == 12565
         assert row["Venue_Surface"] == "artificial turf"

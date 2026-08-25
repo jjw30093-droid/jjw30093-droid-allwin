@@ -16,6 +16,19 @@ J1 26 队真实数据)。每队各自的"最近 N 场同联赛比赛"独立倒�
 - 视角有效点数(x、y 都非空的球队数)由调用方按 §4(<4 支不可用)决定是否
   展示,本模块不做这个判断,只如实返回点集,让前端(同 TeamQuadrantChart)
   统一处理"数据不足禁用该视角"。
+
+2026-08-25 修复:所有查询必须同时按 `League_ID` 与 `Season` 过滤(真实事故——
+富勒姆 vs 切尔西「分析」tab 的风格象限画出 31 支球队,而英超单赛季只有 20
+支)。`dim_match.League_ID` 是跨赛季持久的联赛实体(英超 47 号从 2020/2021
+一直用到 2026/2027),此前只按 `League_ID` 圈定"该队近 N 场同联赛比赛"的
+候选池,任何历史上打过这个联赛的球队(含多年前已降级、此后再没打过顶级
+联赛的球队)只要有一场历史记录早于 `before_date`,就会被 ROW_NUMBER 选中
+它自己"最近的 N 场"(哪怕那 N 场是 2021 年打的)、进而出现在散点图里——
+不是"数据分布图"该有的行为,是把已经不在这个联赛的球队错误地画进了当前
+赛季的联赛画像。修复后每次查询都限定 `Season=?`(取自被查看比赛自己的
+`dim_match.Season`),球队池与"近 N 场"窗口天然只在同一赛季内滚动;赛季
+初样本不足时如实返回更少的点(不跨赛季借数据),与本文件既有的"部分历史
+也是真历史"降级哲学一致。
 """
 
 from __future__ import annotations
@@ -70,7 +83,8 @@ _TEAM_STAT_VIEWS = [
 
 
 def _single_team_stat(
-    conn_core: sqlite3.Connection, league_id: int, before_date: str, key: str, window: int,
+    conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str, key: str,
+    window: int,
 ) -> dict[int, float | None]:
     """单个 TEAM_STAT_KEYS 来源键(自身 extra_json)的近 N 场均值。"""
     sql = """
@@ -82,7 +96,7 @@ def _single_team_stat(
                ) rn
           FROM dim_match m
           JOIN fact_team_match_stats t ON t.Match_ID=m.Match_ID AND t.Period='All'
-         WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+         WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
            AND COALESCE(m.kickoff_at_utc, m.Date) < ?
       ),
       last_n AS (SELECT mid, tid FROM ranked WHERE rn<=?)
@@ -91,13 +105,13 @@ def _single_team_stat(
         JOIN fact_team_match_stats t ON t.Match_ID=l.mid AND t.Team_ID=l.tid AND t.Period='All'
        GROUP BY l.tid
     """
-    rows = conn_core.execute(sql, (league_id, before_date, window, f"$.{key}")).fetchall()
+    rows = conn_core.execute(sql, (league_id, season, before_date, window, f"$.{key}")).fetchall()
     return {int(r["tid"]): r["v"] for r in rows}
 
 
 def _team_stat_points(
-    conn_core: sqlite3.Connection, league_id: int, before_date: str, x_key: str, y_key: str,
-    window: int,
+    conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str, x_key: str,
+    y_key: str, window: int,
 ) -> dict[int, dict[str, float | None]]:
     """两个 TEAM_STAT_KEYS 来源键(自身 extra_json,不涉及对手)的近 N 场均值。"""
     sql = f"""
@@ -109,7 +123,7 @@ def _team_stat_points(
                ) rn
           FROM dim_match m
           JOIN fact_team_match_stats t ON t.Match_ID=m.Match_ID AND t.Period='All'
-         WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+         WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
            AND COALESCE(m.kickoff_at_utc, m.Date) < ?
       ),
       last_n AS (SELECT mid, tid FROM ranked WHERE rn<=?)
@@ -120,12 +134,12 @@ def _team_stat_points(
         JOIN fact_team_match_stats t ON t.Match_ID=l.mid AND t.Team_ID=l.tid AND t.Period='All'
        GROUP BY l.tid
     """
-    rows = conn_core.execute(sql, (league_id, before_date, window)).fetchall()
+    rows = conn_core.execute(sql, (league_id, season, before_date, window)).fetchall()
     return {int(r["tid"]): {"x": r["x"], "y": r["y"]} for r in rows}
 
 
 def _xg_for_against_points(
-    conn_core: sqlite3.Connection, league_id: int, before_date: str, window: int,
+    conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str, window: int,
 ) -> dict[int, dict[str, float | None]]:
     """场均创造 xG(自身)× 场均让出 xG(同场对手)。需要按主客定位对手,单独实现。"""
     sql = """
@@ -137,7 +151,7 @@ def _xg_for_against_points(
                ) rn
           FROM dim_match m
           JOIN fact_team_match_stats t ON t.Match_ID=m.Match_ID AND t.Period='All'
-         WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+         WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
            AND COALESCE(m.kickoff_at_utc, m.Date) < ?
       ),
       last_n AS (SELECT mid, tid, home_id, away_id FROM ranked WHERE rn<=?)
@@ -151,19 +165,24 @@ def _xg_for_against_points(
          AND t_opp.Period='All'
        GROUP BY l.tid
     """
-    rows = conn_core.execute(sql, (league_id, before_date, window)).fetchall()
+    rows = conn_core.execute(sql, (league_id, season, before_date, window)).fetchall()
     return {int(r["tid"]): {"x": r["x"], "y": r["y"]} for r in rows}
 
 
 def league_style_views(
-    conn_core: sqlite3.Connection, league_id: int, before_date: str, window: int = WINDOW
+    conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str,
+    window: int = WINDOW,
 ) -> list[dict[str, Any]]:
     """整个联赛近 window 场的三个风格视角,每个视角是全联赛球队的散点集合。
+
+    `season` 圈定"全联赛"具体是哪个赛季(dim_match.League_ID 跨赛季持久,
+    仅按 league_id 会把历史上打过这个联赛、此后已降级的球队也算进来——
+    2026-08-25 真实事故,见文件头部说明)。
 
     有效点(x、y 都非空)不足 4 支球队时,该视角仍然返回(点集可能很小甚至为
     空)——是否禁用交给调用方按 §4 的门槛判断,本函数只如实聚合。
     """
-    fastbreak = _fastbreak_share_by_team(conn_core, league_id, before_date, window)
+    fastbreak = _fastbreak_share_by_team(conn_core, league_id, season, before_date, window)
 
     # 2026-08-19 性能修复:先把三个视角各自的 points_map 都算出来,再用它们
     # team_id 的并集去查译名——team_display_map() 每次都全扫 dim_match
@@ -175,15 +194,18 @@ def league_style_views(
     all_team_ids: set[int] = set()
     for view in _TEAM_STAT_VIEWS:
         if view["id"] == "xg-for-against":
-            points_map = _xg_for_against_points(conn_core, league_id, before_date, window)
+            points_map = _xg_for_against_points(conn_core, league_id, season, before_date, window)
         elif view["id"] == "poss-fastbreak":
-            poss = _single_team_stat(conn_core, league_id, before_date, "BallPossesion", window)
+            poss = _single_team_stat(
+                conn_core, league_id, season, before_date, "BallPossesion", window
+            )
             points_map = {
                 tid: {"x": v, "y": fastbreak.get(tid)} for tid, v in poss.items()
             }
         else:  # cross-box
             points_map = _team_stat_points(
-                conn_core, league_id, before_date, "accurate_crosses", "touches_opp_box", window
+                conn_core, league_id, season, before_date, "accurate_crosses", "touches_opp_box",
+                window,
             )
         view_points.append((view, points_map))
         all_team_ids.update(points_map.keys())
@@ -212,7 +234,7 @@ def league_style_views(
 
 
 def _fastbreak_share_by_team(
-    conn_core: sqlite3.Connection, league_id: int, before_date: str, window: int
+    conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str, window: int
 ) -> dict[int, float | None]:
     """近 N 场反击射门占该队总射门的百分比(fact_shotmap.Situation='FastBreak')。
     该队近 N 场完全没有射门记录时不出现在返回字典里(不是 0%——没有分母)。
@@ -226,7 +248,7 @@ def _fastbreak_share_by_team(
                ) rn
           FROM dim_match m
           JOIN fact_team_match_stats t ON t.Match_ID=m.Match_ID AND t.Period='All'
-         WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+         WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
            AND COALESCE(m.kickoff_at_utc, m.Date) < ?
       ),
       last_n AS (SELECT mid, tid FROM ranked WHERE rn<=?)
@@ -237,7 +259,7 @@ def _fastbreak_share_by_team(
         JOIN fact_shotmap f ON f.Match_ID=l.mid AND f.Team_ID=l.tid
        GROUP BY l.tid
     """
-    rows = conn_core.execute(sql, (league_id, before_date, window)).fetchall()
+    rows = conn_core.execute(sql, (league_id, season, before_date, window)).fetchall()
     return {
         int(r["tid"]): round(100.0 * r["fastbreak"] / r["shots"], 1)
         for r in rows if r["shots"]
@@ -245,18 +267,20 @@ def _fastbreak_share_by_team(
 
 
 def team_window_bounds(
-    conn_core: sqlite3.Connection, team_id: int, league_id: int, before_date: str,
+    conn_core: sqlite3.Connection, team_id: int, league_id: int, season: str, before_date: str,
     window: int = WINDOW,
 ) -> dict[str, Any] | None:
-    """该队近 window 场同联赛比赛的最早/最晚比赛日期——"近 N 场"必须标真实
-    日期区间(CLAUDE.md §11.2),不能只写"近 5 场"三个字了事。样本不足时
-    仍返回实际找到的场次数(可能 < window),不是 None(部分历史也是真历史)。
+    """该队近 window 场同联赛同赛季比赛的最早/最晚比赛日期——"近 N 场"必须标
+    真实日期区间(CLAUDE.md §11.2),不能只写"近 5 场"三个字了事。样本不足时
+    仍返回实际找到的场次数(可能 < window),不是 None(部分历史也是真历史,
+    但不跨赛季借数据——见文件头部 2026-08-25 修复说明)。
     """
     rows = conn_core.execute(
-        """SELECT Date FROM dim_match WHERE League_ID=? AND status IN ('Finish','Finished')
+        """SELECT Date FROM dim_match
+             WHERE League_ID=? AND Season=? AND status IN ('Finish','Finished')
              AND COALESCE(kickoff_at_utc, Date) < ? AND (Home_Team_ID=? OR Away_Team_ID=?)
            ORDER BY COALESCE(kickoff_at_utc, Date) DESC, Match_ID DESC LIMIT ?""",
-        (league_id, before_date, team_id, team_id, window),
+        (league_id, season, before_date, team_id, team_id, window),
     ).fetchall()
     if not rows:
         return None
@@ -265,7 +289,7 @@ def team_window_bounds(
 
 
 def team_attack_sources(
-    conn_core: sqlite3.Connection, team_id: int, league_id: int, before_date: str,
+    conn_core: sqlite3.Connection, team_id: int, league_id: int, season: str, before_date: str,
     window: int = WINDOW,
 ) -> list[dict[str, Any]]:
     """近 window 场按 Situation 拆解的射门来源:次数 + 占比 + xG(缺失给 None,不补 0)。
@@ -281,7 +305,7 @@ def team_attack_sources(
                    ORDER BY COALESCE(m.kickoff_at_utc, m.Date) DESC, m.Match_ID DESC
                  ) rn
             FROM dim_match m
-           WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+           WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
              AND COALESCE(m.kickoff_at_utc, m.Date) < ?
              AND (m.Home_Team_ID=? OR m.Away_Team_ID=?)
         ),
@@ -293,7 +317,7 @@ def team_attack_sources(
          GROUP BY f.Situation
          ORDER BY shots DESC
         """,
-        (league_id, before_date, team_id, team_id, window, team_id),
+        (league_id, season, before_date, team_id, team_id, window, team_id),
     ).fetchall()
     total_shots = sum(r["shots"] for r in rows) or 1
     out = []

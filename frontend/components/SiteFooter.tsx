@@ -25,8 +25,6 @@ export function SiteFooter() {
 
         <nav className={styles.links} aria-label="页脚导航">
           <Link href="/about">关于我们</Link>
-          <Link href="/about-model">数据与方法</Link>
-          <Link href="/track-record">公开战绩</Link>
           <Link href="/pricing">权限说明</Link>
         </nav>
 

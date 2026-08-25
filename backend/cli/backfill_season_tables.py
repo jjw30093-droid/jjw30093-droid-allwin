@@ -50,18 +50,18 @@ def _dim_match_seasons(conn, league_id: int) -> list:
 
 
 def _verify_identity(data: dict, league_id: int, season: str) -> str | None:
-    """返回 None 表示通过;否则返回失败原因(不落库)。"""
-    details = data.get("details") or {}
-    observed_id = details.get("id")
+    """返回 None 表示通过;否则返回失败原因(不落库)。
+
+    2026-08-25 起委托给统一实现(backend/ingest/season_identity.py,
+    CLAUDE.md §6.3):本脚本按赛季循环、宁可跳过单个赛季也要继续,所以保留
+    "返回原因字符串"的调用形状,只把判定本体收敛到唯一出处。
+    """
+    from backend.ingest.season_identity import SeasonIdentityError, verify_season_echo
+
     try:
-        observed_id = int(observed_id)
-    except (TypeError, ValueError):
-        return f"details.id 无法解析: {observed_id!r}"
-    if observed_id != league_id:
-        return f"details.id={observed_id} 与请求 league_id={league_id} 不一致"
-    observed_season = details.get("selectedSeason") or details.get("season")
-    if observed_season != season:
-        return f"selectedSeason={observed_season!r} 与请求 season={season!r} 不一致"
+        verify_season_echo(data, league_id, season)
+    except SeasonIdentityError as e:
+        return str(e)
     return None
 
 

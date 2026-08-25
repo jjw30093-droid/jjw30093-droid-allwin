@@ -41,17 +41,14 @@ def _published_provenance_slip(conn_platform, actor, match_id, snapshot_ref):
 
 class TestJobRegistration:
     def test_reco_auto_settle_has_own_job_name_and_fn(self):
-        """独立注册,不与 postmatch_settle 合并成一个函数。"""
+        """独立注册(2026-08-25:曾经对照的 postmatch_settle/model_predict 已
+        随 WDL 模型与正式预测登记簿一并删除,reco_auto_settle 本身的注册
+        不受影响)。"""
         assert "reco_auto_settle" in runner.REGISTRY
         assert "reco_auto_settle" in runner.DEFAULT_CHAIN
         spec = runner.REGISTRY["reco_auto_settle"]
         assert spec.get("kind") == "fn"
         assert callable(spec.get("fn"))
-        assert spec["fn"] is not runner.REGISTRY["postmatch_settle"]["fn"]
-
-    def test_postmatch_settle_untouched(self):
-        """本次改动不得触碰既有 postmatch_settle 的注册函数(用户明确要求)。"""
-        assert runner.REGISTRY["postmatch_settle"]["fn"] is runner._job_postmatch_settle
 
 
 class TestJobFunctionEndToEnd:

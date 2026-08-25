@@ -143,12 +143,18 @@ class TestUpcomingPreciseMatchesAndMarketPhase:
     不能只靠字符串形状(是否含 'T'、是否等于午夜)判断,必须走统一验证器。"""
 
     def _insert_match(self, conn, match_id, status, kickoff_at_utc, precision, source):
+        # Season 按 (联赛, 日期) 推导——本类的 kickoff 是相对 now 的动态时刻,
+        # 硬编码赛季会随现实时间漂移撞上 0011 赛季触发器(2026-08-25)。
+        from backend.season_regime import season_for_match
+
+        date = (kickoff_at_utc or T0)[:10]
         conn.execute(
             "INSERT INTO dim_match (Match_ID, Season, League_ID, Date, Home_Team_ID,"
             " Away_Team_ID, Home_Team_Name, Away_Team_Name, status, kickoff_at_utc,"
             " kickoff_precision, kickoff_source)"
-            " VALUES (?, '2026/2027', 47, ?, 111, 222, 'Arsenal', 'Chelsea', ?, ?, ?, ?)",
-            (match_id, (kickoff_at_utc or T0)[:10], status, kickoff_at_utc, precision, source),
+            " VALUES (?, ?, 47, ?, 111, 222, 'Arsenal', 'Chelsea', ?, ?, ?, ?)",
+            (match_id, season_for_match(conn, 47, date), date,
+             status, kickoff_at_utc, precision, source),
         )
 
     def test_date_only_midnight_placeholder_excluded_from_upcoming(self, data_dir):

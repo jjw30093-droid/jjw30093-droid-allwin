@@ -6,11 +6,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.commands.predictions import (
-    get_or_create_model_version,
-    publish_snapshot,
-    register_snapshot,
-)
 from backend.db.connections import connect_rw
 
 from .coreseed import seed_basic_core
@@ -22,23 +17,14 @@ ORIGIN = {"Origin": "http://localhost:3000"}
 
 @pytest.fixture
 def seeded(data_dir):
+    # 2026-08-25:WDL 模型与正式预测登记簿已整体废弃(backend.commands.predictions
+    # 已删除),analysis bundle 恒不再查询 prediction_snapshots——本 fixture
+    # 不再写入任何预测快照,只保留基础比赛数据。
     kickoff = (
         datetime.now(timezone.utc) + timedelta(days=3)
     ).replace(microsecond=0)
-    kickoff_at_utc = kickoff.isoformat().replace("+00:00", "Z")
-
     seed_basic_core(data_dir)
-    conn = connect_rw("platform")
-    get_or_create_model_version(conn, "m-studio", "dixon-coles")
-    sid = register_snapshot(
-        conn, match_id=9001, kickoff_at_utc=kickoff_at_utc,
-        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
-        model_version_id="m-studio", home_win=0.48, draw=0.29, away_win=0.23,
-        expected_home_goals=1.6, expected_away_goals=1.0, status="draft",
-    )
     assert kickoff > datetime.now(timezone.utc)
-    publish_snapshot(conn, sid, actor=None)
-    conn.close()
     return data_dir
 
 
@@ -58,6 +44,11 @@ def _csrf(client):
 
 class TestBundle:
     def test_bundle_structure_and_honesty(self, app, seeded, fresh_ip):
+        """2026-08-25:WDL 模型与正式预测登记簿已废弃,analysis bundle 不再
+        携带 prediction_member/prediction_public 数值(恒为 None,见
+        backend/studio/bundle.py)——本测试只覆盖结构与诚实性,不再断言
+        具体概率数值(那部分覆盖见 test_bundle_without_prediction_is_honest)。
+        """
         client = _analyst_client(app, fresh_ip)
         r = client.get("/api/v1/studio/matches/9001/bundle")
         assert r.status_code == 200
@@ -65,19 +56,13 @@ class TestBundle:
         assert b["bundle_version"] == "1"
         assert [s["id"] for s in b["script_sections"]] == [
             "hook", "context", "data", "probability", "risk", "outro"]
-        assert b["prediction_member"]["home_probability"] == 0.48
-        assert b["prediction_public"] == {"top_outcome": "home", "top_probability": 0.48}
+        assert b["prediction_member"] is None
+        assert b["prediction_public"] is None
         # 诚实性:无特征数据 → uncertainty 明示
         kinds = {u["kind"] for u in b["uncertainty"]}
         assert "features_missing" in kinds and "kickoff_precision" in kinds
         assert b["subtitle_cues"] and b["bundle_hash"]
         assert r.headers["cache-control"] == "private, no-store"
-        note = next(n for n in b["source_notes"] if n["kind"] == "probability_source")
-        # 内部枚举值不得原样出现在用户可见文案里(CLAUDE.md §11.2);
-        # 必须换成中文标签"模型"。
-        assert "MODEL" not in note["text"]
-        assert "模型" in note["text"]
-        assert "概率来自预测登记簿的已发布快照" in note["text"]
 
     def test_bundle_kickoff_precision_uncertainty_by_provenance(self, app, seeded, fresh_ip):
         """15. Studio 的 kickoff 数据质量提示按 kickoff_precision 判定,不能只看
@@ -208,7 +193,10 @@ class TestDraftsAndExports:
                             json={"kind": kind}, headers=_csrf(client))
             assert r.status_code == 200, r.text
             body = r.json()
-            assert body["side"] == "server" and body["model_version"] == "m-studio"
+            # 2026-08-25:WDL 模型与正式预测登记簿已废弃,bundle 不再携带
+            # model_version_id(prediction_member 恒为 None),导出的
+            # model_version 字段随之恒为 None。
+            assert body["side"] == "server" and body["model_version"] is None
             dl = client.get(body["download_url"])
             assert dl.status_code == 200
             assert marker in dl.text

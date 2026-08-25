@@ -34,8 +34,7 @@ def five_matches(data_dir):
     for i in range(5):
         mid = 9500 + i
         match_ids.append(mid)
-        insert_match(conn, mid, league_id=LEAGUE, season="2025/2026",
-                     date=f"2026-01-{10+i:02d}", home_id=TEAM, away_id=2000 + i,
+        insert_match(conn, mid, league_id=LEAGUE, date=f"2026-01-{10+i:02d}", home_id=TEAM, away_id=2000 + i,
                      home="队A", away=f"对手{i}", status="Finish", home_score=1, away_score=0)
         # 主力过人手:5 场全勤,每场 2 次过人
         _player_row(conn, mid, "p_main", "主力过人手", minutes=90, dribbles_succeeded=2)

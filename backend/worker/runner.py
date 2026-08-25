@@ -62,48 +62,6 @@ class JobSkipped(Exception):
 # ── 包内函数任务(evaluate / import_gold / manifest) ──────────────────
 
 
-def _job_prediction_register() -> dict:
-    """把 gold_wdl_predictions 导入预测登记簿(幂等,已导入的跳过)。"""
-    from backend.cli.import_gold_predictions import import_gold
-    from backend.db.connections import connect_ro
-
-    conn_core = connect_ro("core")
-    conn_platform = connect_rw("platform")
-    try:
-        with tx(conn_platform):
-            stats = import_gold(conn_platform, conn_core)
-    finally:
-        conn_core.close()
-        conn_platform.close()
-    return {
-        "input_count": stats["total"],
-        "output_count": stats["draft"] + stats["legacy_unverified"],
-        "meta": stats,
-    }
-
-
-def _job_postmatch_settle() -> dict:
-    """结算已完赛快照 + 计算正式口径评估指标(无正式样本时诚实报告 0)。"""
-    from backend.cli.evaluate_predictions import evaluate
-    from backend.db.connections import connect_ro
-
-    conn_core = connect_ro("core")
-    conn_platform = connect_rw("platform")
-    try:
-        result = evaluate(conn_platform, conn_core, model_version_id=None, notes="worker postmatch_settle")
-    finally:
-        conn_core.close()
-        conn_platform.close()
-    meta = {k: v for k, v in result.items() if k != "calibration"}
-    if result.get("sample_size", 0) == 0:
-        meta["note"] = "暂无符合正式口径的样本(official+曾锁定+赛前发布+已结算;含撤回/被取代),未写入评估"
-    return {
-        "input_count": result.get("sample_size", 0),
-        "output_count": result.get("settled_now", 0),
-        "meta": meta,
-    }
-
-
 def _job_reco_auto_settle() -> dict:
     """自动结算「每日精选」推荐单(独立于模型预测评估之外,CLAUDE.md §9.1)。
 
@@ -168,19 +126,6 @@ def _job_analysis_bundle_build() -> dict:
             conn_odds.close()
     meta = {"errors": errors[:10]} if errors else {}
     return {"input_count": len(rows), "output_count": built, "meta": meta}
-
-
-def _job_metrics_rebuild() -> dict:
-    """生成/追加当日正式预测 manifest(内容不变则不新增版本)。"""
-    from backend.commands.predictions import build_daily_manifest
-
-    conn = connect_rw("platform")
-    try:
-        with tx(conn):
-            result = build_daily_manifest(conn, utc_now_iso()[:10])
-    finally:
-        conn.close()
-    return {"output_count": result.get("entries", 0), "meta": result}
 
 
 def _job_pipeline_gates() -> dict:
@@ -320,34 +265,6 @@ def _watermark_odds_silver_build() -> dict:
     }
 
 
-def _watermark_model_predict() -> dict:
-    """model_predict 硬编码只对 League_ID=FUTURE_LEAGUE_ID / Season=FUTURE_SEASON
-    重算(backend/models/predict_wdl_future.py 的联赛边界说明:wdl_baseline_params.pkl
-    只用该联赛历史拟合,套到其它联赛是"假预测")——水位必须同样限定在这个
-    真实作用域内,否则会被其它联赛的完赛/赛程变化误判为"有新工作"。两个方向
-    都要看:新完赛比赛改变 rolling xG 输入;新增/减少的 NotStarted 赛程改变
-    要出预测的比赛集合本身。"""
-    from backend.db.connections import connect_ro
-    from backend.models.predict_wdl_future import FUTURE_LEAGUE_ID, FUTURE_SEASON
-
-    conn = connect_ro("core")
-    try:
-        finished = conn.execute(
-            "SELECT COUNT(*) FROM dim_match WHERE status='Finish' AND League_ID=?",
-            (FUTURE_LEAGUE_ID,),
-        ).fetchone()[0]
-        not_started = conn.execute(
-            "SELECT COUNT(*) FROM dim_match WHERE status='NotStarted' AND League_ID=? AND Season=?",
-            (FUTURE_LEAGUE_ID, FUTURE_SEASON),
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    return {
-        f"league{FUTURE_LEAGUE_ID}_finished": int(finished),
-        f"league{FUTURE_LEAGUE_ID}_{FUTURE_SEASON}_not_started": int(not_started),
-    }
-
-
 def _alert_job_failure(conn, run_id, job_name, error_summary,
                        source: str = "pipeline_step_failure") -> None:
     """任务失败 → CRITICAL 告警(调用点保证已先 _finish_run 落 job_runs)。
@@ -484,24 +401,6 @@ REGISTRY: dict[str, dict] = {
         "watermark_fn": _watermark_odds_silver_build,
         "description": "odds Bronze → 变化点/时间共现(UNIQUE 幂等,needs_review 映射不产出;水位守卫:无新 Bronze 行则跳过)",
     },
-    "model_predict": {
-        "kind": "subprocess",
-        "argv": [sys.executable, "models/predict_wdl_future.py"],
-        "cwd": str(BACKEND_DIR),
-        "max_attempts": 1,
-        "timeout_seconds": 1800,
-        "backoff_seconds": 0,
-        "watermark_fn": _watermark_model_predict,
-        "description": "对 NotStarted 场次重算 WDL 概率(固定模型参数,只更新 rolling 输入;水位守卫:目标联赛无新完赛/新赛程则跳过)",
-    },
-    "prediction_register": {
-        "kind": "fn",
-        "fn": _job_prediction_register,
-        "max_attempts": 1,
-        "timeout_seconds": 600,
-        "backoff_seconds": 0,
-        "description": "gold_wdl_predictions → 预测登记簿(幂等导入)",
-    },
     "analysis_bundle_build": {
         "kind": "fn",
         "fn": _job_analysis_bundle_build,
@@ -510,14 +409,6 @@ REGISTRY: dict[str, dict] = {
         "backoff_seconds": 0,
         "description": "analysis_bundle 构建:窗口内 NotStarted 场次逐场构建(详情页/Studio 共用 builder)",
     },
-    "postmatch_settle": {
-        "kind": "fn",
-        "fn": _job_postmatch_settle,
-        "max_attempts": 1,
-        "timeout_seconds": 600,
-        "backoff_seconds": 0,
-        "description": "赛后结算 + 正式口径评估(无正式样本时如实报 0)",
-    },
     "reco_auto_settle": {
         "kind": "fn",
         "fn": _job_reco_auto_settle,
@@ -525,14 +416,6 @@ REGISTRY: dict[str, dict] = {
         "timeout_seconds": 300,
         "backoff_seconds": 0,
         "description": "自动结算「每日精选」推荐单(已完赛+真实溯源腿;人工已结算/混合单/不可判定单本轮跳过,与模型评估彻底独立)",
-    },
-    "metrics_rebuild": {
-        "kind": "fn",
-        "fn": _job_metrics_rebuild,
-        "max_attempts": 1,
-        "timeout_seconds": 300,
-        "backoff_seconds": 0,
-        "description": "重建当日正式预测 manifest(内容不变不加版本)",
     },
     "pipeline_gates": {
         "kind": "fn",
@@ -560,12 +443,8 @@ DEFAULT_CHAIN = [
     "entity_resolution",
     "core_silver_build",
     "odds_silver_build",
-    "model_predict",
-    "prediction_register",
     "analysis_bundle_build",
-    "postmatch_settle",
     "reco_auto_settle",
-    "metrics_rebuild",
     # 必须排最后:质量门"发现问题"通过告警表达,不通过任务失败表达——
     # 即便它 failed(检查本身崩溃),也没有下游可被 cascade-skip。
     "pipeline_gates",

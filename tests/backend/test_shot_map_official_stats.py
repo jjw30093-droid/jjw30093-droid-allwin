@@ -47,14 +47,14 @@ def recent_form(data_dir):
     seed_core_schema(conn)
 
     # 阿队(1001)近两场:8001 主场对丙队(1003),8002 客场对丁队(1004)
-    insert_match(conn, 8001, league_id=47, season="2025/2026", date="2026-01-01",
+    insert_match(conn, 8001, league_id=47, date="2026-01-01",
                  home_id=1001, away_id=1003, home="阿队", away="丙队",
                  status="Finish", home_score=2, away_score=1)
-    insert_match(conn, 8002, league_id=47, season="2025/2026", date="2026-01-08",
+    insert_match(conn, 8002, league_id=47, date="2026-01-08",
                  home_id=1004, away_id=1001, home="丁队", away="阿队",
                  status="Finish", home_score=0, away_score=1)
     # 目标比赛:未开赛,不应被纳入"近期"集合
-    insert_match(conn, 9500, league_id=47, season="2025/2026", date="2026-01-20",
+    insert_match(conn, 9500, league_id=47, date="2026-01-20",
                  home_id=1001, away_id=1002, home="阿队", away="乙队",
                  status="NotStarted")
 

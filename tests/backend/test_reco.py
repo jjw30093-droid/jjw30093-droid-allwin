@@ -534,14 +534,6 @@ class TestSummaryAggregation:
         # 不能被误算成 win(命中率虚高)也不能凭空消失(分母漏计)。
         assert s["hit_rate"] == 0.0
 
-    def test_separate_from_model_track_record(self, app, data_dir):
-        """与模型公开战绩分离:/api/v1/track-record 匿名可访问且不含 reco 字段。"""
-        anon = TestClient(app)
-        r = anon.get("/api/v1/track-record")
-        assert r.status_code == 200
-        assert "reco" not in r.text
-        assert "slip" not in r.text
-
 
 class TestPublicOverview:
     """匿名聚合面 /reco/overview:只有计数与聚合,绝无单据内容;draft 不计入。"""

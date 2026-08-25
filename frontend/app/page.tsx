@@ -269,14 +269,6 @@ export default function Home() {
           <strong>联赛数据</strong>
           <span>排名、赛程与球队统计</span>
         </Link>
-        <Link href="/about-model">
-          <strong>模型说明</strong>
-          <span>方法论与校准结果</span>
-        </Link>
-        <Link href="/track-record">
-          <strong>模型公开记录</strong>
-          <span>查看发布与赛后评估</span>
-        </Link>
         <Link href="/pricing">
           <strong>权限说明</strong>
           <span>比赛数据不用登录，精选要开通</span>

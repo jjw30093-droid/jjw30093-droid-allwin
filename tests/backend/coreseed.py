@@ -92,10 +92,21 @@ def seed_core_schema(conn):
     )
 
 
-def insert_match(conn, match_id, league_id=47, season="2026/2027", date="2027-04-01",
+# 哨兵:season 未显式给出时按 (league_id, date) 从制度表推导(2026-08-25,
+# CLAUDE.md §6.3)——测试布景与生产走同一份推导逻辑,不再各自手填一个可能与
+# 日期矛盾的赛季字符串(那正是 dim_match 触发器要 ABORT 的事故形态)。
+# 显式传入的 season 保持原样(触发器会校验它与日期一致)。
+_AUTO_SEASON = object()
+
+
+def insert_match(conn, match_id, league_id=47, season=_AUTO_SEASON, date="2027-04-01",
                  home_id=1001, away_id=1002, home="Arsenal", away="Chelsea",
                  status="NotStarted", home_score=None, away_score=None, rnd="1",
                  kickoff_at_utc=None):
+    if season is _AUTO_SEASON:
+        from backend.season_regime import season_for_match
+
+        season = season_for_match(conn, league_id, date)
     conn.execute(
         "INSERT OR REPLACE INTO dim_match (Match_ID, Season, League_ID, Date, Home_Team_ID, Away_Team_ID,"
         " Home_Team_Name, Away_Team_Name, home_score, away_score, status, Match_Round, kickoff_at_utc)"
@@ -221,7 +232,10 @@ def seed_basic_core(data_dir):
     conn = connect_rw("core")
     seed_core_schema(conn)
     insert_match(conn, 9001, date="2027-04-01", status="NotStarted")
-    insert_match(conn, 9002, date="2026-05-01", status="Finish", home_score=2, away_score=0, rnd="38")
+    # 9002:已完赛比赛,与 9001 同处 2026/2027 赛季(2026-08-25 起赛季由日期
+    # 推导——旧布景 date=2026-05-01 配 Season='2026/2027' 是自相矛盾的错标,
+    # 正是触发器要拒绝的形态;改成赛季初的真实日期,语义不变:一未来一完赛)
+    insert_match(conn, 9002, date="2026-08-22", status="Finish", home_score=2, away_score=0, rnd="1")
     insert_match(conn, 9101, league_id=87, season="2025/2026", date="2026-05-10",
                  home_id=2001, away_id=2002, home="Barcelona", away="Real Madrid",
                  status="Finish", home_score=1, away_score=1)

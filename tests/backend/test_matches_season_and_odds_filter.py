@@ -102,7 +102,7 @@ class TestSeasonFilter:
         已从 MatchSummary 整体删除)。这条断言正是要推翻的旧规则(此前
         requires_login=True 且 win_probability 恒为 None)。"""
         conn = connect_rw("core")
-        insert_match(conn, 7005, league_id=67, season="2020", date="2021-03-01",
+        insert_match(conn, 7005, league_id=67, season="2020", date="2020-03-01",
                      status="Finish", home_score=1, away_score=1)
         conn.commit()
         conn.close()
@@ -285,7 +285,10 @@ class TestHomepageHeroBoostFreePredicted:
     1x2 概率的比赛。
     """
 
-    LEAGUE_ID = 47   # 任意联赛均可——2026-08-16 起访问权不再与联赛挂钩
+    # 任意联赛均可(2026-08-16 起访问权不再与联赛挂钩)。取自然年联赛 67:
+    # 本类种子用 season="2026" 配动态今天的日期,2026-08-25 起触发器要求
+    # 赛季与日期一致,自然年联赛才能让这对组合恒成立。
+    LEAGUE_ID = 67
 
     def _seed_matches(self, data_dir) -> datetime:
         now = datetime.now(timezone.utc)

@@ -40,6 +40,7 @@ load_dotenv(dotenv_path=os.path.join(
 
 import dashscope
 from db import get_connection
+from db.util import utc_now_iso
 
 from i18n.translate_players import translate_one  # 阶段一复用同一套直译+重试逻辑
 
@@ -253,9 +254,9 @@ def run_nickname(limit: int | None) -> None:
                     conn.execute(
                         """UPDATE dim_player_i18n
                            SET name_zh_short=?, source='qwen-plus-nickname',
-                               model=?, updated_at=datetime('now')
+                               model=?, updated_at=?
                            WHERE Player_ID=?""",
-                        (short, NICKNAME_MODEL, pid),
+                        (short, NICKNAME_MODEL, utc_now_iso(), pid),
                     )
                     updated += 1
                 conn.commit()

@@ -596,13 +596,12 @@ class FotMobClient:
         match_id: Union[int, str],
         league_id: Optional[int] = None,
         date: Optional[str] = None,
-        season: str = "2025/2026",
     ) -> dict:
         """
-        从 pageProps 中提取 dim_match 表所需的所有字段。
+        从 pageProps 中提取 dim_match 表所需的字段(不含 Season)。
 
         返回字段（对应 dim_match 列）:
-          Match_ID, Season, League_ID, Date,
+          Match_ID, League_ID, Date,
           kickoff_at_utc, kickoff_precision, kickoff_source,
           Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name,
           home_score, away_score, status,
@@ -620,6 +619,15 @@ class FotMobClient:
         正则猜译可靠)、裁判信息卡全量(id 用于拼头像 URL playerimages/{id}.png,
         imgUrl 是国旗不取;stats[] 原样存 JSON——perMatch 两项自带联赛均值与
         服务端评级 averageType,客户端不自算阈值,实网 60 样本已证伪可反推)。
+
+        2026-08-25 修订(CLAUDE.md §6.3 事故收口):本方法不再有 `season`
+        形参、输出里不再有 `Season` 键。single-match 的 match_details payload
+        本身不含赛季信息(实测 general 字典只有 leagueId/matchRound 等,没有
+        season)——这里能如实提取的每一列都有 payload 来源,唯独 Season 没有,
+        此前靠调用方注入(先是硬编码默认值、后是手填参数)正是错标事故的注入
+        点。赛季由赛程同步独占(ingest_future_fixtures,值来自 provider 回声
+        校验/发现),写入正确性由 dim_match 触发器(migrations/core/0011)与
+        制度表(backend/season_regime.py)保证。
         """
         general = page_props.get("general", {})
         header  = page_props.get("header", {})
@@ -791,7 +799,6 @@ class FotMobClient:
 
         return {
             "Match_ID":             int(match_id),
-            "Season":               season,
             "League_ID":            league_id,
             "Date":                 date,
             "kickoff_at_utc":       kickoff_at_utc,
@@ -1032,8 +1039,17 @@ class FotMobClient:
         if not periods_data and "stats" in stats:
             periods_data = {"All": stats}
 
+        # 加时段拼写归一(2026-08-25,migrations/core/0012):来源在 stats
+        # 端点用 FirstExtraHalf/SecondExtraHalf,在 shotmap 端点用
+        # FirstHalfExtra/SecondHalfExtra——同一个枚举两种拼写落进两张表,
+        # 加时段 join 永远零行。统一为 APK MatchPeriod 枚举拼法(shotmap 侧)。
+        _PERIOD_NORMALIZE = {
+            "FirstExtraHalf": "FirstHalfExtra",
+            "SecondExtraHalf": "SecondHalfExtra",
+        }
         records = []
         for period_name, p_data in periods_data.items():
+            period_name = _PERIOD_NORMALIZE.get(period_name, period_name)
             hs: Dict[str, Any] = {
                 "Match_ID": int(match_id),
                 "Team_ID":  hid,
@@ -1221,7 +1237,6 @@ class FotMobClient:
                 "big_chance_missed_title":        g("big_chance_missed_title", "bigChanceMissed"),
                 "shots_woodwork":                 g("shots_woodwork", "shotsWoodwork", "hitWoodwork"),
                 "missed_penalty":                 g("missed_penalty", "missedPenalty"),
-                "shotmap":                        g("shotmap", "shots"),
 
                 # ── 传球 / 创机 ────────────────────────────────────────
                 "accurate_passes":                g("accurate_passes", "accuratePasses"),

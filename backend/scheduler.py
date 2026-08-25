@@ -16,13 +16,13 @@ scheduler.py — 概率卡更新链路编排(ROADMAP.md Phase C3,选项 1)。
     3. step3_build_features():复用 backend/models/features/build_match_features.py,
        rolling 重算(新结果改变各队近况;lag 逻辑——每场只用"该场之前"已完赛
        的最近 N 场——继承自 1.M.1,本文件不重新实现)。
-    4. step4_predict():复用 backend/models/predict_wdl_future.py,对全部
-       status='NotStarted' 的 26/27 比赛重算预测。ρ/isotonic 校准器/联赛
-       基准全部从 backend/models/artifacts/wdl_baseline_params.pkl 加载,
-       不重新拟合——重算的只是 rolling 输入变了,模型参数本身不变。
+
+2026-08-25:第 4 步(WDL 模型重算预测)已随 WDL 模型/正式预测登记簿一并废弃
+(胜率改由 bet365 赔率直接派生);本文件保留前三步,它们是 fotmob_incremental_multi
+等生产采集路径实际复用的落库/Silver/特征链路,与已废弃的模型预测无关。
 
 用法:
-    python backend/scheduler.py [--league-id 47] [--season 2026/2027]
+    python backend/scheduler.py --season 2026/2027 [--league-id 47]
     python backend/scheduler.py --skip-scrape   # 跳过真实爬取,只跑 2/3/4
                                                   (C3.2 模拟测试专用,验证
                                                   编排链本身,不依赖真实新
@@ -41,7 +41,6 @@ from fotmob_client import FotMobClient
 from ingest.ingest_match import ingest_match
 from silver.build_silver import build_silver
 from models.features.build_match_features import build_match_features
-from models.predict_wdl_future import main as predict_wdl_future_main
 
 from backend.db.util import utc_now_iso
 from backend.ingest.poll_windows import (
@@ -50,7 +49,10 @@ from backend.ingest.poll_windows import (
 )
 
 DEFAULT_LEAGUE_ID = 47
-DEFAULT_SEASON = "2026/2027"
+# DEFAULT_SEASON 已删除(2026-08-25,CLAUDE.md §6.3):标识赛季/时间分区的
+# 参数不得有"当下合理、未来注定过期"的字面量默认值。手动 CLI 的 --season
+# 改为必填;生产调用方(fotmob_incremental_multi)本来就按库里真实存在的
+# 赛季逐个传入,不受影响。
 
 
 def step1_ingest_newly_finished(league_id: int, season: str) -> list:
@@ -121,7 +123,10 @@ def step1_ingest_newly_finished(league_id: int, season: str) -> list:
     ok = []
     for mid in newly_finished:
         try:
-            ingest_match(mid, league_id=league_id, season=season)
+            # 2026-08-25 起不传 season(CLAUDE.md §6.3):Season 由赛程同步独占,
+            # ingest_match 不再接受/覆盖赛季。season 参数仍用于上面的候选筛选
+            # (把本次调用限定在一个赛季内),但不再流向任何写路径。
+            ingest_match(mid, league_id=league_id)
             ok.append(mid)
         except Exception as e:
             raise RuntimeError(
@@ -144,22 +149,15 @@ def step3_build_features() -> None:
     print("[3/4] 完成")
 
 
-def step4_predict() -> None:
-    print("\n[4/4] predict_wdl_future(全量重算所有 status='NotStarted' 的 26/27 预测) ...")
-    predict_wdl_future_main()
-    print("[4/4] 完成")
-
-
 def run(league_id: int, season: str, skip_scrape: bool) -> None:
     if skip_scrape:
-        print("\n[1/4] --skip-scrape:跳过真实爬取(C3.2 模拟测试用,验证编排链"
+        print("\n[1/3] --skip-scrape:跳过真实爬取(C3.2 模拟测试用,验证编排链"
               "本身,不依赖真实新完赛比赛)")
     else:
         step1_ingest_newly_finished(league_id, season)
 
     step2_build_silver()
     step3_build_features()
-    step4_predict()
 
     print("\n=== scheduler 全链路执行完成 ===")
 
@@ -167,7 +165,7 @@ def run(league_id: int, season: str, skip_scrape: bool) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--league-id", type=int, default=DEFAULT_LEAGUE_ID)
-    parser.add_argument("--season", type=str, default=DEFAULT_SEASON)
+    parser.add_argument("--season", type=str, required=True)
     parser.add_argument(
         "--skip-scrape", action="store_true",
         help="跳过第 1 步真实爬取,只跑 2/3/4(C3.2 模拟测试用)",

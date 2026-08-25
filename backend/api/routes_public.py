@@ -23,10 +23,7 @@ from backend.queries import match_preview as q_preview
 from backend.queries import match_report as q_report
 from backend.queries import matches as q_matches
 from backend.queries import odds as q_odds
-from backend.queries import track_record as q_track
 from backend.queries.leagues import LEAGUE_META, anonymous_cacheable_league_ids, league_data_profiles
-from backend.queries.predictions import current_public_snapshot
-from backend.queries.teams import team_display_map
 
 from .deps import NO_STORE, AuthContext, core_ro, get_auth_context, odds_ro, platform_ro
 from .schemas import (
@@ -42,17 +39,10 @@ from .schemas import (
     MatchOddsResponse,
     MatchPreviewResponse,
     MatchReportResponse,
-    ModelMetricsResponse,
-    PredictionDTO,
-    PredictionMeta,
     PlayersResponse,
-    PredictionResponse,
     ProductsResponse,
     StandingsResponse,
     TeamStatsResponse,
-    TrackRecordMetrics,
-    TrackRecordResponse,
-    TrackRecordSample,
     error_responses,
 )
 
@@ -471,69 +461,6 @@ def match_detail(
     }
 
 
-# ── 预测(2026-08-16 起恒完整投影,不再有字段级门禁) ─────────
-
-@router.get("/matches/{match_id}/prediction", response_model=PredictionResponse)
-def match_prediction(
-    match_id: int,
-    response: Response,
-    conn_core=Depends(core_ro),
-    conn_platform=Depends(platform_ro),
-):
-    """恒为完整胜平负三项概率(2026-08-16 起除"每日精选"外全站比赛内容全部
-    免费,包括匿名——不再有免费/付费两套投影)。
-
-    响应内容会随预测发布/编辑变化 → 永远 private, no-store,禁止共享缓存。
-    """
-    response.headers["Cache-Control"] = NO_STORE
-    m = q_matches.match_by_id(conn_core, match_id)
-    if m is None:
-        raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
-
-    snap = current_public_snapshot(conn_platform, match_id)
-    if snap is None:
-        return PredictionResponse(
-            match_id=match_id, available=False, reason="该场比赛暂无已发布的正式预测"
-        )
-    if snap["status"] == "retracted":
-        return PredictionResponse(
-            match_id=match_id, available=False, reason="该预测已被撤回(登记簿中保留原记录)"
-        )
-
-    probs = {"home": snap["home_win"], "draw": snap["draw"], "away": snap["away_win"]}
-    top_outcome = max(probs, key=probs.get)
-    model_row = conn_platform.execute(
-        "SELECT algorithm FROM model_versions WHERE id=?", (snap["model_version_id"],)
-    ).fetchone()
-    probability_source = (
-        "MARKET_BASELINE"
-        if model_row is not None and model_row["algorithm"] == "market_baseline"
-        else "MODEL"
-    )
-    meta = PredictionMeta(
-        model_version_id=snap["model_version_id"],
-        probability_source=probability_source,
-        generated_at=snap["generated_at"],
-        published_at=snap["published_at"],
-        locked_at=snap["locked_at"],
-        input_cutoff_at=snap["input_cutoff_at"],
-        status=snap["status"],
-        confidence=snap["confidence"],
-    )
-    dto = PredictionDTO(
-        top_outcome=top_outcome,
-        home_probability=round(snap["home_win"], 4),
-        draw_probability=round(snap["draw"], 4),
-        away_probability=round(snap["away_win"], 4),
-        expected_home_goals=snap["expected_home_goals"],
-        expected_away_goals=snap["expected_away_goals"],
-        prediction_hash=snap["prediction_hash"],
-        meta=meta,
-    )
-    return PredictionResponse(match_id=match_id, available=True, prediction=dto)
-
-
 @router.get("/matches/{match_id}/analysis", response_model=AnalysisBundleDTO)
 def match_analysis(
     match_id: int,
@@ -797,133 +724,6 @@ def status_freshness(
         "schedule_state": q_freshness.classify_freshness(schedule_updated_at),
         "odds_state": q_freshness.classify_freshness(odds_updated_at),
         "reco_state": q_freshness.classify_freshness(reco_updated_at),
-    }
-
-
-# ── 公开战绩与模型指标 ─────────────────────────────────────
-
-@router.get("/track-record", response_model=TrackRecordResponse)
-def track_record(
-    response: Response,
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    conn_platform=Depends(platform_ro),
-    conn_core=Depends(core_ro),
-):
-    """匿名公开:全部正式样本(official + 曾锁定 + 赛前发布),不挑选。
-
-    永久资格不变量(CLAUDE.md §9.1):撤回(retracted)与被修正版取代
-    (superseded_by 非空)的正式样本不退出列表与指标分母,只带状态与修正链
-    标注(status / superseded_by / correction_of);修正链新旧版本同时返回。
-    """
-    response.headers["Cache-Control"] = PUBLIC_CACHE
-    data = q_track.official_samples(conn_platform, limit=limit, offset=offset)
-    display = team_display_map(conn_core)
-    samples = []
-    for s in data["samples"]:
-        m = conn_core.execute(
-            "SELECT Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name FROM dim_match WHERE Match_ID=?",
-            (s["match_id"],),
-        ).fetchone()
-        home = (
-            q_matches._team_ref(m["Home_Team_ID"], m["Home_Team_Name"], display)
-            if m
-            else {"name": "未知"}
-        )
-        away = (
-            q_matches._team_ref(m["Away_Team_ID"], m["Away_Team_Name"], display)
-            if m
-            else {"name": "未知"}
-        )
-        probs = {"home": s["home_win"], "draw": s["draw"], "away": s["away_win"]}
-        predicted = max(probs, key=probs.get)
-        samples.append(
-            TrackRecordSample(
-                snapshot_id=s["id"],
-                match_id=s["match_id"],
-                kickoff_at_utc=s["kickoff_at_utc"],
-                home=home,
-                away=away,
-                home_probability=s["home_win"],
-                draw_probability=s["draw"],
-                away_probability=s["away_win"],
-                predicted_outcome=predicted,
-                actual_outcome=s["outcome"],
-                home_goals=s["home_goals"],
-                away_goals=s["away_goals"],
-                hit=(s["outcome"] == predicted) if s["outcome"] else None,
-                status=s["status"],
-                superseded_by=s["superseded_by"],
-                correction_of=s["correction_of"],
-                superseded_note=(
-                    "该版本已被修正版取代;新旧版本均保留并计入公开战绩与评估"
-                    if s["superseded_by"] else None
-                ),
-                model_version_id=s["model_version_id"],
-                published_at=s["published_at"],
-                locked_at=s["locked_at"],
-                prediction_hash=s["prediction_hash"],
-            )
-        )
-    metrics = None
-    ev = q_track.latest_evaluation(conn_platform)
-    if ev:
-        metrics = TrackRecordMetrics(
-            sample_size=ev["sample_size"],
-            accuracy=ev["accuracy"],
-            brier=ev["brier"],
-            log_loss=ev["log_loss"],
-            rps=ev["rps"],
-            evaluated_at=ev["evaluated_at"],
-        )
-    return TrackRecordResponse(
-        total=data["total"],
-        retracted_count=data["retracted_count"],
-        superseded_count=data["superseded_count"],
-        limit=limit,
-        offset=offset,
-        metrics=metrics,
-        samples=samples,
-        empty_reason=None if data["total"] else "暂无符合口径的正式样本(正式样本 = 开球前发布并锁定的预测)",
-    )
-
-
-@router.get("/model/metrics", response_model=ModelMetricsResponse)
-def model_metrics(response: Response, conn=Depends(platform_ro)):
-    """模型版本与评估口径。研发期指标来自 walk-forward 回测;正式战绩指标只来自
-    正式样本(official + 曾锁定 + 赛前发布)的离线评估,分母含撤回与被取代版本,
-    不可选择性剔除(CLAUDE.md §9.1)。市场(收盘赔率)基线 UNVERIFIED,不作比较声明。"""
-    response.headers["Cache-Control"] = PUBLIC_CACHE
-    versions = [
-        dict(r) | {
-            "params": json.loads(r["params_json"] or "{}"),
-            "dev_metrics": json.loads(r["metrics_json"] or "{}"),
-        }
-        for r in conn.execute("SELECT * FROM model_versions ORDER BY created_at").fetchall()
-    ]
-    for v in versions:
-        v.pop("params_json", None)
-        v.pop("metrics_json", None)
-    ev = q_track.latest_evaluation(conn)
-    official = None
-    if ev:
-        official = {
-            "sample_size": ev["sample_size"],
-            "accuracy": ev["accuracy"],
-            "brier": ev["brier"],
-            "log_loss": ev["log_loss"],
-            "rps": ev["rps"],
-            "calibration": json.loads(ev["calibration_json"] or "[]"),
-            "evaluated_at": ev["evaluated_at"],
-        }
-    return {
-        "model_versions": versions,
-        "official_evaluation": official,
-        "official_evaluation_note": None if official else "暂无正式样本评估;研发期回测指标见各模型版本 dev_metrics",
-        "market_baseline": {
-            "status": "UNVERIFIED",
-            "note": "尚未完成可复现的收盘赔率配对评估;现有对照仅为历史主/平/客频率基线",
-        },
     }
 
 

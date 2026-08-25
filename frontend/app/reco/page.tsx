@@ -19,7 +19,8 @@
  * 渲染阶段完全不存在,不是发送后被样式或条件渲染盖住。
  *
  * 人工内容可修正:修正次数与最近编辑时间公开展示,不使用"锁定不可改"表述
- * (那是模型登记簿的资格,见 /track-record)。
+ * (2026-08-25:曾经对照的模型预测登记簿/WDL 模型已整体废弃,/track-record
+ * 页面已删除,不再有可比较的对象)。
  *
  * useSearchParams 必须包在 Suspense 里(Next 16 生产构建约束,同 /login)。
  */
@@ -432,10 +433,6 @@ function RecoBody() {
           <h2 className={styles.sectionTitle}>战绩归档（{track?.total ?? 0}）</h2>
           <p className={styles.archiveNote}>
             结算完的单子都在这儿，中没中都留着。改过的地方会在那张单子上标出来。
-            <Link href="/track-record" className={styles.inlineLink}>
-              模型预测
-            </Link>
-            是另一套记录，两边不合并算。
           </p>
           {!track && !trackErr ? (
             <div className={styles.card} aria-busy="true">

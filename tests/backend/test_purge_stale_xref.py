@@ -22,7 +22,7 @@ def dbs(data_dir):
     conn_core.executemany(
         "INSERT INTO dim_match (Match_ID, Season, League_ID, Date, Home_Team_ID, Away_Team_ID,"
         " Home_Team_Name, Away_Team_Name, status, kickoff_at_utc)"
-        " VALUES (?, '2026', 55, '2026-08-24', 9857, 8543, ?, ?, 'NotStarted', '2026-08-24T16:30:00Z')",
+        " VALUES (?, '2026/2027', 55, '2026-08-24', 9857, 8543, ?, ?, 'NotStarted', '2026-08-24T16:30:00Z')",
         [
             (9001, "Bologna", "Lazio"),
             (9002, "Osasuna", "Levante"),

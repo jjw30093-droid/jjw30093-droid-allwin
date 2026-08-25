@@ -44,7 +44,8 @@ def scheduler_module(data_dir):
     return scheduler_mod
 
 
-def _seed(scheduler_module, match_id, league_id, season, status, kickoff_at_utc):
+def _seed(scheduler_module, match_id, league_id, season, status, kickoff_at_utc,
+          date="2026-08-14"):
     """用被测代码自己的连接工厂写测试数据,见模块顶部"连接陷阱"说明——
     必须和 step1_ingest_newly_finished 内部读的是同一个物理文件。"""
     conn = scheduler_module.get_connection()
@@ -53,8 +54,8 @@ def _seed(scheduler_module, match_id, league_id, season, status, kickoff_at_utc)
     conn.execute(
         "INSERT OR REPLACE INTO dim_match (Match_ID, Season, League_ID, Date, status,"
         " kickoff_at_utc, kickoff_precision, kickoff_source)"
-        " VALUES (?, ?, ?, '2026-08-14', ?, ?, 'exact', 'fotmob')",
-        (match_id, season, league_id, status, kickoff_at_utc),
+        " VALUES (?, ?, ?, ?, ?, ?, 'exact', 'fotmob')",
+        (match_id, season, league_id, date, status, kickoff_at_utc),
     )
     conn.commit()
     conn.close()
@@ -89,7 +90,7 @@ def _patch(scheduler_module, monkeypatch, finished_ids, ingested, now_iso="2026-
     monkeypatch.setattr(
         scheduler_module,
         "ingest_match",
-        lambda mid, league_id=None, season=None: ingested.append((mid, league_id, season)),
+        lambda mid, league_id=None: ingested.append((mid, league_id)),
     )
     monkeypatch.setattr(scheduler_module, "utc_now_iso", lambda: now_iso)
 
@@ -103,7 +104,7 @@ class TestStaleReingestCandidatePool:
 
         ok = scheduler_module.step1_ingest_newly_finished(47, "2026/2027")
         assert ok == [5795371]
-        assert ingested == [(5795371, 47, "2026/2027")]
+        assert ingested == [(5795371, 47)]
 
     def test_inplay_within_threshold_not_reingested(self, scheduler_module, monkeypatch):
         """真的还在进行中的比赛(开球才 1 小时)不该被当成滞留场次去重抓。"""
@@ -138,10 +139,15 @@ class TestStaleReingestCandidatePool:
 
     def test_stale_match_in_different_season_excluded(self, scheduler_module, monkeypatch):
         """league_stale_unresolved_match_ids 只按 League_ID 判定、不区分赛季;
-        本函数必须自己再按 Season 收窄,不能把别的赛季的滞留场次用本次调用的
-        season 字符串误标进 ingest_match(season 会覆盖 dim_match.Season)。"""
+        本函数必须自己再按 Season 收窄——season 参数是调用批次的作用域声明
+        (一次只处理一个赛季)。2026-08-25 起 ingest_match 完全不接受 season
+        (CLAUDE.md §6.3),"误标覆盖 dim_match.Season"的旧风险已从接口上
+        消失,这条测试守住的是剩下的作用域语义本身。"""
         # 同一 League_ID=47,但赛季是旧的 2025/2026,同样滞留 InPlay 多日
-        _seed(scheduler_module, 5795375, 47, "2025/2026", "InPlay", "2026-08-20T15:30:00Z")
+        # date 给 2025/2026 赛季内的日期(2026-08-25 起触发器校验赛季与日期
+        # 一致);kickoff 保持在滞留阈值内,这是本测试真正关心的维度。
+        _seed(scheduler_module, 5795375, 47, "2025/2026", "InPlay", "2026-08-20T15:30:00Z",
+              date="2026-05-14")
         ingested = []
         _patch(scheduler_module, monkeypatch, finished_ids=[5795375], ingested=ingested)
 

@@ -46,10 +46,14 @@ def seeded_preview(data_dir):
     """9002(英超,1001 vs 1002,已完赛)近 3 场历史 + 阵容/伤停快照。"""
     seed_basic_core(data_dir)
     conn = connect_rw("core")
+    # 历史比赛必须与 9002 同赛季(风格/窗口查询按 League_ID+Season 过滤,
+    # 见 team_style_preview.py 头部说明)。2026-08-25 起赛季由日期推导
+    # (dim_match 触发器校验),所以直接用 2026/2027 赛季内的日期,season
+    # 走自动推导,不再手填一个可能与日期矛盾的字符串。
     for i in range(3):
         mid = 9500 + i
-        insert_match(conn, mid, league_id=47, season="2025/2026",
-                     date=f"2026-04-{10+i:02d}", home_id=1001, away_id=1002,
+        insert_match(conn, mid, league_id=47,
+                     date=f"2026-08-{10+i:02d}", home_id=1001, away_id=1002,
                      home="Arsenal", away="Chelsea", status="Finish",
                      home_score=1, away_score=0)
         _stats(conn, mid, 1001, BallPossesion=60.0, expected_goals=2.0)
@@ -86,7 +90,7 @@ class TestAvailability:
         assert len(body["sidelined"]["home"]) == 1
         assert body["sidelined"]["home"][0]["expected_return"] == "A few days"
         assert body["sidelined"]["away"] == []  # 确认无伤停,是合法结果不是缺失
-        assert body["home_window"] == {"matches": 3, "from": "2026-04-10", "to": "2026-04-12"}
+        assert body["home_window"] == {"matches": 3, "from": "2026-08-10", "to": "2026-08-12"}
 
     def test_preview_exposes_coach_when_snapshot_has_it(self, data_dir, client):
         """API 级断言(2026-08-18,Fix 2)。MatchPreview* 模型没有 extra="forbid",

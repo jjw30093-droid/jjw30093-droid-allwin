@@ -71,7 +71,10 @@ def reingest(match_ids: list[int], commit: bool = False) -> dict:
             results.append({**t, "result": "skipped_not_in_db"})
             continue
         try:
-            ingest_match(t["match_id"], league_id=t["league_id"], season=t["season"])
+            # 2026-08-25 起不再传 season(CLAUDE.md §6.3):此前这里把库里已有的
+            # Season 读回再写回,是错误赛季的自我繁殖路径——库里标错时,用本
+            # 工具"修复"反而把错标重新焊死。ingest_match 现在完全不碰 Season。
+            ingest_match(t["match_id"], league_id=t["league_id"])
             results.append({**t, "result": "ok"})
         except Exception as exc:  # noqa: BLE001 — 手动补采工具:单场失败要如实报告,不中止批次
             results.append({**t, "result": f"failed: {type(exc).__name__}: {exc}"})

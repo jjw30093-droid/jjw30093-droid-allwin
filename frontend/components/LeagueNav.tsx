@@ -9,7 +9,6 @@ const TABS = [
   { key: "matches", label: "赛程", path: "matches" },
   { key: "team-stats", label: "球队数据", path: "team-stats" },
   { key: "players", label: "球员榜", path: "players" },
-  { key: "wdl-predictions", label: "概率卡", path: "wdl-predictions" },
 ] as const;
 
 export function LeagueNav({

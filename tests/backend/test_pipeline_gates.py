@@ -21,6 +21,14 @@ def _notify_disabled(monkeypatch):
     monkeypatch.delenv("SERVERCHAN_SENDKEY", raising=False)
 
 
+def _derived_season(conn, league_id, kickoff):
+    """种子行赛季按 (联赛, 日期) 推导——测试大量用相对 now 的动态 kickoff,
+    硬编码赛季会随现实时间漂移撞上 0011 赛季触发器(2026-08-25)。"""
+    from backend.season_regime import season_for_match
+
+    return season_for_match(conn, league_id, (kickoff or "2026-08-12")[:10])
+
+
 def _seed_match(conn, mid, league_id=48, kickoff="2026-08-12T12:00:00Z",
                 status="NotStarted", precision="exact",
                 source="fotmob:fixtures", home_score=None, away_score=None):
@@ -29,8 +37,9 @@ def _seed_match(conn, mid, league_id=48, kickoff="2026-08-12T12:00:00Z",
            (Match_ID, Season, League_ID, Date, Home_Team_ID, Away_Team_ID,
             Home_Team_Name, Away_Team_Name, home_score, away_score, status,
             kickoff_at_utc, kickoff_precision, kickoff_source)
-           VALUES (?, '2026/2027', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (mid, league_id, (kickoff or "2026-08-12")[:10], mid * 10, mid * 10 + 1,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (mid, _derived_season(conn, league_id, kickoff), league_id,
+         (kickoff or "2026-08-12")[:10], mid * 10, mid * 10 + 1,
          f"Home{mid}", f"Away{mid}", home_score, away_score, status,
          kickoff, precision, source),
     )

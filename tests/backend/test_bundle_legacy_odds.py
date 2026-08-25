@@ -43,10 +43,10 @@ def bundle_matches(data_dir):
     conn = connect_rw("core")
     seed_core_schema(conn)
     # EPL(免费联赛,匿名可访问 analysis 端点)
-    insert_match(conn, 8101, league_id=47, season="2021/2022", date="2022-01-10",
+    insert_match(conn, 8101, league_id=47, date="2022-01-10",
                  status="Finish", home_score=1, away_score=0,
                  kickoff_at_utc="2022-01-10T15:00:00Z")   # legacy-only
-    insert_match(conn, 8102, league_id=47, season="2021/2022", date="2022-01-17",
+    insert_match(conn, 8102, league_id=47, date="2022-01-17",
                  status="Finish", home_score=2, away_score=2,
                  kickoff_at_utc="2022-01-17T15:00:00Z")   # no odds
     conn.commit()

@@ -188,7 +188,14 @@ def normalize_canonical_schedule_payload(
     competition_class_verified: bool,
     artifact_schema_version: str,
 ) -> tuple[NormalizedScheduleRow, ...]:
-    """Validate the reviewed canonical shape and return stable sorted rows."""
+    """Validate the reviewed canonical shape and return stable sorted rows.
+
+    赛季回声(selectedSeason == requested_season)与联赛 id 校验的统一实现在
+    backend/ingest/season_identity.py(2026-08-25 收敛,CLAUDE.md §6.3);本
+    函数(及下方 normalize_raw_schedule_payload)是同一判定嵌在整块结构化
+    校验里的单行比较,不是那 30 行函数的拷贝——保留内联以维持本子系统
+    "一次性判定 + 结构化拒绝"的既有形状,判定口径与统一实现一致。
+    """
 
     failed = False
     rows: list[NormalizedScheduleRow] = []

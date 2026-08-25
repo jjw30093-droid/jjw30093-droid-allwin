@@ -59,18 +59,6 @@ class TestLeagueIsolation:
         remaining = {r["match_id"] for r in conn.execute("SELECT match_id FROM int_match_features")}
         assert remaining == {200}, "清理 EPL 特征不得连带删除其它联赛的行"
 
-    def test_wdl_baseline_load_features_has_league_predicate(self):
-        """守卫训练脚本的 SQL 谓词:字符串级断言,谓词被删时立刻红。"""
-        import inspect
-
-        from backend.models import build_wdl_baseline as bwb
-
-        src = inspect.getsource(bwb.load_features)
-        assert "imf.league_id = ?" in src
-        assert bwb.LEAGUE_ID == 47
-        src_del = inspect.getsource(bwb.write_predictions)
-        assert "AND league_id = ?" in src_del
-
     def test_build_features_df_single_league_end_to_end(self, two_league_core):
         matches, stats = bmf._load_raw(two_league_core, 47)
         out = bmf.build_features_df(matches, stats)

@@ -49,75 +49,26 @@ from fotmob_client import FotMobClient, derive_match_status
 from ingest_match import _upsert
 from schema import DIM_MATCH_COLUMNS
 
+# 赛季身份校验统一收敛进 season_identity.py(2026-08-25,CLAUDE.md §6.3):
+# 此前同一套"回声校验"在仓库里有五份互不复用的实现。这里保留同名 re-export,
+# 既有 import(cli/sync_fixtures_window、测试)不需要改。优先包路径导入——
+# 保证与其它 `backend.ingest.season_identity` 消费方拿到同一个类对象
+# (异常 isinstance 跨模块才成立);独立脚本运行时退回 sys.path 导入。
+try:
+    from backend.ingest.season_identity import (  # noqa: F401 — re-export 兼容
+        SeasonIdentityError,
+        discover_season as discover_season_identity,
+        verify_season_echo as _verify_season_identity,
+    )
+except ImportError:  # 独立脚本上下文(cwd=backend/ingest)
+    from season_identity import (  # noqa: F401
+        SeasonIdentityError,
+        discover_season as discover_season_identity,
+        verify_season_echo as _verify_season_identity,
+    )
+
 # 与 parse_match_dim(match_details 详情页)共用同一个判定函数,见上方模块 docstring。
 _status_from_fixture = derive_match_status
-
-
-class SeasonIdentityError(RuntimeError):
-    """league_matches() 响应的 details.id/selectedSeason 与请求参数不一致。
-
-    FotMob 在某个联赛尚未发布下一赛季赛程时,`&season=` 请求参数可能被忽略、
-    静默返回当前/上一个已发布赛季的数据。不校验的话,这些行会被当成目标赛季
-    写进 dim_match(例如把已完赛的 2025/2026 整季误标成 Season='2026/2027'),
-    这正是 docs/data-plan.md 记录的"跨联赛/跨赛季污染"风险——必须拒绝写库,
-    不能静默降级成"写入了但赛季标错"。
-    """
-
-
-def _verify_season_identity(data: dict, league_id: int, season: str) -> None:
-    """与 backend/cli/backfill_season_tables.py::_verify_identity 同一口径
-    (details.id 必须等于请求的 league_id,selectedSeason 必须等于请求的 season)。
-    不同点:那里按赛季循环、宁可跳过单个赛季也要继续;这里一次调用只处理一个
-    (league_id, season),不一致就是这次调用唯一目的失败,直接抛异常。"""
-    details = data.get("details") or {}
-    observed_id = details.get("id")
-    try:
-        observed_id = int(observed_id)
-    except (TypeError, ValueError):
-        raise SeasonIdentityError(
-            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
-            f"details.id 无法解析为整数: {observed_id!r}"
-        )
-    if observed_id != league_id:
-        raise SeasonIdentityError(
-            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
-            f"details.id={observed_id} 与请求的 league_id 不一致——来源很可能还没有 "
-            f"这个赛季的数据,拒绝落库"
-        )
-    observed_season = details.get("selectedSeason") or details.get("season")
-    if observed_season != season:
-        raise SeasonIdentityError(
-            f"league_matches(league_id={league_id}, season={season!r}) 响应的 "
-            f"selectedSeason={observed_season!r} 与请求的 season 不一致——来源很可能还没有 "
-            f"这个赛季的数据,拒绝落库"
-        )
-
-
-def discover_season_identity(data: dict, league_id: int) -> str:
-    """discovery 模式:硬断言 details.id == league_id,但 season 由响应**回报**。
-
-    用于 T+7 赛程同步——不预设赛季串(解决 J1 同时存在 2026 与 2026/2027 的换季、
-    以及各联赛跨年/自然年惯例不同)。返回 details.selectedSeason(非空)。
-    id 不符或赛季缺失照样抛 SeasonIdentityError,fail-closed。
-    """
-    details = data.get("details") or {}
-    observed_id = details.get("id")
-    try:
-        observed_id = int(observed_id)
-    except (TypeError, ValueError):
-        raise SeasonIdentityError(
-            f"discovery(league_id={league_id}) 的 details.id 无法解析: {observed_id!r}"
-        )
-    if observed_id != league_id:
-        raise SeasonIdentityError(
-            f"discovery(league_id={league_id}) 的 details.id={observed_id} 不一致,拒绝落库"
-        )
-    season = details.get("selectedSeason") or details.get("season")
-    if not season or not str(season).strip():
-        raise SeasonIdentityError(
-            f"discovery(league_id={league_id}) 响应未回报可用赛季串,拒绝落库"
-        )
-    return str(season)
 
 
 def fetch_fixture_rows(client: FotMobClient, league_id: int, season: str) -> list:

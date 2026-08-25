@@ -79,7 +79,9 @@ HALF_KINDS = frozenset({"HT", "FT", "AET"})
 _PERIOD_ORDER = {
     "FirstHalf": 1, "SecondHalf": 2,
     "FirstHalfExtra": 3, "SecondHalfExtra": 4,
-    "FirstExtraHalf": 3, "SecondExtraHalf": 4,   # 两种来源写法都见过,同序
+    # 旧拼写(来源 stats 端点)已在写侧归一 + 0012 迁移存量为 FirstHalfExtra
+    # 系拼法(2026-08-25);这两行防御性保留,本表是该兼容的唯一出处。
+    "FirstExtraHalf": 3, "SecondExtraHalf": 4,
     "PenaltyShootout": 5,
 }
 

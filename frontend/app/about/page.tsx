@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import styles from "./about.module.css";
 
 export const metadata: Metadata = {
@@ -75,13 +74,8 @@ export default function AboutPage() {
             不用零值补齐。
           </p>
           <p>
-            概率可能来自登记模型，也可能是明确标识的赔率折算概率。
-            两者不会混写，页面会直接告诉你来源。
+            胜率由 bet365 赔率折算得出，页面会直接标注来源。
           </p>
-          <div className={styles.inlineLinks}>
-            <Link href="/about-model">查看模型说明</Link>
-            <Link href="/track-record">查看公开记录</Link>
-          </div>
         </div>
       </section>
 

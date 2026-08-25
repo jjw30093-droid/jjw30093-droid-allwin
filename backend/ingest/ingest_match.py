@@ -78,16 +78,60 @@ def _rows_with_extra_json(rows: list) -> list:
     return out
 
 
-def ingest_match(
-    match_id: int, league_id: int = None, date: str = None, season: str = None
-) -> None:
+# 明细抓取"拥有"的 dim_match 列(2026-08-25,CLAUDE.md §6.3 事故收口):
+# 全部列减去 Match_ID(主键)与 Season。Season 由赛程同步独占
+# (ingest_future_fixtures.FIXTURE_OWNED_COLUMNS 第一列,值来自 provider 回声
+# 校验/发现),明细抓取一律不碰——此前这里的整行 INSERT OR REPLACE 会把赛程
+# 同步写对的 Season 用调用方手填的值冲掉,正是 5 场英超揭幕战被错标成上赛季
+# 的直接机制。与该文件"用整行 INSERT OR REPLACE 会把它们清成 NULL"的既有
+# 教训同型,同一个修法:列作用域 upsert。
+MATCH_DETAIL_OWNED_COLUMNS = tuple(
+    n for n in _col_names(DIM_MATCH_COLUMNS) if n not in ("Match_ID", "Season")
+)
+
+
+def _upsert_match_details(conn, dim: dict) -> None:
+    """按 Match_ID upsert,只写明细抓取拥有的列——绝不碰 Season。"""
+    cols = ("Match_ID",) + MATCH_DETAIL_OWNED_COLUMNS
+    placeholders = ", ".join("?" for _ in cols)
+    col_sql = ", ".join(_quote(c) for c in cols)
+    update_sql = ", ".join(
+        f"{_quote(c)}=excluded.{_quote(c)}" for c in MATCH_DETAIL_OWNED_COLUMNS
+    )
+    conn.execute(
+        f"INSERT INTO dim_match ({col_sql}) VALUES ({placeholders}) "
+        f"ON CONFLICT(Match_ID) DO UPDATE SET {update_sql}",
+        [dim.get(c) for c in cols],
+    )
+
+
+def ingest_match(match_id: int, league_id: int = None, date: str = None) -> None:
+    """抓取单场明细并落库。不再接受 season 参数(2026-08-25,CLAUDE.md §6.3):
+
+    赛季不是明细抓取能知道的信息(单场 match_details payload 不含赛季),也
+    不是调用方该手填的信息(手填正是事故来源)。dim_match 行必须已由赛程同步
+    (sync_fixtures_window / ingest_league 的骨架落库)先建好、带着 provider
+    校验过的 Season——行不存在时 fail closed,不发起任何网络请求,提示先跑
+    赛程同步,绝不凭空造一行赛季未知/错误的比赛。
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT Season FROM dim_match WHERE Match_ID = ?", (match_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise ValueError(
+            f"match_id={match_id}: dim_match 里没有这场比赛的赛程行,拒绝落库——"
+            f"Season 由赛程同步独占(provider 回声校验),明细抓取不产生赛季。"
+            f"请先跑 sync_fixtures_window / ingest_league 的赛程落库,再补明细"
+        )
+
     client = FotMobClient()
     page_props = client.match_details(match_id)
 
-    dim_kwargs = {"league_id": league_id, "date": date}
-    if season is not None:
-        dim_kwargs["season"] = season
-    dim = client.parse_match_dim(page_props, match_id, **dim_kwargs)
+    dim = client.parse_match_dim(page_props, match_id, league_id=league_id, date=date)
 
     # 数据完整性闸门：这几个字段缺失通常意味着页面结构漂移或抓到了半页数据，
     # 不能静默写入 NULL 污染 dim_match——让它像网络错误一样抛出、计入失败列表，
@@ -107,8 +151,8 @@ def ingest_match(
 
     conn = get_connection()
     try:
-        # dim_match / dim_player — upsert
-        _upsert(conn, "dim_match", DIM_MATCH_COLUMNS, dim)
+        # dim_match(列作用域,不碰 Season)/ dim_player — upsert
+        _upsert_match_details(conn, dim)
 
         for p in player_stats:
             _upsert(
@@ -184,9 +228,10 @@ if __name__ == "__main__":
     parser.add_argument("match_id", type=int)
     parser.add_argument("--league-id", type=int, default=None)
     parser.add_argument("--date", type=str, default=None)
-    parser.add_argument("--season", type=str, default=None)
+    # --season 已删除(2026-08-25,CLAUDE.md §6.3):赛季由赛程同步独占,
+    # 明细抓取不接受也不产生赛季。
     args = parser.parse_args()
 
     ingest_match(
-        args.match_id, league_id=args.league_id, date=args.date, season=args.season
+        args.match_id, league_id=args.league_id, date=args.date
     )

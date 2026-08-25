@@ -76,7 +76,7 @@ def test_real_prematch_payload_status_is_not_started(client):
     }
     assert "reason" not in page_props["header"]["status"]
 
-    row = client.parse_match_dim(page_props, match_id=5104961, league_id=59, season="2026")
+    row = client.parse_match_dim(page_props, match_id=5104961, league_id=59)
 
     assert row["status"] == STATUS_NOT_STARTED
     assert row["kickoff_at_utc"] == "2026-08-01T14:00:00Z"

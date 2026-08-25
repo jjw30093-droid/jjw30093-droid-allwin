@@ -48,12 +48,10 @@ export type MatchListResponse = GetJson<"/api/v1/matches">;
 export type MatchSummary = MatchListResponse["matches"][number];
 export type WinProbability = NonNullable<MatchSummary["win_probability"]>;
 export type MatchDetailResponse = GetJson<"/api/v1/matches/{match_id}">;
-export type PredictionResponse = GetJson<"/api/v1/matches/{match_id}/prediction">;
 export type MatchReportResponse = GetJson<"/api/v1/matches/{match_id}/report">;
 export type MatchPreviewResponse = GetJson<"/api/v1/matches/{match_id}/preview">;
 export type MatchMarketCardsResponse = GetJson<"/api/v1/matches/{match_id}/markets">;
 export type MarketCard = MatchMarketCardsResponse["cards"][number];
-export type TrackRecordResponse = GetJson<"/api/v1/track-record">;
 export type AuthMethodsResponse = GetJson<"/api/v1/auth/methods">;
 export type PasswordLoginResponse = PostJson<"/api/v1/auth/password/login">;
 

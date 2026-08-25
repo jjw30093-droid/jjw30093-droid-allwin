@@ -6,12 +6,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.commands.predictions import (
-    get_or_create_model_version,
-    lock_snapshot,
-    publish_snapshot,
-    register_snapshot,
-)
 from backend.db.connections import connect_rw
 
 from .coreseed import seed_basic_core
@@ -47,82 +41,13 @@ def seeded(data_dir):
     conn_core.commit()
     conn_core.close()
 
-    conn = connect_rw("platform")
-    get_or_create_model_version(conn, "m-api", "dixon-coles")
-    # 9001:已发布的公开预测(执行时 UTC now +3 天 + 可追溯来源)
-    sid = register_snapshot(
-        conn, match_id=9001, kickoff_at_utc=kickoff_at_utc,
-        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
-        model_version_id="m-api", home_win=0.48, draw=0.29, away_win=0.23,
-        expected_home_goals=1.62, expected_away_goals=1.01, status="draft",
-    )
     assert kickoff > datetime.now(timezone.utc)
-    publish_snapshot(conn, sid, actor=None)   # 只发布不锁定:published 可对外,但不是正式样本
-    # 9002:draft(绝不能对外)
-    register_snapshot(
-        conn, match_id=9002, kickoff_at_utc="2027-05-01T14:00:00Z",
-        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
-        model_version_id="m-api", home_win=0.5, draw=0.3, away_win=0.2, status="draft",
-    )
-    conn.close()
     return data_dir
 
 
 def _login_user(client, ip="203.0.113.99"):
     wechat_scan_login(client, ip=ip)
     return client.get("/api/v1/me").json()["user"]["id"]
-
-
-class TestPredictionFieldGate:
-    """2026-08-16 产品权限口径修正:除"每日精选"外普通比赛内容全部免费,
-    包括匿名用户;登录与内容分层彻底解耦——普通预测响应对匿名和已登录用户
-    逐字段完全一致,恒含完整胜平负三项概率。"""
-
-    def test_anonymous_gets_full_wdl_probability(self, app, seeded):
-        client = TestClient(app)
-        r = client.get("/api/v1/matches/9001/prediction")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["available"] is True
-        pred = body["prediction"]
-        assert pred["top_outcome"] == "home"
-        assert pred["home_probability"] == 0.48
-        assert pred["draw_probability"] == 0.29
-        assert pred["away_probability"] == 0.23
-        assert pred["expected_home_goals"] == 1.62
-        assert pred["prediction_hash"]
-        raw = r.text
-        for key in FORBIDDEN_PAYWALL_FIELDS:
-            assert key not in raw, f"响应仍带有旧付费裁剪字段 {key}: {raw}"
-        assert r.headers["cache-control"] == "private, no-store"
-
-    def test_logged_in_user_gets_identical_projection_to_anonymous(self, app, seeded, fresh_ip):
-        """登录只是身份状态,不是内容分层依据——普通用户(无任何订阅)登录后
-        拿到的响应体必须与匿名逐字段完全一致,不能有任何额外/更少字段。"""
-        anon_pred = TestClient(app).get("/api/v1/matches/9001/prediction").json()["prediction"]
-        client = TestClient(app)
-        _login_user(client, ip=fresh_ip)
-        member_pred = client.get("/api/v1/matches/9001/prediction").json()["prediction"]
-        assert member_pred == anon_pred
-
-    def test_draft_never_exposed(self, app, seeded, fresh_ip):
-        client = TestClient(app)
-        _login_user(client, ip=fresh_ip)
-        r = client.get("/api/v1/matches/9002/prediction")
-        body = r.json()
-        assert body["available"] is False
-        assert body["prediction"] is None
-        assert "0.5" not in r.text
-
-    def test_no_snapshot_honest_empty(self, app, seeded):
-        client = TestClient(app)
-        # 9101 是西甲(87,top5,权限矩阵互换后匿名可访问)场次,无预测快照
-        # → 直接诚实空态,不再撞联赛门禁
-        r = client.get("/api/v1/matches/9101/prediction")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["available"] is False
-        assert body["prediction"] is None
 
 
 class TestMatchWindowParam:
@@ -392,7 +317,7 @@ class TestLeagueSeasonStats:
             "INSERT OR REPLACE INTO dim_match (Match_ID, Season, League_ID, Date,"
             " Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name,"
             " home_score, away_score, status, Match_Round)"
-            " VALUES (9500, '2099/2100', 47, '2099-01-01', 1001, 1002,"
+            " VALUES (9500, '2099/2100', 47, '2099-08-01', 1001, 1002,"
             " 'Arsenal', 'Chelsea', 3, 0, 'Finish', '1')"
         )
         conn.commit()
@@ -465,48 +390,6 @@ class TestLeagueSeasonStats:
         assert pl.json()["boards"] == [] and pl.json()["empty_reason"]
 
 
-class TestTrackRecordApi:
-    def test_empty_state_honest(self, app, seeded):
-        client = TestClient(app)
-        r = client.get("/api/v1/track-record")
-        body = r.json()
-        assert body["total"] == 0
-        assert "暂无符合口径的正式样本" in body["empty_reason"]
-        assert "public" in r.headers["cache-control"]
-
-    def test_locked_official_sample_listed_draft_not(self, app, seeded):
-        # 造一个已完赛的官方样本(直接 SQL,kickoff 过去、发布在开球前)
-        conn = connect_rw("platform")
-        conn.execute(
-            """INSERT INTO prediction_snapshots
-               (id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at, locked_at,
-                prediction_hash, home_win, draw, away_win, visibility, status, is_official, created_at)
-               VALUES ('tr1', 9002, '2026-05-01T00:00:00Z', 'm-api', '2026-04-30T10:00:00Z',
-                       '2026-04-30T10:00:00Z', '2026-04-30T11:00:00Z', 'h',
-                       0.6, 0.25, 0.15, 'public', 'locked', 1, '2026-04-30T10:00:00Z')"""
-        )
-        conn.execute(
-            "INSERT INTO prediction_outcomes (match_id, home_goals, away_goals, outcome, settled_at)"
-            " VALUES (9002, 2, 0, 'home', '2026-05-02T00:00:00Z')"
-        )
-        conn.close()
-        client = TestClient(app)
-        body = client.get("/api/v1/track-record").json()
-        assert body["total"] == 1
-        s = body["samples"][0]
-        assert s["match_id"] == 9002 and s["hit"] is True
-        assert s["home"]["name"] == "阿森纳"
-
-
-class TestModelMetrics:
-    def test_metrics_endpoint_honest(self, app, seeded):
-        client = TestClient(app)
-        body = client.get("/api/v1/model/metrics").json()
-        assert body["market_baseline"]["status"] == "UNVERIFIED"
-        assert body["official_evaluation"] is None
-        assert "暂无正式样本评估" in body["official_evaluation_note"]
-
-
 class TestProbes:
     def test_healthz_readyz(self, app, seeded):
         client = TestClient(app)
@@ -536,21 +419,6 @@ def seeded_allsvenskan(seeded):
     conn_core.execute("INSERT OR REPLACE INTO dim_team_i18n VALUES (3002,'Orgryte IS','厄尔格里特','t','')")
     conn_core.commit()
     conn_core.close()
-
-    conn = connect_rw("platform")
-    get_or_create_model_version(conn, "m-allsvenskan-api", "dixon-coles", applicable_league_ids=[67])
-    sid = register_snapshot(
-        conn, match_id=9201, kickoff_at_utc=kickoff_at_utc,
-        kickoff_precision="exact", kickoff_source="fotmob:fixtures",
-        model_version_id="m-allsvenskan-api", league_id=67,
-        home_win=0.4, draw=0.32, away_win=0.28, status="draft",
-    )
-    publish_snapshot(conn, sid, actor=None)
-    assert conn.execute(
-        "SELECT status FROM prediction_snapshots WHERE id=?",
-        (sid,),
-    ).fetchone()[0] == "published"
-    conn.close()
     return seeded
 
 
@@ -600,26 +468,6 @@ class TestAllsvenskanLeagueOnboarding:
         det = client.get("/api/v1/matches/9201").json()
         assert det["match"]["home"]["name"] == "韦斯特罗斯"
         assert det["match"]["away"]["name"] == "厄尔格里特"
-
-    def test_anonymous_gets_full_wdl_for_league_67_match_prediction(self, app, seeded_allsvenskan):
-        """联赛不再有任何访问门禁:匿名对瑞典超场次直接拿到完整三项概率,
-        不再是 401。"""
-        client = TestClient(app)
-        r = client.get("/api/v1/matches/9201/prediction")
-        assert r.status_code == 200
-        pred = r.json()["prediction"]
-        assert pred["home_probability"] == 0.4
-        assert pred["draw_probability"] == 0.32
-        assert pred["away_probability"] == 0.28
-
-    def test_member_gets_full_wdl_for_league_67_match(self, app, seeded_allsvenskan, fresh_ip):
-        client = TestClient(app)
-        _login_user(client, ip=fresh_ip)
-        pred = client.get("/api/v1/matches/9201/prediction").json()["prediction"]
-        assert pred["home_probability"] == 0.4
-        assert pred["draw_probability"] == 0.32
-        assert pred["away_probability"] == 0.28
-
 
 class TestLeagueSeasonProfile:
     """/leagues/{id}/season-profile:四张银层表的联合投影(2026-08-12 新增)。

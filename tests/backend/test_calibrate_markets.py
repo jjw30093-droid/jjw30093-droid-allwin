@@ -67,7 +67,7 @@ def _seed_series(conn, team_id, league_id, values, *, start_date="2026-01-01",
         mid = 60000 + team_id * 100 + i
         opp = opponent_start + i
         d = (base + timedelta(days=i)).isoformat()
-        insert_match(conn, mid, league_id=league_id, season="2025/2026", date=d,
+        insert_match(conn, mid, league_id=league_id, date=d,
                      home_id=team_id, away_id=opp, home="队", away=f"陪衬{i}",
                      status="Finish", home_score=1, away_score=0)
         conn.execute(
@@ -112,7 +112,7 @@ class TestBuildPredictionsNoLookAhead:
         for i, v in enumerate(values):
             mid = 61000 + i
             d = (base + timedelta(days=i)).isoformat()
-            insert_match(conn, mid, league_id=47, season="2025/2026", date=d,
+            insert_match(conn, mid, league_id=47, date=d,
                          home_id=team, away_id=opp, home="队A", away="队B",
                          status="Finish", home_score=1, away_score=0)
             conn.execute(
@@ -147,7 +147,7 @@ class TestBuildPredictionsNoLookAhead:
         for i in range(5):
             mid = 62000 + i
             d = (base + timedelta(days=i)).isoformat()
-            insert_match(conn, mid, league_id=47, season="2025/2026", date=d,
+            insert_match(conn, mid, league_id=47, date=d,
                          home_id=team, away_id=opp, home="队A", away="队B",
                          status="Finish", home_score=3, away_score=2)  # 真实进球 5
             conn.execute(

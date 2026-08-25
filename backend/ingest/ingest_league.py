@@ -3,7 +3,7 @@ ingest_league.py — 批量枚举 + 落库某赛季全部已完赛比赛，并�
 (fact_league_table、fact_season_player_stats)。
 
 用法:
-    python backend/ingest/ingest_league.py [--league-id 47] [--season 2025/2026]
+    python backend/ingest/ingest_league.py --season 2026/2027 [--league-id 47]
         [--limit N] [--only-finished/--no-only-finished]
         [--match-ids 4813735,4813736] [--sleep 2.5] [--sleep-jitter 1.5]
         [--skip-season-tables] [--force-season-tables]
@@ -18,7 +18,9 @@ ingest_league.py — 批量枚举 + 落库某赛季全部已完赛比赛，并�
 
 多赛季支持:
     - --season 会透传进 ingest_match() → parse_match_dim()，正确写入每场比赛的
-      Season 列（不再固定落成 parse_match_dim 默认的 "2025/2026"）。
+      Season 列。--season 本身是必填参数（2026-08-25 起不再有默认值——真实
+      事故：旧默认 "2025/2026" 曾在一次 --match-ids 单场补采时因操作者漏带
+      --season 被静默使用，见 CLAUDE.md §6.3）。
     - 历史赛季回填需逐季分别调用本脚本（--season 不支持一次传多个）。
 
 可靠性 / 续爬机制:
@@ -41,8 +43,11 @@ from urllib.parse import quote
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db import get_connection
-from fotmob_client import FotMobClient
+from db.util import normalize_utc_iso
+from fotmob_client import FotMobClient, derive_match_status
 from ingest_match import ingest_match, _insert_many, _rows_with_extra_json
+from ingest_future_fixtures import upsert_fixture_row
+from season_identity import verify_season_echo
 from schema import LEAGUE_TABLE_CORE_COLUMNS, SEASON_PLAYER_STATS_CORE_COLUMNS
 
 
@@ -141,12 +146,19 @@ def _league_matches_with_retry(
 
 def enumerate_fixtures(client: FotMobClient, league_id: int, season: str) -> list:
     """
-    枚举某赛季全部比赛，返回 [{"match_id", "round", "utc", "finished", "cancelled"}, ...]。
+    枚举某赛季全部比赛，返回 [{"match_id", "round", "utc", "finished", "cancelled",
+    "status", "home_id", "home_name", "away_id", "away_name"}, ...]。
     优先读 fixtures.allMatches[]（含完整 status 字段），缺失则回退
     overview.leagueOverviewMatches[]。按 match_id 去重。
+
+    2026-08-25 起带赛季回声校验(CLAUDE.md §6.3):此前本脚本把 --season 同时
+    用作请求参数和存储标签、全程不校验响应——正是错标事故的所在路径。现在
+    响应的 details.id/selectedSeason 与请求不一致直接抛 SeasonIdentityError,
+    一行都不返回。home/away 字段是给赛程骨架落库用的(见 seed_fixture_skeletons)。
     """
     season_param = quote(season, safe="")
     data = _league_matches_with_retry(client, league_id, season_param)
+    verify_season_echo(data, league_id, season)
 
     raw = (data.get("fixtures", {}) or {}).get("allMatches") or []
     if not raw:
@@ -158,6 +170,8 @@ def enumerate_fixtures(client: FotMobClient, league_id: int, season: str) -> lis
         if mid_raw is None:
             continue
         st = m.get("status", {}) or {}
+        home = m.get("home") or {}
+        away = m.get("away") or {}
         mid = int(mid_raw)
         out[mid] = {
             "match_id": mid,
@@ -165,8 +179,58 @@ def enumerate_fixtures(client: FotMobClient, league_id: int, season: str) -> lis
             "utc": st.get("utcTime"),
             "finished": bool(st.get("finished")),
             "cancelled": bool(st.get("cancelled")),
+            "status": derive_match_status(st),
+            "home_id": int(home["id"]) if home.get("id") is not None else None,
+            "home_name": home.get("name"),
+            "away_id": int(away["id"]) if away.get("id") is not None else None,
+            "away_name": away.get("name"),
         }
     return list(out.values())
+
+
+def seed_fixture_skeletons(league_id: int, season: str, fixtures: list) -> int:
+    """把枚举到的比赛先按"赛程同步拥有的列"落成 dim_match 骨架行。
+
+    2026-08-25 架构(CLAUDE.md §6.3):Season 由赛程同步独占,ingest_match 不再
+    产生赛季、且对不存在的行 fail closed——历史赛季批量回填因此必须先落骨架
+    (Season 用上面回声校验过的 --season 值),再逐场补明细。走
+    upsert_fixture_row(列作用域),不碰裁判/天气/比分等其它路径拥有的列。
+    """
+    conn = get_connection()
+    n = 0
+    try:
+        for f in fixtures:
+            if f.get("home_id") is None or f.get("away_id") is None:
+                continue  # 无法构成合法骨架的行,交给逐场明细路径自己失败报告
+            utc = f.get("utc")
+            date = _utc_to_date(utc)
+            kickoff_at_utc = normalize_utc_iso(utc)
+            if kickoff_at_utc is not None:
+                kickoff_precision, kickoff_source = "exact", "fotmob:fixtures"
+            elif date is not None:
+                kickoff_precision, kickoff_source = "date_only", None
+            else:
+                kickoff_precision, kickoff_source = "unknown", None
+            upsert_fixture_row(conn, {
+                "Match_ID": f["match_id"],
+                "Season": season,
+                "League_ID": league_id,
+                "Date": date,
+                "Home_Team_ID": f["home_id"],
+                "Away_Team_ID": f["away_id"],
+                "Home_Team_Name": f.get("home_name"),
+                "Away_Team_Name": f.get("away_name"),
+                "status": f.get("status"),
+                "Match_Round": f.get("round"),
+                "kickoff_at_utc": kickoff_at_utc,
+                "kickoff_precision": kickoff_precision,
+                "kickoff_source": kickoff_source,
+            })
+            n += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return n
 
 
 def _utc_to_date(utc):
@@ -177,9 +241,16 @@ def _utc_to_date(utc):
 
 
 def ingest_season_tables(client: FotMobClient, league_id: int, season: str) -> None:
-    """用同一份 league_matches() 响应回填 fact_league_table / fact_season_player_stats。"""
+    """用同一份 league_matches() 响应回填 fact_league_table / fact_season_player_stats。
+
+    2026-08-25 起带赛季回声校验(CLAUDE.md §6.3):这条路径此前是全仓最大的
+    无校验缺口——同一个 --season 字符串既当请求参数又当存储标签,来源静默
+    回退赛季时会整季错标(英超 fact_league_table 里那 60 行 Season='2024'
+    幽灵赛季就是同类产物)。
+    """
     season_param = quote(season, safe="")
     data = _league_matches_with_retry(client, league_id, season_param)
+    verify_season_echo(data, league_id, season)
 
     table_rows = client.parse_league_table(data, league_id, season)
     player_rows = client.parse_season_player_stats(data, league_id, season)
@@ -218,7 +289,10 @@ def ingest_season_tables(client: FotMobClient, league_id: int, season: str) -> N
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--league-id", type=int, default=47)
-    parser.add_argument("--season", type=str, default="2025/2026")
+    # 2026-08-25:曾经默认 "2025/2026"——真实事故,操作者用 --match-ids 单独
+    # 补采某几场时忘了带 --season,静默用旧赛季覆盖了 5 场已经是新赛季的英超
+    # 揭幕战(详见 CLAUDE.md §6.3)。--season 现在必须显式传入,不给默认值。
+    parser.add_argument("--season", type=str, required=True)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
         "--only-finished", action=argparse.BooleanOptionalAction, default=True
@@ -276,6 +350,10 @@ def _run(args) -> None:
         ]
     else:
         fixtures = enumerate_fixtures(client, args.league_id, args.season)
+        # 先落赛程骨架(Season 已回声校验),再逐场补明细——ingest_match 对
+        # 不存在的行 fail closed(2026-08-25,CLAUDE.md §6.3)。
+        seeded = seed_fixture_skeletons(args.league_id, args.season, fixtures)
+        print(f"赛程骨架落库: {seeded}/{len(fixtures)} 行(Season 经回声校验)")
         if args.only_finished:
             fixtures = [f for f in fixtures if f["finished"] and not f["cancelled"]]
         fixtures.sort(key=lambda f: (f["utc"] or ""))
@@ -296,7 +374,9 @@ def _run(args) -> None:
         mid = f["match_id"]
         date = _utc_to_date(f.get("utc"))
         try:
-            ingest_match(mid, league_id=args.league_id, date=date, season=args.season)
+            # 不再传 season(2026-08-25,CLAUDE.md §6.3):Season 已由上面的
+            # 骨架落库(回声校验)写入,明细抓取不碰赛季。
+            ingest_match(mid, league_id=args.league_id, date=date)
             ok.append(mid)
             recent.append(True)
         except Exception as e:

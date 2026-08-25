@@ -115,7 +115,10 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--league-id", type=int, required=True)
-    parser.add_argument("--season", type=str, default="2025/2026")
+    # 2026-08-25:曾经默认 "2025/2026"——与 ingest_league.py 同一类真实事故
+    # (见 CLAUDE.md §6.3),同一个硬编码旧赛季字面量,同样的"忘传参数就默默
+    # 用错赛季"风险,一并堵上。
+    parser.add_argument("--season", type=str, required=True)
     parser.add_argument("--sleep", type=float, default=0.3)
     parser.add_argument("--sleep-jitter", type=float, default=0.5)
     parser.add_argument(

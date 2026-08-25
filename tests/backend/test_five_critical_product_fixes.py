@@ -12,11 +12,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.commands.predictions import (
-    get_or_create_model_version,
-    publish_snapshot,
-    register_snapshot,
-)
 from backend.content_status import project_freshness, public_status_for_match
 from backend.db.connections import connect_rw
 from backend.queries.matches import list_matches, standings
@@ -437,27 +432,27 @@ def product_seeded(data_dir):
     core.commit()
     core.close()
 
+    # 2026-08-25:WDL 模型与正式预测登记簿(backend.commands.predictions)
+    # 已整体废弃,不再有 register_snapshot/publish_snapshot 可调用;这里
+    # 直接写一行 prediction_snapshots(表本身未删除,只是没有写入代码),
+    # 只为满足 /api/v1/matches?content=analysis 的
+    # "match_id in prediction_snapshots(status published/locked)" 筛选口径,
+    # 保持本文件其余断言(content=analysis 命中该场)不变。
     platform = connect_rw("platform")
-    get_or_create_model_version(
-        platform,
-        "product-fix-model",
-        "market-baseline",
-        applicable_league_ids=[59],
+    platform.execute(
+        """INSERT INTO model_versions (id, algorithm, description, created_at)
+           VALUES ('product-fix-model', 'market-baseline', 'test only', ?)""",
+        (kickoff_at_utc,),
     )
-    snapshot = register_snapshot(
-        platform,
-        match_id=5104968,
-        kickoff_at_utc=kickoff_at_utc,
-        kickoff_precision="exact",
-        kickoff_source="test:product-fix",
-        model_version_id="product-fix-model",
-        league_id=59,
-        home_win=0.4,
-        draw=0.3,
-        away_win=0.3,
-        status="draft",
+    platform.execute(
+        """INSERT INTO prediction_snapshots
+           (id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at,
+            prediction_hash, home_win, draw, away_win, visibility, status, is_official, created_at)
+           VALUES ('product-fix-snap', 5104968, ?, 'product-fix-model', ?, ?,
+                   'h', 0.4, 0.3, 0.3, 'public', 'published', 0, ?)""",
+        (kickoff_at_utc, kickoff_at_utc, kickoff_at_utc, kickoff_at_utc),
     )
-    publish_snapshot(platform, snapshot, actor=None)
+    platform.commit()
     platform.close()
 
     odds = connect_rw("odds")
