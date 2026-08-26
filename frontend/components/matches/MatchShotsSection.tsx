@@ -15,11 +15,11 @@ import type { TeamColorPair } from "@/components/charts/matchTeamColors";
 import { ThreatTimeline } from "@/components/matches/ThreatTimeline";
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
 import { ShotMapChart } from "@/components/matches/ShotMapChart";
+import { AttackingZonesChart } from "@/components/matches/AttackingZonesChart";
 import {
-  AttackingZonesChart,
   zoneSplitFrom,
   type AttackingZoneSplit,
-} from "@/components/matches/AttackingZonesChart";
+} from "@/components/matches/attackingZones";
 import styles from "@/app/matches/[matchId]/match-detail.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;

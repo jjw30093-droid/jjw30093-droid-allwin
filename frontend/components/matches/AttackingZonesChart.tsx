@@ -28,14 +28,13 @@ import { useChartColors } from "@/components/charts/useChartColors";
 import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
 import { hexToRgba } from "@/components/charts/useChartColors";
 import { FootballPitchBackground } from "./FootballPitchBackground";
+import {
+  buildAttackingZonesSummary,
+  type AttackingZoneSplit,
+} from "./attackingZones";
 import styles from "./AttackingZonesChart.module.css";
 
-/** 整数百分比(来源 content.attackingZones 的原样数值)。 */
-export interface AttackingZoneSplit {
-  left: number;
-  center: number;
-  right: number;
-}
+export type { AttackingZoneSplit } from "./attackingZones";
 
 type PeriodKey = "All" | "FirstHalf" | "SecondHalf";
 
@@ -48,40 +47,9 @@ const PERIOD_LABEL: Record<PeriodKey, string> = {
 const ZONE_LABEL = { left: "左路", center: "中路", right: "右路" } as const;
 type ZoneKey = keyof typeof ZONE_LABEL;
 
-/** §11.2 文字摘要的唯一出口(纯函数,测试直接断言;与 buildShotMapSummary
- * 同一体例)。缺失侧如实说"暂无",不编 0。 */
-export function buildAttackingZonesSummary(args: {
-  home: AttackingZoneSplit | null;
-  away: AttackingZoneSplit | null;
-  homeName: string;
-  awayName: string;
-  periodLabel: string;
-}): string {
-  const { home, away, homeName, awayName, periodLabel } = args;
-  const side = (name: string, dir: string, s: AttackingZoneSplit | null) =>
-    s
-      ? `${name}(${dir})左路 ${s.left}%、中路 ${s.center}%、右路 ${s.right}%`
-      : `${name}暂无进攻区域数据`;
-  return (
-    `进攻区域(${periodLabel},左/中/右三路各占该队进攻的比例):` +
-    `${side(homeName, "攻向右", home)};${side(awayName, "攻向左", away)}。`
-  );
-}
-
 /** 某时段两侧是否完全无数据。 */
 function empty(h: AttackingZoneSplit | null, a: AttackingZoneSplit | null): boolean {
   return h == null && a == null;
-}
-
-/** 三个投影字段 → 三分区对象;任一缺失整组按 null 处理(三路占比缺了一路
- * 就不是一个完整的分布,不能拿 0 顶,CLAUDE.md §6.2)。 */
-export function zoneSplitFrom(
-  left: number | null | undefined,
-  center: number | null | undefined,
-  right: number | null | undefined,
-): AttackingZoneSplit | null {
-  if (left == null || center == null || right == null) return null;
-  return { left, center, right };
 }
 
 export function AttackingZonesChart({

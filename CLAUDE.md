@@ -659,6 +659,65 @@ GET  /api/v1/admin/...
   受益方计乌龙球，见 `buildShotMapSummary` / `summarizeSide` 与
   `backend/queries/match_report.py::_own_goal_fields`）。
 
+### 11.4 Server/Client Component 边界纪律（2026-08-26，经真实生产事故确认）
+
+2026-08-25 晚间部署（进攻区域图功能）上线后，比赛详情页**整页白屏**（服务端
+渲染阶段直接抛异常，落到通用错误边界，用户点开任何一场比赛都只看到"页面
+出错了"）。生产 `journalctl -u allwin-web` 里唯一的错误签名：
+
+```
+⨯ Error: Attempted to call zoneSplitFrom() from the server but zoneSplitFrom
+is on the client. It's not possible to invoke a client function from the
+server, it can only be rendered as a Component or passed to props of a
+Client Component.
+```
+
+根因：`AttackingZonesChart.tsx` 顶部是 `"use client"`（组件内部用
+`useState` 做时段切换器），但同一文件里还导出了一个纯函数
+`zoneSplitFrom()`（不依赖任何 React hook，纯数据转换）。`MatchShotsSection.tsx`
+是服务端组件，直接 `import { zoneSplitFrom } from "./AttackingZonesChart"`
+在服务端调用它来组装 props。**`"use client"` 是整个文件级别的边界，不是
+逐个 export 判断**——服务端组件从一个 client 文件里 import 任何东西（哪怕
+是零依赖的纯函数），Next.js 都会把它替换成一个"客户端引用"对象，服务端
+调用这个引用会直接抛出上面这个异常，且这个异常在 `next build` 阶段**不会
+出现**（比赛详情页是动态路由 `ƒ /matches/[matchId]`，构建期不会真的渲染
+一个具体比赛的服务端组件，只有线上收到真实请求时才会执行到这行调用）——
+`npm run build`、`vitest run`、发布脚本的候选进程冒烟全部通过，问题只在
+真实用户点开比赛详情页时才暴露。
+
+更深一层：release.sh 的业务冒烟（`verify_next_assets.py` 的 `CORE_PAGES`）
+其实包含了一个具体的 `/matches/5104968`，理论上应该能测出页面渲染异常——
+但 `zoneSplitOf()` 的调用路径是"先在 `teamStats` 里 `.find()` 到匹配的行，
+再调用 `zoneSplitFrom()`"，找不到匹配行时提前 `return null`，根本不会走到
+那个会崩的调用。**同一个 bug 在某些比赛上完全触发不了，在另一些比赛上必崩**
+——发布流程里固定用一个 match_id 冒烟，测的只是"这一个路径没崩"，不代表
+"这一类组件的所有渲染分支都没崩"。
+
+据此固化：
+
+- **判断一个纯函数要不要放进 `"use client"` 文件，问的不是"它本身需不需要
+  客户端能力"，而是"有没有服务端组件要 import 它"。** 只要答案是"有"，
+  这个函数就必须搬进一个不带 `"use client"` 的独立文件（本次修复：
+  `zoneSplitFrom`/`buildAttackingZonesSummary`/`AttackingZoneSplit` 类型
+  搬进 `frontend/components/matches/attackingZones.ts`），客户端组件和
+  服务端组件都从这个纯文件 import；`"use client"` 文件本身不再重新导出
+  这些符号（重新导出同样会把调用方拖进"客户端引用"陷阱，不是安全的
+  中转层）。
+- **动态路由页面的自动化验证不能只信一个固定 match_id 的冒烟结果。**
+  `next build` 对 `ƒ` 标记的动态路由完全不执行服务端组件的真实渲染；
+  发布脚本的业务冒烟目前也只跑一个 match_id，无法代表"所有数据形状都能
+  正确渲染"。新增比赛详情页组件时，如果逻辑依赖某些数据是否存在（如本例
+  "找不到匹配的 team_stats 行就提前返回"），必须显式确认真实生产环境里
+  同时存在"命中"和"不命中"这两类比赛各测过一次，不能假设发布流程的固定
+  冒烟路径覆盖了所有分支。
+- 事故处理时间线（UTC）：2026-08-25 15:33 部署（`current -> 302df736e77d`）
+  → 15:36 起线上持续报 `zoneSplitFrom` 异常（此时尚无人工感知）→ 次日站长
+  报告"点开比赛详情没有内容" → 生产日志定位根因 → 拆分纯逻辑文件到
+  `attackingZones.ts` → 本地 tsc/eslint/vitest/build 全绿 → 重新部署恢复。
+  全程未涉及数据损坏，纯前端渲染问题；从部署到真正被发现间隔了约一天，
+  说明发布流程的自动化验证没有能力捕获这类"依赖具体数据形状才触发"的
+  服务端组件异常。
+
 ## 12. Creator Studio
 
 网站和内容制作必须共享一个版本化 `analysis_bundle`：

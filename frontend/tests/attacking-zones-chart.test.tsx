@@ -6,11 +6,11 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { AttackingZonesChart } from "@/components/matches/AttackingZonesChart";
 import {
-  AttackingZonesChart,
   buildAttackingZonesSummary,
   zoneSplitFrom,
-} from "@/components/matches/AttackingZonesChart";
+} from "@/components/matches/attackingZones";
 
 afterEach(cleanup);
 
