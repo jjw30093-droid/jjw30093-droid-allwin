@@ -861,8 +861,11 @@ failed/locked 时非零：
 `physical_stats_poll`：FotMob 部分球队体能统计（`physical_metrics_distance_
 covered` 等，落在 `fact_team_match_stats.extra_json`）是异步计算的，常在
 比赛完赛后才出现终值，现有管道只在比赛刚解决时抓一次、之后不再回访；该
-任务只处理 League_ID=47（英超），在 kickoff+6h/12h/24h 三个固定检查点回查
-`ingest_match()`，主客两队 `physical_metrics_distance_covered` 都
+任务只处理 League_ID ∈ {47 英超, 42 欧冠}（人工维护的窄名单；42 是 2026-08-26
+加入的占位——当前 `dim_match` 里一行都没有，加入候选池不产生任何候选、今天
+不改变任何行为，只是为将来接入欧冠比赛数据后体能统计自动生效做准备；全库
+实测只有英超有真实体能数据，不做自动探测），在 kickoff+6h/12h/24h 三个固定
+检查点回查 `ingest_match()`，主客两队 `physical_metrics_distance_covered` 都
 ≥50000 米即视为终值并停止，三次检查点后仍未达标则记 `exhausted_at` 并经
 `backend.notify` 告警恰好一次（纯判断逻辑在
 `backend/ingest/physical_stats_poll.py`，落库与调用在
@@ -876,14 +879,22 @@ covered` 等，落在 `fact_team_match_stats.extra_json`）是异步计算的，
 下仍然合法保留）只要该 (League_ID, Season) 有过任何一行就永久跳过，导致
 赛季初始 skeleton（`played=0`）落库后积分榜再也不会自动刷新，即使联赛已经
 踢完多轮（2026-08 英超 2026/2027 真实事故，已手动修复一次，非持久修复）。
-该任务只处理 League_ID=47（英超），触发条件是"该联赛当前赛季最近一场完赛
-比赛（`status='Finish'`）的 `kickoff_at_utc` + 6 小时"——纯粹的时间到期
-判断，不是有限次检查点或有效值重试（这一点与 `physical_stats_poll` 不
-同构：`ingest_season_tables()` 是整体 pull-and-replace，请求成功即结构上
-有效，没有"有效/无效"数据判断）；到期即调用一次
-`ingest_season_tables()`，赛季从"最近一场完赛比赛自身的 `Season` 列"读取
-（该列已由迁移 0011 的触发器保证与 (League_ID, Date) 推导一致），不重新
-调用 `season_for_match()`/`resolve_current_season()`。纯判断逻辑在
+该任务遍历 `backend/queries/leagues.py::LEAGUE_META` 的**全部**联赛（单一
+真源，不再另维护一份联赛白名单——2026-08-26 起，此前刻意收窄成只有英超；
+站长实测西甲/意甲/法甲等 12 个在营联赛积分榜同样冻结或滞后后要求扩容），
+触发条件是"该联赛当前赛季最近一场完赛比赛（`status='Finish'`）的
+`kickoff_at_utc` + 6 小时"——纯粹的时间到期判断，不是有限次检查点或有效值
+重试（这一点与 `physical_stats_poll` 不同构：`ingest_season_tables()` 是
+整体 pull-and-replace，请求成功即结构上有效，没有"有效/无效"数据判断）；
+到期即调用一次 `ingest_season_tables()`，赛季从"最近一场完赛比赛自身的
+`Season` 列"读取（该列已由迁移 0011 的触发器保证与 (League_ID, Date) 推导
+一致），不重新调用 `season_for_match()`/`resolve_current_season()`。**每轮
+最多真正刷新 `MAX_REFRESHES_PER_RUN`（5）个联赛**——只计真正执行
+HTTP+DELETE/INSERT 的，不计"检查了但未到期/无完赛比赛"的；到期但被上限
+挤掉的联赛按 `due_at` 最旧优先排序，记 `action:"deferred"` 顺延到下一轮，
+计入 JSON 摘要的 `deferred`/`deferred_league_ids`（CLAUDE.md 禁止静默截断，
+不能只报刷新成功的、把顺延的悄悄吞掉）；12 个联赛同时到期时，30 分钟一轮
+的 timer 约 1.5 小时排空首次积压。纯判断逻辑在
 `backend/ingest/standings_refresh_poll.py`（`due_refresh`），落库与调用在
 `backend/cli/poll_standings.py`，状态表 `standings_refresh_state`
 落 core/allwin.db，理由见迁移 `0014_standings_refresh_state.sql` 头注释。

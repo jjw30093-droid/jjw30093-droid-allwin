@@ -20,6 +20,21 @@ backend/ingest/ingest_league.py::ingest_season_tables() 写入,而该函数从�
 due 的判定点就随之前移"——不是刷新一次就永久满足,而是要刷新到
 "覆盖了最新一场完赛比赛"才算数。
 
+2026-08-26 扩到全联赛(此前刻意收窄成只有英超一家,站长实测西甲/意甲/法甲等
+12 个在营联赛积分榜同样冻结或滞后后明确要求扩容)。范围**不再是本模块维护
+的另一份白名单**,而是直接派生自 backend/queries/leagues.py::LEAGUE_META
+(仓库里"新增联赛只改这一处字典"的单一真源)——调用方(poll_standings.py)
+遍历 LEAGUE_META,不在这里重复维护第二份联赛清单。没有任何完赛比赛的联赛
+(如当前 dim_match 零行的欧冠/欧联/欧协)天然对这个判断是 inert,不需要
+特殊处理。
+
+每轮上限(MAX_REFRESHES_PER_RUN):12 个联赛可能在首轮同时到期,每个到期都要
+向 FotMob 拉一次整季数据(HTTP + DELETE/INSERT),站长要求每轮最多真正刷新
+5 个,其余顺延到下一轮(30 分钟一轮,约 1.5 小时排空一次性积压)。这个上限
+只约束"真正执行刷新"这个昂贵操作,不约束"检查是否到期"这个廉价的纯 DB 读
+——调用方按 due_at 最旧优先选出前 5 个执行,其余记 deferred 顺延,不静默
+丢弃(CLAUDE.md 禁止静默截断)。
+
 本模块只做这一个纯判断,不做任何 I/O、不碰数据库连接、不发网络请求——
 落库/请求都在调用方(backend/cli/poll_standings.py)。
 """
@@ -27,13 +42,14 @@ due 的判定点就随之前移"——不是刷新一次就永久满足,而是�
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-# 站长指定,人工维护、刻意收窄——只有英超(League_ID=47)。新增联赛需要
-# 站长明确批准后手动加入这个 frozenset,不做自动探测(与
-# backend/ingest/physical_stats_poll.py::PHYSICAL_STATS_LEAGUE_IDS 同一纪律)。
-STANDINGS_LEAGUE_IDS: frozenset[int] = frozenset({47})
-
 # 最近一场完赛比赛开球后多久应刷新一次积分榜(站长明确决定,不做成可配置项)。
 REFRESH_DELAY_HOURS = 6.0
+
+# 每轮最多真正刷新多少个联赛(站长明确决定,不做成可配置项)。只计真正执行
+# HTTP+DELETE/INSERT 的联赛,不计"检查了但未到期/无比赛"的——见上方模块
+# 说明。被这个上限挤掉的到期联赛在 poll_standings.py 里记 action="deferred",
+# 顺延到下一轮,按 due_at 最旧优先,不会被持续饿死。
+MAX_REFRESHES_PER_RUN = 5
 
 
 def _parse_iso(ts: str) -> datetime:

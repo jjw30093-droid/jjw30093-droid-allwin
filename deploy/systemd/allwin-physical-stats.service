@@ -4,14 +4,16 @@
 # 与 allwin-postmatch/allwin-derive 同一节奏(30 分钟)不是巧合——检查点是
 # kickoff+6h/12h/24h,固定粒度,30 分钟足以及时捕捉每个检查点又不至于
 # 浪费;不需要 allwin-odds/allwin-lineup 那种 5 分钟粒度(§13),也不像
-# allwin-digest 那样只需一天一次。范围只限 League_ID=47(英超),三次检查点
-# 双队达标即停,三次仍未达标则 exhausted + 告警一次,内部节流(状态表
-# checks_done/resolved_at/exhausted_at)保证重复触发代价低。
+# allwin-digest 那样只需一天一次。范围是英超 47 + 欧冠 42(2026-08-26 加入
+# 42 作为占位——当前 dim_match 零行,不产生任何候选,今天不改变行为;全库
+# 只有英超有真实体能数据,不做自动探测),三次检查点双队达标即停,三次仍未
+# 达标则 exhausted + 告警一次,内部节流(状态表 checks_done/resolved_at/
+# exhausted_at)保证重复触发代价低。
 #
 # 安装:cp allwin-physical-stats.service allwin-physical-stats.timer /etc/systemd/system/
 #       systemctl daemon-reload && systemctl enable --now allwin-physical-stats.timer
 [Unit]
-Description=allwin physical stats late-arrival re-poll (EPL only, kickoff+6h/12h/24h checkpoints)
+Description=allwin physical stats late-arrival re-poll (EPL + UCL placeholder, kickoff+6h/12h/24h checkpoints)
 After=network.target
 
 [Service]

@@ -6,13 +6,17 @@
 # 一次"的纯时间到点语义——ingest_season_tables() 本身是整赛季 DELETE 再
 # INSERT,天然幂等,问题只在触发时机,不在写入安全性。30 分钟粒度同
 # allwin-physical-stats 的理由:足以及时捕捉 +6h 这个节点又不至于浪费,
-# 不需要 allwin-odds/allwin-lineup 那种 5 分钟粒度。范围只限 League_ID=47
-# (英超)。
+# 不需要 allwin-odds/allwin-lineup 那种 5 分钟粒度。
+#
+# 2026-08-26 起范围是 LEAGUE_META 全部联赛(此前只限 League_ID=47 英超,
+# 站长实测西甲/意甲/法甲等 12 个在营联赛积分榜同样冻结或滞后后要求扩容)。
+# 每轮最多真正刷新 5 个联赛,其余记 deferred 顺延到下一轮——首次上线时
+# 12 个联赛可能同时到期,约 1.5 小时(3 轮)排空一次性积压。
 #
 # 安装:cp allwin-standings.service allwin-standings.timer /etc/systemd/system/
 #       systemctl daemon-reload && systemctl enable --now allwin-standings.timer
 [Unit]
-Description=allwin standings (fact_league_table) refresh (EPL only, 6h after latest finished match)
+Description=allwin standings (fact_league_table) refresh (all leagues, 6h after latest finished match, max 5 per run)
 After=network.target
 
 [Service]

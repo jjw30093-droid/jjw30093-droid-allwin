@@ -22,18 +22,28 @@ kickoff+N 小时检查点(6h/12h/24h),命中即查一次,查完这一枪不管�
 poll_windows.py 或 postmatch_retry.py 任何一个,避免把两种不同的语义硬拗
 成同一套参数。
 
-联赛范围刻意收窄、人工维护,不做自动探测(不含欧冠 42——虽然是热门联赛,
-但当前 dim_match 里一行都没有,加入候选池也不会有真实效果,徒增无意义的
-判断分支;需要新增联赛时手动往这个 frozenset 里加,不做"自动发现有比赛的
-联赛就加进来"这种会不受控扩大抓取面的逻辑)。
+联赛范围刻意收窄、人工维护,不做自动探测——与 2026-08-26 起改为遍历
+LEAGUE_META 全量的 standings_refresh_poll 不同构,那里改宽是因为"任何联赛
+的积分榜都可能滞后";这里保持窄名单是因为体能数据是否存在完全取决于
+FotMob 是否为该联赛计算这几个字段,不是"轮询节奏"问题——全库实测只有
+英超(League_ID=47)有任何一行 physical_metrics_distance_covered(600 行),
+其余联赛 0 行,加进候选池也查不到任何有效值,纯属空转。
+
+2026-08-26 站长明确加入欧冠(League_ID=42)作为占位:当前 dim_match 里
+一行都没有(与之前"不含欧冠"的理由完全相同——一场比赛都没有,加入候选池
+不会产生任何候选),今天不改变任何行为,只是为将来接入欧冠比赛数据后
+体能统计自动生效做准备,不需要再手动加一次。新增其它联赛仍需站长明确
+批准后手动加入这个 frozenset,不做"自动发现有比赛的联赛就加进来"这种
+会不受控扩大抓取面的逻辑。
 """
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-# 站长指定,人工维护、刻意收窄——只有英超(League_ID=47)。新增联赛需要
-# 站长明确批准后手动加入,不做自动探测。
-PHYSICAL_STATS_LEAGUE_IDS: frozenset[int] = frozenset({47})
+# 站长指定,人工维护、刻意收窄——英超(47,唯一有真实体能数据的联赛)+
+# 欧冠(42,当前 dim_match 零行的占位,今天空转、不产生任何候选)。新增
+# 联赛需要站长明确批准后手动加入,不做自动探测。见上方模块说明。
+PHYSICAL_STATS_LEAGUE_IDS: frozenset[int] = frozenset({47, 42})
 
 # 三个检查点:kickoff + 6h / +12h / +24h,固定三次,不多不少。
 CHECKPOINT_HOURS: tuple[float, ...] = (6.0, 12.0, 24.0)

@@ -437,29 +437,32 @@ REGISTRY: dict[str, dict] = {
         "kind": "subprocess",
         # 体能统计(physical_metrics_*)迟到补采,daily_digest 同类的独立
         # timer 任务——不进 DEFAULT_CHAIN、不挂在 7 个既有定时器任何一个上
-        # (CLAUDE.md §13):候选范围只有 League_ID=47(英超),kickoff+6h/12h/24h
-        # 三个固定检查点,与 7 个定时器各自的既有语义(赛程/赔率/阵容/赛后链/
-        # 派生/维护)都不同构,单独一个 allwin-physical-stats.timer。
+        # (CLAUDE.md §13):候选范围是英超 47 + 欧冠 42(42 当前 dim_match
+        # 零行,是占位,今天空转),kickoff+6h/12h/24h 三个固定检查点,与 7
+        # 个定时器各自的既有语义(赛程/赔率/阵容/赛后链/派生/维护)都不同构,
+        # 单独一个 allwin-physical-stats.timer。
         "argv": [sys.executable, "-m", "backend.cli.poll_physical_stats", "--due"],
         "cwd": str(PROJECT_ROOT),
         "max_attempts": 1,
         "timeout_seconds": 900,
         "backoff_seconds": 0,
-        "description": "体能统计(physical_metrics_distance_covered)迟到补采:kickoff+6h/12h/24h 三次检查点,双队达标即停,耗尽告警一次(仅英超)",
+        "description": "体能统计(physical_metrics_distance_covered)迟到补采:kickoff+6h/12h/24h 三次检查点,双队达标即停,耗尽告警一次(英超 47 + 欧冠 42 占位)",
     },
     "standings_refresh_poll": {
         "kind": "subprocess",
         # 联赛积分榜(fact_league_table)迟到刷新,physical_stats_poll 同类的
         # 独立 timer 任务——不进 DEFAULT_CHAIN、不挂在 7 个既有定时器任何一个
-        # 上(CLAUDE.md §13):候选范围只有 League_ID=47(英超),触发条件是
-        # "该联赛+赛季最近一场完赛比赛开球后 6 小时",不是有限次检查点,也
-        # 不同构于任何既有定时器的语义(赛程/赔率/阵容/赛后链/派生/维护)。
+        # 上(CLAUDE.md §13):候选范围是 LEAGUE_META 全部联赛(单一真源,
+        # 2026-08-26 起不再是只有英超),触发条件是"该联赛+赛季最近一场完赛
+        # 比赛开球后 6 小时",不是有限次检查点,也不同构于任何既有定时器的
+        # 语义(赛程/赔率/阵容/赛后链/派生/维护)。每轮最多真正刷新 5 个联赛,
+        # 其余顺延到下一轮(见 standings_refresh_poll.py::MAX_REFRESHES_PER_RUN)。
         "argv": [sys.executable, "-m", "backend.cli.poll_standings", "--due"],
         "cwd": str(PROJECT_ROOT),
         "max_attempts": 1,
-        "timeout_seconds": 300,
+        "timeout_seconds": 900,
         "backoff_seconds": 0,
-        "description": "联赛积分榜(fact_league_table)迟到刷新:最近一场完赛比赛开球+6h 到期即重新拉取一次(仅英超)",
+        "description": "联赛积分榜(fact_league_table)迟到刷新:最近一场完赛比赛开球+6h 到期即重新拉取一次(全部联赛,每轮最多刷新 5 个)",
     },
 }
 

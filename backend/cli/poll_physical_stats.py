@@ -6,7 +6,8 @@ is_valid_distance,不做 I/O);本文件是唯一的调用方——负责发现�
 三次检查点耗尽后的原子告警。
 
 范围与节奏(CLAUDE.md §6.3,站长最终决定,不在此重新推导):
-- 只处理 League_ID ∈ PHYSICAL_STATS_LEAGUE_IDS(当前仅英超 47);
+- 只处理 League_ID ∈ PHYSICAL_STATS_LEAGUE_IDS(英超 47 + 欧冠 42;42 当前
+  dim_match 零行,是占位,今天不产生任何候选、行为不变);
 - status='Finish' 且 kickoff_at_utc 非空的比赛才进候选池;
 - kickoff+6h / +12h / +24h 三个检查点,命中即查一次(调用 ingest_match 强制
   重抓整场,复用它已有的幂等 DELETE+INSERT);

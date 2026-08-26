@@ -45,3 +45,13 @@ def test_standings_refresh_poll_argv_wired():
     argv = runner.REGISTRY["standings_refresh_poll"]["argv"]
     assert "backend.cli.poll_standings" in argv
     assert "--due" in argv
+
+
+def test_standings_refresh_poll_timeout_matches_systemd_unit():
+    """2026-08-26 扩到全联赛前,runner 里的 timeout_seconds=300 与
+    deploy/systemd/allwin-standings.service 的 TimeoutStartSec=900 早已
+    不一致(单联赛时无所谓,五个联赛顺序刷新时 300s 真的不够)——两处漂移、
+    没有任何测试盯着,和本文件开头 --write-match-details 那次事故是同一个
+    "没接线/接错线不会被常规测试发现"的模式,补一条断言钉死对齐。"""
+    assert runner.REGISTRY["standings_refresh_poll"]["timeout_seconds"] == 900
+    assert runner.REGISTRY["physical_stats_poll"]["timeout_seconds"] == 900
