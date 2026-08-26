@@ -169,26 +169,23 @@ function mirrorPoint(isHome: boolean, x: number, y: number): [number, number] {
   return isHome ? [x, y] : [PITCH_LEN - x, PITCH_WID - y];
 }
 
-/** 球门宽 7.32m,中心 y=34(与 backend/queries/match_report.py 模块注释同一
- * 口径实测验证过)。 */
-const GOAL_CENTER_Y = 34;
-
 /** 2026-08-24 画射门轨迹线:原始(未镜像)坐标系下的终点,null = 没有可靠
  * 终点数据,调用方静默不画线。
  *
- * 优先级:
- *  1. is_blocked 且 blocked_x/blocked_y 均非空 → 封堵点(真实坐标)。
- *  2. 否则 outcome==='Goal' 或 is_on_target===true:
- *     a. goal_crossed_y 非空且在球场宽度域 [0,68] 内 → 真实球门线穿越点
- *        (x=105,y=goal_crossed_y)。语义 2026-08-25 已对生产 fact_shotmap
- *        数值验证:goal_crossed_y 就是球场 Y 坐标(球门跨 30.34..37.66,
- *        射正样本全部落在框内),这是**已验证映射**,与 GoalMouthDiagram
- *        画的入网位置同源,不会出现"轨迹指正中、球门框图指左下角"的自相
- *        矛盾;
- *     b. goal_crossed_y 缺失(旧场次未采集)→ **兜底**退化到球门正中
- *        (x=105,y=34)——轨迹线需要一个终点才能画,兜底不是验证过的
- *        真实落点,只是"朝门方向"的示意。
- *  3. 否则(未被封堵的非射正球)→ null,没有可信终点。
+ * 2026-08-26 对齐 FotMob 官方安卓包反编译出的精确终点选择逻辑(逐字节实证,
+ * 不是猜测):
+ *  1. is_blocked 且 blocked_x/blocked_y 均非空 → 封堵点(真实坐标),终点
+ *     画小箭头(chevron)标记"到此为止"。
+ *  2. 否则 goal_crossed_y 非空 → 真实球门线穿越点(x=105,y=goal_crossed_y)。
+ *     **没有任何"射正才画"的门槛**——偏出的 Miss 同样带 goal_crossed_y
+ *     (生产实测:5868020 全部 12 脚 Miss 都有),FotMob 一样给它画轨迹,
+ *     此前我们错误地把这条分支锁在 outcome==='Goal'/is_on_target 后面,
+ *     导致"偏出的射门点击之后没有路径"。语义 2026-08-25 已对生产
+ *     fact_shotmap 数值验证:goal_crossed_y 就是球场 Y 坐标,与
+ *     GoalMouthDiagram 画的入网位置同源。域外脏数据([0,68] 之外)→ null,
+ *     不裁剪、不兜底(§6.2)。
+ *  3. 否则 → null。FotMob 同样没有"球门正中"兜底——没有终点数据就诚实
+ *     不画线,不捏造一个从未观测到的正中落点(此前的兜底已删除)。
  */
 export function trajectoryEndpoint(
   s: Shot,
@@ -196,11 +193,8 @@ export function trajectoryEndpoint(
   if (s.is_blocked && s.blocked_x != null && s.blocked_y != null) {
     return { x: s.blocked_x, y: s.blocked_y, blocked: true };
   }
-  if (s.outcome === "Goal" || s.is_on_target === true) {
-    if (s.goal_crossed_y != null && s.goal_crossed_y >= 0 && s.goal_crossed_y <= PITCH_WID) {
-      return { x: PITCH_LEN, y: s.goal_crossed_y, blocked: false };
-    }
-    return { x: PITCH_LEN, y: GOAL_CENTER_Y, blocked: false };
+  if (s.goal_crossed_y != null && s.goal_crossed_y >= 0 && s.goal_crossed_y <= PITCH_WID) {
+    return { x: PITCH_LEN, y: s.goal_crossed_y, blocked: false };
   }
   return null;
 }
@@ -410,25 +404,27 @@ export function buildOption(
                 },
               ];
               if (endpoint.blocked) {
-                // 垂直短线必须在像素空间算角度——球场纵横比 105:68 不是
-                // 1:1,数据空间里"垂直"的两个方向投影到像素后并不是真的
-                // 90 度;偏移量同样用固定像素长度,不能用数据空间坐标差。
+                // 封堵点画 FotMob 同款小箭头(chevron,两段短线从终点朝来路
+                // 张开 ±30°)。角度必须在像素空间算——球场纵横比 105:68 不是
+                // 1:1,数据空间的角度投影到像素后会变形;长度同样用固定像素,
+                // 不能用数据空间坐标差。
                 const dx = p2[0] - p1[0];
                 const dy = p2[1] - p1[1];
-                const angle = Math.atan2(dy, dx) + Math.PI / 2;
-                const half = 6;
-                const ox = Math.cos(angle) * half;
-                const oy = Math.sin(angle) * half;
-                children.push({
-                  type: "line",
-                  shape: {
-                    x1: p2[0] - ox,
-                    y1: p2[1] - oy,
-                    x2: p2[0] + ox,
-                    y2: p2[1] + oy,
-                  },
-                  style: { stroke: c.ink, lineWidth: 1.5 },
-                });
+                const theta = Math.atan2(dy, dx);
+                const len = 8;
+                for (const spread of [Math.PI / 6, -Math.PI / 6]) {
+                  const back = theta + Math.PI + spread; // 朝来路 ±30°
+                  children.push({
+                    type: "line",
+                    shape: {
+                      x1: p2[0],
+                      y1: p2[1],
+                      x2: p2[0] + Math.cos(back) * len,
+                      y2: p2[1] + Math.sin(back) * len,
+                    },
+                    style: { stroke: c.ink, lineWidth: 1.5 },
+                  });
+                }
               }
               return { type: "group", children } as unknown as CustomSeriesRenderItemReturn;
             },
@@ -778,9 +774,6 @@ export function ShotMapChart({
           说明;(b) 删掉 hover tooltip 后唯一的可点击性提示——没有它,
           点击交互完全不可发现。 */}
       {!isExport && <p className={styles.hint}>点击任意射门点查看详情</p>}
-      {/* 可见文字摘要固定在球场下方(EChart 内置的那份在球场层里隐藏,
-          避免把装饰线的百分比定位基准拉歪;aria-label 仍在图表上) */}
-      <p className="chart-summary">{summary}</p>
       {!isExport && (
         /* 面板出现/消失走 grid 行高过渡(不做 JS 高度测量),未选中时
            不占任何高度;面板在球场下方,展开只推动其下的小节,不推球场。 */
@@ -806,6 +799,13 @@ export function ShotMapChart({
           </div>
         </div>
       )}
+      {/* 2026-08-26:可见文字摘要段落按用户要求整段删除(此前先尝试挪到
+          详情面板之后,但依然把面板往下推出首屏,用户明确要求直接删掉)。
+          摘要文字并未从可访问性树消失:summary 仍原样传给下方 EChart 的
+          ariaSummary,渲染在图表容器的 role="img" aria-label 上
+          (components/EChart.tsx),屏幕阅读器用户仍可读到完整摘要——删掉的
+          只是这段视觉段落,不是底层摘要计算本身,宪法 §11.2"图表要有文字
+          摘要"仍由 aria-label 落地。 */}
     </div>
   );
 }

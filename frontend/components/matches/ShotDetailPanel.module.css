@@ -1,3 +1,7 @@
+/* 射门详情面板(2026-08-26 重做:标签-数值行 + 球门框独占区域,对齐
+ * FotMob 的卡片结构)。全部走 CSS 变量(§11.3:不跨主题硬编码颜色);
+ * 手机优先:默认纵向堆叠,≥560px 才左右两栏。文字最小 12px(§11.2)。 */
+
 .panel {
   margin-top: 12px;
   padding: 12px 14px;
@@ -6,7 +10,7 @@
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .nav {
@@ -45,63 +49,121 @@
   gap: 8px;
 }
 
+/* 手机优先:身份+数值行在上,球门框整块在下;≥560px 左右两栏。 */
 .body {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 560px) {
+  .body {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .infoCol {
+    flex: 1 1 55%;
+  }
+
+  .goalMouth {
+    flex: 1 1 45%;
+  }
+}
+
+.infoCol {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.playerRow {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  flex-wrap: wrap; /* 窄屏球门框示意图换行到下方 */
 }
 
-/* 球门框示意图:宽屏在右侧,窄屏(flex-wrap)自动落到下一行。
- * GoalMouthDiagram 渲染空态文案时同样只占一行小字,不撑面板。 */
-.goalMouth {
-  flex: 1 1 160px;
-  min-width: 150px;
-  max-width: 220px;
-}
-
-.info {
-  flex: 1;
+.playerMeta {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.playerRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .playerName {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.teamRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.teamName {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .minute {
-  color: var(--ink-3);
-  font-size: 12.5px;
-}
-
-.outcome {
-  margin: 0;
-  font-size: 13.5px;
+  flex: none;
   color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
-.meta {
+/* 标签-数值行(FotMob 的 label/value 对):标签弱化左对齐,数值加重
+ * 右对齐;数值行用 .num(Oswald + tabular-nums,DESIGN.md §3)。 */
+.statList {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
 }
 
-.xg {
-  margin: 0;
-  font-size: 12.5px;
+.statRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.statRow + .statRow {
+  border-top: 1px solid var(--border);
+}
+
+.statLabel {
   color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.statValue {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* 球门框可视化独占一块居中区域(FotMob 给它专门的版面,不塞角落)。
+ * 底色仍是 --surface——标记对比度断言(goal-mouth-diagram.test.tsx)
+ * 的背景 fixture 就是 --surface,换成着色底就必须换 fixture。 */
+.goalMouth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px 12px;
 }

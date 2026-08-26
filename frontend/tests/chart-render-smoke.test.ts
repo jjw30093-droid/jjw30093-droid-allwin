@@ -209,15 +209,22 @@ describe("ShotMapChart.buildOption 渲染冒烟", () => {
       minute: 26, xg: 0.05, is_home: true, x: 78.43, y: 33.24,
       outcome: "AttemptSaved", is_blocked: true, blocked_x: 81.13, blocked_y: 33.16,
     });
-    const goalNoPreciseEndpoint = shot({
+    const goalNoEndpointData = shot({
       minute: 9, xg: 0.3, is_home: true, x: 95.44, y: 34.61, outcome: "Goal",
+      goal_crossed_y: null,
+    });
+    // 2026-08-26 对齐 FotMob:Miss 带 goal_crossed_y 一样画轨迹(生产实测
+    // 5868020 全部 12 脚 Miss 均有该值),不再有"射正才画"门槛。
+    const missWithCrossedY = shot({
+      minute: 33, xg: 0.08, is_home: false, x: 88, y: 40,
+      outcome: "Miss", is_blocked: false, is_on_target: false, goal_crossed_y: 42.7,
     });
     const noTrajectoryData = shot({
       minute: 60, xg: 0.02, is_home: false, x: 95, y: 30,
-      outcome: "Miss", is_blocked: null, is_on_target: false,
+      outcome: "Miss", is_blocked: null, is_on_target: false, goal_crossed_y: null,
     });
 
-    it("选中有封堵坐标的射门 → 不抛异常且多画出图形(轨迹线+被挡标记)", () => {
+    it("选中有封堵坐标的射门 → 不抛异常且多画出图形(轨迹线+终点箭头)", () => {
       const withoutSelection = renderOrThrow(
         buildShotMapOption(plottedShots, "主队", "客队", COLORS),
       );
@@ -227,21 +234,39 @@ describe("ShotMapChart.buildOption 渲染冒烟", () => {
       expect(withSelection).toBeGreaterThan(withoutSelection);
     });
 
-    it("选中无精确终点的进球(退化到球门正中默认值)→ 不抛异常", () => {
-      expect(() =>
-        renderOrThrow(
-          buildShotMapOption(
-            [...plottedShots, goalNoPreciseEndpoint],
-            "主队",
-            "客队",
-            COLORS,
-            goalNoPreciseEndpoint,
-          ),
+    it("选中带 goal_crossed_y 的 Miss → 不抛异常且多画出轨迹线(2026-08-26 修复的主诉)", () => {
+      const withoutSelection = renderOrThrow(
+        buildShotMapOption([...plottedShots, missWithCrossedY], "主队", "客队", COLORS),
+      );
+      const withSelection = renderOrThrow(
+        buildShotMapOption(
+          [...plottedShots, missWithCrossedY],
+          "主队",
+          "客队",
+          COLORS,
+          missWithCrossedY,
         ),
-      ).not.toThrow();
+      );
+      expect(withSelection).toBeGreaterThan(withoutSelection);
     });
 
-    it("选中非射正非封堵射门 → 不抛异常且不应多出轨迹线系列(静默不画线)", () => {
+    it("选中无任何终点数据的进球 → 不抛异常且不画线(球门正中兜底已删除,诚实不画)", () => {
+      const withoutSelection = renderOrThrow(
+        buildShotMapOption([...plottedShots, goalNoEndpointData], "主队", "客队", COLORS),
+      );
+      const withSelection = renderOrThrow(
+        buildShotMapOption(
+          [...plottedShots, goalNoEndpointData],
+          "主队",
+          "客队",
+          COLORS,
+          goalNoEndpointData,
+        ),
+      );
+      expect(withSelection).toBe(withoutSelection);
+    });
+
+    it("选中无终点数据的 Miss → 不抛异常且不应多出轨迹线系列(静默不画线)", () => {
       const withoutSelection = renderOrThrow(
         buildShotMapOption([...plottedShots, noTrajectoryData], "主队", "客队", COLORS),
       );

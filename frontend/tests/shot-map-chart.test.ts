@@ -153,43 +153,54 @@ describe("resolveClickedShot(点击参数解析)", () => {
   });
 });
 
-describe("trajectoryEndpoint(2026-08-24,射门轨迹线终点)", () => {
+describe("trajectoryEndpoint(2026-08-26,对齐 FotMob 反编译终点选择逻辑)", () => {
+  // FotMob 反编译实证的契约(逐字节,不是猜测):
+  //   1. isBlocked 且 blockedX/blockedY 非空 → 封堵点;
+  //   2. 否则 goalCrossedY 非空 → (105, goalCrossedY)——**没有射正门槛**;
+  //   3. 否则 → null,**没有球门正中兜底**。
   it("is_blocked 且 blocked_x/blocked_y 均非空 → 返回封堵点,blocked=true", () => {
     const s = shot({ outcome: "AttemptSaved", is_blocked: true, blocked_x: 81.13, blocked_y: 33.16 });
     expect(trajectoryEndpoint(s)).toEqual({ x: 81.13, y: 33.16, blocked: true });
   });
 
-  it("is_blocked=true 但 blocked_x/blocked_y 缺失 → 不使用封堵分支,按进球/射正退化", () => {
-    const s = shot({ outcome: "Goal", is_blocked: true, blocked_x: null, blocked_y: null });
-    expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 34, blocked: false });
+  it("is_blocked=true 但 blocked_x/blocked_y 缺失 → 落到穿越点分支(与 FotMob 一致)", () => {
+    const s = shot({ outcome: "Goal", is_blocked: true, blocked_x: null, blocked_y: null, goal_crossed_y: 35.1 });
+    expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 35.1, blocked: false });
   });
 
-  it("进球(outcome==='Goal')且无精确终点数据 → 退化到球门正中,blocked=false", () => {
-    const s = shot({ outcome: "Goal", is_blocked: null });
-    expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 34, blocked: false });
+  // 2026-08-26 修复站长报告的"偏出的射门点击之后没有路径":旧实现把穿越点
+  // 分支锁在 outcome==='Goal'/is_on_target 后面,而生产数据里 Miss 普遍带
+  // goal_crossed_y(5868020 全部 12 脚 Miss 均有)——FotMob 没有这个门槛。
+  it("Miss 带 goal_crossed_y → 照画穿越点(不再有射正门槛)", () => {
+    const s = shot({ outcome: "Miss", is_blocked: false, is_on_target: false, goal_crossed_y: 42.7 });
+    expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 42.7, blocked: false });
   });
 
-  it("is_on_target===true 且无精确终点数据 → 同样退化到球门正中", () => {
-    const s = shot({ outcome: "AttemptSaved", is_on_target: true, is_blocked: false });
-    expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 34, blocked: false });
-  });
-
-  it("未被封堵、非射正的球(如 Miss)→ 没有可信终点,返回 null", () => {
-    const s = shot({ outcome: "Miss", is_blocked: null, is_on_target: false });
-    expect(trajectoryEndpoint(s)).toBeNull();
-  });
-
-  // 2026-08-25:goal_crossed_y 语义已对生产 fact_shotmap 验证(球场 Y 坐标,
-  // 球门跨 30.34..37.66)——射正/进球有真实穿越点时不再退化到球门正中,
-  // 与 GoalMouthDiagram 画的入网位置同源。
-  it("进球带已验证的 goal_crossed_y → 终点用真实穿越点,不再是球门正中", () => {
+  it("进球带已验证的 goal_crossed_y → 终点用真实穿越点", () => {
     const s = shot({ outcome: "Goal", goal_crossed_y: 36.2, goal_crossed_z: 1.1 });
     expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 36.2, blocked: false });
   });
 
-  it("goal_crossed_y 超出球场宽度域(脏数据防御)→ 退回球门正中兜底", () => {
+  // FotMob 没有"球门正中"兜底:没有终点数据就诚实不画线,不捏造一个从未
+  // 观测到的正中落点(此前的 (105,34) 兜底已删除,CLAUDE.md §2.2/§6.2)。
+  it("进球但 goal_crossed_y 缺失(旧场次)→ null,不再捏造球门正中兜底", () => {
+    const s = shot({ outcome: "Goal", is_blocked: null, goal_crossed_y: null });
+    expect(trajectoryEndpoint(s)).toBeNull();
+  });
+
+  it("is_on_target===true 但无任何终点数据 → 同样 null,无兜底", () => {
+    const s = shot({ outcome: "AttemptSaved", is_on_target: true, is_blocked: false, goal_crossed_y: null });
+    expect(trajectoryEndpoint(s)).toBeNull();
+  });
+
+  it("goal_crossed_y 超出球场宽度域 [0,68](脏数据防御)→ null,不裁剪不兜底", () => {
     const s = shot({ outcome: "Goal", goal_crossed_y: 999 });
-    expect(trajectoryEndpoint(s)).toEqual({ x: 105, y: 34, blocked: false });
+    expect(trajectoryEndpoint(s)).toBeNull();
+  });
+
+  it("完全无终点数据的 Miss → null", () => {
+    const s = shot({ outcome: "Miss", is_blocked: null, is_on_target: false, goal_crossed_y: null });
+    expect(trajectoryEndpoint(s)).toBeNull();
   });
 
   it("封堵点优先级仍高于穿越点(被封堵的球没到球门线)", () => {
