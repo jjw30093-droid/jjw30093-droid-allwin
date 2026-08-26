@@ -130,17 +130,30 @@ export function orderShotsForRender(plotted: Shot[]): Shot[] {
   );
 }
 
-/** 点击参数 → 被点中的射门。`.shot` 为主(custom 系列实测原样透传 data
- * 对象,有真实点击测试确认,见 frontend/tests/shot-map-click.test.ts)、
- * `dataIndex` 为兜底——后者不依赖任何 ECharts 透传行为,只要求调用方传入
- * 与 buildOption 相同的 orderShotsForRender 结果。 */
+/** 2026-08-26 真实生产事故修复:真实浏览器里 ECharts custom 系列在内部
+ * setOption 时会克隆 `data[i]` 里嵌套的非原始值——点击事件 `params.data.shot`
+ * 拿到的是一份结构相同但**引用不同**的副本,不是 buildOption 传入的那个
+ * 原始 shot 对象。`frontend/tests/shot-map-click.test.ts` 用 zrender 内部
+ * `handler.dispatch()` 直接派发事件,绕开了真实 `chart.setOption()` 走的
+ * 那条克隆路径,所以此前一直是绿的——测试通过不代表真实浏览器行为一致,
+ * 这条差异只有真实点击 + 真实 setOption 才会暴露(线上复现:点击任意射门
+ * 标记,详情面板完全不出现,`resolveClickedShot` 能正确解析出射门对象,
+ * 但下游 `resolveSelectedShot` 的引用相等判断永远找不到它)。
+ *
+ * 因此确认"点中的是 shots 系列"(`seriesName === "shots"`)之后,不能再
+ * 信任 `params.data.shot` 这个引用本身,定位改走 `dataIndex`——它是 zrender
+ * 按数据下标关联点击事件的核心机制,不涉及嵌套对象克隆,可靠。调用方必须
+ * 传入与 buildOption 相同的 orderShotsForRender 结果,dataIndex 才对得上号。
+ * `.shot` 仍保留为兜底(不要求 seriesName——历史调用约定,`.shot` 字段本身
+ * 只会出现在 shots 系列自己的 data 项上,不会和其它系列混淆),覆盖调用方
+ * 手工构造、不带 seriesName/dataIndex 的场景(如本文件测试里的部分用例)。 */
 export function resolveClickedShot(params: unknown, ordered: Shot[]): Shot | null {
   const p = params as { data?: { shot?: Shot }; dataIndex?: number; seriesName?: string };
-  if (p?.data?.shot) return p.data.shot;
   if (p?.seriesName === "shots" && typeof p?.dataIndex === "number") {
-    return ordered[p.dataIndex] ?? null;
+    const byIndex = ordered[p.dataIndex];
+    if (byIndex) return byIndex;
   }
-  return null;
+  return p?.data?.shot ?? null;
 }
 
 /**
@@ -192,14 +205,31 @@ export function trajectoryEndpoint(
   return null;
 }
 
+/** 射门的稳定结构化标识(2026-08-26)。`shot_id` 来源侧经常缺失(见调试
+ * 实测,历史场次普遍为 null),不能单独作为 key;球员+分钟+半场+落点坐标+
+ * 结果的组合在同一场比赛里不会撞(同一球员同一分钟不可能两次射门落在
+ * 完全相同的坐标又是相同结果)。 */
+function shotKey(s: Shot): string {
+  return `${s.player_id}|${s.minute}|${s.period}|${s.x}|${s.y}|${s.outcome}`;
+}
+
 /** 筛选变化导致选中射门不在新的 plotted 里时返回 null——这是唯一的处理点,
  * 组件渲染和测试都只需要认这一个函数。用派生状态而非 useEffect 清空:
  * selected 只记"最后一次点击/翻页选中的是哪个 shot 对象",真正参与渲染的
  * 永远是这个函数的返回值——plotted 一变,不在其中的选中项自动"隐形",
- * 切筛选筛没了、又切回来会重新出现,这是刻意的简化。 */
+ * 切筛选筛没了、又切回来会重新出现,这是刻意的简化。
+ *
+ * 2026-08-26 真实生产事故修复:曾经用 `plotted.includes(selected)` 做引用
+ * 相等判断——真实浏览器里 ECharts 会克隆 custom 系列 data 里嵌套的 shot
+ * 对象(见 resolveClickedShot 注释),点击拿到的对象即使已经改用 dataIndex
+ * 路径整体规避了这个问题,这里仍然改用结构化 key 比较而不是引用比较,是
+ * 双保险——不让"选中判断依赖对象引用是否被下游意外克隆"这一类问题在未来
+ * 任何新代码路径里重演。返回的是 plotted 里那个真实引用(不是 selected
+ * 本身),保证下游拿到的对象与图上正在渲染的对象是同一个。 */
 export function resolveSelectedShot(plotted: Shot[], selected: Shot | null): Shot | null {
   if (!selected) return null;
-  return plotted.includes(selected) ? selected : null;
+  const key = shotKey(selected);
+  return plotted.find((s) => shotKey(s) === key) ?? null;
 }
 
 export interface ShotSideSummary {
@@ -577,8 +607,8 @@ export function ShotMapChart({
   // 避免热链头像跨源污染 html-to-image 的 canvas(见 PlayerAvatar.tsx 头部
   // 注释),筛选控件本来也在导出模式隐藏,同一个 isExport 判断复用。
   const handleChartClick = (params: unknown) => {
-    // 与 buildOption 使用同一个 orderShotsForRender 排序,dataIndex 兜底
-    // 路径才对得上号(见 resolveClickedShot 注释)。
+    // 与 buildOption 使用同一个 orderShotsForRender 排序,dataIndex 才对得上号
+    // (见 resolveClickedShot 注释)。
     const clicked = resolveClickedShot(params, orderShotsForRender(plotted));
     if (clicked) setSelected(clicked);
   };

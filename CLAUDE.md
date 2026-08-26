@@ -658,6 +658,54 @@ GET  /api/v1/admin/...
   输入变化；缺失值一律不得静默填 0，要么排除、要么如实标注**（进球数按
   受益方计乌龙球，见 `buildShotMapSummary` / `summarizeSide` 与
   `backend/queries/match_report.py::_own_goal_fields`）。
+- **对比度安全阀不能对"差一点点"和"差很多"一视同仁，直接丢弃真实数据。**
+  （2026-08-26 真实事故，站长报告）势头图西甲瓦伦西亚 vs 皇家贝蒂斯的队伍
+  配色和 FotMob 官方不一致：查证后端数据完全正确（生产库存值与 FotMob
+  实时接口逐字节一致，`teamColors.lightMode.home="#ff671f"`），根因在
+  `frontend/components/charts/matchTeamColors.ts::resolveTeamColor()`——
+  真实球队色对着实际渲染背景算出的对比度只要低于阈值（`MIN_CONTRAST=3`），
+  不管差多少，一律直接丢弃换成品牌兜底色。瓦伦西亚的橙色对势头图白色卡片
+  背景是 2.91:1，只比阈值差 0.09，就被整个换成了和 FotMob 毫无关系的品牌
+  青绿。修复：新增 `nudgeForContrast()`（`colorContrast.ts`），勉强不达标时
+  在一个小明度预算内（`MAX_NUDGE_LIGHTNESS=0.06`，约 6% HSL 明度）朝"远离
+  背景"的方向微调，救回一个肉眼几乎看不出差别但真正达标的颜色（瓦伦西亚
+  案例微调后是 `#ff6015`，对比度 3.03:1）；预算内救不回来的（真正差得远，
+  如既有回归测试的 `#035db8` 对深色球场需要约 11% 明度）仍然正确回退品牌
+  色——**不是把安全阈值整体放宽，是不让阈值边缘的真实数据和真正不安全的
+  数据共用同一种"一刀切丢弃"处理方式**。实现该微调时踩过一次真实的方向
+  判断反了的 bug（该判断前景比背景暗时应该继续变暗、比背景亮时应该继续
+  变亮，写反会把颜色调去让对比度变得更差而不是更好）——凡是实现"朝目标
+  调整某个数值"这类逻辑，必须对着真实案例算出的期望方向写测试断言方向，
+  不能只断言"调整后达标"这一个终态（那样测不出方向反了但凑巧还是达标的
+  情况）。见 `frontend/tests/color-contrast-nudge.test.ts`。
+- **"真实点击测试"如果只断言字段值、不断言对象引用，测不出 ECharts 内部
+  克隆数据这类 bug。**（2026-08-26 真实事故，站长报告）2026-08-25 射门图
+  标记形态重做时把点击详情面板一起换掉了，上线后点击任意射门标记完全没有
+  反应——连改动前就有的旧详情框都消失了。查证：`ECharts` 的 custom 系列在
+  `chart.setOption()` 内部处理时，会把 `data[i]` 里嵌套的非原始值（这里是
+  塞进 `{value, shot: s}` 的 `shot` 对象）克隆一份；点击事件 `params.data.shot`
+  拿到的是结构相同但**引用不同**的副本——用项目自带 echarts 在 jsdom 里
+  `renderer:"svg"` 真实 `init`+`setOption`+zrender 事件派发复测，
+  `received[0].data.shot === target` 实测为 `false`，证实这不是"jsdom 测试
+  环境模拟不到位"或"canvas 渲染器特有"，是 ECharts 本身跨渲染器的通用行为。
+  真正的根因是 `resolveSelectedShot()` 下游用 `plotted.includes(selected)`
+  做**引用相等**判断——`selected`（点击拿到的克隆副本）永远不会通过，详情
+  面板因此永远拿不到非空的 `activeSelected`。`frontend/tests/
+  shot-map-click.test.ts` 当时号称"真实点击测试"、也确实用了真实 ECharts
+  渲染和事件派发，但断言只写了 `resolved!.player_id === "clicked"`（字段级
+  相等），从未断言过 `resolved === target`（引用相等）——"用了真实渲染管线"
+  和"断言对了要害"是两件事，前者不能替代后者。修复两处：①
+  `resolveClickedShot()` 改为 `seriesName==='shots'` 时优先信任 `dataIndex`
+  （直接从调用方传入的 `ordered` 数组按下标取，不经过这条克隆路径），
+  `.data.shot` 降级为它本身没有 `dataIndex` 时的兜底；②
+  `resolveSelectedShot()` 从引用相等改为结构化 key 匹配（球员+分钟+半场+
+  坐标+结果的组合），返回 `plotted` 里的真实引用而不是 `selected` 本身，
+  双保险防止未来任何新代码路径重演"选中态依赖对象引用是否被下游意外克隆"
+  这一类问题。据此固化：**测试如果要证明"点击后能正确关联到原始数据对象"，
+  必须显式断言引用相等（`toBe`），断言字段值相等（`toEqual`/取字段比较）
+  证明不了这一点，两者在这类 bug 上是完全不同的两条命题**。见
+  `frontend/tests/shot-map-click.test.ts` 与
+  `frontend/tests/shot-map-chart.test.ts` 里对应的克隆场景回归测试。
 
 ### 11.4 Server/Client Component 边界纪律（2026-08-26，经真实生产事故确认）
 

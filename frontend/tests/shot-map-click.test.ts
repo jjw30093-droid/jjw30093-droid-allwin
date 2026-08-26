@@ -1,12 +1,24 @@
 /**
- * 射门标记真实点击路径(2026-08-25,方案 §1.3 的硬性要求)。
+ * 射门标记真实点击路径(2026-08-25 起,2026-08-26 补充引用相等断言)。
  *
- * custom 系列是否把 data 项上的 `.shot` 对象原样透传进 click 参数,是
- * resolveClickedShot 主路径的前提——方案明确要求"必须在实现时用一条真实
- * 点击测试确认,不要默认它一定成立"。这里用项目自带 echarts 在 jsdom 里
- * 真实 init(svg 渲染器 + 显式宽高)、真实 setOption,再通过 zrender 的
- * 事件派发(getZr().handler.dispatch)在标记的像素坐标上触发一次 click:
- * 命中测试、事件包装、参数组装全部走 ECharts 真实代码路径,不是 mock。
+ * 这里用项目自带 echarts 真实 init(svg 渲染器 + 显式宽高)、真实
+ * setOption,再通过 zrender 的事件派发(getZr().handler.dispatch)在标记
+ * 的像素坐标上触发一次 click:命中测试、事件包装、参数组装全部走 ECharts
+ * 真实代码路径,不是 mock。
+ *
+ * 2026-08-26 真实生产事故教训:本文件最初的断言只检查
+ * `resolved!.player_id === "clicked"`(字段级相等),从未检查过
+ * `resolved === target`(引用相等)——而 ECharts 的 custom 系列在
+ * `setOption` 内部处理 `data` 时,会把 `data[i]` 里嵌套的非原始值(这里是
+ * `shot` 对象)克隆一份;`params.data.shot` 拿到的是结构相同但引用不同的
+ * 副本(`received[0].data.shot === target` 实测为 false,即使在这份"真实
+ * 点击测试"、jsdom+svg 环境下也如此——不是浏览器 canvas 渲染特有的差异,
+ * 是 ECharts 本身的行为)。字段级相等测试对此完全没有发现能力,而这正是
+ * `resolveSelectedShot()` 下游用 `plotted.includes(selected)` 做引用相等
+ * 判断时会失败、导致详情面板完全不出现的根本原因(线上复现:点击任意射门
+ * 标记无任何反应)。现在 `resolveClickedShot()` 已改为优先信任 `dataIndex`
+ * (直接从 `ordered` 数组按下标取,不经过这条克隆路径),下面显式补上引用
+ * 相等断言,把"这条真实点击链路返回的确实是 plotted 里的原始对象"钉死。
  */
 
 import * as echarts from "echarts";
@@ -99,9 +111,20 @@ describe("射门标记真实点击(ECharts 真实事件派发,非 mock)", () => 
       dispatchClick(chart, px, py);
 
       expect(received.length).toBeGreaterThan(0);
+
+      // 2026-08-26:ECharts 真实会克隆 data 项里嵌套的 shot 对象——这条
+      // 断言直接证实那次事故的根因,不是靠推测。
+      const rawShot = (received[0] as { data?: { shot?: Shot } }).data?.shot;
+      expect(rawShot).not.toBe(target); // 克隆副本,不是原始引用
+      expect(rawShot?.player_id).toBe("clicked"); // 但结构/字段确实一致
+
       const resolved = resolveClickedShot(received[0], ordered);
       expect(resolved).not.toBeNull();
       expect(resolved!.player_id).toBe("clicked");
+      // 关键断言(2026-08-26 事故修复前这里会失败):必须是 plotted 里的
+      // 真实引用,不是上面那份克隆副本——resolveSelectedShot 下游依赖的
+      // 正是这个引用相等性。
+      expect(resolved).toBe(target);
 
       // dataIndex 兜底路径:剥掉 data 字段后仍能靠 seriesName+dataIndex 解析
       const raw = received[0] as { seriesName?: string; dataIndex?: number };
@@ -111,6 +134,7 @@ describe("射门标记真实点击(ECharts 真实事件派发,非 mock)", () => 
       );
       expect(viaIndex).not.toBeNull();
       expect(viaIndex!.player_id).toBe("clicked");
+      expect(viaIndex).toBe(target);
     } finally {
       chart.dispose();
       el.remove();

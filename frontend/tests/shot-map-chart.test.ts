@@ -115,16 +115,34 @@ describe("markerKindFor / markerRadius / ballPatchPolygons(2026-08-25 标记形�
   });
 });
 
-describe("resolveClickedShot(点击参数解析,dataIndex 兜底不依赖透传)", () => {
+describe("resolveClickedShot(点击参数解析)", () => {
   const a = shot({ player_id: "a" });
   const b = shot({ player_id: "b" });
 
-  it(".shot 透传路径优先", () => {
-    expect(resolveClickedShot({ data: { shot: b } }, [a, b])).toBe(b);
+  // 2026-08-26 真实生产事故修复:真实浏览器里 ECharts custom 系列在
+  // setOption 时会克隆 data[i] 嵌套的 shot 对象,params.data.shot 是一份
+  // 结构相同但引用不同的副本(frontend/tests/shot-map-click.test.ts 用
+  // zrender 内部 dispatch 绕开了这条克隆路径,此前一直是绿的假信心)。
+  // seriesName='shots' + 合法 dataIndex 时必须优先信任 dataIndex(直接从
+  // ordered 数组按下标取,不经过 ECharts 内部克隆),不能再信任 .data.shot
+  // 这个引用本身,即使它看起来"structurally 一样"。
+  it("seriesName='shots' + dataIndex 时优先信任 dataIndex,即使 .data.shot 是一份克隆副本", () => {
+    const bClone = { ...b }; // 模拟 ECharts 内部克隆:结构相同,引用不同
+    expect(bClone).not.toBe(b);
+    const resolved = resolveClickedShot(
+      { seriesName: "shots", dataIndex: 1, data: { shot: bClone } },
+      [a, b],
+    );
+    expect(resolved).toBe(b); // 必须是 ordered[1] 的真实引用,不是克隆副本
+    expect(resolved).not.toBe(bClone);
   });
 
-  it("seriesName='shots' + dataIndex 兜底", () => {
+  it("seriesName='shots' + dataIndex 兜底(无 .shot 字段时同样走 dataIndex)", () => {
     expect(resolveClickedShot({ seriesName: "shots", dataIndex: 1 }, [a, b])).toBe(b);
+  });
+
+  it(".shot 透传路径作为兜底(手工构造、无 seriesName/dataIndex 的调用场景)", () => {
+    expect(resolveClickedShot({ data: { shot: b } }, [a, b])).toBe(b);
   });
 
   it("其它系列(轨迹线)或空白参数不产生选中", () => {
@@ -198,6 +216,28 @@ describe("resolveSelectedShot(2026-08-24,筛选变化后选中态的边界处理
 
   it("selected 本身为 null 时返回 null,不抛异常", () => {
     expect(resolveSelectedShot([shot({})], null)).toBeNull();
+  });
+
+  // 2026-08-26 真实生产事故直接回归测试:此前用 plotted.includes(selected)
+  // 做引用相等判断,真实浏览器里 ECharts 克隆 custom 系列 data 里嵌套的
+  // shot 对象后,selected(点击拿到的、可能是克隆副本)永远不会通过引用相等
+  // 判断,导致详情面板完全不出现(线上复现:点击任意射门标记无任何反应)。
+  // 现在必须按结构化 key 匹配,即使 selected 是一份结构相同、引用不同的
+  // 副本,也要能在 plotted 里找到对应的真实项,并返回 plotted 里的那个
+  // 真实引用(不是 selected 本身)。
+  it("selected 是结构相同但引用不同的克隆副本(模拟 ECharts 内部克隆)时仍能正确解析", () => {
+    const a = shot({ player_id: "a", minute: 25, x: 84.51, y: 25.53, outcome: "AttemptSaved" });
+    const clone = { ...a }; // 结构相同,引用不同——模拟 params.data.shot 的克隆
+    expect(clone).not.toBe(a);
+    const resolved = resolveSelectedShot([a], clone);
+    expect(resolved).toBe(a); // 必须是 plotted 里的真实引用,不是传入的克隆
+    expect(resolved).not.toBe(clone);
+  });
+
+  it("克隆副本但结构上确实不在 plotted 里(如球员/分钟不同)时仍正确返回 null", () => {
+    const a = shot({ player_id: "a", minute: 25 });
+    const differentShot = shot({ player_id: "a", minute: 40 }); // 同球员不同分钟,不是同一次射门
+    expect(resolveSelectedShot([a], differentShot)).toBeNull();
   });
 });
 
