@@ -268,12 +268,53 @@ export function pickChartCompany(
   return bestId;
 }
 
+/** 走势图最多画多少个点(2026-08-27,ah/ou 手机端可读性问题)。距开球越近
+ * 采集越密(§6.3 最后 6 小时每小时一次),原始点数可以轻松破 200,窄屏手机
+ * 上挤成一条看不出走势的毛线。超过这个数就走 downsampleForChart 分桶精简,
+ * 不改变数据本身——分桶取"该窗口内最后一次观测到的值",与仓库里 FINAL
+ * 快照"开球前最后一个有效快照"同一语义,不是插值/平均出来的假点。 */
+const MAX_CHART_POINTS = 40;
+
+/** 按时间把 series 分成最多 maxPoints 个桶,每桶只保留桶内时间最晚的那条
+ * (即"这个时间窗口里最后已知的值")。最新(最后)一条真实观测值恒精确保留
+ * 在输出末尾——它要跟表格"最新"那一行的值对得上;更早的点同样是真实
+ * 观测(不是插值/平均出来的假点),只是代表"该窗口内最后已知的值",不保证
+ * 逐字节等于原始序列里最早那一条(桶 0 里如果不止一个点,输出的是桶内
+ * 最晚那个,不是桶内最早那个——跟其它桶的处理规则完全一致,不搞双重标准)。
+ * 用于走势图降噪,不用于任何数值计算——初盘/最新/涨跌方向永远读原始
+ * initial/current,不受这里的采样影响。 */
+export function downsampleForChart(series: OddsSnapshot[], maxPoints: number): OddsSnapshot[] {
+  if (series.length <= maxPoints) return series;
+  const t0 = new Date(series[0].observed_at).getTime();
+  const t1 = new Date(series[series.length - 1].observed_at).getTime();
+  const bucketMs = Math.max(t1 - t0, 1) / maxPoints;
+  const out: OddsSnapshot[] = [];
+  let bucketIdx = -1;
+  let pending: OddsSnapshot | null = null;
+  for (const s of series) {
+    const t = new Date(s.observed_at).getTime();
+    const idx = Math.min(maxPoints - 1, Math.floor((t - t0) / bucketMs));
+    if (idx !== bucketIdx) {
+      if (pending) out.push(pending);
+      bucketIdx = idx;
+    }
+    pending = s; // 同一桶内不断覆盖,离开桶时留下的就是桶内最后一条
+  }
+  if (pending) out.push(pending);
+  return out;
+}
+
 /** 一家公司在一个市场里的走势图(≥2 个点才画)。1x2 三个字段同量纲同轴;
  * ah/ou/corners_ou 有一个盘口线字段(球数门槛),量纲与另外两个水位字段不同,
  * 拆成右侧独立 y 轴,不共用一条刻度尺——否则要么水位被压成一条直线,要么
  * 盘口线的整数跳变淹没水位的小数波动。字段→颜色沿用 1x2 的位置约定
  * (第 1 个=win 色、第 2 个=draw 色、第 3 个=loss 色),盘口线恰好落在中间
- * 天然拿到中性的 draw 色,不需要另开一个语义色。 */
+ * 天然拿到中性的 draw 色,不需要另开一个语义色。
+ *
+ * 2026-08-27:盘口线本身是阶梯值(只在 0.25 一档跳),用平滑折线画会显得像
+ * 密集毛刺——改成阶梯线(step:'end',"值在下一次变化前保持不变"),水位
+ * 字段仍是普通折线,两者视觉语言各自对应各自的真实形状。原始点数超过
+ * MAX_CHART_POINTS 时先做 downsampleForChart 分桶精简,不分桶不改数值。 */
 export function buildMarketChart(
   snapshots: OddsSnapshot[],
   market: string,
@@ -281,10 +322,11 @@ export function buildMarketChart(
   fields: { key: string; label: string; isLine?: boolean }[],
   colors: ChartColors,
 ): { option: EChartsOption; summary: string } | null {
-  const series = snapshots
+  const raw = snapshots
     .filter((s) => s.market === market && s.company_id === companyId && flatOddsGroup(s.payload))
     .sort((a, b) => a.observed_at.localeCompare(b.observed_at));
-  if (series.length < 2) return null;
+  if (raw.length < 2) return null;
+  const series = downsampleForChart(raw, MAX_CHART_POINTS);
   // 北京时间(与下方表格的 LocalTime 一致)——曾用浏览器本地时区,会让同一
   // 组件里图表横轴和表格行显示两套不同的时钟,对中文用户反而更迷惑。
   const times = series.map((s) => formatBeijingZh(s.observed_at) ?? s.observed_at);
@@ -332,15 +374,20 @@ export function buildMarketChart(
     series: fields.map((f, i) => ({
       name: f.label,
       type: "line",
+      step: f.isLine ? "end" : undefined,
       data: pick(f.key),
       color: fieldColors[i] ?? colors.axis,
       yAxisIndex: f.isLine ? 1 : 0,
     })),
   };
   const unitNote = hasLine ? "水位为小数赔率,盘口线为球数门槛" : "欧洲赔率";
+  const countNote =
+    series.length < raw.length
+      ? `共 ${raw.length} 个快照,图上按时间聚合精简为 ${series.length} 个点`
+      : `共 ${series.length} 个快照`;
   return {
     option,
-    summary: `${company} ${MARKET_ZH[market] ?? market}随观察时间的变化(单位:${unitNote};时间范围:北京时间 ${first} 至 ${last},共 ${series.length} 个快照)`,
+    summary: `${company} ${MARKET_ZH[market] ?? market}随观察时间的变化(单位:${unitNote};时间范围:北京时间 ${first} 至 ${last},${countNote})`,
   };
 }
 

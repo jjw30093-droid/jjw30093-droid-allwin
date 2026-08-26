@@ -20,6 +20,7 @@ import {
   listCompanies,
   pickChartCompany,
   buildMarketChart,
+  downsampleForChart,
 } from "@/components/matches/OddsTimeline";
 import { MARKET_FIELDS } from "@/components/matches/zh";
 import { flatOddsGroup } from "@/components/matches/types";
@@ -239,6 +240,80 @@ describe("走势图纯函数(2026-08-26 P2:跟随选中公司 + 覆盖 ah/ou 市
       (s) => s.name === "主队",
     );
     expect(homeSeries?.yAxisIndex ?? 0).toBe(0);
+  });
+
+  it(
+    "buildMarketChart(2026-08-27,ah/ou 可读性修复):盘口线画成阶梯线(值在下一次变化前保持不变)," +
+      "水位字段仍是普通折线——阶梯值用平滑折线画会显得像密集毛刺,这正是站长反馈「看不懂」的直接原因",
+    () => {
+      const snaps = [
+        snap("ah", "8", "Bet365", "2021-01-01T10:00:00Z", { home: 0.9, line: 1.0, away: 1.0 }),
+        snap("ah", "8", "Bet365", "2021-01-01T11:00:00Z", { home: 0.85, line: 1.25, away: 1.05 }),
+      ] as unknown as Parameters<typeof buildMarketChart>[0];
+      const chart = buildMarketChart(snaps, "ah", "8", MARKET_FIELDS.ah, COLORS);
+      const byName = (name: string) =>
+        (chart!.option.series as { name?: string; step?: unknown }[]).find((s) => s.name === name);
+      expect(byName("盘口线")?.step).toBe("end");
+      expect(byName("主队")?.step).toBeUndefined();
+      expect(byName("客队")?.step).toBeUndefined();
+    },
+  );
+
+  it("downsampleForChart:点数不超过上限时原样返回,不做任何精简", () => {
+    const series = [1, 2, 3].map((n) =>
+      snap("1x2", "8", "Bet365", `2021-01-01T1${n}:00:00Z`, { home: n }),
+    ) as unknown as Parameters<typeof downsampleForChart>[0];
+    expect(downsampleForChart(series, 40)).toBe(series); // 同一个引用,压根没碰
+  });
+
+  it(
+    "downsampleForChart:超过上限时按时间分桶,每桶只留桶内最后一条(不是插值/平均出来的假点)," +
+      "最新(最后)一条真实观测值恒精确保留——它要跟表格「最新」那一行对得上",
+    () => {
+      // 100 个点,均匀铺在 100 分钟里,降到 10 个点
+      const series = Array.from({ length: 100 }, (_, i) =>
+        snap("1x2", "8", "Bet365", new Date(2021, 0, 1, 0, i).toISOString(), { home: i }),
+      ) as unknown as Parameters<typeof downsampleForChart>[0];
+      const out = downsampleForChart(series, 10);
+      expect(out.length).toBeLessThanOrEqual(10);
+      expect(out.length).toBeGreaterThan(1);
+      // 末条(最新的真实观测)必须原样保留,不能被桶掉——桶 0 里如果不止一个点,
+      // 头部按同一规则("桶内最后一条")处理,不强行去凑最早那一条(见函数注释)。
+      expect(out[out.length - 1].observed_at).toBe(series[series.length - 1].observed_at);
+      // 输出里的每一条都必须是原始序列里真实存在的一条(引用相等),不是合成值
+      for (const o of out) expect(series).toContain(o);
+      // 时间必须严格递增(桶的顺序不能乱)
+      const times = out.map((s) => new Date(s.observed_at).getTime());
+      for (let i = 1; i < times.length; i++) expect(times[i]).toBeGreaterThan(times[i - 1]);
+    },
+  );
+
+  it("buildMarketChart:原始点数超过上限时,图表只画降采样后的点,摘要如实标注两个数字", () => {
+    const raw = Array.from({ length: 100 }, (_, i) =>
+      snap("1x2", "8", "Bet365", new Date(2021, 0, 1, 0, i).toISOString(), {
+        home: 1.5,
+        draw: 4,
+        away: 6,
+      }),
+    ) as unknown as Parameters<typeof buildMarketChart>[0];
+    const chart = buildMarketChart(raw, "1x2", "8", MARKET_FIELDS["1x2"], COLORS);
+    expect(chart).not.toBeNull();
+    const plottedPoints = (chart!.option.xAxis as { data?: unknown[] }).data!.length;
+    expect(plottedPoints).toBeLessThanOrEqual(40);
+    expect(plottedPoints).toBeLessThan(100);
+    // 摘要必须同时出现真实观测总数(100)和实际画出的点数,不能只报其中一个
+    expect(chart!.summary).toContain("共 100 个快照");
+    expect(chart!.summary).toContain(`精简为 ${plottedPoints} 个点`);
+  });
+
+  it("buildMarketChart:原始点数不超过上限时,摘要不出现「精简」字样(没有发生降采样)", () => {
+    const raw = [
+      snap("1x2", "8", "Bet365", "2021-01-01T10:00:00Z", { home: 1.5, draw: 4, away: 6 }),
+      snap("1x2", "8", "Bet365", "2021-01-01T11:00:00Z", { home: 1.4, draw: 4.2, away: 6.5 }),
+    ] as unknown as Parameters<typeof buildMarketChart>[0];
+    const chart = buildMarketChart(raw, "1x2", "8", MARKET_FIELDS["1x2"], COLORS);
+    expect(chart!.summary).toContain("共 2 个快照");
+    expect(chart!.summary).not.toContain("精简");
   });
 });
 
