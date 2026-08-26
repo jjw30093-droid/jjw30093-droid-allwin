@@ -16,6 +16,7 @@ import {
   oddsDelta,
   formatDelta,
   summarizeMarketMovement,
+  buildCompanyHistory,
 } from "@/components/matches/OddsTimeline";
 import { flatOddsGroup } from "@/components/matches/types";
 import { formatBeijingDateTime } from "@/components/matches/zh";
@@ -123,6 +124,30 @@ describe("涨跌纯函数(2026-08-26 赔率展示重做)", () => {
       total: 4,
     });
   });
+
+  it("buildCompanyHistory:最新在前,逐条与前一条比着色,首条(最早)为开盘 unknown", () => {
+    const snap = (obs: string, home: number) => ({
+      market: "1x2",
+      company_id: "8",
+      company_name: "Bet365",
+      market_phase: "pre_match",
+      source_updated_at: null,
+      observed_at: obs,
+      payload: { home, draw: 4, away: 6 },
+    });
+    // 故意乱序传入,函数内部按 observed_at 升序排后再比,再整体倒序。
+    const snaps = [
+      snap("2021-01-01T10:00:00Z", 1.5),
+      snap("2021-01-01T12:00:00Z", 1.4), // 下调
+      snap("2021-01-01T11:00:00Z", 1.5), // 相对 10:00 持平
+    ] as unknown as Parameters<typeof buildCompanyHistory>[0];
+    const hist = buildCompanyHistory(snaps, ["home"]);
+    // 最新(12:00)在前
+    expect(hist.map((e) => e.values?.home)).toEqual([1.4, 1.5, 1.5]);
+    expect(hist[0].dirs.home).toBe("down"); // 12:00 vs 11:00 的 1.5 → 下调
+    expect(hist[1].dirs.home).toBe("flat"); // 11:00 vs 10:00 的 1.5 → 持平
+    expect(hist[2].dirs.home).toBe("unknown"); // 10:00 是开盘,无前一条
+  });
 });
 
 describe("OddsTimeline 市场切换 + 每公司行(结构重做)", () => {
@@ -152,6 +177,65 @@ describe("OddsTimeline 市场切换 + 每公司行(结构重做)", () => {
     screen.getByRole("tab", { name: "大小球" }).click();
     await waitFor(() => expect(screen.queryByText("0.95")).not.toBeNull());
     expect(screen.queryByText("1.50")).toBeNull(); // 1x2 不再渲染
+  });
+});
+
+describe("OddsTimeline 点公司名下钻完整变化记录抽屉(P1)", () => {
+  const seq = (obs: string, home: number) => ({
+    market: "1x2",
+    company_id: "8",
+    company_name: "Bet365",
+    market_phase: "pre_match",
+    source_updated_at: null,
+    observed_at: obs,
+    payload: { home, draw: 4, away: 6 },
+  });
+
+  it("多条快照:行可点,点开出抽屉列出该公司变化记录;再点收起", async () => {
+    mockOddsResponse(
+      fullTimelineBody(
+        [
+          seq("2021-01-01T10:00:00Z", 1.5),
+          seq("2021-01-01T11:00:00Z", 1.4),
+          seq("2021-01-01T12:00:00Z", 1.3),
+        ],
+        { display_mode: "odds_changes" },
+      ),
+    );
+    render(<OddsTimeline matchId={1} />);
+    // 行是 role=button 且 aria-expanded 初始 false
+    const row = await screen.findByRole("button", { name: /Bet365/ });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("region", { name: /完整变化记录/ })).toBeNull();
+
+    // 点开
+    row.click();
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: /完整变化记录/ })).not.toBeNull(),
+    );
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    // 抽屉里三条变化都在(1.50/1.40/1.30 各至少一次)
+    const drawer = screen.getByRole("region", { name: /完整变化记录/ });
+    expect(drawer.textContent).toContain("1.50");
+    expect(drawer.textContent).toContain("1.40");
+    expect(drawer.textContent).toContain("1.30");
+    expect(drawer.textContent).toMatch(/共\s*3\s*次/);
+
+    // 再点收起
+    row.click();
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: /完整变化记录/ })).toBeNull(),
+    );
+  });
+
+  it("只有一条快照:行不可点(没有变化记录可下钻)", async () => {
+    mockOddsResponse(fullTimelineBody([seq("2021-01-01T10:00:00Z", 1.5)]));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    // 单条快照不给 role=button(无可展开内容)
+    expect(screen.queryByRole("button", { name: /Bet365/ })).toBeNull();
   });
 });
 

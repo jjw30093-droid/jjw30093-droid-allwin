@@ -16,7 +16,8 @@
  * 文案纪律:只写"系统于 X 检测到",不写因果;时间按北京时间展示(CLAUDE.md §11.2)。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import type React from "react";
 import type { EChartsOption } from "echarts";
 import { clientFetch } from "@/lib/api-v1";
 import { formatOdds } from "@/lib/format";
@@ -186,6 +187,38 @@ export function summarizeMarketMovement(
   return m;
 }
 
+export type HistoryEntry = {
+  observedAt: string;
+  values: Record<string, number> | null;
+  /** 每个字段相对上一条(更早那条)的方向——首条(最早)全 unknown,是开盘点。 */
+  dirs: Record<string, OddsDir>;
+};
+
+/** 一家公司在一个市场里的完整变化记录,最新在前。
+ * 库里每条快照本身已是变化点(odds_snapshots.py hash-diff 去重,值不变不落库),
+ * 所以这里不再二次去重;方向按时间升序逐条与前一条比后,整体倒序返回。
+ * 缺失值(flatOddsGroup 返回 null 的行)不参与方向计算、也不污染下一条的基准。 */
+export function buildCompanyHistory(
+  snapshots: OddsSnapshot[],
+  fieldKeys: string[],
+): HistoryEntry[] {
+  const asc = [...snapshots].sort((a, b) => a.observed_at.localeCompare(b.observed_at));
+  const entries: HistoryEntry[] = [];
+  let prev: Record<string, number> | null = null;
+  for (const s of asc) {
+    const values = flatOddsGroup(s.payload);
+    const dirs: Record<string, OddsDir> = {};
+    for (const k of fieldKeys) dirs[k] = oddsDelta(prev?.[k], values?.[k]).dir;
+    entries.push({ observedAt: s.observed_at, values, dirs });
+    if (values) prev = values; // 缺失行不更新基准,避免把"这条没抓到"当成"回到某值"
+  }
+  entries.reverse();
+  return entries;
+}
+
+/** 下钻抽屉一次最多列多少条变化(最新在前);超过时如实标注总数,不静默截断。 */
+export const HISTORY_LIMIT = 50;
+
 type ChartColors = { axis: string; grid: string; win: string; draw: string; loss: string };
 
 /** 完整时间线时,为快照最多的一家公司的 1x2 序列画折线(≥2 个点才画) */
@@ -276,16 +309,56 @@ function OddsCell({
 }
 
 /** 一家公司一行(内含"初盘/最新"两子行)。有初盘可比时两行;只有单条快照
- * (initial 缺失)时退化成单行"最新",不假装有初盘。 */
-function CompanyRow({ market, row }: { market: string; row: CompanyOddsRow }) {
+ * (initial 缺失)时退化成单行"最新",不假装有初盘。
+ * expandable 时整行可点/可键盘操作,展开该公司的完整变化记录抽屉。 */
+function CompanyRow({
+  market,
+  row,
+  expandable,
+  isOpen,
+  onToggle,
+}: {
+  market: string;
+  row: CompanyOddsRow;
+  expandable: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
   const fields = MARKET_FIELDS[market] ?? [];
   const hasInitial = row.initial != null;
   const lineTag =
     market === "ah" ? ahDirectionZh(row.current?.line ?? row.initial?.line) : null;
+  const interactive = expandable
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        "aria-expanded": isOpen,
+        onClick: onToggle,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        },
+      }
+    : {};
   return (
-    <div className={styles.coRow} data-two={hasInitial}>
+    <div
+      className={styles.coRow}
+      data-two={hasInitial}
+      data-expandable={expandable || undefined}
+      data-open={(expandable && isOpen) || undefined}
+      {...interactive}
+    >
       <div className={styles.coName}>
-        <span className={styles.coLabel}>{row.companyLabel}</span>
+        <span className={styles.coLabel}>
+          {row.companyLabel}
+          {expandable && (
+            <span className={styles.chev} aria-hidden>
+              {isOpen ? "▾" : "▸"}
+            </span>
+          )}
+        </span>
         {lineTag && <span className={styles.ahTag}>{lineTag}</span>}
         <span className={styles.coTime}>
           <LocalTime iso={row.observedAt} />
@@ -314,14 +387,67 @@ function CompanyRow({ market, row }: { market: string; row: CompanyOddsRow }) {
   );
 }
 
-/** 一个市场的完整块:聚合升降摘要 + 表头 + 各公司行。 */
+/** 点开一家公司后的完整变化记录抽屉(最新在前)。库里每条快照即一次变化,
+ * 这里逐条按时间与前一条比着色;超过 HISTORY_LIMIT 条时如实标注总数。 */
+function HistoryDrawer({
+  market,
+  companyLabel,
+  snapshots,
+}: {
+  market: string;
+  companyLabel: string;
+  snapshots: OddsSnapshot[];
+}) {
+  const fields = MARKET_FIELDS[market] ?? [];
+  const entries = buildCompanyHistory(
+    snapshots,
+    fields.map((f) => f.key),
+  );
+  const shown = entries.slice(0, HISTORY_LIMIT);
+  return (
+    <div className={styles.drawer} role="region" aria-label={`${companyLabel} 完整变化记录`}>
+      <div className={styles.drawerHead}>
+        {companyLabel} · 完整变化记录 共 {entries.length} 次
+        {entries.length > HISTORY_LIMIT && `(显示最近 ${HISTORY_LIMIT} 次)`}
+      </div>
+      <div className={styles.histGrid}>
+        <div className={styles.histHead}>
+          <span>时间</span>
+          {fields.map((f) => (
+            <span key={f.key}>{f.label}</span>
+          ))}
+        </div>
+        {shown.map((e, i) => (
+          <div key={`${e.observedAt}|${i}`} className={styles.histRow}>
+            <span className={styles.histTime}>
+              <LocalTime iso={e.observedAt} />
+            </span>
+            {fields.map((f) => (
+              <span key={f.key} className={`num ${styles.histCell}`} data-dir={e.dirs[f.key]}>
+                {renderOddsNum(e.values?.[f.key])}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 一个市场的完整块:聚合升降摘要 + 表头 + 各公司行(可点开完整变化记录抽屉)。 */
 function MarketBlock({
   market,
   companyRows,
+  rawByCompany,
+  openCompany,
+  onToggle,
   phaseNote,
 }: {
   market: string;
   companyRows: CompanyOddsRow[];
+  rawByCompany: Map<string, OddsSnapshot[]>;
+  openCompany: string | null;
+  onToggle: (companyId: string) => void;
   phaseNote: string | null;
 }) {
   const fields = MARKET_FIELDS[market] ?? [];
@@ -358,10 +484,27 @@ function MarketBlock({
             </span>
           ))}
         </div>
-        {companyRows.map((row) => (
-          <CompanyRow key={`${market}|${row.companyId}`} market={market} row={row} />
-        ))}
+        {companyRows.map((row) => {
+          const raw = rawByCompany.get(row.companyId) ?? [];
+          const expandable = raw.length > 1; // 只有一条快照没有"变化记录"可看
+          const isOpen = openCompany === row.companyId;
+          return (
+            <Fragment key={`${market}|${row.companyId}`}>
+              <CompanyRow
+                market={market}
+                row={row}
+                expandable={expandable}
+                isOpen={isOpen}
+                onToggle={() => onToggle(row.companyId)}
+              />
+              {expandable && isOpen && (
+                <HistoryDrawer market={market} companyLabel={row.companyLabel} snapshots={raw} />
+              )}
+            </Fragment>
+          );
+        })}
       </div>
+      <p className={styles.gridHint}>点公司名可展开该公司的完整变化记录</p>
     </div>
   );
 }
@@ -402,6 +545,26 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   // 选中的市场 tab。存"用户点过的那个",真正生效的 active 在 render 里用
   // markets.includes() 兜底解析(市场集合随数据变化,存 null 时回落到第一个)。
   const [pickedMarket, setPickedMarket] = useState<string | null>(null);
+  // 展开了完整变化记录抽屉的公司 id(每次只开一家)。切市场时关掉,避免另一个
+  // 市场里同 id 公司误留展开态。
+  const [openCompany, setOpenCompany] = useState<string | null>(null);
+  const selectMarket = useCallback((m: string) => {
+    setPickedMarket(m);
+    setOpenCompany(null);
+  }, []);
+  const toggleCompany = useCallback(
+    (companyId: string) => setOpenCompany((cur) => (cur === companyId ? null : companyId)),
+    [],
+  );
+  // Esc 关闭抽屉(与射门详情面板同一键盘惯例)。只在有展开时挂监听。
+  useEffect(() => {
+    if (openCompany == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenCompany(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openCompany]);
 
   useEffect(() => {
     let cancelled = false;
@@ -580,7 +743,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
     const companyRows = Array.from(byCompany.values()).map((list) =>
       summarizeCompanyOdds(list, fieldKeys),
     );
-    return { market, companyRows };
+    return { market, companyRows, rawByCompany: byCompany };
   });
 
   // 生效的市场:用户点过且仍存在则用它,否则回落到第一个(市场集合变化时的兜底)。
@@ -596,7 +759,7 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
 
   return (
     <div>
-      <MarketTabs markets={markets} active={active} onSelect={setPickedMarket} />
+      <MarketTabs markets={markets} active={active} onSelect={selectMarket} />
 
       {/* 走势图只在 1x2 市场、且样本足够(odds_changes)时出现;build1x2Chart
           是 1x2 专用,其它市场的 tab 不画图。图注里点名画的是哪家公司。 */}
@@ -610,6 +773,9 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
         <MarketBlock
           market={activeBlock.market}
           companyRows={activeBlock.companyRows}
+          rawByCompany={activeBlock.rawByCompany}
+          openCompany={openCompany}
+          onToggle={toggleCompany}
           phaseNote={phaseNote}
         />
       )}
