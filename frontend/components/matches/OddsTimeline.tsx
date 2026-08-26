@@ -965,7 +965,11 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
           也画(buildMarketChart 双 y 轴处理盘口线与水位的量纲差异)。 */}
       {chart && (
         <div className={styles.chartWrap}>
-          <EChart option={chart.option} height={220} ariaSummary={chart.summary} />
+          {/* showSummary=false(2026-08-27,同 ShotMapChart 的先例):不再渲染
+              图表下方的可见摘要段落——摘要文字并未从可访问性树消失,仍原样
+              传给 ariaSummary,落在图表容器 role="img" 的 aria-label 上,
+              §11.2"图表要有文字摘要"由此落地,只是不再占版面。 */}
+          <EChart option={chart.option} height={220} ariaSummary={chart.summary} showSummary={false} />
         </div>
       )}
 
