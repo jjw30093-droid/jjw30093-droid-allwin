@@ -17,7 +17,11 @@ import {
   formatDelta,
   summarizeMarketMovement,
   buildCompanyHistory,
+  listCompanies,
+  pickChartCompany,
+  buildMarketChart,
 } from "@/components/matches/OddsTimeline";
+import { MARKET_FIELDS } from "@/components/matches/zh";
 import { flatOddsGroup } from "@/components/matches/types";
 import { formatBeijingDateTime } from "@/components/matches/zh";
 
@@ -26,9 +30,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// EChart 依赖真实 DOM 尺寸,jsdom 下留桩即可;测试关心"是否渲染了图表容器"
+// EChart 依赖真实 DOM 尺寸,jsdom 下留桩即可。桩把 ariaSummary 原样渲染出来
+// (真实组件也会把它放进 aria-label),这样测试能断言"图表画的是哪家公司/
+// 哪个市场"而不用解析 ECharts option 内部结构。
 vi.mock("@/components/EChart", () => ({
-  EChart: () => <div data-testid="echart-stub" />,
+  EChart: ({ ariaSummary }: { ariaSummary: string }) => (
+    <div data-testid="echart-stub">{ariaSummary}</div>
+  ),
 }));
 
 function mockOddsResponse(body: unknown) {
@@ -150,6 +158,90 @@ describe("涨跌纯函数(2026-08-26 赔率展示重做)", () => {
   });
 });
 
+describe("走势图纯函数(2026-08-26 P2:跟随选中公司 + 覆盖 ah/ou 市场)", () => {
+  const snap = (market: string, companyId: string, companyName: string, obs: string, payload: unknown) => ({
+    market,
+    company_id: companyId,
+    company_name: companyName,
+    market_phase: "pre_match",
+    source_updated_at: null,
+    observed_at: obs,
+    payload,
+  });
+  const COLORS = { axis: "#999", grid: "#eee", win: "#0a0", draw: "#888", loss: "#a00" };
+
+  it("listCompanies:跨市场去重,按首次出现顺序返回 {id,label}", () => {
+    const snaps = [
+      snap("1x2", "8", "Bet365", "t1", { home: 1, draw: 2, away: 3 }),
+      snap("ah", "3", "Crown", "t2", { home: 1, line: 1, away: 1 }),
+      snap("ah", "8", "Bet365", "t3", { home: 1, line: 1, away: 1 }), // 同 id 再出现,不重复
+    ] as unknown as Parameters<typeof listCompanies>[0];
+    expect(listCompanies(snaps)).toEqual([
+      { id: "8", label: "Bet365" },
+      { id: "3", label: "Crown" },
+    ]);
+  });
+
+  it("pickChartCompany:优先用 preferredId(展开的公司),样本不足或被隐藏时回落到可见样本最多的", () => {
+    const raw = new Map([
+      ["a", [1, 2, 3].map((n) => snap("1x2", "a", "A", `t${n}`, {}))], // 3 条
+      ["b", [1, 2].map((n) => snap("1x2", "b", "B", `t${n}`, {}))], // 2 条
+      ["c", [1].map((n) => snap("1x2", "c", "C", `t${n}`, {}))], // 只有 1 条,不够画线
+    ]) as unknown as Parameters<typeof pickChartCompany>[0];
+
+    // preferred 有效(样本≥2)→ 用它,即使不是样本最多的那家
+    expect(pickChartCompany(raw, "b", new Set())).toBe("b");
+    // preferred 样本不足(只有 1 条)→ 回落到样本最多且可见的
+    expect(pickChartCompany(raw, "c", new Set())).toBe("a");
+    // 没有 preferred → 回落到样本最多且可见的
+    expect(pickChartCompany(raw, null, new Set())).toBe("a");
+    // preferred 被隐藏 → 当作没有 preferred,回落
+    expect(pickChartCompany(raw, "b", new Set(["b"]))).toBe("a");
+    // 样本最多的那家也被隐藏 → 回落到下一个可见的
+    expect(pickChartCompany(raw, null, new Set(["a"]))).toBe("b");
+    // 全部隐藏 → 没有可画的
+    expect(pickChartCompany(raw, null, new Set(["a", "b", "c"]))).toBeNull();
+  });
+
+  it("buildMarketChart:1x2 单 y 轴三条线;样本<2 时返回 null", () => {
+    const snaps = [
+      snap("1x2", "8", "Bet365", "2021-01-01T10:00:00Z", { home: 1.5, draw: 4, away: 6 }),
+      snap("1x2", "8", "Bet365", "2021-01-01T11:00:00Z", { home: 1.4, draw: 4.2, away: 6.5 }),
+    ] as unknown as Parameters<typeof buildMarketChart>[0];
+    const chart = buildMarketChart(snaps, "1x2", "8", MARKET_FIELDS["1x2"], COLORS);
+    expect(chart).not.toBeNull();
+    expect(chart!.summary).toContain("Bet365");
+    expect(chart!.summary).toContain("欧洲赔率");
+    expect(chart!.option.series).toHaveLength(3);
+    // 1x2 没有盘口线字段,不应该出现双 y 轴
+    expect(Array.isArray(chart!.option.yAxis)).toBe(false);
+
+    const tooFew = buildMarketChart(snaps.slice(0, 1), "1x2", "8", MARKET_FIELDS["1x2"], COLORS);
+    expect(tooFew).toBeNull();
+  });
+
+  it("buildMarketChart:ah 市场盘口线字段拆到独立 y 轴(量纲与水位不同)", () => {
+    const snaps = [
+      snap("ah", "8", "Bet365", "2021-01-01T10:00:00Z", { home: 0.9, line: 1.0, away: 1.0 }),
+      snap("ah", "8", "Bet365", "2021-01-01T11:00:00Z", { home: 0.85, line: 1.25, away: 1.05 }),
+    ] as unknown as Parameters<typeof buildMarketChart>[0];
+    const chart = buildMarketChart(snaps, "ah", "8", MARKET_FIELDS.ah, COLORS);
+    expect(chart).not.toBeNull();
+    expect(chart!.summary).toContain("水位为小数赔率,盘口线为球数门槛");
+    expect(Array.isArray(chart!.option.yAxis)).toBe(true);
+    expect((chart!.option.yAxis as unknown[]).length).toBe(2);
+    // 盘口线(第 2 个字段,index 1)必须指到第二根 y 轴
+    const lineSeries = (chart!.option.series as { name?: string; yAxisIndex?: number }[]).find(
+      (s) => s.name === "盘口线",
+    );
+    expect(lineSeries?.yAxisIndex).toBe(1);
+    const homeSeries = (chart!.option.series as { name?: string; yAxisIndex?: number }[]).find(
+      (s) => s.name === "主队",
+    );
+    expect(homeSeries?.yAxisIndex ?? 0).toBe(0);
+  });
+});
+
 describe("OddsTimeline 市场切换 + 每公司行(结构重做)", () => {
   it("多市场时出 tab,默认选第一个,点击切换只渲染选中市场", async () => {
     const one = (market: string, over: number) => ({
@@ -236,6 +328,192 @@ describe("OddsTimeline 点公司名下钻完整变化记录抽屉(P1)", () => {
     );
     // 单条快照不给 role=button(无可展开内容)
     expect(screen.queryByRole("button", { name: /Bet365/ })).toBeNull();
+  });
+});
+
+describe("OddsTimeline 走势图跟随选中公司 + 覆盖 ah/ou 市场(P2)", () => {
+  const ahSnap = (companyId: string, companyName: string, obs: string, home: number) => ({
+    market: "ah",
+    company_id: companyId,
+    company_name: companyName,
+    market_phase: "pre_match",
+    source_updated_at: null,
+    observed_at: obs,
+    payload: { home, line: 1.0, away: 1.0 },
+  });
+
+  it("ah 市场也画图(此前只有 1x2 有),默认跟样本最多的公司", async () => {
+    mockOddsResponse(
+      fullTimelineBody(
+        [
+          ahSnap("8", "Bet365", "2021-01-01T10:00:00Z", 0.9),
+          ahSnap("8", "Bet365", "2021-01-01T11:00:00Z", 0.85),
+        ],
+        { display_mode: "odds_changes" },
+      ),
+    );
+    render(<OddsTimeline matchId={1} />);
+    const stub = await screen.findByTestId("echart-stub");
+    expect(stub.textContent).toContain("Bet365");
+    expect(stub.textContent).toContain("亚洲让球");
+  });
+
+  it("点开另一家公司的抽屉后,图表跟着切过去(与抽屉展示的是同一家)", async () => {
+    mockOddsResponse(
+      fullTimelineBody(
+        [
+          // Bet365 样本更多(3 条),默认应该是它
+          ahSnap("8", "Bet365", "2021-01-01T10:00:00Z", 0.9),
+          ahSnap("8", "Bet365", "2021-01-01T11:00:00Z", 0.85),
+          ahSnap("8", "Bet365", "2021-01-01T12:00:00Z", 0.88),
+          // Crown 样本较少(2 条)但足够画线
+          ahSnap("3", "Crown", "2021-01-01T10:05:00Z", 0.92),
+          ahSnap("3", "Crown", "2021-01-01T11:05:00Z", 0.9),
+        ],
+        { display_mode: "odds_changes" },
+      ),
+    );
+    render(<OddsTimeline matchId={1} />);
+    let stub = await screen.findByTestId("echart-stub");
+    expect(stub.textContent).toContain("Bet365"); // 默认:样本最多
+
+    const crownRow = screen.getByRole("button", { name: /Crown/ });
+    crownRow.click();
+    await waitFor(() => {
+      stub = screen.getByTestId("echart-stub");
+      expect(stub.textContent).toContain("Crown");
+    });
+    expect(stub.textContent).not.toContain("Bet365");
+  });
+});
+
+describe("OddsTimeline 公司筛选(P2)", () => {
+  const two = (obs: string, betHome: number, crownHome: number) => [
+    {
+      market: "1x2",
+      company_id: "8",
+      company_name: "Bet365",
+      market_phase: "pre_match",
+      source_updated_at: null,
+      observed_at: obs,
+      payload: { home: betHome, draw: 4, away: 6 },
+    },
+    {
+      market: "1x2",
+      company_id: "3",
+      company_name: "Crown",
+      market_phase: "pre_match",
+      source_updated_at: null,
+      observed_at: obs,
+      payload: { home: crownHome, draw: 4, away: 6 },
+    },
+  ];
+
+  it("勾掉一家公司:该公司行消失,摘要如实标注筛选口径,升降计数只算可见公司", async () => {
+    mockOddsResponse(fullTimelineBody(two("2021-01-01T10:00:00Z", 1.5, 1.6)));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() => expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull());
+    expect(screen.getByText("Crown", { selector: "span" })).not.toBeNull();
+    expect(screen.getByText("2 家公司")).not.toBeNull();
+
+    // 打开筛选面板,勾掉 Crown
+    const summary = screen.getByText(/公司筛选/);
+    summary.click();
+    const crownCheckbox = screen.getByRole("checkbox", { name: "Crown" });
+    crownCheckbox.click();
+
+    await waitFor(() => expect(screen.queryByText("Crown", { selector: "span" })).toBeNull());
+    expect(screen.getByText("Bet365", { selector: "span" })).not.toBeNull();
+    // "1 家公司(共 2 家,已筛选)"——不能只报筛选后的数字
+    expect(screen.getByText("1 家公司")).not.toBeNull();
+    expect(screen.getByText(/共 2 家,已筛选/)).not.toBeNull();
+  });
+
+  it("被隐藏的公司不是它就是走势图的驱动者:隐藏后图表换到另一家可见公司", async () => {
+    mockOddsResponse(
+      fullTimelineBody(
+        [...two("2021-01-01T10:00:00Z", 1.5, 1.6), ...two("2021-01-01T11:00:00Z", 1.4, 1.55)],
+        { display_mode: "odds_changes" },
+      ),
+    );
+    render(<OddsTimeline matchId={1} />);
+    let stub = await screen.findByTestId("echart-stub");
+    expect(stub.textContent).toContain("Bet365"); // 默认:插入顺序里第一家且样本数相同时排在前面
+
+    screen.getByText(/公司筛选/).click();
+    screen.getByRole("checkbox", { name: "Bet365" }).click();
+
+    await waitFor(() => {
+      stub = screen.getByTestId("echart-stub");
+      expect(stub.textContent).toContain("Crown");
+    });
+    expect(stub.textContent).not.toContain("Bet365");
+  });
+
+  it("只有一家公司时不出筛选面板(筛选没有意义)", async () => {
+    mockOddsResponse(fullTimelineBody([NESTED_SNAP]));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    expect(screen.queryByText(/公司筛选/)).toBeNull();
+  });
+
+  it(
+    "真实生产回归(2026-08-26,match 3411527):同一显示名不同 company_id 只在" +
+      "不同市场出现(id 8 实时/ah·ou vs id 281 历史/1x2,均归一显示为 Bet365)" +
+      "时,筛选面板不跨市场汇总——否则会在同一份列表里出现两个互不联动、" +
+      "无法区分的 Bet365 勾选项",
+    async () => {
+      const ahBet365 = {
+        market: "ah",
+        company_id: "8",
+        company_name: "Bet365",
+        market_phase: "pre_match",
+        source_updated_at: null,
+        observed_at: "2021-01-01T10:00:00Z",
+        payload: { home: 0.9, line: 1.0, away: 1.0 },
+      };
+      const x1x2Bet365 = {
+        market: "1x2",
+        company_id: "281",
+        company_name: "Bet365",
+        market_phase: "pre_match",
+        source_updated_at: null,
+        observed_at: "2021-01-01T10:00:00Z",
+        payload: { home: 1.5, draw: 4, away: 6 },
+      };
+      mockOddsResponse(fullTimelineBody([ahBet365, x1x2Bet365]));
+      render(<OddsTimeline matchId={1} />);
+      await waitFor(() => expect(screen.queryByRole("tab", { name: "亚洲让球" })).not.toBeNull());
+
+      // 默认落在 1x2(MARKET_ORDER 里排最前),只有一家公司,不出筛选面板
+      expect(screen.queryByText(/公司筛选/)).toBeNull();
+
+      // 切到 ah:同样只有一家(不同 id 的那家),依然不该出现两个"Bet365"
+      screen.getByRole("tab", { name: "亚洲让球" }).click();
+      await waitFor(() => expect(screen.queryByText("0.90")).not.toBeNull());
+      expect(screen.queryByText(/公司筛选/)).toBeNull();
+      expect(screen.getAllByText("Bet365", { selector: "span" }).length).toBe(1);
+    },
+  );
+});
+
+describe("OddsTimeline 盘口线与水位的视觉区分(P2)", () => {
+  it("ah 市场:盘口线列(表头+初盘+最新)带 data-kind=line,水位列不带", async () => {
+    mockOddsResponse(fullTimelineBody([NESTED_SNAP], { display_mode: "odds_changes" }));
+    const { container } = render(<OddsTimeline matchId={1} />);
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    const lineCells = container.querySelectorAll('[data-kind="line"]');
+    // 表头 1 + 初盘 1 + 最新 1 = 至少 3 个打了 data-kind="line" 的单元格
+    expect(lineCells.length).toBeGreaterThanOrEqual(3);
+    // 表头三列里,"盘口线" 那一列有 data-kind,"主队"/"客队" 没有
+    const headerLine = screen.getByRole("columnheader", { name: "盘口线" });
+    expect(headerLine.getAttribute("data-kind")).toBe("line");
+    const headerHome = screen.getByRole("columnheader", { name: "主队" });
+    expect(headerHome.getAttribute("data-kind")).toBeNull();
   });
 });
 

@@ -33,6 +33,9 @@ const PHASE_ZH: Record<string, string> = {
   unknown: "未标注",
 };
 
+/** 市场展示顺序(用户熟悉的排序),只保留该场真实存在的。 */
+const MARKET_ORDER = ["1x2", "ah", "ou", "corners_ou"];
+
 /** 主题切换时重新解析一遍 CSS 变量的实际取值,ECharts(canvas)拿不到 var()。 */
 const THEME_CHANGE_EVENT = "allwin-theme-change";
 
@@ -221,41 +224,80 @@ export const HISTORY_LIMIT = 50;
 
 type ChartColors = { axis: string; grid: string; win: string; draw: string; loss: string };
 
-/** 完整时间线时,为快照最多的一家公司的 1x2 序列画折线(≥2 个点才画) */
-function build1x2Chart(
-  snapshots: OddsSnapshot[],
-  colors: ChartColors,
-): { option: EChartsOption; summary: string } | null {
+/** 该市场每家公司的原始快照,按 company_id 分组(不过滤,供图表选公司/抽屉复用)。 */
+function groupByCompany(snapshots: OddsSnapshot[]): Map<string, OddsSnapshot[]> {
   const byCompany = new Map<string, OddsSnapshot[]>();
   for (const s of snapshots) {
-    // flatOddsGroup:兼容扁平(历史回填,73.5 万行)与嵌套(实时轮询)两种
-    // payload 形状——旧代码只认 payload.latest,扁平数据全部被跳过,
-    // 1x2 走势图因此从不渲染(审计 B2)。
-    if (s.market !== "1x2" || !flatOddsGroup(s.payload)) continue;
     const list = byCompany.get(s.company_id) ?? [];
     list.push(s);
     byCompany.set(s.company_id, list);
   }
-  let best: OddsSnapshot[] | null = null;
-  for (const list of byCompany.values()) {
-    if (list.length >= 2 && (best == null || list.length > best.length)) {
-      best = list;
+  return byCompany;
+}
+
+/** 该场比赛出现过的全部公司(跨所有市场,首次出现顺序),供筛选面板列出。 */
+export function listCompanies(snapshots: OddsSnapshot[]): { id: string; label: string }[] {
+  const seen = new Map<string, string>();
+  for (const s of snapshots) {
+    if (!seen.has(s.company_id)) seen.set(s.company_id, s.company_name || s.company_id);
+  }
+  return Array.from(seen.entries()).map(([id, label]) => ({ id, label }));
+}
+
+/** 走势图画谁:优先跟随用户当前展开的公司(与下钻抽屉保持一致的"你正在看的
+ * 就是图上这条线");该公司样本不足或被筛掉时,回落到"可见公司里样本最多的
+ * 那家"(≥2 个点才够画一条线)。都没有则不画图。 */
+export function pickChartCompany(
+  rawByCompany: Map<string, OddsSnapshot[]>,
+  preferredId: string | null,
+  hiddenIds: Set<string>,
+): string | null {
+  if (preferredId && !hiddenIds.has(preferredId)) {
+    const list = rawByCompany.get(preferredId);
+    if (list && list.length >= 2) return preferredId;
+  }
+  let bestId: string | null = null;
+  let bestLen = 0;
+  for (const [id, list] of rawByCompany) {
+    if (hiddenIds.has(id)) continue;
+    if (list.length >= 2 && list.length > bestLen) {
+      bestId = id;
+      bestLen = list.length;
     }
   }
-  if (!best) return null;
-  const series = best;
+  return bestId;
+}
+
+/** 一家公司在一个市场里的走势图(≥2 个点才画)。1x2 三个字段同量纲同轴;
+ * ah/ou/corners_ou 有一个盘口线字段(球数门槛),量纲与另外两个水位字段不同,
+ * 拆成右侧独立 y 轴,不共用一条刻度尺——否则要么水位被压成一条直线,要么
+ * 盘口线的整数跳变淹没水位的小数波动。字段→颜色沿用 1x2 的位置约定
+ * (第 1 个=win 色、第 2 个=draw 色、第 3 个=loss 色),盘口线恰好落在中间
+ * 天然拿到中性的 draw 色,不需要另开一个语义色。 */
+export function buildMarketChart(
+  snapshots: OddsSnapshot[],
+  market: string,
+  companyId: string,
+  fields: { key: string; label: string; isLine?: boolean }[],
+  colors: ChartColors,
+): { option: EChartsOption; summary: string } | null {
+  const series = snapshots
+    .filter((s) => s.market === market && s.company_id === companyId && flatOddsGroup(s.payload))
+    .sort((a, b) => a.observed_at.localeCompare(b.observed_at));
+  if (series.length < 2) return null;
   // 北京时间(与下方表格的 LocalTime 一致)——曾用浏览器本地时区,会让同一
   // 组件里图表横轴和表格行显示两套不同的时钟,对中文用户反而更迷惑。
   const times = series.map((s) => formatBeijingZh(s.observed_at) ?? s.observed_at);
-  const pick = (key: string) =>
-    series.map((s) => flatOddsGroup(s.payload)?.[key] ?? null);
+  const pick = (key: string) => series.map((s) => flatOddsGroup(s.payload)?.[key] ?? null);
   const company = series[0].company_name || series[0].company_id;
   const first = times[0];
   const last = times[times.length - 1];
+  const fieldColors = [colors.win, colors.draw, colors.loss];
+  const hasLine = fields.some((f) => f.isLine);
   const option: EChartsOption = {
-    grid: { left: 44, right: 16, top: 30, bottom: 28 },
+    grid: { left: 44, right: hasLine ? 44 : 16, top: 30, bottom: 28 },
     legend: {
-      data: ["主胜", "平局", "客胜"],
+      data: fields.map((f) => f.label),
       textStyle: { color: colors.axis },
       top: 0,
     },
@@ -264,21 +306,41 @@ function build1x2Chart(
       data: times,
       axisLabel: { color: colors.axis, fontSize: 10 },
     },
-    yAxis: {
-      type: "value",
-      scale: true,
-      axisLabel: { color: colors.axis },
-      splitLine: { lineStyle: { color: colors.grid } },
-    },
-    series: [
-      { name: "主胜", type: "line", data: pick("home"), color: colors.win },
-      { name: "平局", type: "line", data: pick("draw"), color: colors.draw },
-      { name: "客胜", type: "line", data: pick("away"), color: colors.loss },
-    ],
+    yAxis: hasLine
+      ? [
+          {
+            type: "value",
+            scale: true,
+            name: "水位",
+            axisLabel: { color: colors.axis },
+            splitLine: { lineStyle: { color: colors.grid } },
+          },
+          {
+            type: "value",
+            scale: true,
+            name: "盘口线",
+            axisLabel: { color: colors.axis },
+            splitLine: { show: false },
+          },
+        ]
+      : {
+          type: "value",
+          scale: true,
+          axisLabel: { color: colors.axis },
+          splitLine: { lineStyle: { color: colors.grid } },
+        },
+    series: fields.map((f, i) => ({
+      name: f.label,
+      type: "line",
+      data: pick(f.key),
+      color: fieldColors[i] ?? colors.axis,
+      yAxisIndex: f.isLine ? 1 : 0,
+    })),
   };
+  const unitNote = hasLine ? "水位为小数赔率,盘口线为球数门槛" : "欧洲赔率";
   return {
     option,
-    summary: `${company} 胜平负即时赔率随观察时间的变化(单位:欧洲赔率;时间范围:北京时间 ${first} 至 ${last},共 ${series.length} 个快照)`,
+    summary: `${company} ${MARKET_ZH[market] ?? market}随观察时间的变化(单位:${unitNote};时间范围:北京时间 ${first} 至 ${last},共 ${series.length} 个快照)`,
   };
 }
 
@@ -290,14 +352,20 @@ function OddsCell({
   value,
   initial,
   showDelta,
+  isLine,
 }: {
   value: number | null | undefined;
   initial: number | null | undefined;
   showDelta: boolean;
+  isLine?: boolean;
 }) {
   const { dir, delta } = oddsDelta(initial, value);
   return (
-    <span className={styles.oCell} data-dir={showDelta ? dir : "unknown"}>
+    <span
+      className={styles.oCell}
+      data-dir={showDelta ? dir : "unknown"}
+      data-kind={isLine ? "line" : undefined}
+    >
       <span className={`num ${styles.oNum}`}>{renderOddsNum(value)}</span>
       {showDelta && dir !== "unknown" && (
         <span className={styles.oDelta} aria-hidden>
@@ -368,7 +436,11 @@ function CompanyRow({
         <>
           <span className={styles.kind}>初盘</span>
           {fields.map((f) => (
-            <span key={`i-${f.key}`} className={`num ${styles.initNum}`}>
+            <span
+              key={`i-${f.key}`}
+              className={`num ${styles.initNum}`}
+              data-kind={f.isLine ? "line" : undefined}
+            >
               {renderOddsNum(row.initial?.[f.key])}
             </span>
           ))}
@@ -381,6 +453,7 @@ function CompanyRow({
           value={row.current?.[f.key]}
           initial={row.initial?.[f.key]}
           showDelta={hasInitial}
+          isLine={f.isLine}
         />
       ))}
     </div>
@@ -414,7 +487,9 @@ function HistoryDrawer({
         <div className={styles.histHead}>
           <span>时间</span>
           {fields.map((f) => (
-            <span key={f.key}>{f.label}</span>
+            <span key={f.key} data-kind={f.isLine ? "line" : undefined}>
+              {f.label}
+            </span>
           ))}
         </div>
         {shown.map((e, i) => (
@@ -423,7 +498,12 @@ function HistoryDrawer({
               <LocalTime iso={e.observedAt} />
             </span>
             {fields.map((f) => (
-              <span key={f.key} className={`num ${styles.histCell}`} data-dir={e.dirs[f.key]}>
+              <span
+                key={f.key}
+                className={`num ${styles.histCell}`}
+                data-dir={e.dirs[f.key]}
+                data-kind={f.isLine ? "line" : undefined}
+              >
                 {renderOddsNum(e.values?.[f.key])}
               </span>
             ))}
@@ -434,30 +514,83 @@ function HistoryDrawer({
   );
 }
 
-/** 一个市场的完整块:聚合升降摘要 + 表头 + 各公司行(可点开完整变化记录抽屉)。 */
+/** 公司筛选面板(跨市场共用同一份隐藏集合)。用 &lt;details&gt; 而非自制下拉——
+ * 零 JS 状态即可开合、原生键盘可达,与项目里其它折叠面板同一惯用法。 */
+function CompanyFilter({
+  companies,
+  hiddenIds,
+  onToggle,
+}: {
+  companies: { id: string; label: string }[];
+  hiddenIds: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  if (companies.length <= 1) return null; // 只有一家公司时筛选没有意义
+  return (
+    <details className={styles.filterDetails}>
+      <summary className={styles.filterSummary}>
+        公司筛选{hiddenIds.size > 0 ? `(已隐藏 ${hiddenIds.size} 家)` : ""}
+      </summary>
+      <div className={styles.filterPanel}>
+        {companies.map((c) => (
+          <label key={c.id} className={styles.filterItem}>
+            <input
+              type="checkbox"
+              checked={!hiddenIds.has(c.id)}
+              onChange={() => onToggle(c.id)}
+            />
+            {c.label}
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** 一个市场的完整块:公司筛选 + 聚合升降摘要 + 表头 + 各公司行(可点开完整
+ * 变化记录抽屉)。companyRows 已经是"筛选后可见"的;totalCount 是筛选前
+ * 该市场的公司总数,用于摘要里如实声明筛选口径(不能只报筛选后的数字,
+ * 那样读者会误以为这场比赛总共只有这几家公司)。 */
 function MarketBlock({
   market,
   companyRows,
+  totalCount,
   rawByCompany,
   openCompany,
   onToggle,
   phaseNote,
+  allCompanies,
+  hiddenCompanies,
+  onToggleCompanyVisible,
 }: {
   market: string;
   companyRows: CompanyOddsRow[];
+  totalCount: number;
   rawByCompany: Map<string, OddsSnapshot[]>;
   openCompany: string | null;
   onToggle: (companyId: string) => void;
   phaseNote: string | null;
+  allCompanies: { id: string; label: string }[];
+  hiddenCompanies: Set<string>;
+  onToggleCompanyVisible: (id: string) => void;
 }) {
   const fields = MARKET_FIELDS[market] ?? [];
   const primary = ODDS_PRIMARY_FIELD[market];
   const move = primary ? summarizeMarketMovement(companyRows, primary.key) : null;
   const hasMovement = move != null && move.up + move.down + move.flat > 0;
+  const filtered = companyRows.length < totalCount;
   return (
     <div className={styles.marketBlock}>
+      <CompanyFilter
+        companies={allCompanies}
+        hiddenIds={hiddenCompanies}
+        onToggle={onToggleCompanyVisible}
+      />
       <div className={styles.sumBar}>
-        <span className={styles.sumTotal}>{companyRows.length} 家公司</span>
+        <span className={styles.sumTotal}>
+          {companyRows.length} 家公司
+          {filtered && <span className={styles.sumFiltered}>(共 {totalCount} 家,已筛选)</span>}
+        </span>
         {hasMovement && move && primary && (
           <span className={styles.sumMove}>
             {primary.label}
@@ -479,7 +612,7 @@ function MarketBlock({
           <span role="columnheader">公司</span>
           <span role="columnheader" aria-hidden />
           {fields.map((f) => (
-            <span key={f.key} role="columnheader">
+            <span key={f.key} role="columnheader" data-kind={f.isLine ? "line" : undefined}>
               {f.label}
             </span>
           ))}
@@ -548,6 +681,9 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   // 展开了完整变化记录抽屉的公司 id(每次只开一家)。切市场时关掉,避免另一个
   // 市场里同 id 公司误留展开态。
   const [openCompany, setOpenCompany] = useState<string | null>(null);
+  // 用户勾掉的公司(跨市场共用同一份——公司身份是全局的,不因切 tab 重置)。
+  // 默认空集合=全部可见,与"筛选"面板的语义一致(勾选=保留)。
+  const [hiddenCompanies, setHiddenCompanies] = useState<Set<string>>(() => new Set());
   const selectMarket = useCallback((m: string) => {
     setPickedMarket(m);
     setOpenCompany(null);
@@ -556,6 +692,14 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
     (companyId: string) => setOpenCompany((cur) => (cur === companyId ? null : companyId)),
     [],
   );
+  const toggleCompanyVisible = useCallback((companyId: string) => {
+    setHiddenCompanies((cur) => {
+      const next = new Set(cur);
+      if (next.has(companyId)) next.delete(companyId);
+      else next.add(companyId);
+      return next;
+    });
+  }, []);
   // Esc 关闭抽屉(与射门详情面板同一键盘惯例)。只在有展开时挂监听。
   useEffect(() => {
     if (openCompany == null) return;
@@ -597,8 +741,29 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
     resp.coverage_tier === "full_timeline" &&
     resp.display_mode === "odds_changes";
 
+  // 以下全是纯派生值(不是 hook),但要放在这个 hook 之前算好,供下面的
+  // useMemo 依赖——resp 不可用时各自安全退化成空集合/null,不需要早退。
+  const allSnapshots = resp?.available === true ? resp.snapshots : [];
+  const presentMarkets = new Set(allSnapshots.map((s) => s.market));
+  const markets = MARKET_ORDER.filter((m) => presentMarkets.has(m));
+  // 生效的市场:用户点过且仍存在则用它,否则回落到第一个(市场集合变化时的兜底)。
+  const active = pickedMarket && markets.includes(pickedMarket) ? pickedMarket : (markets[0] ?? null);
+  const activeSnaps = active ? allSnapshots.filter((s) => s.market === active) : [];
+  const rawByCompany = groupByCompany(activeSnaps);
+  // 筛选面板只列当前市场出现过的公司,不跨市场汇总——真实数据里同一家公司
+  // 在不同市场可能落在不同 company_id 上(如 Bet365 的实时 id 只出现在
+  // ah/ou,历史 id 只出现在 1x2),这两个 id 在单个市场内部不会重名共现,
+  // 但汇总成一份全局列表就会出现两个都叫"Bet365"却互不联动的勾选项——
+  // 用户分不清也勾不明白。按市场切分,同时也不会让用户在这个市场看到一个
+  // 跟这个市场毫无关系的公司(如 ah 页面出现只在 1x2 出现过的 Pinnacle)。
+  const allCompanies = listCompanies(activeSnaps);
+
+  // 走势图:跟随当前市场 + 当前展开的公司(与下钻抽屉保持一致),不再只锁定
+  // 1x2——ah/ou/corners_ou 现在也画(见 buildMarketChart 的双 y 轴设计)。
   const chart = useMemo(() => {
-    if (!isFullTimeline || resp?.available !== true) return null;
+    if (!isFullTimeline || !active) return null;
+    const companyId = pickChartCompany(rawByCompany, openCompany, hiddenCompanies);
+    if (!companyId) return null;
     const style = getComputedStyle(document.documentElement);
     const readVar = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
     const colors: ChartColors = {
@@ -608,10 +773,11 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
       draw: readVar("--draw", "#aaa79f"),
       loss: readVar("--loss", "#ef7865"),
     };
-    return build1x2Chart(resp.snapshots, colors);
+    const fields = MARKET_FIELDS[active] ?? [];
+    return buildMarketChart(activeSnaps, active, companyId, fields, colors);
     // themeTick 只用来触发重新读取 CSS 变量,不直接参与计算
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resp, isFullTimeline, themeTick]);
+  }, [active, activeSnaps, rawByCompany, openCompany, hiddenCompanies, isFullTimeline, themeTick]);
 
   if (error) {
     return (
@@ -726,57 +892,47 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
 
   const observationCount = resp.observation_count ?? resp.snapshots.length;
 
-  // 市场顺序固定为 1x2 → ah → ou → corners_ou(用户熟悉的排序),只保留该场
-  // 真实存在的。每个市场按公司归并出"初盘/最新"行。
-  const MARKET_ORDER = ["1x2", "ah", "ou", "corners_ou"];
-  const present = new Set(resp.snapshots.map((s) => s.market));
-  const markets = MARKET_ORDER.filter((m) => present.has(m));
-  const marketRows = markets.map((market) => {
-    const rows = resp.snapshots.filter((s) => s.market === market);
-    const fieldKeys = (MARKET_FIELDS[market] ?? []).map((f) => f.key);
-    const byCompany = new Map<string, typeof rows>();
-    for (const snap of rows) {
-      const list = byCompany.get(snap.company_id) ?? [];
-      list.push(snap);
-      byCompany.set(snap.company_id, list);
-    }
-    const companyRows = Array.from(byCompany.values()).map((list) =>
-      summarizeCompanyOdds(list, fieldKeys),
-    );
-    return { market, companyRows, rawByCompany: byCompany };
-  });
-
-  // 生效的市场:用户点过且仍存在则用它,否则回落到第一个(市场集合变化时的兜底)。
-  const active = pickedMarket && markets.includes(pickedMarket) ? pickedMarket : markets[0];
-  const activeBlock = marketRows.find((b) => b.market === active) ?? marketRows[0];
+  // active/activeSnaps/rawByCompany/allCompanies 已经在上面(chart 那个
+  // useMemo 之前)算好了,这里只需要按公司归并出当前市场的"初盘/最新"行,
+  // 再用 hiddenCompanies 筛一遍——totalCount 留筛选前的数字,摘要条要如实
+  // 声明"筛选自 N 家",不能让筛选后的数字看起来像这场比赛的全部公司。
+  const fieldKeys = (active ? (MARKET_FIELDS[active] ?? []) : []).map((f) => f.key);
+  const allCompanyRows = Array.from(rawByCompany.values()).map((list) =>
+    summarizeCompanyOdds(list, fieldKeys),
+  );
+  const visibleCompanyRows = allCompanyRows.filter((r) => !hiddenCompanies.has(r.companyId));
 
   // 「阶段」在整批快照里如果只有一个真实取值(几乎恒为"赛前"),就并进摘要条
   // 一句话,不再占一列;真出现差异(如混入 in_play)时,退回不展示统一阶段句,
   // 由 CompanyRow 各自的时间承担——不为了好看丢真实差异(§2.1)。
-  const allPhases = new Set(resp.snapshots.map((s) => s.market_phase));
+  const allPhases = new Set(allSnapshots.map((s) => s.market_phase));
   const uniformPhase = allPhases.size === 1 ? [...allPhases][0] : null;
   const phaseNote = uniformPhase != null ? (PHASE_ZH[uniformPhase] ?? uniformPhase) : null;
 
   return (
     <div>
-      <MarketTabs markets={markets} active={active} onSelect={selectMarket} />
+      <MarketTabs markets={markets} active={active ?? ""} onSelect={selectMarket} />
 
-      {/* 走势图只在 1x2 市场、且样本足够(odds_changes)时出现;build1x2Chart
-          是 1x2 专用,其它市场的 tab 不画图。图注里点名画的是哪家公司。 */}
-      {chart && active === "1x2" && (
+      {/* 走势图跟随当前市场 + 当前展开(或样本最多)的公司,ah/ou/corners_ou
+          也画(buildMarketChart 双 y 轴处理盘口线与水位的量纲差异)。 */}
+      {chart && (
         <div className={styles.chartWrap}>
           <EChart option={chart.option} height={220} ariaSummary={chart.summary} />
         </div>
       )}
 
-      {activeBlock && (
+      {active && (
         <MarketBlock
-          market={activeBlock.market}
-          companyRows={activeBlock.companyRows}
-          rawByCompany={activeBlock.rawByCompany}
+          market={active}
+          companyRows={visibleCompanyRows}
+          totalCount={allCompanyRows.length}
+          rawByCompany={rawByCompany}
           openCompany={openCompany}
           onToggle={toggleCompany}
           phaseNote={phaseNote}
+          allCompanies={allCompanies}
+          hiddenCompanies={hiddenCompanies}
+          onToggleCompanyVisible={toggleCompanyVisible}
         />
       )}
 

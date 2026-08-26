@@ -102,6 +102,47 @@
 
 /* ── 聚合升降摘要条 ────────────── */
 
+/* ── 公司筛选(2026-08-26 P2) ────────────── */
+
+.filterDetails {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+}
+
+.filterSummary {
+  cursor: pointer;
+  color: var(--ink-3);
+  user-select: none;
+}
+
+.filterSummary:hover {
+  color: var(--ink-2);
+}
+
+.filterPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.filterItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.filterItem input {
+  cursor: pointer;
+}
+
 .sumBar {
   display: flex;
   align-items: center;
@@ -118,6 +159,13 @@
 .sumTotal {
   font-weight: 600;
   color: var(--ink);
+}
+
+.sumFiltered {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
 
 .sumMove {
@@ -304,6 +352,17 @@
   color: inherit;
 }
 
+/* 盘口线列(2026-08-26 P2):量纲与另外两个水位/赔率字段不同(球数门槛
+ * vs 小数赔率),同字号同字重时三个数字挨在一起容易被当成同类值扫读。
+ * 不新增字号/字重差异(§11.2/§11.3 的"一屏一个字号"教训),改用一条贯穿
+ * 表头到每一行的背景带把这一列在视觉上单独分组——第三种中性色阶
+ * (--surface-2,区别于行底 --surface 与表头/hover 底 --surface-soft)。 */
+.gridHead > span[data-kind="line"],
+.initNum[data-kind="line"],
+.oCell[data-kind="line"] {
+  background: var(--surface-2);
+}
+
 /* ── 点开一家公司后的完整变化记录抽屉 ────────────── */
 
 .drawer {
@@ -380,6 +439,13 @@
 
 .histCell[data-dir="down"] {
   color: var(--odds-down);
+}
+
+/* 盘口线列的背景带延伸进抽屉,与主表同一条视觉分组带贯穿到底(见上方
+ * .gridHead > span[data-kind="line"] 的说明)。 */
+.histHead > span[data-kind="line"],
+.histCell[data-kind="line"] {
+  background: var(--surface-2);
 }
 
 .gridHint {

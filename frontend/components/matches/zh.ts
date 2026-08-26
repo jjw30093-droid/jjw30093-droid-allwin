@@ -34,7 +34,10 @@ export const LEGACY_SOURCE_ZH: Record<string, string> = {
 };
 
 /** 各市场 payload 字段 → 中文列名(与 backend/providers/nowgoal.py _FIELD_MAP 对齐) */
-export const MARKET_FIELDS: Record<string, { key: string; label: string }[]> = {
+/** isLine:该字段是盘口线(球数门槛)而非赔率/水位——量纲不同,渲染层用它
+ * 加一条视觉区分带(见 OddsTimeline.module.css 的 data-kind="line"),避免
+ * 三个数字挨在一起时被当成同类值扫读(2026-08-26 P2)。 */
+export const MARKET_FIELDS: Record<string, { key: string; label: string; isLine?: boolean }[]> = {
   "1x2": [
     { key: "home", label: "主胜" },
     { key: "draw", label: "平局" },
@@ -42,18 +45,18 @@ export const MARKET_FIELDS: Record<string, { key: string; label: string }[]> = {
   ],
   ah: [
     { key: "home", label: "主队" },
-    { key: "line", label: "盘口线" },
+    { key: "line", label: "盘口线", isLine: true },
     { key: "away", label: "客队" },
   ],
   ou: [
     { key: "over", label: "大球" },
-    { key: "line", label: "盘口线" },
+    { key: "line", label: "盘口线", isLine: true },
     { key: "under", label: "小球" },
   ],
   // payload 形状与 "ou" 完全一样({line, over, under}),字段标签照抄。
   corners_ou: [
     { key: "over", label: "大球" },
-    { key: "line", label: "盘口线" },
+    { key: "line", label: "盘口线", isLine: true },
     { key: "under", label: "小球" },
   ],
 };
