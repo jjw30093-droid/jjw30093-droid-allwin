@@ -4,8 +4,11 @@
  * 数据来源:FotMob general.teamColors,服务端已按对手做过撞色规避的
  * **主客配对级**结果(不是球队固定色,同一支队换个对手这两个值可能不同)。
  * 站长明确要求直接消费 FotMob 算好的结果,不自行重新实现其 CIE94 撞色规避
- * 算法——这里只做"选对主题变体 + 校验对比度安全 + 缺失或不安全时回退品牌
- * 色"三件事。
+ * 算法——这里只做"选对主题变体 + 校验对比度安全 + 勉强不达标时小幅微调 +
+ * 仍不安全或数据缺失时回退品牌色"这几件事(微调预算见 colorContrast.ts 的
+ * nudgeForContrast/MAX_NUDGE_LIGHTNESS,2026-08-26 加入——此前"不达标就
+ * 直接丢弃换品牌色"曾把只差 0.09:1 就达标的瓦伦西亚真实橙色整个换成了
+ * 无关的品牌青绿,见 CLAUDE.md §11.4 事故记录)。
  *
  * 对比度必须对着调用方**真实渲染背景**算,不能猜——射门落点图的球场底色
  * 和其它图表的卡片底色不是同一个颜色,这是为什么每个图表分别调用
@@ -20,7 +23,7 @@
  */
 
 import type { components } from "@/lib/api-types";
-import { contrastRatioHex, isValidHexColor, MIN_CONTRAST } from "./colorContrast";
+import { contrastRatioHex, isValidHexColor, MIN_CONTRAST, nudgeForContrast } from "./colorContrast";
 
 export type TeamColorPair = components["schemas"]["TeamColorPair"];
 
@@ -40,8 +43,15 @@ export function resolveTeamColor(
   const { isDark, backgroundHex, fallbackHex, minContrast = MIN_CONTRAST } = opts;
   const candidate = isDark ? pair?.dark : pair?.light;
   if (!isValidHexColor(candidate)) return fallbackHex;
-  if (contrastRatioHex(candidate, backgroundHex) < minContrast) return fallbackHex;
-  return candidate;
+  if (contrastRatioHex(candidate, backgroundHex) >= minContrast) return candidate;
+  // 2026-08-26 真实事故(瓦伦西亚 vs 皇家贝蒂斯):真实球队色 #ff671f 对白色
+  // 卡片背景只有 2.91:1,比阈值差一点点就被直接丢弃换成品牌兜底色,导致
+  // 势头图显示的颜色和 FotMob 官方完全不一样。勉强不达标时先在小预算内
+  // 朝远离背景的方向微调明度救回真实色(见 nudgeForContrast 文档);预算内
+  // 救不回来才真的回退品牌色——不是放宽阈值,是不让"差一点点"和"差很多"
+  // 共用同一种"直接丢弃真实数据"的处理方式。
+  const nudged = nudgeForContrast(candidate, backgroundHex, minContrast);
+  return nudged ?? fallbackHex;
 }
 
 /** 主客队双方一起解析,调用方少写一次重复的 opts。 */
