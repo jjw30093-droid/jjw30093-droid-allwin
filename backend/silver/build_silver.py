@@ -20,11 +20,25 @@ build_silver.py — 从 Bronze(dim_match / fact_team_match_stats / fact_match_ev
     按 (League_ID, Season) 先 DELETE 再整体 INSERT，可反复重跑
     (与 ingest_league.py 的 fact_league_table/fact_season_player_stats 同一风格)。
 
+分区级水位(0015,2026-08-26):
+    backend/worker/runner.py 里 core_silver_build 任务本身还有一层全库级
+    watermark_fn(全库 Finish 场次数),那一层只回答"有没有必要跑这个任务",
+    未变化时整个任务直接跳过、这个函数根本不会被调用。本函数内部这层是
+    第二层、粒度更细的水位:任务一旦决定要跑,原来的写法是无条件对枚举到
+    的**全部**(League_ID, Season)做 DELETE+INSERT——西甲一场都没变化,
+    K联赛踢完一场,也会把西甲的 5 张 silver 表连带重写一遍(数值不变但
+    updated_at 被拍新,这张表因此失去"这个联赛真的更新过"的含义)。
+    silver_build_state(0015 migration)记录每个分区上次成功构建时看到的
+    Finish 场次数,数字没变就跳过该分区的全部 5 张表,数字变了才重建并
+    回写状态——迁移未跑时降级为原有的"每次都重建"行为,不因为状态表
+    缺失而报错或漏更新。
+
 用法:
     python backend/silver/build_silver.py
 """
 
 import os
+import sqlite3
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -111,6 +125,45 @@ def _seasons(conn) -> list:
         "SELECT DISTINCT League_ID, Season FROM dim_match ORDER BY League_ID, Season"
     ).fetchall()
     return [(r[0], r[1]) for r in rows]
+
+
+def _load_build_state(conn) -> dict:
+    """(League_ID, Season) -> 上次成功构建时看到的该分区 Finish 场次数。
+
+    0015 migration 未跑到的环境(比如尚未升级的测试库)里表不存在,退化为
+    空状态——下面的比较永远不相等,等价于"每次都重建",不是新回归。"""
+    try:
+        rows = conn.execute(
+            "SELECT league_id, season, finished_count FROM silver_build_state"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {(r[0], r[1]): r[2] for r in rows}
+
+
+def _finished_count(conn, league_id: int, season: str) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM dim_match WHERE status = 'Finish' AND League_ID = ? AND Season = ?",
+        (league_id, season),
+    ).fetchone()[0]
+
+
+def _save_build_state(conn, league_id: int, season: str, finished_count: int, built_at: str) -> None:
+    try:
+        conn.execute(
+            """
+            INSERT INTO silver_build_state (league_id, season, finished_count, built_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(league_id, season) DO UPDATE SET
+                finished_count = excluded.finished_count,
+                built_at = excluded.built_at
+            """,
+            (league_id, season, finished_count, built_at),
+        )
+    except sqlite3.OperationalError:
+        # 与 _load_build_state 对称:表不存在时静默跳过写入,不阻断本次
+        # 分区已经完成的真实聚合。
+        pass
 
 
 def _matches(conn, league_id: int, season: str) -> list:
@@ -294,6 +347,8 @@ def build_goal_minute_buckets(conn, league_id: int, season: str) -> list:
 
 
 def build_silver() -> None:
+    from backend.db.util import utc_now_iso
+
     conn = get_connection()
     try:
         status_rows = conn.execute(
@@ -304,7 +359,15 @@ def build_silver() -> None:
         seasons = _seasons(conn)
         print(f"待聚合 (League_ID, Season): {seasons}")
 
+        build_state = _load_build_state(conn)
+        skipped = 0
+
         for league_id, season in seasons:
+            finished_count = _finished_count(conn, league_id, season)
+            if build_state.get((league_id, season)) == finished_count:
+                skipped += 1
+                continue
+
             if (league_id, season) in PARTIAL_SEASON_PARTITIONS:
                 print(
                     f"跳过 silver 赛季级聚合(部分赛季,非完整赛季数据): "
@@ -368,6 +431,7 @@ def build_silver() -> None:
                 conn, "silver_goal_minute_buckets", SILVER_GOAL_MINUTE_BUCKETS_COLUMNS, bucket_rows
             )
 
+            _save_build_state(conn, league_id, season, finished_count, utc_now_iso())
             conn.commit()
             print(
                 f"[{league_id} {season}] team_rows={len(team_rows)} ou_rows={len(ou_rows)} "
@@ -376,7 +440,7 @@ def build_silver() -> None:
     finally:
         conn.close()
 
-    print("=== Silver 聚合完成 ===")
+    print(f"=== Silver 聚合完成(重建 {len(seasons) - skipped} 个分区,跳过 {skipped} 个无变化分区) ===")
 
 
 if __name__ == "__main__":

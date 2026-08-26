@@ -50,7 +50,6 @@ from backend.db.connections import connect_rw, tx
 from backend.db.paths import PROJECT_ROOT, data_dir
 from backend.db.util import new_uuid, utc_now_iso
 
-BACKEND_DIR = PROJECT_ROOT / "backend"
 ERROR_SUMMARY_MAX = 500
 SUBPROCESS_TAIL_MAX = 2000
 
@@ -383,8 +382,17 @@ REGISTRY: dict[str, dict] = {
     },
     "core_silver_build": {
         "kind": "subprocess",
-        "argv": [sys.executable, "silver/build_silver.py"],
-        "cwd": str(BACKEND_DIR),
+        # 2026-08-26:改用 -m 包路径 + cwd=PROJECT_ROOT(与紧邻的 odds_silver_build
+        # 统一)。旧写法(脚本路径 + cwd=BACKEND_DIR)只把 <repo>/backend 塞进
+        # sys.path,仓库根从不在 sys.path 里;build_silver.py 顶部的扁平布局
+        # import(`from db import ...`)能工作,但 2026-08-25 f9cf2a3 在函数体内
+        # 新增的包风格 import(`from backend.db.util import utc_now_iso`,build_silver.py
+        # 第 90 行)解析不到 `backend` 包,ModuleNotFoundError 在真正写入 silver 表时
+        # 才炸,导致 core_silver_build 每 30 分钟必然失败(silver 五张表停在
+        # 2026-08-25T13:24 不再更新)。-m 启动会把 PROJECT_ROOT 放进 sys.path[0],
+        # 两种 import 风格都能解析,不需要改 build_silver.py 本体。
+        "argv": [sys.executable, "-m", "backend.silver.build_silver"],
+        "cwd": str(PROJECT_ROOT),
         "max_attempts": 1,
         "timeout_seconds": 1800,
         "backoff_seconds": 0,
