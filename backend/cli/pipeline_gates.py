@@ -24,6 +24,8 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
                                    漂移新增 WARNING(CLAUDE.md §6.3)
   G13 unknown_enum_value          enum 型列出现 known_values.py 登记外取值 WARNING
   G14 extra_json_unknown_key      球队统计 extra_json 出现白名单外新键 WARNING
+  G15 fixture_round_gap           数字轮次出现整轮空缺(中途接入联赛的历史场次
+                                   漏采,CLAUDE.md §6.3)                CRITICAL
 
 数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
 不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
@@ -75,6 +77,16 @@ G10_MIN_TEAM_MATCHES = 20            # 少于这个样本数不判(coord/officia
 # 定为基线的约 2.5 倍(5%),只在真正的坐标系漂移(球场朝向反了/换了坐标
 # 约定,那种漂移会把不相等率推到远高于个位数)时才触发。
 G10_MAX_MISMATCH_RATE = 0.05
+
+# G15:整轮消失的判据(2026-08-27,巴甲 268 缺 215/380 场事故——赛程同步只写
+# 未完赛行,中途接入的联赛历史已完赛场次永久漏采,见
+# backend/cli/backfill_fixtures.py 头注释)。行数/最大轮次太小时数据本身还
+# 不足以判断"轮次消失"还是"赛季刚开始",跳过不误报。
+G15_MIN_ROWS = 20
+G15_MIN_MAX_ROUND = 5
+# 已知例外(联赛真实存在结构性轮次缺口,不是数据丢失):今天为空,保留位置
+# 供将来发现真实赛制特例时登记,不要把这当成放宽阈值的入口。
+G15_EXEMPT: set[tuple[int, str]] = set()
 
 
 def _parse_iso(ts: str) -> datetime:
@@ -552,6 +564,57 @@ def _gate_extra_json_unknown_key(conn_core, now_iso) -> dict:
     }
 
 
+def _gate_fixture_round_gap(conn_core) -> dict:
+    """G15:按 (League_ID, Season) 取数字轮次(GLOB '[0-9]*',排除 final/bronze/
+    1-4 这类季后赛/分组制标签),expected=1..max(present)。任何整轮为空即
+    CRITICAL——不设 WARNING 分支,因为 max_round 本身来自 present 集合,
+    "缺最后一轮"在构造上不可能发生,内部整轮为空只可能是真实数据丢失。
+
+    只遍历 LEAGUE_META(与 fixtures_window_empty 等其它门同一惯例)——孤儿
+    联赛(不在 LEAGUE_META 的旧联赛,如 86/110/140/146)天然被排除,不需要
+    第二份黑名单,详见 backend/cli/backfill_fixtures.py 头注释。
+
+    LEAGUE_META 17 个生产联赛全量校准过(2026-08-27):268/57/61 命中真实缺口,其余全部
+    缺 0 轮,含非数字轮次的日职联(223)/澳超(113)/分组制韩K联(9080)零误报。
+    "轮次不满员"(数量少于该赛季众数)被明确否决过——澳超季后赛赛制会让
+    27/28 轮判定为"不满员",做成信号会在两周内被当噪音关掉(同 G10 注释里
+    记过的教训)。
+    """
+    rows = conn_core.execute(
+        """SELECT League_ID, Season, Match_Round FROM dim_match
+           WHERE League_ID IN ({}) AND Match_Round GLOB '[0-9]*'""".format(
+            ",".join(str(lid) for lid in LEAGUE_META)
+        )
+    ).fetchall()
+    by_key: dict[tuple[int, str], set[int]] = {}
+    for r in rows:
+        # GLOB '[0-9]*' 只挡开头,"1/4"/"1-2"这类混合标签开头是数字仍会漏进来,
+        # 必须严格 isdigit() 才当真正的数字轮次(否则 int() 直接崩,被外层
+        # 通用 gate_error 兜底吞成误导性的 WARNING,而不是这里该有的 OK/CRITICAL)。
+        if not r["Match_Round"].isdigit():
+            continue
+        by_key.setdefault((int(r["League_ID"]), r["Season"]), set()).add(int(r["Match_Round"]))
+
+    violations = []
+    for (lid, season), rounds in sorted(by_key.items()):
+        if (lid, season) in G15_EXEMPT:
+            continue
+        if len(rounds) < G15_MIN_ROWS:
+            continue
+        max_round = max(rounds)
+        if max_round < G15_MIN_MAX_ROUND:
+            continue
+        missing = sorted(set(range(1, max_round + 1)) - rounds)
+        if missing:
+            violations.append({
+                "league_id": lid, "league": _league_name(lid), "season": season,
+                "max_round": max_round, "rows_present": len(rounds),
+                "missing_rounds": missing[:15], "missing_count": len(missing),
+            })
+    return {"gate": "fixture_round_gap", "level": CRITICAL if violations else OK,
+            "violations": violations}
+
+
 # ── 汇总与告警 ───────────────────────────────────────────────────────
 
 # 门 → notify 的 source(P0 白名单来源见 backend/notify.P0_ALERT_SOURCES;
@@ -571,6 +634,7 @@ _GATE_ALERT_SOURCE = {
     "season_label_drift": "season_label_drift",
     "unknown_enum_value": "unknown_enum_value",
     "extra_json_unknown_key": "extra_json_unknown_key",
+    "fixture_round_gap": "fixture_round_gap",
 }
 
 
@@ -596,6 +660,7 @@ def run(now_iso: str | None = None, notify_alerts: bool = True) -> dict:
             ("season_label_drift", lambda: _gate_season_label_drift(conn_core)),
             ("unknown_enum_value", lambda: _gate_unknown_enum_value(conn_core)),
             ("extra_json_unknown_key", lambda: _gate_extra_json_unknown_key(conn_core, now)),
+            ("fixture_round_gap", lambda: _gate_fixture_round_gap(conn_core)),
         )
         for gate_name, check in checks:
             try:

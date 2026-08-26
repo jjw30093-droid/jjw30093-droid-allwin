@@ -316,6 +316,22 @@ poll_windows.py` 的代码注释同样把这三条标注为下限）：
   **标识"这行数据属于哪个时间分区/赛季/批次"的值，能派生就绝不手填；
   必须外部提供时只认来源回报的值，且写入端要有与派生一致性的存储层校验**——
   "必填参数"只是把静默错误变成大声错误，仍不是正确性保证。
+- **赛程同步（`schedule_sync_multi`/`ingest_future_fixtures.py`）只写"尚未完赛"
+  的比赛**（`rows_from_payload()` 明确跳过 `status=='Finish'` 的行，交给
+  `ingest_league.py` 的完整比赛流程处理）。这意味着**任何在赛季中途才接入的
+  联赛，接入那一刻已经踢完的比赛永久缺失，且没有任何定时任务会补上**——赛程
+  同步此后只增量写"未来"，不会回头补"过去"（2026-08-27 真实事故：巴甲 268
+  接入时缺 215/380 场，荷甲 57/葡超 61 各缺 1 轮，全部是"整轮消失"而非随机
+  丢失，此前无任何质量门能发现，用户侧表现为联赛页赛程残缺、Silver 聚合球队
+  数偏少）。中途接入的联赛必须补跑一次
+  `python -m backend.cli.backfill_fixtures --league-id <id> --season <season>`
+  （dry-run 默认，加 `--commit` 才真正写入；骨架和明细成对补，不允许只补
+  骨架——那会造出 `status='Finish'` 但比分为 NULL 的行，比缺失更糟）；
+  质量门 G15 `fixture_round_gap`（`backend/cli/pipeline_gates.py`）负责在忘了
+  补跑时按"数字轮次整轮为空"发现并 CRITICAL。`rows_from_payload()` 的这个
+  `continue` 本身不删除——删掉它会让常规 T+7 同步每轮都写入 `Finish` 但无
+  比分的行，等于把这次的故障模式产品化；正确的收口是"接入流程末尾补跑一次
+  `backfill_fixtures`"，不是改写常规同步的语义。
 
 ### 6.4 时间共现
 

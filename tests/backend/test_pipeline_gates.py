@@ -400,6 +400,132 @@ class TestNotifySuppression:
         assert _alert_rows() == []
 
 
+def _seed_round(conn, mid, league_id, season, round_label, kickoff="2026-08-12T12:00:00Z"):
+    conn.execute(
+        """INSERT INTO dim_match
+           (Match_ID, Season, League_ID, Date, Home_Team_ID, Away_Team_ID,
+            Home_Team_Name, Away_Team_Name, status, Match_Round, kickoff_at_utc,
+            kickoff_precision, kickoff_source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Finish', ?, ?, 'exact', 'fotmob:fixtures')""",
+        (mid, season, league_id, kickoff[:10], mid * 10, mid * 10 + 1,
+         f"Home{mid}", f"Away{mid}", round_label, kickoff),
+    )
+
+
+class TestFixtureRoundGap:
+    """G15:数字轮次整轮消失(2026-08-27,巴甲 268 缺 215/380 场事故)。"""
+
+    def test_contiguous_rounds_ok(self, data_dir):
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
+        for r in range(1, 21):
+            _seed_round(conn_core, 6000 + r, 268, season, str(r))
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "OK"
+        assert g["violations"] == []
+
+    def test_268_shape_critical(self, data_dir):
+        """1-3 缺,4 在,5-20 缺,21-38 在(268 真实形态:前段整体消失,后段完整)。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
+        present_rounds = [4] + list(range(20, 39))
+        mid = 6100
+        for r in present_rounds:
+            _seed_round(conn_core, mid, 268, season, str(r))
+            mid += 1
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "CRITICAL"
+        v = next(x for x in g["violations"] if x["league_id"] == 268)
+        assert v["max_round"] == 38
+        for expected_missing in (1, 2, 3, 5):
+            assert expected_missing in v["missing_rounds"]
+
+    def test_57_shape_critical_missing_first_round(self, data_dir):
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 57, "2026-08-12T12:00:00Z")
+        for r in range(2, 22):
+            _seed_round(conn_core, 6200 + r, 57, season, str(r))
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "CRITICAL"
+        v = next(x for x in g["violations"] if x["league_id"] == 57)
+        assert v["missing_rounds"] == [1]
+
+    def test_non_numeric_rounds_ignored(self, data_dir):
+        """final/bronze/1-4 这类非数字轮次标签不参与轮次连续性判断。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 113, "2026-08-12T12:00:00Z")
+        mid = 6300
+        for r in range(1, 21):
+            _seed_round(conn_core, mid, 113, season, str(r))
+            mid += 1
+        for label in ("final", "bronze", "1/4"):
+            _seed_round(conn_core, mid, 113, season, label)
+            mid += 1
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "OK"
+
+    def test_orphan_league_excluded(self, data_dir):
+        """孤儿联赛(登记在 dim_league_season_regime 但不在 LEAGUE_META 的旧
+        联赛,如 86)即便缺一大片轮次也不报——遍历只走 LEAGUE_META,不需要
+        第二份黑名单(CLAUDE.md §6.3 站长决定:86/110/140/146 不动)。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        orphan_id = 86
+        assert orphan_id not in __import__(
+            "backend.queries.leagues", fromlist=["LEAGUE_META"]
+        ).LEAGUE_META
+        season = _derived_season(conn_core, orphan_id, "2026-01-01T12:00:00Z")
+        mid = 6400
+        for r in list(range(20, 26)) + [40]:  # present 分散在两段,缺 26-39,足够触发
+            _seed_round(conn_core, mid, orphan_id, season, str(r), kickoff="2026-01-01T12:00:00Z")
+            mid += 1
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "OK"
+        assert all(v["league_id"] != orphan_id for v in g["violations"])
+
+    def test_short_season_skipped(self, data_dir):
+        """行数 < G15_MIN_ROWS 或 max_round < G15_MIN_MAX_ROUND 时不判——
+        赛季刚开始的正常状态,不是数据丢失。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
+        _seed_round(conn_core, 6500, 268, season, "3")  # 缺 1、2,但样本太小
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "OK"
+        assert g["violations"] == []
+
+    def test_alert_row_written_and_job_not_failed(self, data_dir):
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
+        mid = 6600
+        for r in [4] + list(range(20, 39)):
+            _seed_round(conn_core, mid, 268, season, str(r))
+            mid += 1
+        conn_core.commit()
+        conn_core.close()
+        report = pg.run(now_iso=NOW, notify_alerts=True)
+        assert report["level"] == "CRITICAL"
+        rows = _alert_rows()
+        assert any(r["source"] == "fixture_round_gap" for r in rows)
+
+
 class TestWorkerJobShape:
     def test_gate_findings_do_not_fail_the_job(self, data_dir):
         """质量门"发现问题"≠任务失败:runner 的 pipeline_gates 任务应 succeeded,

@@ -289,6 +289,56 @@ def ingest_season_tables(client: FotMobClient, league_id: int, season: str) -> N
           f"fact_season_player_stats={len(player_rows)}")
 
 
+def ingest_matches_sequential(
+    targets: list,
+    *,
+    league_id: int,
+    sleep: float = 0.3,
+    sleep_jitter: float = 0.5,
+    cooldown_window: int = 10,
+    cooldown_fail_rate: float = 0.8,
+    cooldown_seconds: float = 90.0,
+) -> tuple[list, list]:
+    """逐场调用 ingest_match(),按失败率熔断——提取自 _run()(2026-08-27,供
+    backend/cli/backfill_fixtures.py 复用),行为不变、只是不再打印汇总/重试
+    命令(不同调用方想要的收尾文案不同,交回调用方自己拼)。
+
+    targets 每项需要 {"match_id", "utc"}(utc 用于取 date,可为 None)。
+    返回 (ok_match_ids, fail_match_ids)。
+    """
+    ok: list = []
+    fail: list = []
+    recent = deque(maxlen=cooldown_window)
+    total = len(targets)
+    for i, f in enumerate(targets, 1):
+        mid = f["match_id"]
+        date = _utc_to_date(f.get("utc"))
+        try:
+            ingest_match(mid, league_id=league_id, date=date)
+            ok.append(mid)
+            recent.append(True)
+        except Exception as e:
+            print(f"match_id={mid} 失败: {e}")
+            fail.append(mid)
+            recent.append(False)
+
+        # 失败率熔断：最近 N 场里坏得太狠，大概率是代理池进入了坏时段
+        # （之前诊断过 0~30% 成功率的情况），与其原速率把整季请求额度都
+        # 空耗在这个坏窗口上，不如先冷却一下，给轮换池换到健康节点的机会。
+        if len(recent) == recent.maxlen:
+            fail_rate = recent.count(False) / len(recent)
+            if fail_rate >= cooldown_fail_rate:
+                print(f"最近 {len(recent)} 场失败率 {fail_rate:.0%} "
+                      f"≥ {cooldown_fail_rate:.0%}，疑似代理池进入坏时段，"
+                      f"冷却 {cooldown_seconds:.0f}s 后继续")
+                time.sleep(cooldown_seconds)
+                recent.clear()
+
+        if i < total:
+            time.sleep(sleep + random.uniform(0, sleep_jitter))
+    return ok, fail
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--league-id", type=int, default=47)
@@ -371,36 +421,17 @@ def _run(args) -> None:
     total = len(targets)
     print(f"共 {total} 场待落库(league_id={args.league_id}, season={args.season})")
 
-    ok, fail = [], []
-    recent = deque(maxlen=args.cooldown_window)
-    for i, f in enumerate(targets, 1):
-        mid = f["match_id"]
-        date = _utc_to_date(f.get("utc"))
-        try:
-            # 不再传 season(2026-08-25,CLAUDE.md §6.3):Season 已由上面的
-            # 骨架落库(回声校验)写入,明细抓取不碰赛季。
-            ingest_match(mid, league_id=args.league_id, date=date)
-            ok.append(mid)
-            recent.append(True)
-        except Exception as e:
-            print(f"match_id={mid} 失败: {e}")
-            fail.append(mid)
-            recent.append(False)
-
-        # 失败率熔断：最近 N 场里坏得太狠，大概率是代理池进入了坏时段
-        # （之前诊断过 0~30% 成功率的情况），与其原速率把整季请求额度都
-        # 空耗在这个坏窗口上，不如先冷却一下，给轮换池换到健康节点的机会。
-        if len(recent) == recent.maxlen:
-            fail_rate = recent.count(False) / len(recent)
-            if fail_rate >= args.cooldown_fail_rate:
-                print(f"最近 {len(recent)} 场失败率 {fail_rate:.0%} "
-                      f"≥ {args.cooldown_fail_rate:.0%}，疑似代理池进入坏时段，"
-                      f"冷却 {args.cooldown_seconds:.0f}s 后继续")
-                time.sleep(args.cooldown_seconds)
-                recent.clear()
-
-        if i < total:
-            time.sleep(args.sleep + random.uniform(0, args.sleep_jitter))
+    # 不再传 season(2026-08-25,CLAUDE.md §6.3):Season 已由上面的骨架落库
+    # (回声校验)写入,明细抓取不碰赛季。
+    ok, fail = ingest_matches_sequential(
+        targets,
+        league_id=args.league_id,
+        sleep=args.sleep,
+        sleep_jitter=args.sleep_jitter,
+        cooldown_window=args.cooldown_window,
+        cooldown_fail_rate=args.cooldown_fail_rate,
+        cooldown_seconds=args.cooldown_seconds,
+    )
 
     print(f"\n=== 逐场落库汇总: {len(ok)}/{total} 成功, {len(fail)} 失败 ===")
     if fail:
