@@ -11,7 +11,12 @@
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OddsTimeline } from "@/components/matches/OddsTimeline";
+import {
+  OddsTimeline,
+  oddsDelta,
+  formatDelta,
+  summarizeMarketMovement,
+} from "@/components/matches/OddsTimeline";
 import { flatOddsGroup } from "@/components/matches/types";
 import { formatBeijingDateTime } from "@/components/matches/zh";
 
@@ -85,35 +90,98 @@ describe("flatOddsGroup 归一(与后端 normalize_odds_payload 同规则)", () 
   });
 });
 
-describe("OddsTimeline 扁平 payload(审计 B2 的直接回归)", () => {
-  it("渲染真实数值而非 —(current_odds 简化态:大数字块,取代原表格)", async () => {
-    mockOddsResponse(fullTimelineBody([FLAT_SNAP]));
+describe("涨跌纯函数(2026-08-26 赔率展示重做)", () => {
+  it("oddsDelta:与初盘比,量化到 2 位小数;up/down/flat/unknown 四态", () => {
+    expect(oddsDelta(1.02, 0.97)).toEqual({ dir: "down", delta: -0.05 });
+    expect(oddsDelta(1.0, 1.25)).toEqual({ dir: "up", delta: 0.25 });
+    expect(oddsDelta(0.97, 0.97)).toEqual({ dir: "flat", delta: 0 });
+    // "没有初盘可比"(单条快照)必须是 unknown,不能被当成 flat——两者语义不同。
+    expect(oddsDelta(null, 0.97)).toEqual({ dir: "unknown", delta: 0 });
+    expect(oddsDelta(0.97, null)).toEqual({ dir: "unknown", delta: 0 });
+    // IEEE754 噪声吸收(与 cleanOddsNum 同一处理):1.93 的 ULP 抖动不产生假变化。
+    expect(oddsDelta(1.9300000000000002, 1.93)).toEqual({ dir: "flat", delta: 0 });
+  });
+
+  it("formatDelta:带符号两位小数,负号用真减号 U+2212", () => {
+    expect(formatDelta(0.25)).toBe("+0.25");
+    expect(formatDelta(-0.05)).toBe("−0.05"); // U+2212,不是 ASCII '-'
+    expect(formatDelta(-0.05).charCodeAt(0)).toBe(0x2212);
+  });
+
+  it("summarizeMarketMovement:按代表字段逐公司计升/平/降/无初盘 家数", () => {
+    const rows = [
+      { initial: { home: 1.0 }, current: { home: 1.2 } }, // up
+      { initial: { home: 2.0 }, current: { home: 1.8 } }, // down
+      { initial: { home: 1.5 }, current: { home: 1.5 } }, // flat
+      { initial: null, current: { home: 1.9 } }, // unknown(只有一条快照)
+    ] as unknown as Parameters<typeof summarizeMarketMovement>[0];
+    expect(summarizeMarketMovement(rows, "home")).toEqual({
+      up: 1,
+      down: 1,
+      flat: 1,
+      unknown: 1,
+      total: 4,
+    });
+  });
+});
+
+describe("OddsTimeline 市场切换 + 每公司行(结构重做)", () => {
+  it("多市场时出 tab,默认选第一个,点击切换只渲染选中市场", async () => {
+    const one = (market: string, over: number) => ({
+      market,
+      company_id: "8",
+      company_name: "Bet365",
+      market_phase: "pre_match",
+      source_updated_at: null,
+      observed_at: "2021-02-02T20:11:45Z",
+      payload:
+        market === "1x2"
+          ? { home: 1.5, draw: 4.0, away: 6.0 }
+          : { over, line: 2.5, under: 0.9 },
+    });
+    mockOddsResponse(fullTimelineBody([one("1x2", 0), one("ou", 0.95)]));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "胜平负(欧赔)" })).not.toBeNull());
+    // 两个市场两个 tab,默认 1x2 选中
+    expect(screen.getByRole("tab", { name: "胜平负(欧赔)" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "大小球" }).getAttribute("aria-selected")).toBe("false");
+    // 默认渲染 1x2:主胜 1.50 在,大小球的 0.95 不在
+    expect(screen.getByText("1.50")).not.toBeNull();
+    expect(screen.queryByText("0.95")).toBeNull();
+    // 切到大小球
+    screen.getByRole("tab", { name: "大小球" }).click();
+    await waitFor(() => expect(screen.queryByText("0.95")).not.toBeNull());
+    expect(screen.queryByText("1.50")).toBeNull(); // 1x2 不再渲染
+  });
+});
+
+describe("OddsTimeline 嵌套 payload(初盘≠最新):两行叠放 + 方向 + 幅度", () => {
+  it("初盘行给初值,最新行给现值并标 ↑/↓ 幅度与方向色", async () => {
+    mockOddsResponse(fullTimelineBody([NESTED_SNAP], { display_mode: "odds_changes" }));
     render(<OddsTimeline matchId={1} />);
     await waitFor(() =>
       expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
     );
-    expect(screen.getByText("0.99")).not.toBeNull();   // 主队水位
-    expect(screen.getByText("1.25")).not.toBeNull();   // 盘口线
-    expect(screen.getByText("0.91")).not.toBeNull();   // 客队水位
-    expect(screen.queryByText("—")).toBeNull();
+    // 初盘行(--ink-3 参考值)
+    expect(screen.getByText("1.02")).not.toBeNull();
+    expect(screen.getByText("0.88")).not.toBeNull();
+    // 最新行现值
+    expect(screen.getByText("0.97")).not.toBeNull(); // home 下调
+    expect(screen.getByText("0.93")).not.toBeNull(); // away 上调
+    // 幅度 + 方向箭头(home 1.02→0.97=−0.05 下;line 1.00→1.25=+0.25 上;away +0.05 上)
+    expect(screen.getByText("↓0.05")).not.toBeNull();
+    expect(screen.getByText("↑0.25")).not.toBeNull();
+    expect(screen.getByText("↑0.05")).not.toBeNull();
+    // 方向色由单元格 data-dir 承载(青绿=up / 板岩蓝=down,§11.2 安全)
+    const downCell = screen.getByText("↓0.05").closest("[data-dir]");
+    expect(downCell?.getAttribute("data-dir")).toBe("down");
+    const upCell = screen.getByText("↑0.25").closest("[data-dir]");
+    expect(upCell?.getAttribute("data-dir")).toBe("up");
+    // 旧的"挤在一格"写法不得回归
+    expect(screen.queryByText("1.02 → 0.97")).toBeNull();
   });
-});
 
-describe("OddsTimeline 嵌套 payload,tier=full 且 display_mode=odds_changes(实时轮询形状,不得回归)", () => {
-  it(
-    "initial 与 latest 不同时,用箭头显示真实变化(2026-08-12 修复:此前只显示" +
-      " latest 却打「初盘」标签,盘口真实变化从未展示)",
-    async () => {
-      mockOddsResponse(fullTimelineBody([NESTED_SNAP], { display_mode: "odds_changes" }));
-      render(<OddsTimeline matchId={1} />);
-      await waitFor(() => expect(screen.queryByText("有变动")).not.toBeNull());
-      expect(screen.getByText("1.02 → 0.97")).not.toBeNull();
-      expect(screen.getByText("0.88 → 0.93")).not.toBeNull();
-      expect(screen.queryByText("—")).toBeNull();
-    },
-  );
-
-  it('initial 与 latest 相同时,不画箭头(避免"1.25 → 1.25"这种噪音)', async () => {
+  it("初盘==最新时:两行都在,方向为持平(—),不产生假箭头", async () => {
     const stable = {
       ...NESTED_SNAP,
       payload: {
@@ -126,34 +194,44 @@ describe("OddsTimeline 嵌套 payload,tier=full 且 display_mode=odds_changes(�
     await waitFor(() =>
       expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
     );
-    expect(screen.getAllByText("0.97").length).toBeGreaterThan(0);
-    // "→" 会出现在数字块/表格之外的说明文案里,这里只需要确认数据单元格
-    // 没有画箭头——用"有变动"标签的缺失来精确断言这一点。
-    expect(screen.queryByText("有变动")).toBeNull();
+    // 初盘 + 最新两行,同值各出现一次
+    expect(screen.getAllByText("0.97").length).toBe(2);
+    // 持平用 "—",不画 ↑/↓
+    expect(screen.queryByText(/↑/)).toBeNull();
+    expect(screen.queryByText(/↓/)).toBeNull();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
 
-describe("OddsTimeline tier=full 但 display_mode=current_odds(样本不足以画走势,退化成简化态)", () => {
-  it("大数字块显示 latest 值,不画箭头、不出表格(2026-08-14 重设计)", async () => {
+describe("OddsTimeline display_mode=current_odds(观测点不足):仍展示可得的初/最新,并如实标注非实时", () => {
+  it("单条含内嵌初盘的快照:两行照出,同时挂'不是实时刷新'提示", async () => {
     mockOddsResponse(fullTimelineBody([NESTED_SNAP]));
     render(<OddsTimeline matchId={1} />);
     await waitFor(() =>
       expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
     );
+    expect(screen.getByText("1.02")).not.toBeNull(); // 内嵌初盘照样展示,不再被藏
     expect(screen.getByText("0.97")).not.toBeNull();
-    expect(screen.getByText("0.93")).not.toBeNull();
-    expect(screen.queryByText("1.02 → 0.97")).toBeNull();
-    expect(screen.queryByText("有变动")).toBeNull();
-    expect(screen.getByText(/不是实时赔率/)).not.toBeNull();
-    // 2026-08-16 权限口径修正:tier 恒为 "full"(MatchOddsAvailableDTO.tier
-    // 已收窄成常量),不再存在"未登录只展示一条,登录查看完整时间线"这一档。
+    expect(screen.getByText(/不是实时刷新/)).not.toBeNull();
     expect(screen.queryByText(/未登录/)).toBeNull();
-    expect(screen.queryByText(/免费登录查看完整时间线/)).toBeNull();
+  });
+
+  it("扁平单条快照(无内嵌初盘):退化成单行现值,不画方向,不假装有初盘", async () => {
+    mockOddsResponse(fullTimelineBody([FLAT_SNAP]));
+    render(<OddsTimeline matchId={1} />);
+    await waitFor(() =>
+      expect(screen.queryByText("Bet365", { selector: "span" })).not.toBeNull(),
+    );
+    expect(screen.getByText("0.99")).not.toBeNull();
+    expect(screen.getByText("1.25")).not.toBeNull();
+    expect(screen.getByText("0.91")).not.toBeNull();
+    expect(screen.queryByText("初盘")).toBeNull(); // 没有初盘就不显示初盘行
+    expect(screen.queryByText(/↑|↓/)).toBeNull();
   });
 });
 
-describe("OddsTimeline 每家公司卡片展示各自的 observed_at(2026-08 审计:CompanyOddsRow.observedAt\n  已经从每条快照的真实 observed_at 正确填充,但 OddsNumbers() 渲染函数从未把它显示出来——\n  这里断言的是「每家公司自己的」时间,不是页面级共享一个新鲜度时间)", () => {
-  it("两家公司(同一市场)observedAt 不同时,各自的北京时间文本都出现在渲染结果里", async () => {
+describe("OddsTimeline 每家公司展示各自的 observed_at(2026-08 审计:每公司自己的观测时间,不是页面级共享时间)", () => {
+  it("两家公司(同一市场)observedAt 不同时,各自时间落在各自那一行", async () => {
     const companyA = {
       ...FLAT_SNAP,
       company_id: "8",
@@ -162,7 +240,7 @@ describe("OddsTimeline 每家公司卡片展示各自的 observed_at(2026-08 审
     };
     const companyB = {
       ...FLAT_SNAP,
-      company_id: "281",
+      company_id: "3",
       company_name: "Crown",
       observed_at: "2021-03-15T09:30:00Z",
     };
@@ -177,18 +255,15 @@ describe("OddsTimeline 每家公司卡片展示各自的 observed_at(2026-08 审
     const timeB = formatBeijingDateTime(companyB.observed_at);
     expect(timeA).not.toBeNull();
     expect(timeB).not.toBeNull();
-    expect(timeA).not.toBe(timeB); // 两家公司的观测时间本就不同,不是同一个共享时间戳
+    expect(timeA).not.toBe(timeB); // 两家公司观测时间本就不同,不是共享时间戳
 
-    // 精确定位到各自公司的数字块(而不是页面上任意位置的时间文本——顶部
-    // "这是 X 采集到的快照" 说明段用的是 freshestRow 单一时间戳,不能被
-    // 误判成"每家公司都展示了"),断言 Bet365 那一块只含自己的时间、
-    // Crown 那一块只含自己的时间。
-    const companyABlock = screen.getByText("Bet365", { selector: "span" }).closest("div");
-    const companyBBlock = screen.getByText("Crown", { selector: "span" }).closest("div");
-    expect(companyABlock?.textContent).toContain(timeA);
-    expect(companyBBlock?.textContent).toContain(timeB);
-    expect(companyABlock?.textContent).not.toContain(timeB);
-    expect(companyBBlock?.textContent).not.toContain(timeA);
+    // .coName 容器(公司名 span 的父 div)里,各含自己的时间、不含对方的。
+    const blockA = screen.getByText("Bet365", { selector: "span" }).closest("div");
+    const blockB = screen.getByText("Crown", { selector: "span" }).closest("div");
+    expect(blockA?.textContent).toContain(timeA);
+    expect(blockB?.textContent).toContain(timeB);
+    expect(blockA?.textContent).not.toContain(timeB);
+    expect(blockB?.textContent).not.toContain(timeA);
   });
 });
 

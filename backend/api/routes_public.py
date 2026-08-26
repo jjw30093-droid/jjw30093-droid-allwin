@@ -527,6 +527,10 @@ def match_odds(
     snapshots = [dict(r) | {"payload": json.loads(r["payload_json"])} for r in rows]
     for s in snapshots:
         s.pop("payload_json", None)
+        # 公司显示名读侧归一(见 q_odds.canonical_company_name):同一家公司的
+        # 多 company_id + 多拼写(Bet365 id 8/"Bet365" vs id 281/"bet 365";
+        # Macauslot id 1 vs 80)在同一页面里以统一品牌名显示,不改存储、不合并行。
+        s["company_name"] = q_odds.canonical_company_name(s["company_id"], s.get("company_name"))
     if not snapshots:
         # 完整时间线口径下无快照 → 尝试旧项目两点摘要,再不行才 unavailable
         return _legacy_odds_fallback(

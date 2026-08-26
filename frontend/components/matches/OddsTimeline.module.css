@@ -63,44 +63,220 @@
   color: var(--ink-2);
 }
 
-/* ── 数字快照块(取代无走势时的表格,2026-08-14 重设计) ────────── */
+/* ── 市场切换胶囊(2026-08-26 赔率展示重做) ────────────── */
 
-.numsBlock {
-  margin-bottom: 10px;
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
-.numsGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 14px 12px;
-  border-radius: var(--r-card);
+.tab,
+.tabOn {
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
   background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.numCell {
+.tab:hover {
+  border-color: var(--border-strong);
+}
+
+.tabOn {
+  border-color: var(--brand-teal);
+  color: var(--brand-teal);
+  font-weight: 600;
+}
+
+.tabOn:focus-visible,
+.tab:focus-visible {
+  outline: 2px solid var(--brand-teal);
+  outline-offset: 1px;
+}
+
+/* ── 聚合升降摘要条 ────────────── */
+
+.sumBar {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  font-size: 13px;
+}
+
+.sumTotal {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sumMove {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--ink-2);
+}
+
+.sumCnt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.sumCnt .bar,
+.bar {
+  display: inline-block;
+  width: 4px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--ink-3);
+}
+
+.sumCnt[data-dir="up"] .bar {
+  background: var(--odds-up);
+}
+
+.sumCnt[data-dir="down"] .bar {
+  background: var(--odds-down);
+}
+
+.sumCnt[data-dir="flat"] .bar {
+  background: var(--ink-3);
+}
+
+.sumPhase {
+  color: var(--ink-3);
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* ── 赔率表:每公司一行(初盘/最新两子行) ────────────── */
+/* 语境列(公司 + 初/最新标识)固定宽,3 个数字列 1fr 等分 —— 不同公司同一列
+ * 天然对齐成一把竖直标尺(借自 NowGoal 的排版规律,§见方案)。 */
+
+.grid {
+  border: 1px solid var(--border);
+  border-radius: 0 0 var(--r-card) var(--r-card);
+  overflow: hidden;
+}
+
+.gridHead,
+.coRow {
+  display: grid;
+  grid-template-columns: minmax(84px, 1.4fr) 30px repeat(3, 1fr);
+  align-items: center;
+}
+
+.gridHead {
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.gridHead > span {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.gridHead > span:first-child {
+  text-align: left;
+}
+
+.coRow {
+  border-bottom: 1px solid var(--border);
+  min-height: 34px;
+}
+
+.coRow:last-child {
+  border-bottom: none;
+}
+
+.coRow[data-two="true"] {
+  grid-template-rows: auto auto;
+}
+
+.coName {
+  grid-column: 1;
+  align-self: center;
+  padding: 5px 8px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
 }
 
-.numCell span:first-child {
+.coRow[data-two="true"] .coName {
+  grid-row: 1 / span 2;
+}
+
+.coLabel {
+  font-size: 13px;
   color: var(--ink);
-  font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 30px;
-  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.numCell span:last-child {
+.coTime {
+  font-size: 11px;
   color: var(--ink-3);
-  font-size: 11.5px;
 }
 
-.sourceLine {
-  margin: 8px 0 0;
+.kind {
+  font-size: 11px;
   color: var(--ink-3);
-  font-size: 11.5px;
+  text-align: center;
+}
+
+.initNum {
+  padding: 3px 4px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.oCell {
+  padding: 3px 4px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.oCell[data-dir="up"] {
+  --dcolor: var(--odds-up);
+  color: var(--dcolor);
+}
+
+.oCell[data-dir="down"] {
+  --dcolor: var(--odds-down);
+  color: var(--dcolor);
+}
+
+.oNum {
+  color: inherit;
+}
+
+.oDelta {
+  margin-left: 3px;
+  font-size: 11px;
+  color: inherit;
 }
 
 .snapshotNote {
@@ -176,12 +352,6 @@
   color: var(--ink-3);
 }
 
-.columnNote {
-  margin: 0 0 10px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 /* 亚洲让球方向标签(主让/客让/平手),紧跟在盘口线数字后面。
  * 12px 是用户可见文字下限(CLAUDE.md §11.2),不跟其它辅助小字一样压到 11px。 */
 .ahTag {
@@ -197,41 +367,9 @@
   white-space: nowrap;
 }
 
-/* 手机端列裁剪:「阶段」「来源更新」两列在实测数据全为常量时收起,
- * 值改到表格上方的 .columnNote 里说一次(见 OddsTimeline.tsx 的
- * uniformPhase/sourceNeverDeclared 判据——数据不是常量时不会加这个
- * class,列会照常显示,不强行砍真实差异)。 */
-@media (max-width: 640px) {
-  .mobileHideCol {
-    display: none;
-  }
-}
-
-/* ── 精简视图:初盘/最新标签 + 完整历史折叠 ────────────── */
-
-.pointTag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 .sourceTag {
   display: block;
   margin-top: 2px;
   font-size: 11px;
-  color: var(--ink-3);
-}
-
-.historyDetails {
-  margin-top: 8px;
-}
-
-.historySummary {
-  cursor: pointer;
-  font-size: 12.5px;
   color: var(--ink-3);
 }

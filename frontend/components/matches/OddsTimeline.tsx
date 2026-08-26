@@ -35,10 +35,6 @@ const PHASE_ZH: Record<string, string> = {
 /** 主题切换时重新解析一遍 CSS 变量的实际取值,ECharts(canvas)拿不到 var()。 */
 const THEME_CHANGE_EVENT = "allwin-theme-change";
 
-function groupLabel(s: OddsSnapshot): string {
-  return `${s.market}|${s.company_id}`;
-}
-
 /** 赔率/盘口线防御性去噪——修正存储层偶发的 IEEE754 尾部误差(真实事故
  * 2026-08-21:某场比赛显示"1.9300000000000002")。后端
  * backend/queries/odds.py::legacy_summary_points 已经在读侧做过同一处理,
@@ -134,10 +130,60 @@ export function summarizeCompanyOdds(
     marketPhase: freshest.market_phase,
     observedAt: freshest.observed_at,
     sourceUpdatedAt: freshest.source_updated_at,
-    initial: changed ? initialCandidate : null,
+    // 2026-08-26:initial 恒保留(不再在未变时置 null)——两行「初盘/最新」
+    // 展示要能显示"这家没动"这个真实信息(初盘==最新),而不是把它和"只抓到
+    // 一条快照、根本没有初盘可比"(initialCandidate 本就为 null)混为一谈。
+    // 涨跌方向改由渲染层逐字段调用 oddsDelta() 判定,不再依赖这个布尔。
+    initial: initialCandidate,
     current,
     changed,
   };
+}
+
+/** 单个赔率字段的涨跌:与初盘比,量化到 2 位小数。
+ * dir="unknown" 专指"没有初盘可比"(单条快照),与"有初盘且没动"(flat)是
+ * 两件不同的事,不能混——前者不画方向,后者要如实标"持平"。 */
+export type OddsDir = "up" | "down" | "flat" | "unknown";
+export function oddsDelta(
+  initial: number | null | undefined,
+  current: number | null | undefined,
+): { dir: OddsDir; delta: number } {
+  const i = cleanOddsNum(initial);
+  const c = cleanOddsNum(current);
+  if (i == null || c == null) return { dir: "unknown", delta: 0 };
+  const d = Math.round((c - i) * 100) / 100;
+  if (d === 0) return { dir: "flat", delta: 0 };
+  return { dir: d > 0 ? "up" : "down", delta: d };
+}
+
+/** 带符号两位小数,负号用真正的 U+2212 减号(与表格等宽数字对齐更整齐)。 */
+export function formatDelta(delta: number): string {
+  return (delta > 0 ? "+" : "−") + Math.abs(delta).toFixed(2);
+}
+
+/** 每个市场"最有代表性的那条水位/赔率",聚合升降摘要按它计数。
+ * 1x2 取主胜赔率(最被关注的单一数字),让球/大小取上盘(主队/大球)水位。
+ * label 会原样进用户可见文案,所以是"主胜""主队水位"这种完整词,不是字段名。 */
+export const ODDS_PRIMARY_FIELD: Record<string, { key: string; label: string }> = {
+  "1x2": { key: "home", label: "主胜" },
+  ah: { key: "home", label: "主队水位" },
+  ou: { key: "over", label: "大球水位" },
+  corners_ou: { key: "over", label: "大球水位" },
+};
+
+export type MarketMovement = { up: number; down: number; flat: number; unknown: number; total: number };
+
+/** 一个市场里,各公司的代表字段相对初盘涨/跌/平/无初盘 各多少家。
+ * 纯计数、纯描述统计——不做"说明市场看好谁"这类归因(§2.1 文案纪律)。 */
+export function summarizeMarketMovement(
+  rows: CompanyOddsRow[],
+  primaryKey: string,
+): MarketMovement {
+  const m: MarketMovement = { up: 0, down: 0, flat: 0, unknown: 0, total: rows.length };
+  for (const r of rows) {
+    m[oddsDelta(r.initial?.[primaryKey], r.current?.[primaryKey]).dir] += 1;
+  }
+  return m;
 }
 
 type ChartColors = { axis: string; grid: string; win: string; draw: string; loss: string };
@@ -203,40 +249,147 @@ function build1x2Chart(
   };
 }
 
-/** 一家公司一个市场的快照数字块:大数字 + 小标签,取代原来的表格行。 */
-function OddsNumbers({ market, row }: { market: string; row: CompanyOddsRow }) {
-  const fields = MARKET_FIELDS[market] ?? [];
-  const values = row.current ?? row.initial;
+/** 一个数字单元格:数值 + 可选的涨跌方向注释(箭头 + 带符号幅度)。
+ * 主数值恒用 --ink(中性、权威),不被方向色染——方向色只落在小号注释上,
+ * 避免和 §11.2 里青绿="选中"的语义在密集表格里打架;方向另由 ↑/↓ 箭头和
+ * +/− 符号双通道编码,色盲用户不依赖颜色也能读。 */
+function OddsCell({
+  value,
+  initial,
+  showDelta,
+}: {
+  value: number | null | undefined;
+  initial: number | null | undefined;
+  showDelta: boolean;
+}) {
+  const { dir, delta } = oddsDelta(initial, value);
   return (
-    <div className={styles.numsBlock}>
-      <div className={styles.numsGrid}>
-        {fields.map((f) => {
-          const dirTag = market === "ah" && f.key === "line" ? ahDirectionZh(values?.[f.key]) : null;
-          return (
-            <div key={f.key} className={styles.numCell}>
-              <span className="num">
-                {renderOddsNum(values?.[f.key])}
-                {dirTag && <span className={styles.ahTag}>{dirTag}</span>}
-              </span>
-              <span>{f.label}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className={styles.sourceLine}>
-        <span>{row.companyLabel}</span>
-        <span aria-hidden> · </span>
-        <span>{MARKET_ZH[market] ?? market}</span>
-        <span aria-hidden> · </span>
-        <span>{PHASE_ZH[row.marketPhase] ?? row.marketPhase}</span>
-        <span aria-hidden> · </span>
-        {/* 这一行赔率具体是哪个时刻观测到的——每家公司各自的 observed_at,
-            不是页面级共享一个新鲜度时间(不同公司同一市场的最后观测时间
-            可能不一样)。 */}
-        <span>
+    <span className={styles.oCell} data-dir={showDelta ? dir : "unknown"}>
+      <span className={`num ${styles.oNum}`}>{renderOddsNum(value)}</span>
+      {showDelta && dir !== "unknown" && (
+        <span className={styles.oDelta} aria-hidden>
+          {dir === "flat" ? "—" : (dir === "up" ? "↑" : "↓") + formatDelta(delta).slice(1)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** 一家公司一行(内含"初盘/最新"两子行)。有初盘可比时两行;只有单条快照
+ * (initial 缺失)时退化成单行"最新",不假装有初盘。 */
+function CompanyRow({ market, row }: { market: string; row: CompanyOddsRow }) {
+  const fields = MARKET_FIELDS[market] ?? [];
+  const hasInitial = row.initial != null;
+  const lineTag =
+    market === "ah" ? ahDirectionZh(row.current?.line ?? row.initial?.line) : null;
+  return (
+    <div className={styles.coRow} data-two={hasInitial}>
+      <div className={styles.coName}>
+        <span className={styles.coLabel}>{row.companyLabel}</span>
+        {lineTag && <span className={styles.ahTag}>{lineTag}</span>}
+        <span className={styles.coTime}>
           <LocalTime iso={row.observedAt} />
         </span>
-      </p>
+      </div>
+      {hasInitial && (
+        <>
+          <span className={styles.kind}>初盘</span>
+          {fields.map((f) => (
+            <span key={`i-${f.key}`} className={`num ${styles.initNum}`}>
+              {renderOddsNum(row.initial?.[f.key])}
+            </span>
+          ))}
+        </>
+      )}
+      <span className={styles.kind}>{hasInitial ? "最新" : ""}</span>
+      {fields.map((f) => (
+        <OddsCell
+          key={`c-${f.key}`}
+          value={row.current?.[f.key]}
+          initial={row.initial?.[f.key]}
+          showDelta={hasInitial}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** 一个市场的完整块:聚合升降摘要 + 表头 + 各公司行。 */
+function MarketBlock({
+  market,
+  companyRows,
+  phaseNote,
+}: {
+  market: string;
+  companyRows: CompanyOddsRow[];
+  phaseNote: string | null;
+}) {
+  const fields = MARKET_FIELDS[market] ?? [];
+  const primary = ODDS_PRIMARY_FIELD[market];
+  const move = primary ? summarizeMarketMovement(companyRows, primary.key) : null;
+  const hasMovement = move != null && move.up + move.down + move.flat > 0;
+  return (
+    <div className={styles.marketBlock}>
+      <div className={styles.sumBar}>
+        <span className={styles.sumTotal}>{companyRows.length} 家公司</span>
+        {hasMovement && move && primary && (
+          <span className={styles.sumMove}>
+            {primary.label}
+            <span className={styles.sumCnt} data-dir="up">
+              <i className={styles.bar} /> {move.up} 家上调
+            </span>
+            <span className={styles.sumCnt} data-dir="flat">
+              <i className={styles.bar} /> {move.flat} 家不变
+            </span>
+            <span className={styles.sumCnt} data-dir="down">
+              <i className={styles.bar} /> {move.down} 家下调
+            </span>
+          </span>
+        )}
+        {phaseNote && <span className={styles.sumPhase}>{phaseNote}</span>}
+      </div>
+      <div className={styles.grid} role="table" aria-label={`${MARKET_ZH[market] ?? market}赔率`}>
+        <div className={styles.gridHead} role="row">
+          <span role="columnheader">公司</span>
+          <span role="columnheader" aria-hidden />
+          {fields.map((f) => (
+            <span key={f.key} role="columnheader">
+              {f.label}
+            </span>
+          ))}
+        </div>
+        {companyRows.map((row) => (
+          <CompanyRow key={`${market}|${row.companyId}`} market={market} row={row} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 市场切换胶囊(只列出该场真实存在的市场)。 */
+function MarketTabs({
+  markets,
+  active,
+  onSelect,
+}: {
+  markets: string[];
+  active: string;
+  onSelect: (m: string) => void;
+}) {
+  return (
+    <div className={styles.tabs} role="tablist" aria-label="赔率市场">
+      {markets.map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={m === active}
+          className={m === active ? styles.tabOn : styles.tab}
+          onClick={() => onSelect(m)}
+        >
+          {MARKET_ZH[m] ?? m}
+        </button>
+      ))}
     </div>
   );
 }
@@ -246,6 +399,9 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [themeTick, setThemeTick] = useState(0);
+  // 选中的市场 tab。存"用户点过的那个",真正生效的 active 在 render 里用
+  // markets.includes() 兜底解析(市场集合随数据变化,存 null 时回落到第一个)。
+  const [pickedMarket, setPickedMarket] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -405,10 +561,13 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
     );
   }
 
-  const markets = Array.from(new Set(resp.snapshots.map((s) => s.market)));
   const observationCount = resp.observation_count ?? resp.snapshots.length;
 
-  // 每个市场归并出的公司行,数字块(简化态/完整态都要用)按这份数据渲染
+  // 市场顺序固定为 1x2 → ah → ou → corners_ou(用户熟悉的排序),只保留该场
+  // 真实存在的。每个市场按公司归并出"初盘/最新"行。
+  const MARKET_ORDER = ["1x2", "ah", "ou", "corners_ou"];
+  const present = new Set(resp.snapshots.map((s) => s.market));
+  const markets = MARKET_ORDER.filter((m) => present.has(m));
   const marketRows = markets.map((market) => {
     const rows = resp.snapshots.filter((s) => s.market === market);
     const fieldKeys = (MARKET_FIELDS[market] ?? []).map((f) => f.key);
@@ -421,186 +580,52 @@ export function OddsTimeline({ matchId }: { matchId: number }) {
     const companyRows = Array.from(byCompany.values()).map((list) =>
       summarizeCompanyOdds(list, fieldKeys),
     );
-    return { market, rows, companyRows };
+    return { market, companyRows };
   });
-  const freshestRow = marketRows[0]?.companyRows[0] ?? null;
 
-  if (!isFullTimeline) {
-    // 简化态(样本不足以画走势):只给数字块 + 说明,不出表格。
-    return (
-      <div>
-        {marketRows.map(({ market, companyRows }) => (
-          <div key={market} className={styles.marketBlock}>
-            {companyRows.map((row) => (
-              <OddsNumbers key={`${market}|${row.companyId}`} market={market} row={row} />
-            ))}
-          </div>
-        ))}
-        {freshestRow && (
-          <p className={styles.snapshotNote}>
-            <LocalTime iso={freshestRow.observedAt} /> 抓到的，
-            <b>不是实时赔率</b>。这场只抓到 <span className="num">{observationCount}</span>{" "}
-            个点，画不出走势。
-          </p>
-        )}
-      </div>
-    );
-  }
+  // 生效的市场:用户点过且仍存在则用它,否则回落到第一个(市场集合变化时的兜底)。
+  const active = pickedMarket && markets.includes(pickedMarket) ? pickedMarket : markets[0];
+  const activeBlock = marketRows.find((b) => b.market === active) ?? marketRows[0];
 
-  // 手机端列裁剪:「阶段」「来源更新」窄屏挤占版面,但这两列的值不一定
-  // 每场都是常量(阶段有 pre_match/in_play/unknown 三种真实取值,来源更新
-  // 目前只有 NowGoal 一个来源、恒不声明,但不能硬编码这个假设)——只在
-  // 这一批快照里实测确实全部相同时才收起该列并改成表格上方一句话说明,
-  // 出现真实差异时老实保留整列,不能为了窄屏好看丢真实数据。
+  // 「阶段」在整批快照里如果只有一个真实取值(几乎恒为"赛前"),就并进摘要条
+  // 一句话,不再占一列;真出现差异(如混入 in_play)时,退回不展示统一阶段句,
+  // 由 CompanyRow 各自的时间承担——不为了好看丢真实差异(§2.1)。
   const allPhases = new Set(resp.snapshots.map((s) => s.market_phase));
   const uniformPhase = allPhases.size === 1 ? [...allPhases][0] : null;
-  const sourceNeverDeclared = resp.snapshots.every((s) => s.source_updated_at == null);
-
-  const header = (fields: { key: string; label: string }[]) => (
-    <thead>
-      <tr>
-        <th>公司</th>
-        <th className={uniformPhase != null ? styles.mobileHideCol : undefined}>阶段</th>
-        {fields.map((f) => (
-          <th key={f.key}>{f.label}</th>
-        ))}
-        <th>采集时间</th>
-        <th className={sourceNeverDeclared ? styles.mobileHideCol : undefined}>来源更新</th>
-      </tr>
-    </thead>
-  );
+  const phaseNote = uniformPhase != null ? (PHASE_ZH[uniformPhase] ?? uniformPhase) : null;
 
   return (
     <div>
-      <p className={styles.tierNote}>
-        赔率变化记录:默认展示每家公司的初盘→最新,完整历史可展开。
-        完整快照时间线(已登录):同一公司同一市场,内容有变化才记录一条。
-        {resp.home_away_inverted &&
-          " 注:该场来源主客方向与本站相反,数值已按本站主客口径换算。"}
-      </p>
+      <MarketTabs markets={markets} active={active} onSelect={setPickedMarket} />
 
-      {chart && (
+      {/* 走势图只在 1x2 市场、且样本足够(odds_changes)时出现;build1x2Chart
+          是 1x2 专用,其它市场的 tab 不画图。图注里点名画的是哪家公司。 */}
+      {chart && active === "1x2" && (
         <div className={styles.chartWrap}>
           <EChart option={chart.option} height={220} ariaSummary={chart.summary} />
         </div>
       )}
 
-      {marketRows.map(({ market, companyRows }) => (
-        <div key={market} className={styles.marketBlock}>
-          {companyRows.map((row) => (
-            <OddsNumbers key={`${market}|${row.companyId}`} market={market} row={row} />
-          ))}
-        </div>
-      ))}
+      {activeBlock && (
+        <MarketBlock
+          market={activeBlock.market}
+          companyRows={activeBlock.companyRows}
+          phaseNote={phaseNote}
+        />
+      )}
 
-      {(uniformPhase != null || sourceNeverDeclared) && (
-        <p className={styles.columnNote}>
-          {uniformPhase != null &&
-            `这批快照都是「${PHASE_ZH[uniformPhase] ?? uniformPhase}」阶段抓到的。`}
-          {sourceNeverDeclared && "这几家公司都没有声明更新时间，统一标注「未声明」。"}
+      {!isFullTimeline && (
+        <p className={styles.snapshotNote}>
+          这些是<b>目前抓到的最新赔率,不是实时刷新</b>。这场只观测到{" "}
+          <span className="num">{observationCount}</span> 个时点,还画不出完整走势。
         </p>
       )}
 
-      {marketRows.map(({ market, rows, companyRows }) => {
-        const fields = MARKET_FIELDS[market] ?? [];
-        const rawRow = (snap: OddsSnapshot, key: string) => {
-          const g = flatOddsGroup(snap.payload);
-          return (
-            <tr key={key}>
-              <td>{snap.company_name || snap.company_id}</td>
-              <td className={uniformPhase != null ? styles.mobileHideCol : undefined}>
-                {PHASE_ZH[snap.market_phase] ?? snap.market_phase}
-              </td>
-              {fields.map((f) => {
-                const val = cleanOddsNum(g?.[f.key]);
-                const dirTag = market === "ah" && f.key === "line" ? ahDirectionZh(val) : null;
-                return (
-                  <td key={f.key} className="num">
-                    {val == null ? "—" : formatOdds(val)}
-                    {dirTag && <span className={styles.ahTag}>{dirTag}</span>}
-                  </td>
-                );
-              })}
-              <td>
-                <LocalTime iso={snap.observed_at} />
-              </td>
-              <td className={sourceNeverDeclared ? styles.mobileHideCol : undefined}>
-                <LocalTime iso={snap.source_updated_at} fallback="未声明" />
-              </td>
-            </tr>
-          );
-        };
-        return (
-          <div key={market} className={styles.marketBlock}>
-            <h4 className={styles.marketTitle}>{MARKET_ZH[market] ?? market}</h4>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                {header(fields)}
-                <tbody>
-                  {companyRows.map((row) => (
-                    <tr key={`${market}|${row.companyId}`}>
-                      <td>
-                        {row.companyLabel}
-                        {row.changed && <span className={styles.pointTag}>有变动</span>}
-                      </td>
-                      <td className={uniformPhase != null ? styles.mobileHideCol : undefined}>
-                        {PHASE_ZH[row.marketPhase] ?? row.marketPhase}
-                      </td>
-                      {fields.map((f) => {
-                        const cur = cleanOddsNum(row.current?.[f.key]);
-                        const init = cleanOddsNum(row.initial?.[f.key]);
-                        const display =
-                          row.changed && init != null && cur != null
-                            ? `${formatOdds(init)} → ${formatOdds(cur)}`
-                            : cur != null
-                              ? formatOdds(cur)
-                              : init != null
-                                ? formatOdds(init)
-                                : "—";
-                        const dirTag =
-                          market === "ah" && f.key === "line" ? ahDirectionZh(cur ?? init) : null;
-                        return (
-                          <td key={f.key} className="num">
-                            {display}
-                            {dirTag && <span className={styles.ahTag}>{dirTag}</span>}
-                          </td>
-                        );
-                      })}
-                      <td>
-                        <LocalTime iso={row.observedAt} />
-                      </td>
-                      <td className={sourceNeverDeclared ? styles.mobileHideCol : undefined}>
-                        <LocalTime iso={row.sourceUpdatedAt} fallback="未声明" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {rows.length > companyRows.length && (
-              <details className={styles.historyDetails}>
-                <summary className={styles.historySummary}>
-                  查看完整历史({rows.length} 条)
-                </summary>
-                <div className={styles.tableWrap}>
-                  <table className={styles.table}>
-                    {header(fields)}
-                    <tbody>
-                      {rows.map((snap, i) =>
-                        rawRow(snap, `${groupLabel(snap)}|${snap.observed_at}|${i}`),
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-            )}
-          </div>
-        );
-      })}
-
       <p className={styles.footNote}>
-        「采集时间」是我们第一次看到这个数字的时间，北京时间。有些公司不说自己什么时候更新的，
-        那一列就写「未声明」。
+        每家公司后面的时间是我们第一次看到该数字的时间(北京时间);「上调/下调」按各公司
+        相对自己初盘的变化计,数值为幅度。
+        {resp.home_away_inverted &&
+          " 该场来源主客方向与本站相反,数值已按本站主客口径换算。"}
       </p>
     </div>
   );

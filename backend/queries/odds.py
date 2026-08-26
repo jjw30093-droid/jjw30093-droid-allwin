@@ -34,6 +34,35 @@ from backend.models.research.market_baseline import (
 # (对未来比赛贡献 0 场,但作为兜底不删)。同场两者都有时优先取 '8'。
 _WIN_PROB_COMPANY_PRIORITY = ("8", "281")
 
+# 公司显示名归一(2026-08-26,读侧,不改存储)。bronze_ng_odds_snap.company_name
+# 直接来自来源抓取,同一家博彩公司在库里既有多个 company_id 也有多种拼写:
+#   Bet365    → id '8'(实时,写作 "Bet365")  + id '281'(历史,写作 "bet 365")
+#   Macauslot → id '1'(写作 "Macauslot")     + id '80'(写作 "macauslot")
+# id '8'/'281' 同为 Bet365 已由上面 _WIN_PROB_COMPANY_PRIORITY 明确;
+# id '1'/'80' 同为 Macauslot 由原始名(大小写差异)判定。实测同一场同一市场内
+# 两个重复 id 不会同时出现(281 只在 1x2、8 只在 ah/ou),所以按 id 映射显示名
+# 是安全的,不会让同一市场出现两行同名公司。保留 Latin 品牌名(不转成
+# "皇冠"/"平博"这类博彩行话),与本站非博彩定位一致;未登记的 id 原样透传
+# (回退到来源名,再回退到 id),绝不吞掉未知来源。
+_COMPANY_DISPLAY_NAME = {
+    "1": "Macauslot",
+    "80": "Macauslot",
+    "8": "Bet365",
+    "281": "Bet365",
+    "177": "Pinnacle",
+    "3": "Crown",
+    "31": "Sbobet",
+}
+
+
+def canonical_company_name(company_id: Any, raw_name: Any) -> str:
+    """company_id → 规范显示名;未登记 id 回退到来源名、再回退到 id。"""
+    mapped = _COMPANY_DISPLAY_NAME.get(str(company_id))
+    if mapped is not None:
+        return mapped
+    name = str(raw_name).strip() if raw_name is not None else ""
+    return name or str(company_id)
+
 def normalize_odds_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """把两种真实 payload 形状归一为扁平字段组。
 
