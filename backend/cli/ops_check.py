@@ -325,9 +325,37 @@ def check_disk(config: OpsConfig | None = None) -> dict:
             "warn_pct": config.disk_warn_pct, "critical_pct": config.disk_critical_pct}
 
 
+def _registered_job_names() -> frozenset[str] | None:
+    """Worker 任务注册表(runner.REGISTRY)里**现存**的任务名。
+
+    用途:job_runs 是永久审计账本,一个任务从代码里删掉之后它的历史行仍在,
+    于是 "SELECT DISTINCT job_name FROM job_runs" 会永远把已退役的任务名捞
+    出来、永远判成 stale_last_success —— 一条永不消失、也无法处理的 WARNING。
+    真正的 CRITICAL 混在这种噪音里会被淹掉(2026-08-29 实际发生过:巴甲 xref
+    CRITICAL 连续 35 小时无人处理,WARNING 通道全是已删除的 WDL 模型任务)。
+
+    延迟导入(不放模块顶层):本模块声明"import 阶段不读取任何环境变量、无副
+    作用",而 runner 会拉起 notify/db 等一串依赖。
+
+    导入失败返回 None → 调用方 fail-open,继续监控全部历史任务名:宁可噪音,
+    也不因为一次导入错误就静默关掉所有任务告警。
+    """
+    try:
+        from backend.worker.runner import REGISTRY
+    except Exception:
+        return None
+    return frozenset(REGISTRY)
+
+
 def check_job_runs(config: OpsConfig | None = None) -> dict:
-    """每个已出现过的任务名的最近一次运行:running 超过阈值 → stuck;
-    failed → warn;记录最后一次成功的时间是否过期。
+    """每个**仍在 Worker 注册表里**的任务名的最近一次运行:running 超过阈值
+    → stuck;failed → warn;记录最后一次成功的时间是否过期。
+
+    job_runs 里存在、但 REGISTRY 里已经没有的任务名 = 已退役(代码里删掉了),
+    仍然列出来供审计,但一律 level=OK、detail='retired_not_in_registry',不再
+    产生任何告警——它永远不会再运行,报 stale 既无法处理也淹没真告警。
+    退役任务被误删而 systemd 单元还在调用它不会被这条规则掩盖:run_job() 对
+    未注册任务直接抛 KeyError,那个单元会响亮失败,是独立于本检查的信号。
 
     查询本身也包在 try/except 里(不只是 connect_ro 那一步)——platform.db 损坏
     到"能连接但一查询就报错"的程度时,check_databases() 已经会把它标成
@@ -347,6 +375,8 @@ def check_job_runs(config: OpsConfig | None = None) -> dict:
             return {"level": OK, "detail": "no_job_runs_table_yet", "jobs": []}
 
         names = [r[0] for r in conn.execute("SELECT DISTINCT job_name FROM job_runs")]
+        # None = 注册表读不到 → fail-open,退回"监控全部历史任务名"的旧行为
+        registered = _registered_job_names()
         overall = OK
         entries = []
         for name in names:
@@ -361,6 +391,15 @@ def check_job_runs(config: OpsConfig | None = None) -> dict:
 
             entry = {"job": name, "last_status": last["status"] if last else None}
             level = OK
+
+            if registered is not None and name not in registered:
+                # 已退役:保留可审计的事实(最后状态/最后成功时间),不参与告警
+                entry["retired"] = True
+                entry["detail"] = "retired_not_in_registry"
+                entry["last_success_at"] = last_success["finished_at"] if last_success else None
+                entry["level"] = OK
+                entries.append(entry)
+                continue
 
             if last and last["status"] == "running":
                 started = _parse_iso(last["started_at"])

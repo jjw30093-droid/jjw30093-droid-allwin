@@ -123,6 +123,22 @@ class TestCheckDisk:
 
 
 class TestCheckJobRuns:
+    # check_job_runs 只对"仍在 Worker 注册表里"的任务名告警(已退役任务不再
+    # 产生永不消失的 stale WARNING),所以本类里的假任务名必须真的注册进
+    # REGISTRY——用 runner 自带的 register_job()(它的 docstring 写明就是给
+    # 测试注入临时任务用的),而不是把断言放宽成"退役也算数"。
+    FAKE_JOBS = ("test_job", "stuck_job", "fresh_job", "never_ok_job", "stale_success_job")
+
+    @pytest.fixture(autouse=True)
+    def _register_fake_jobs(self):
+        from backend.worker import runner
+
+        for name in self.FAKE_JOBS:
+            runner.register_job(name, argv=["/bin/true"], cwd=str(PROJECT_ROOT))
+        yield
+        for name in self.FAKE_JOBS:
+            runner.REGISTRY.pop(name, None)
+
     def _insert_job_run(self, conn, job_name, status, started_at=None, finished_at=None):
         from backend.db.util import new_uuid
 
@@ -187,6 +203,48 @@ class TestCheckJobRuns:
         result = ops_check.check_job_runs()
         job = next(j for j in result["jobs"] if j["job"] == "stale_success_job")
         assert job["level"] == ops_check.WARN
+
+
+    def test_retired_job_not_in_registry_is_ok_not_stale(self, data_dir):
+        """已从 REGISTRY 删除的任务:哪怕最后一次成功早已过期,也不再告警。
+
+        回归 2026-08-29:WDL 模型系统被删除后,model_predict/prediction_register/
+        postmatch_settle/metrics_rebuild 在 job_runs 里留下历史行,让 ops_check
+        永久报 stale_last_success,把真正的 CRITICAL 淹没在 WARNING 噪音里。
+        """
+        conn = connect_rw("platform")
+        self._insert_job_run(conn, "deleted_wdl_job", "succeeded",
+                             _utc_iso(minus_hours=ops_check.JOB_STALE_HOURS + 100),
+                             _utc_iso(minus_hours=ops_check.JOB_STALE_HOURS + 100))
+        conn.commit()
+        conn.close()
+
+        from backend.worker import runner
+        assert "deleted_wdl_job" not in runner.REGISTRY
+
+        result = ops_check.check_job_runs()
+        job = next(j for j in result["jobs"] if j["job"] == "deleted_wdl_job")
+        assert job["retired"] is True
+        assert job["detail"] == "retired_not_in_registry"
+        assert job["level"] == ops_check.OK
+        # 仍然可审计:最后一次成功时间没有被抹掉
+        assert job["last_success_at"] is not None
+
+    def test_registry_unavailable_falls_back_to_monitoring_all(self, data_dir, monkeypatch):
+        """注册表读不到时 fail-open:退回旧行为继续告警,不静默关掉全部任务告警。"""
+        conn = connect_rw("platform")
+        self._insert_job_run(conn, "some_unregistered_job", "succeeded",
+                             _utc_iso(minus_hours=ops_check.JOB_STALE_HOURS + 10),
+                             _utc_iso(minus_hours=ops_check.JOB_STALE_HOURS + 10))
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(ops_check, "_registered_job_names", lambda: None)
+        result = ops_check.check_job_runs()
+        job = next(j for j in result["jobs"] if j["job"] == "some_unregistered_job")
+        assert job.get("retired") is None
+        assert job["level"] == ops_check.WARN
+        assert job["detail"] == "stale_last_success"
 
 
 class TestCheckSourceHealth:
