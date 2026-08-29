@@ -360,11 +360,30 @@ def run_due_poll(now_iso: str | None = None, offline_fixture: str | None = None)
         ):
             xref_by_match[int(r["fotmob_match_id"])] = dict(r)
 
-        # ── 日程发现:窗口内未映射比赛 → 按北京日期节流抓日程并解析 ──
-        unmapped = [c for c in candidates if int(c["Match_ID"]) not in xref_by_match]
-        if unmapped:
+        # ── 日程发现:窗口内"还没定下映射"的比赛 → 按北京日期节流抓日程并解析 ──
+        # 触发集合 = 完全没有 xref 行的 ∪ 停在 needs_review 的。
+        #
+        # needs_review 必须计入(2026-08-29 修):_rescore_existing_needs_review
+        # (2026-08-24 引入,专为"补好别名后把冻结的行捡回来")只在重新遇到该场
+        # 的日程行时才会被调用,而日程行只有在这里按北京日期抓取后才存在。原先
+        # 只看"完全没有 xref 行",于是一个 needs_review 场次除非碰巧和某个
+        # unmapped 场次同一个北京日期,否则永远等不到重新评分——别名补得再对也
+        # 救不回来,那次修复对它想救的场次结构上不可达。
+        # 实测(2026-08-29):巴甲 5103607/5103610 落在北京日期 08-31、葡超
+        # 5887612 与巴甲 5103613 落在 09-01,这两天 unmapped 均为 0,四场会一路
+        # 零赔率到开球;同批的 5103609(无 xref 行)反而能触发抓取,连带把同一天
+        # 的 5103611 顺便救回来——修复与否只取决于"当天有没有别的场次没建行",
+        # 这不是可依赖的行为。
+        # 代价可控:抓取本身仍由 is_due(..., INTERVAL_FAR_SECONDS) 按北京日期
+        # 节流,计入更多日期只是让这些日期有机会到期,不改变单日期的抓取频率。
+        pending = [
+            c for c in candidates
+            if (x := xref_by_match.get(int(c["Match_ID"]))) is None
+            or x["review_status"] == "needs_review"
+        ]
+        if pending:
             seed_team_aliases(conn_odds, conn_core)
-            for date in _beijing_dates_for(unmapped):
+            for date in _beijing_dates_for(pending):
                 if not is_due(conn_odds, SOURCE_NOWGOAL_SCHEDULE, date,
                               INTERVAL_FAR_SECONDS, now):
                     continue
