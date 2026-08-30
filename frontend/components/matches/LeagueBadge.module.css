@@ -3,6 +3,15 @@
   flex: none;
   object-fit: contain;
   vertical-align: middle;
+  border-radius: 4px;
+}
+
+/* 深色模式:好几家联赛徽标(英超、欧冠、法甲文字标等)是透明底上的深色/黑色
+ * 图形,直接放在深色卡片上会隐形。加一块固定浅色底衬(不跟随主题反转,
+ * 衬色本身就是要跟深色卡片对比)——已经自带不透明底色/浅色圆环的徽标
+ * (Championship、J1 League 等)叠在上面不受影响。 */
+:global(html[data-theme="dark"]) .badge {
+  background: #eef2f2;
 }
 
 .size14 {

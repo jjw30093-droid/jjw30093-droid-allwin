@@ -9,6 +9,7 @@
  * (宪法 §12);每张卡固定渲染 数据截止时间 + 模型版本,导出 PNG 自然携带。
  */
 
+import Image from "next/image";
 import { SpecChart } from "@/components/charts/SpecCharts";
 import { fmtUtc } from "./api";
 import type {
@@ -222,9 +223,18 @@ export function SceneCard({
             </li>
           ))}
         </ul>
-        <p className={styles.disclaimer}>
-          本内容为赛前数据分析,不构成任何投注建议;比赛存在不确定性。
-        </p>
+        <div className={styles.disclaimerRow}>
+          <Image
+            src="/brand/logo-mark.png"
+            alt=""
+            width={420}
+            height={420}
+            className={styles.outroMascot}
+          />
+          <p className={styles.disclaimer}>
+            本内容为赛前数据分析,不构成任何投注建议;比赛存在不确定性。
+          </p>
+        </div>
         <p className={styles.hashLine}>
           分析包 {bundle.bundle_hash.slice(0, 12)} · 生成于{" "}
           {fmtUtc(bundle.built_at)}
@@ -237,8 +247,14 @@ export function SceneCard({
     <div className={styles.card} style={{ width: 1080, height }}>
       <header className={styles.head}>
         <div className={styles.brandRow}>
-          <span className={styles.brand}>欧赢</span>
-          <span className={styles.brandLatin}>ALLWIN</span>
+          <Image
+            src="/brand/logo-badge-256.png"
+            alt=""
+            width={104}
+            height={104}
+            className={styles.brandLogo}
+          />
+          <span className={styles.brand}>喵弟数据研究室</span>
           <span className={styles.sceneTag}>{label}</span>
         </div>
         <div className={styles.matchRow}>

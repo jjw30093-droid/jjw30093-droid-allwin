@@ -26,6 +26,7 @@
  */
 
 import { Suspense, useEffect, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   apiErrorMessage,
@@ -35,7 +36,6 @@ import {
   type MeResponse,
   type PasswordLoginResponse,
 } from "@/lib/api-v1";
-import Image from "next/image";
 import { ENV_TITLE, ScanLoginCard, useEnv } from "@/components/auth/ScanLoginCard";
 import scanStyles from "@/components/auth/ScanLoginCard.module.css";
 import followStyles from "@/components/trust/WechatFollowCard.module.css";
@@ -169,10 +169,19 @@ function LoginBody() {
   return (
     <main className={styles.page}>
       <div className={styles.titleGroup}>
-        <h1 className={styles.title}>{pageTitle}</h1>
-        <p className={styles.note}>
-          第一次扫码会自动建号，不用填手机号。登完自动回到你刚才那页。
-        </p>
+        <Image
+          src="/brand/logo-badge-256.png"
+          alt=""
+          width={48}
+          height={48}
+          className={styles.titleLogo}
+        />
+        <div className={styles.titleCopy}>
+          <h1 className={styles.title}>{pageTitle}</h1>
+          <p className={styles.note}>
+            第一次扫码会自动建号，不用填手机号。登完自动回到你刚才那页。
+          </p>
+        </div>
       </div>
 
       {me?.authenticated && (
@@ -202,7 +211,7 @@ function LoginBody() {
           <div className={followStyles.qrBox}>
             <Image
               src="/brand/wechat-mp-qr.png"
-              alt="欧赢 ALLWIN 公众号二维码"
+              alt="喵弟数据研究室 公众号二维码"
               width={160}
               height={160}
               className={followStyles.qr}
@@ -240,7 +249,16 @@ export default function LoginPage() {
       fallback={
         <main className={styles.page}>
           <div className={styles.titleGroup}>
-            <h1 className={styles.title}>登录</h1>
+            <Image
+              src="/brand/logo-badge-256.png"
+              alt=""
+              width={48}
+              height={48}
+              className={styles.titleLogo}
+            />
+            <div className={styles.titleCopy}>
+              <h1 className={styles.title}>登录</h1>
+            </div>
           </div>
           <ScanCardSkeleton />
         </main>

@@ -26,6 +26,7 @@
  */
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { clientFetch, type GetJson, type MatchListResponse } from "@/lib/api-v1";
 import { marqueeRank, selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
@@ -408,7 +409,17 @@ function ThisWeekSection({ cards, total }: { cards: HomeMatchCard[]; total: numb
         )}
       </header>
       {items.length === 0 ? (
-        <p className={styles.secondaryEmpty}>未来 7 天暂无其他已排期比赛。</p>
+        <div className={styles.emptyState}>
+          <Image
+            src="/brand/logo-mark.png"
+            alt=""
+            width={150}
+            height={150}
+            className={styles.emptyIllustration}
+          />
+          <p className={styles.emptyTitle}>未来 7 天暂无其他已排期比赛</p>
+          <p className={styles.emptyHint}>喵弟先去睡了。新赛程抓到了这儿会自己冒出来。</p>
+        </div>
       ) : (
         // 站长反馈纵向列表不如横滑(2026-08-23),改回横向滚动:容器自身可
         // 横向滚动(<640px),body 不产生横向滚动条;640-899px 与 ≥900px 两档
@@ -465,7 +476,22 @@ export function HomeMatchExperienceLive({
     return <div className={styles.errorBox}>今日比赛暂时无法加载，请稍后再试。</div>;
   }
   if (!featured) {
-    return <div className={styles.errorBox}>暂无已排期的未来比赛。</div>;
+    return (
+      <div className={styles.emptyState}>
+        <Image
+          src="/brand/logo-mark.png"
+          alt=""
+          width={150}
+          height={150}
+          className={styles.emptyIllustration}
+        />
+        <p className={styles.emptyTitle}>暂无已排期的未来比赛</p>
+        <p className={styles.emptyHint}>喵弟先去睡了。新赛程抓到了这儿会自己冒出来。</p>
+        <Link href="/matches?status=finished" className={styles.emptyCta}>
+          去看赛果
+        </Link>
+      </div>
+    );
   }
 
   return (
