@@ -5,6 +5,7 @@
  * 登录态在浏览器端经 /api/v1/me 私有请求水合(宪法 §10.2)。
  */
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -202,12 +203,30 @@ export function SiteNav() {
       <header className={styles.header}>
         <div className={styles.inner}>
           <Link href="/" className={styles.brand}>
-            <span className={styles.brandLine} aria-hidden="true" />
-            <span className={styles.brandNames}>
-              <span className={styles.brandMark}>欧赢</span>
-              <span className={styles.brandSub}>ALLWIN</span>
+            <span className={styles.brandLogo}>
+              <Image
+                src="/brand/logo-badge-white-256.png"
+                alt="喵弟数据研究室"
+                width={40}
+                height={40}
+                className={styles.brandLogoImg}
+                data-variant="light"
+                priority
+              />
+              <Image
+                src="/brand/logo-badge-256.png"
+                alt=""
+                width={40}
+                height={40}
+                className={styles.brandLogoImg}
+                data-variant="dark"
+                priority
+              />
             </span>
-            <span className={styles.brandDescriptor}>足球数据与比赛分析</span>
+            <span className={styles.brandNames}>
+              <span className={styles.brandMark}>喵弟数据研究室</span>
+              <span className={styles.brandDescriptor}>足球数据研究室</span>
+            </span>
           </Link>
           <nav className={styles.nav} aria-label="主导航">
             <Suspense fallback={<NavLinks pathname={pathname} status={null} />}>

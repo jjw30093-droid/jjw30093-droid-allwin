@@ -149,8 +149,8 @@ export function SafeSceneCard({
       <div className={styles.safeRight} aria-hidden />
       <header className={styles.header}>
         <div className={styles.brandLine}>
-          <strong>欧赢</strong>
-          <span>ALLWIN · MATCH LAB</span>
+          <strong>喵弟数据研究室</strong>
+          <span>MEOWDI · MATCH LAB</span>
           <b>{data.index}</b>
         </div>
         <div className={styles.contextLine}>

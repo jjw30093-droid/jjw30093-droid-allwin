@@ -41,6 +41,16 @@ export function WechatFollowCard({
   return (
     <section className={styles.card} data-variant={variant} aria-labelledby="wechat-follow-title">
       <div className={styles.body}>
+        <div className={styles.brandRow}>
+          <Image
+            src="/brand/logo-badge-256.png"
+            alt=""
+            width={34}
+            height={34}
+            className={styles.brandLogo}
+          />
+          <span className={styles.brandName}>喵弟数据研究室</span>
+        </div>
         <h2 id="wechat-follow-title" className={styles.title}>
           每天一场比赛的完整数据图
         </h2>
@@ -56,7 +66,7 @@ export function WechatFollowCard({
         <div className={styles.qrBox}>
           <Image
             src={QR_SRC}
-            alt="欧赢 ALLWIN 公众号二维码"
+            alt="喵弟数据研究室 公众号二维码"
             width={200}
             height={200}
             className={styles.qr}

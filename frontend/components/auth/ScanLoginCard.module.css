@@ -39,7 +39,7 @@
   background: #a8c1ca;
 }
 .card[data-state="waiting"] .dot {
-  background: var(--brand-lime);
+  background: var(--brand-gold);
   animation: breathe 1.6s ease-in-out infinite;
 }
 .card[data-state="ending"] .dot {
@@ -102,7 +102,7 @@
   font-family: var(--font-latin);
   font-size: 20px;
   font-weight: 700;
-  color: var(--brand-lime);
+  color: var(--brand-gold);
   line-height: 1;
 }
 .countdownNumSmall {
@@ -138,7 +138,7 @@
 .progressFill {
   display: block;
   height: 100%;
-  background: var(--brand-lime);
+  background: var(--brand-gold);
   transition: width 1s linear;
 }
 .card[data-state="ending"] .progressFill,
@@ -186,7 +186,7 @@
 .qrSkeleton {
   width: 200px;
   height: 200px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   animation: pulse 1.4s ease-in-out infinite;
@@ -211,7 +211,7 @@
 .qrCanvas {
   display: block;
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
   padding: 6px;
 }
@@ -291,7 +291,7 @@
   justify-content: center;
   gap: 10px;
   background: rgba(238, 242, 242, 0.72);
-  border-radius: 8px;
+  border-radius: 12px;
 }
 .expiredText {
   margin: 0;
@@ -375,7 +375,7 @@
 }
 .steps li {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   padding: 9px 0;
@@ -388,19 +388,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: var(--surface-soft);
-  color: var(--brand-teal);
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--gold-hi-accent);
+  color: var(--brand-gold-deep);
   font-family: var(--font-latin);
   font-size: 12px;
   font-weight: 700;
-}
-@media (min-width: 640px) {
-  .stepNum {
-    background: var(--surface);
-  }
 }
 .stepText {
   font-size: 13.5px;

@@ -15,8 +15,20 @@
 
 .titleGroup {
   display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.titleLogo {
+  flex: none;
+  border-radius: 50%;
+}
+
+.titleCopy {
+  display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .eyebrow {
@@ -132,8 +144,8 @@
 .perksBlock {
   background: var(--surface-soft);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--brand-teal);
-  border-radius: 0;
+  border-left: 3px solid var(--brand-gold);
+  border-radius: 12px;
   padding: 13px 14px;
 }
 

@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * 所有页面都"通过",守卫直接失效。
  *
  * 同一份测试顺带钉死 title.template 迁移(2026-08-21)的结果:app/ 下任何
- * `title:` 后面不得再出现手写的 "— 欧赢 ALLWIN" 后缀,否则会和根 layout 的
+ * `title:` 后面不得再出现手写的 "— 喵弟数据研究室" 后缀,否则会和根 layout 的
  * template 拼成双后缀。
  */
 
@@ -98,17 +98,17 @@ describe("页面标题覆盖率守卫", () => {
     }
   });
 
-  it('title.template 迁移(2026-08-21)不得留下双后缀:app/ 下 title 不得再手写 "— 欧赢 ALLWIN"', () => {
+  it('title.template 迁移(2026-08-21)不得留下双后缀:app/ 下 title 不得再手写 "— 喵弟数据研究室"', () => {
     // 根 layout.tsx 自己(template 定义 + 说明注释)是唯一允许出现这段文本的地方。
     const offenders: string[] = [];
     for (const f of pageFiles) {
       const rel = relative(APP_DIR, f);
-      if (readFileSync(f, "utf-8").includes("— 欧赢 ALLWIN")) offenders.push(rel);
+      if (readFileSync(f, "utf-8").includes("— 喵弟数据研究室")) offenders.push(rel);
     }
     // layout.tsx 里除根 layout 外,子 layout(reco/login/account)也不该出现。
     for (const rel of ["reco/layout.tsx", "login/layout.tsx", "account/layout.tsx"]) {
       const full = join(APP_DIR, rel);
-      if (existsSync(full) && readFileSync(full, "utf-8").includes("— 欧赢 ALLWIN")) {
+      if (existsSync(full) && readFileSync(full, "utf-8").includes("— 喵弟数据研究室")) {
         offenders.push(rel);
       }
     }

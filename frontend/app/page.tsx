@@ -1,4 +1,5 @@
 import { cache, Suspense } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   serverGet,
@@ -18,9 +19,19 @@ type Freshness = GetJson<"/api/v1/status/freshness">;
 function SectionSkeleton({ lines = 3 }: { lines?: number }) {
   return (
     <div className={styles.skeleton} aria-hidden>
-      {Array.from({ length: lines }, (_, i) => (
-        <span key={i} className={styles.skelLine} />
-      ))}
+      <Image
+        src="/brand/logo-mark.png"
+        alt=""
+        width={88}
+        height={88}
+        className={styles.skeletonMascot}
+      />
+      <div className={styles.skeletonLines}>
+        {Array.from({ length: lines }, (_, i) => (
+          <span key={i} className={styles.skelLine} />
+        ))}
+        <span className={styles.skeletonHint}>喵弟正在翻数据…</span>
+      </div>
     </div>
   );
 }
@@ -222,7 +233,7 @@ async function DailyPicksSection() {
               <span>命中/未中/走水</span>
             </div>
             <div className={styles.recoSummaryItem}>
-              <b className="num">
+              <b className={`num${overview.net_units > 0 ? ` ${styles.recoNetPositive}` : ""}`}>
                 {overview.net_units >= 0 ? "+" : ""}
                 {overview.net_units.toFixed(2)}
               </b>

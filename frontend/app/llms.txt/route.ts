@@ -18,7 +18,7 @@ function buildLlmsTxt(): string {
       `- [${nameZh}赛程与比赛](${SITE_URL}/league/${id}/matches):赛程、比分与比赛数据入口`,
   ).join("\n");
 
-  return `# 欧赢 ALLWIN
+  return `# 喵弟数据研究室
 
 > 面向中文用户的足球数据与比赛分析站点:联赛积分榜、赛程比分、球队与球员数据、
 > 模型完整概率、完整赔率时间线与公开可核验的预测战绩——全部内容匿名即可
