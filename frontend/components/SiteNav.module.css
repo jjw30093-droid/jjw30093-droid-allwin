@@ -11,7 +11,7 @@
   max-width: 1180px;
   margin: 0 auto;
   padding: 0 16px;
-  min-height: 62px;
+  min-height: 66px;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -20,47 +20,61 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   text-decoration: none;
   flex-shrink: 0;
 }
 
-.brandLine {
-  width: 5px;
-  height: 30px;
-  background: var(--brand-teal);
-  box-shadow: 4px 0 0 var(--brand-lime);
+.brandLogo {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+/* 浅色模式用白底版本,深色模式用深蓝底版本(白底徽章在浅色导航栏上会融进
+ * 背景,失去圆形边界感)。两张图都在 DOM 里,靠 data-theme 属性选择器切换
+ * display,不用 JS 判断主题——SSR 时 <html data-theme> 已经由 layout.tsx
+ * 的阻塞脚本设好,不会有切换闪烁。 */
+.brandLogoImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.brandLogoImg[data-variant="dark"] {
+  display: none;
+}
+
+:global(html[data-theme="dark"]) .brandLogoImg[data-variant="light"] {
+  display: none;
+}
+
+:global(html[data-theme="dark"]) .brandLogoImg[data-variant="dark"] {
+  display: block;
 }
 
 .brandNames {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  gap: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .brandMark {
   font-family: var(--font-cn);
   font-weight: 900;
-  font-size: 20px;
+  font-size: 19px;
   color: var(--ink);
-  letter-spacing: -0.06em;
-}
-
-.brandSub {
-  font-family: var(--font-latin);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--brand-teal);
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+  letter-spacing: -0.05em;
+  line-height: 1.15;
 }
 
 .brandDescriptor {
-  border-left: 1px solid var(--border-strong);
-  padding-left: 10px;
   color: var(--ink-3);
   font-size: 11px;
+  line-height: 1.1;
   white-space: nowrap;
 }
 
@@ -102,8 +116,9 @@
   right: 9px;
   bottom: 3px;
   left: 9px;
-  height: 2px;
-  background: var(--brand-teal);
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--brand-gold);
 }
 
 .actions {
@@ -121,10 +136,10 @@
   display: inline-block;
   padding: 8px 17px;
   border-radius: var(--r-control);
-  background: var(--brand-navy);
-  color: #fff;
+  background: var(--brand-gold);
+  color: var(--on-gold);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 900;
   text-decoration: none;
 }
 
@@ -144,37 +159,25 @@
   display: none;
 }
 
-@media (max-width: 980px) {
-  .brandDescriptor {
-    display: none;
-  }
-}
-
 @media (max-width: 640px) {
   .inner {
-    min-height: 52px;
+    min-height: 56px;
     justify-content: space-between;
     gap: 12px;
     padding: 0 12px;
   }
 
-  .brandLine {
-    width: 4px;
-    height: 26px;
-    box-shadow: 3px 0 0 var(--brand-lime);
-  }
-
-  .brandSub {
-    display: inline;
-    font-size: 9.5px;
-  }
-
-  .brandNames {
-    display: grid;
+  .brandLogo {
+    width: 36px;
+    height: 36px;
   }
 
   .brandMark {
-    font-size: 19px;
+    font-size: 17px;
+  }
+
+  .brandDescriptor {
+    font-size: 10px;
   }
 
   .nav {
@@ -245,7 +248,7 @@
   }
 
   .bottomActive {
-    color: var(--brand-teal);
+    color: var(--brand-gold-deep);
   }
 
   .bottomActive::before {
@@ -253,7 +256,12 @@
     top: -4px;
     width: 30px;
     height: 3px;
-    background: var(--brand-lime);
+    border-radius: 2px;
+    background: var(--brand-gold);
     content: "";
+  }
+
+  :global(html[data-theme="dark"]) .bottomActive {
+    color: var(--brand-gold);
   }
 }

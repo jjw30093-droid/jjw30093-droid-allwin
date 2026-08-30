@@ -43,4 +43,37 @@ MANUAL_OVERRIDES: list[tuple[int, str, str]] = [
     (10273, "Atletico Paranaense",
      "NowGoal 拼写 Atletico(无 h),FotMob 拼写 Athletico(带 h)——单字母拼写差异,"
      "不是结构性词缀/变音符,_canonical_form 不猜拼写,人工核实收录"),
+
+    # ── 2026-08-29 追加:巴甲(268)/葡超(61)州名后缀批次 ──────────────────
+    # 触发原因:pipeline_gates 的 xref_unmapped_upcoming 连续 35 小时 CRITICAL
+    # ——巴甲未来 72h 的 10 场里 5 场、葡超 1 场卡在 needs_review 采不到任何赔率。
+    # 根因与上面 Internacional RS 完全同类:NowGoal 给巴西俱乐部名加州名/城市
+    # 后缀,FotMob 用简称,双边队名对不上 → 只能模糊匹配 → 达不到
+    # AUTO_OK_THRESHOLD=0.9 → needs_review → 该场不可轮询。
+    #
+    # 核实方式(与 2026-08-24 那批同一标准,不是从字面猜):调生产 NowGoal 日程
+    # 接口取回原文队名,用 titan_id ↔ FotMob Match_ID 的开球时刻**逐分钟一致**
+    # 加**对手方队名已能精确解析**双重锁定身份,再逐条确认是同一支球队。
+    # 收录前用 _alias_team_ids() 实测确认每条当前确实解析为空集(∅):
+    # Gremio (RS) 和 Sporting Braga 实测已能由 _canonical_form 解析,故不收录。
+    (10272, "Atletico Mineiro",
+     "NowGoal 用全称 Mineiro,FotMob 用缩写 Atletico-MG——MG 是米纳斯吉拉斯州缩写,"
+     "展开成全称不是词缀规则能覆盖的"),
+    (7733, "Vitoria BA",
+     "NowGoal 带州名后缀 BA(巴伊亚州),FotMob 用简称 Vitoria——不能用通用规则去掉"
+     "州名,否则会跟葡超 Vitoria de Guimaraes(7844)等同名球队撞名"),
+    (9863, "Fluminense RJ",
+     "NowGoal 带州名后缀 RJ(里约州),FotMob 用简称 Fluminense"),
+    (9808, "Corinthians Paulista (SP)",
+     "NowGoal 用全称加州名括注 Paulista (SP),FotMob 用简称 Corinthians"),
+    (197693, "Chapecoense SC",
+     "NowGoal 带州名后缀 SC(圣卡塔琳娜州),FotMob 用 Chapecoense AF——两边各带"
+     "一个不同的后缀,去后缀规则两头都不安全"),
+    (1626, "Remo Belem (PA)",
+     "NowGoal 带城市+州名 Belem (PA),FotMob 用简称 Remo"),
+    (9767, "Coritiba PR",
+     "NowGoal 带州名后缀 PR(巴拉那州),FotMob 用简称 Coritiba"),
+    (7844, "Vitoria Guimaraes",
+     "NowGoal 省略介词 de,FotMob 用 Vitoria de Guimaraes——不能用通用规则去掉"
+     "Guimaraes 当城市名,否则会跟巴甲 Vitoria(7733)撞名"),
 ]

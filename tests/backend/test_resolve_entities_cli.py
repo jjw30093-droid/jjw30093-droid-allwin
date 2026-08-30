@@ -34,13 +34,26 @@ def _alert_rows():
 
 class TestResolveEntitiesSeeding:
     def test_seeds_manual_overrides(self, data_dir):
+        from backend.ingest.provider_alias_overrides import MANUAL_OVERRIDES
+
         result = run()
-        assert result["manual_override_added"] == 11   # provider_alias_overrides.py 当前 11 条
+        # 断言"全部条目都真的种进去了",而不是一个每次加别名都要手改的魔数:
+        # 空库首次种入时 added 必须等于表长度——少一条就说明有条目被撞名
+        # fail-closed 拒绝了(seed_manual_alias_overrides 的既定行为),那正是
+        # 这条断言要抓的回归。
+        assert result["manual_override_added"] == len(MANUAL_OVERRIDES)
         conn = connect_ro("odds")
         got = {r[0] for r in conn.execute(
             "SELECT canonical_team_id FROM dim_team_alias WHERE alias='wolves'")}
+        # 2026-08-29 巴甲/葡超州名后缀批次:抽查两条,确认新条目确实可解析
+        got_br = {r[0] for r in conn.execute(
+            "SELECT canonical_team_id FROM dim_team_alias WHERE alias='fluminense rj'")}
+        got_pt = {r[0] for r in conn.execute(
+            "SELECT canonical_team_id FROM dim_team_alias WHERE alias='vitoria guimaraes'")}
         conn.close()
         assert got == {8602}
+        assert got_br == {9863}
+        assert got_pt == {7844}
 
     def test_idempotent_across_all_three_seed_functions(self, data_dir):
         run()

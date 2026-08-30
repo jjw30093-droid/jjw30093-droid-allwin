@@ -1,5 +1,5 @@
 {
-  "asset_version": 1,
+  "asset_version": 2,
   "match_id": 5104968,
   "surface": "homepage_feature",
   "exports": [
@@ -8,16 +8,16 @@
       "width": 1600,
       "height": 900,
       "usage": "homepage_desktop",
-      "svg_sha256": "0b82326f6d55463b420e36a64b4c510ab2e3266eefceb8d6247e0d463f9af57e",
-      "png_sha256": "cf8cd5cad43134102c0052bb168774d179213224b9e0c4b0c056a7e40bdad605"
+      "svg_sha256": "416b89e623c4df48338ad0d8a2934489e4294dda3485a85cae6150c54f718edf",
+      "png_sha256": "1e3056438bde69c368d0c6d6bd88d3ddca20385b6c59065c5993c86169f28866"
     },
     {
       "name": "match-5104968-1080x1350",
       "width": 1080,
       "height": 1350,
       "usage": "homepage_mobile_and_social",
-      "svg_sha256": "b468fc251343699644fd49b2066ed967b43dacba3d12fdc187a9acd115ec8b07",
-      "png_sha256": "1a72b1f9952571025c7fc40cf6b4dbfe7f5e6bf339f92a5985bf24f3d48806cd"
+      "svg_sha256": "f54933df25c3a890e165635f87ea152f0100870c70b8b09afdeb8be90537c0ff",
+      "png_sha256": "697355d33de85c27cf6f3de3814f1b239e065bf6371f0cadef64b4c810aba31b"
     }
   ],
   "source_bundle": "runtime/studio/match-5104968-analysis-bundle.json",
@@ -46,7 +46,7 @@
   "locked_fields_in_public_asset": [],
   "notes": [
     "Only the highest public probability is rendered.",
-    "MARKET_BASELINE is an odds de-margining result, not an ALLWIN model forecast.",
+    "MARKET_BASELINE is an odds de-margining result, not a Meowdi Data Lab model forecast.",
     "Missing data is not replaced with zero."
   ]
 }

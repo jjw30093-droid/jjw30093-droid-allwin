@@ -185,6 +185,36 @@ if [ -f "$DEST/platform.db" ]; then
   fi
 fi
 
+# ── 归属服务用户:否则 release.sh 造的备份 opscheck 读不了 ──
+#
+# 2026-08-29 真实生产发现(与上面 prune 那段是同一个"多用户共用备份根"问题的
+# 另一半):umask 077 让备份目录是 700,只有创建者可进。日常备份由 systemd 以
+# allwin 用户跑,没问题;但 release.sh 通常由 ubuntu 手动执行,造出的目录属主是
+# ubuntu —— 而 check_backup() 只看**最新**一份备份,于是发布之后 allwin-opscheck
+# (User=allwin)每轮都在 backup_metadata.json 上 PermissionError 崩溃,一直到
+# 次日 allwin 自己的定时备份产生新目录才恢复。运维监控被自己的发布打瘫,而且
+# 每次发布都复发(2026-08-26 两次发布留下的 ubuntu 属主目录是同一现象)。
+#
+# 修法是改属主而不是放宽权限:保持 700/600 的既定安全姿态(umask 077 的本意),
+# 只把 owner 换成服务实际运行的用户,与 allwin 自己跑出来的备份完全一致。
+# 已经是该用户时直接跳过(日常定时备份路径不需要 sudo、不触发密码提示);
+# 换用户执行时才退避到 sudo -n(同 prune 与 release.sh::cleanup_old_releases()
+# 的既有先例)。两者都失败只警告——备份本身已经完整可用,不因归属问题把
+# 整个备份判成失败、进而被 release.sh 误判成"备份失败不执行 migration"。
+SERVICE_USER="${ALLWIN_SERVICE_USER:-allwin}"
+if [ "$(id -un)" != "$SERVICE_USER" ] && id -u "$SERVICE_USER" >/dev/null 2>&1; then
+  for path in "$DEST" "$MANIFEST_ROOT/$TS"; do
+    [ -e "$path" ] || continue
+    if chown -R "$SERVICE_USER:$SERVICE_USER" "$path" 2>/dev/null \
+       || sudo -n chown -R "$SERVICE_USER:$SERVICE_USER" "$path" 2>/dev/null; then
+      echo "-- 归属: $path → $SERVICE_USER(服务用户可读)"
+    else
+      echo "-- 归属: 警告:$path 改属主到 $SERVICE_USER 失败,以 $SERVICE_USER 运行的 \
+ops_check 可能读不到这份备份(备份本身完整)" >&2
+    fi
+  done
+fi
+
 # ── 保留最近 KEEP 份(只 prune 完整备份目录,不误删 .incomplete-*/manifests) ──
 #
 # 2026-08-25 真实生产发现:旧备份目录可能由不同用户创建(如 systemd 定时器以

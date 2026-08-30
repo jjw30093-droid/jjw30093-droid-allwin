@@ -314,6 +314,93 @@ class TestT7DiscoveryWindow:
         assert s2["not_due_skipped"] == 0  # 72h 外仍算"窗口外",不计入节流计数
 
 
+class TestNeedsReviewDrivesScheduleDiscovery:
+    """needs_review 场次必须自己驱动日程发现(2026-08-29 真实回归)。
+
+    _rescore_existing_needs_review(2026-08-24 引入)只在重新遇到该场的日程行
+    时才会被调用,而日程行只有在 run_due_poll 的"日程发现"里按北京日期抓取后
+    才存在。原实现的触发集合只含"完全没有 xref 行"的比赛,于是一个停在
+    needs_review 的场次除非碰巧和某个未建行场次同一个北京日期,否则永远等不到
+    重新评分——补好别名也救不回来,零赔率一路到开球。
+
+    本用例刻意让窗口内**只有**这一场、且它**已经有** xref 行:旧实现下
+    unmapped 为空 → 不抓日程 → 不重新评分 → auto_ok 与赔率都是 0。
+    """
+
+    MID = 7601
+    TITAN = "888601"
+    HOME_ID, AWAY_ID = 411, 422
+
+    def test_frozen_needs_review_match_is_rediscovered_and_polled(self, data_dir, tmp_path):
+        kickoff = NOW + timedelta(hours=30)
+        js_tuple = (
+            f"{kickoff.year},{kickoff.month - 1},{kickoff.day},"
+            f"{kickoff.hour:02d},{kickoff.minute:02d},00"
+        )
+        schedule_data = (
+            "var A=Array(2);\nvar matchcount=1;\n"
+            f"A[1]=[{self.TITAN},87,{self.HOME_ID},{self.AWAY_ID},"
+            f"'Alaves','Getafe','{js_tuple}',-1,0];"
+        )
+        fixture_path = tmp_path / "frozen.json"
+        fixture_path.write_text(
+            json.dumps({
+                "schedule_data": schedule_data,
+                "odds": {self.TITAN: _odds_payload("2.00")},
+            }),
+            encoding="utf-8",
+        )
+
+        conn = connect_rw("core")
+        try:
+            conn.execute(
+                "INSERT INTO dim_match (Match_ID, Season, League_ID, Date, Home_Team_ID,"
+                " Away_Team_ID, Home_Team_Name, Away_Team_Name, status, Match_Round,"
+                " kickoff_at_utc, kickoff_precision, kickoff_source)"
+                " VALUES (?, '2026/2027', 87, ?, ?, ?, 'Alaves', 'Getafe', 'NotStarted', '1', ?,"
+                " 'exact', 'fotmob:fixtures')",
+                (self.MID, _iso(kickoff)[:10], self.HOME_ID, self.AWAY_ID, _iso(kickoff)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # 模拟"当初别名还不全时被冻结"的行:已有 xref 行,但停在 needs_review。
+        odds_conn = connect_rw("odds")
+        try:
+            odds_conn.execute(
+                "INSERT INTO dim_match_xref (fotmob_match_id, provider, provider_match_id,"
+                " home_away_inverted, confidence, verified, method, review_status,"
+                " created_at, updated_at)"
+                " VALUES (?, 'nowgoal', ?, 0, 0.5, 0, 'auto', 'needs_review', ?, ?)",
+                (self.MID, self.TITAN, T0, T0),
+            )
+            odds_conn.commit()
+        finally:
+            odds_conn.close()
+
+        summary = run_due_poll(now_iso=T0, offline_fixture=str(fixture_path))
+
+        # 窗口内只有这一场,且它有 xref 行 —— 旧实现在这里不会抓任何日程
+        assert summary["window_candidates"] == 1
+        assert summary["schedule_fetches"] == 1, "needs_review 场次没有驱动日程发现"
+
+        odds_conn = connect_ro("odds")
+        try:
+            row = odds_conn.execute(
+                "SELECT review_status, confidence FROM dim_match_xref WHERE fotmob_match_id=?",
+                (self.MID,),
+            ).fetchone()
+        finally:
+            odds_conn.close()
+        assert row["review_status"] == "auto_ok", "补好别名后仍未被重新评分捡回"
+        assert row["confidence"] == 1.0
+
+        # 真正的目的:被捡回来之后赔率确实采到了
+        assert summary["odds_polled"] == 1
+        assert summary["snapshots_inserted"] >= 1
+
+
 class TestOfflinePipelineE2E:
     def test_full_chain(self, pipeline_core, data_dir, app, tmp_path, fresh_ip):
         # ── 轮 1(T0):日程发现 → xref → 赔率快照 v1 ─────────────

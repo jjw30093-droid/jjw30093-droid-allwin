@@ -4,22 +4,22 @@ import styles from "./about.module.css";
 
 export const metadata: Metadata = {
   title: "关于我们",
-  description:
-    "了解欧赢 ALLWIN 的足球数据来源、分析方式、内容工作流和合作方向。",
+  description: "了解喵弟数据研究室的足球数据来源、分析方式、内容工作流和合作方向。",
 };
 
 /** 与页脚 WechatFollowCard 同一张固定二维码,不走从未配置过的 NEXT_PUBLIC_* 变量。 */
 const WECHAT_QR_SRC = "/brand/wechat-mp-qr.png";
-const WECHAT_MP_NAME = "欧赢 ALLWIN";
+const WECHAT_MP_NAME = "喵弟数据研究室";
 
 export default function AboutPage() {
   return (
     <main className={styles.page}>
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <h1>关于我们</h1>
+          <p className={styles.eyebrow}>ABOUT MEOWDI</p>
+          <h1>关于喵弟</h1>
           <p className={styles.lead}>
-            欧赢是一个面向中文足球用户的独立数据产品。我们把赛程、球队状态、
+            喵弟数据研究室是一个面向中文足球用户的独立数据产品。我们把赛程、球队状态、
             xG、赔率观察和历史记录整理到同一场比赛里，再把同一份数据做成网站、
             图卡和视频内容。
           </p>
@@ -28,16 +28,19 @@ export default function AboutPage() {
           </p>
         </div>
         <figure className={styles.heroMedia}>
-          <Image
-            src="/brand/editorial/getty-2286810893-home-preview.webp"
-            alt="西班牙球员在球场庆祝并手持冠军奖杯"
-            width={1600}
-            height={1082}
-            sizes="(max-width: 760px) calc(100vw - 32px), 48vw"
-            unoptimized
-          />
+          <div className={styles.heroMediaFrame}>
+            <Image
+              src="/brand/logo-mark.png"
+              alt="喵弟数据研究室 logo"
+              width={1600}
+              height={1082}
+              sizes="(max-width: 760px) calc(100vw - 32px), 48vw"
+              unoptimized
+            />
+          </div>
           <figcaption>
-            视觉素材预览 · Getty Images / FIFA
+            <span>品牌形象 · 喵弟与球</span>
+            <span>喵弟数据研究室</span>
           </figcaption>
         </figure>
       </header>

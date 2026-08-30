@@ -1,10 +1,14 @@
 :root {
   color-scheme: light;
 
-  /* 欧赢品牌色：深海蓝骨架 + 赛场青数据 + 荧光黄状态 */
+  /* 喵弟数据研究室品牌色：深海蓝骨架 + 赛场青数据 + logo 金黄强调 */
   --brand-navy: #0d2c3d;
   --brand-teal: #087e78;
-  --brand-lime: #d7ed63;
+  --brand-lime: #d7ed63; /* 旧荧光黄,已停用,迁移完可删 */
+  --brand-gold: #e9c037;
+  --brand-gold-deep: #8a6a0b; /* 金黄在浅底上的文字/描边可读变体 */
+  --gold-hi-accent: #fbf3d8; /* 金黄胶囊/序号底,与全站其余组件共用的 --gold-hi(遗留 teal 别名)区分 */
+  --on-gold: #2a1f05; /* 金黄底上的文字 */
   --brand-red: #e0523d;
   --brand-red-deep: #a9352a;
   --brand-ice: #dceff0;
@@ -84,8 +88,9 @@
   --rate-mid: #e8eeee;
   --rate-low: #d8e0e0;
   /* radius */
-  --r-card: 4px;
-  --r-control: 4px;
+  --r-card: 14px;
+  --r-card-sm: 12px;
+  --r-control: 10px;
   --r-pill: 999px;
   /* depth：只给需要在同屏内压过次级内容的主卡片用，不做通用重阴影 */
   --shadow-card: 0 1px 2px rgba(13, 44, 61, 0.06), 0 4px 12px rgba(13, 44, 61, 0.08);
@@ -114,7 +119,11 @@ html[data-theme="dark"] {
   /* 深色模式仍是体育数据编辑部，不使用霓虹光晕或玻璃拟态。 */
   --brand-navy: #061923;
   --brand-teal: #45b9af;
-  --brand-lime: #d9ee67;
+  --brand-lime: #d9ee67; /* 旧荧光黄,已停用 */
+  --brand-gold: #f0ce55;
+  --brand-gold-deep: #f0ce55;
+  --gold-hi-accent: #3a2e0c;
+  --on-gold: #2a1f05;
   --brand-red: #ef7865;
   --brand-red-deep: #ff9a88;
   --brand-ice: #17343d;
