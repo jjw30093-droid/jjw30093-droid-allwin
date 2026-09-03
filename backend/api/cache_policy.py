@@ -33,6 +33,11 @@ header 列表,不触碰任何 `http.response.body` 消息——StreamingResponse
 from starlette.datastructures import MutableHeaders
 
 NO_STORE = "private, no-store"
+# 公开且身份无关的响应可用的两档共享缓存(供各 route 模块 import,不再各自
+# 重复定义;原定义在 routes_public.py,2026-09 每日公推新增端点需要同一
+# 常量,顺势收敛到缓存策略的单一真源里,字符串值一字节不变)。
+PUBLIC_CACHE = "public, s-maxage=300, stale-while-revalidate=60"
+PUBLIC_CACHE_SHORT = "public, s-maxage=60, stale-while-revalidate=30"
 
 # (method, 完整路径模板) —— APIRoute.path 已经是包含 router prefix 的完整路径
 # (例如 "/api/v1/leagues/{league_id}/fixtures"),不需要再拼前缀。
@@ -63,6 +68,12 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # 与 /report、/markets 同级,全部历史聚合与已采集快照,不区分付费档位。
         ("GET", "/api/v1/matches/{match_id}/preview"),
         ("GET", "/api/v1/media/team-crests/{provider}/{provider_team_id}.png"),
+        # 每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
+        # 响应不随身份变化——与 /api/v1/products 同一性质。带 Cookie 的请求
+        # 仍由上方规则 1 强制 no-store,不会污染共享缓存。注意:
+        # /api/v1/reco/daily(/{slip_id})、/reco/my-access、/reco/overview
+        # 与全部 /admin/reco/* 仍然**不在**本 allowlist 内,继续走 default-deny。
+        ("GET", "/api/v1/reco/public"),
     }
 )
 

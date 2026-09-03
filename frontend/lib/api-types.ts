@@ -591,6 +591,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reco/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reco Public
+         * @description 每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
+         *     不需要登录——与「每日精选」并列的板块,签名里刻意不注入 AuthContext,
+         *     不存在按身份分叉的任何分支,响应对所有人完全一致。这是本文件**唯一**
+         *     进入 PUBLIC_ALLOWLIST 的路径(见 backend/api/cache_policy.py),其余全部
+         *     reco 路径继续维持中间件 default-deny 的 no-store。
+         */
+        get: operations["reco_public_api_v1_reco_public_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reco/daily": {
         parameters: {
             query?: never;
@@ -695,8 +719,9 @@ export interface paths {
         };
         /**
          * Admin List Slips
-         * @description status/date_from/date_to(按 slip_date)均可选,不传即不筛选;total 是
-         *     筛选后的计数,不是全库总数。
+         * @description status/date_from/date_to(按 slip_date)/board 均可选,不传即不筛选;
+         *     total 是筛选后的计数,不是全库总数。board 不传返回两个板块(每日精选/
+         *     每日公推,2026-09 新增)。
          */
         get: operations["admin_list_slips_api_v1_admin_reco_slips_get"];
         put?: never;
@@ -1444,6 +1469,11 @@ export interface components {
             edit_count: number;
             /** Last Edited At */
             last_edited_at: string;
+            /**
+             * Board
+             * @enum {string}
+             */
+            board: "daily_pick" | "daily_public";
             /** Legs */
             legs: components["schemas"]["AdminRecoLegDTO"][];
         };
@@ -3598,6 +3628,28 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * RecoBoardConflictWarningDTO
+         * @description 同一场比赛的同一盘口已被另一个板块的非作废单占用(2026-09,只提醒
+         *     不拦截——写入仍然成功,前端据此展示提示条)。
+         */
+        RecoBoardConflictWarningDTO: {
+            /** Match Id */
+            match_id: number;
+            /** Market */
+            market: string;
+            /** Conflicting Slip Id */
+            conflicting_slip_id: string;
+            /** Conflicting Slip Title */
+            conflicting_slip_title: string;
+            /** Conflicting Slip Date */
+            conflicting_slip_date: string;
+            /**
+             * Other Board
+             * @enum {string}
+             */
+            other_board: "daily_pick" | "daily_public";
+        };
+        /**
          * RecoDailyLockedSlipDTO
          * @description 当前用户对该 slip 没有 active 按场授权时的中性投影(2026-08-16,
          *     取代旧的全局 reco:daily 布尔权益门禁):只暴露"存在性 + 状态",标题/
@@ -3860,6 +3912,19 @@ export interface components {
              */
             published_match_ids: number[];
         };
+        /**
+         * RecoPublicResponse
+         * @description 每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
+         *     不需要登录。刻意不复用 RecoDailyResponse——那个模型的 slips 是
+         *     Union[解锁,锁定]两态,而公推板块不存在锁定态,响应里连
+         *     access_required 这个字段都不应该出现。
+         */
+        RecoPublicResponse: {
+            /** Window Days */
+            window_days: number;
+            /** Slips */
+            slips: components["schemas"]["RecoSlipDTO"][];
+        };
         /** RecoSettleBody */
         RecoSettleBody: {
             /** Leg Results */
@@ -3885,6 +3950,12 @@ export interface components {
             title: string;
             /** Note */
             note?: string | null;
+            /**
+             * Board
+             * @default daily_pick
+             * @enum {string}
+             */
+            board: "daily_pick" | "daily_public";
             /** Legs */
             legs: components["schemas"]["RecoLegInput"][];
         };
@@ -3892,6 +3963,11 @@ export interface components {
         RecoSlipCreatedDTO: {
             /** Id */
             id: string;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["RecoBoardConflictWarningDTO"][];
         };
         /** RecoSlipDTO */
         RecoSlipDTO: {
@@ -3936,8 +4012,23 @@ export interface components {
             note?: string | null;
             /** Slip Date */
             slip_date?: string | null;
+            /** Board */
+            board?: ("daily_pick" | "daily_public") | null;
             /** Legs */
             legs?: components["schemas"]["RecoLegInput"][] | null;
+        };
+        /** RecoSlipEditResponse */
+        RecoSlipEditResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["RecoBoardConflictWarningDTO"][];
         };
         /**
          * RecoSlipPreviewResponse
@@ -6417,6 +6508,71 @@ export interface operations {
             };
         };
     };
+    reco_public_api_v1_reco_public_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoPublicResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     reco_daily_api_v1_reco_daily_get: {
         parameters: {
             query?: never;
@@ -6690,6 +6846,7 @@ export interface operations {
                 status?: string;
                 date_from?: string;
                 date_to?: string;
+                board?: string;
             };
             header?: never;
             path?: never;
@@ -7046,7 +7203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OkDTO"];
+                    "application/json": components["schemas"]["RecoSlipEditResponse"];
                 };
             };
             /** @description Bad Request */

@@ -2676,6 +2676,78 @@
     }
    }
   },
+  "/api/v1/reco/public": {
+   "get": {
+    "tags": [
+     "reco"
+    ],
+    "summary": "Reco Public",
+    "description": "每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,\n不需要登录——与「每日精选」并列的板块,签名里刻意不注入 AuthContext,\n不存在按身份分叉的任何分支,响应对所有人完全一致。这是本文件**唯一**\n进入 PUBLIC_ALLOWLIST 的路径(见 backend/api/cache_policy.py),其余全部\nreco 路径继续维持中间件 default-deny 的 no-store。",
+    "operationId": "reco_public_api_v1_reco_public_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoPublicResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/reco/daily": {
    "get": {
     "tags": [
@@ -3004,7 +3076,7 @@
      "admin"
     ],
     "summary": "Admin List Slips",
-    "description": "status/date_from/date_to(按 slip_date)均可选,不传即不筛选;total 是\n筛选后的计数,不是全库总数。",
+    "description": "status/date_from/date_to(按 slip_date)/board 均可选,不传即不筛选;\ntotal 是筛选后的计数,不是全库总数。board 不传返回两个板块(每日精选/\n每日公推,2026-09 新增)。",
     "operationId": "admin_list_slips_api_v1_admin_reco_slips_get",
     "parameters": [
      {
@@ -3055,6 +3127,16 @@
        "type": "string",
        "default": "",
        "title": "Date To"
+      }
+     },
+     {
+      "name": "board",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Board"
       }
      }
     ],
@@ -3528,7 +3610,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/OkDTO"
+         "$ref": "#/components/schemas/RecoSlipEditResponse"
         }
        }
       }
@@ -6552,6 +6634,14 @@
       "type": "string",
       "title": "Last Edited At"
      },
+     "board": {
+      "type": "string",
+      "enum": [
+       "daily_pick",
+       "daily_public"
+      ],
+      "title": "Board"
+     },
      "legs": {
       "items": {
        "$ref": "#/components/schemas/AdminRecoLegDTO"
@@ -6569,6 +6659,7 @@
      "status",
      "edit_count",
      "last_edited_at",
+     "board",
      "legs"
     ],
     "title": "AdminRecoSlipDTO"
@@ -13879,6 +13970,49 @@
     "type": "object",
     "title": "RecoAccessRevokeBody"
    },
+   "RecoBoardConflictWarningDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "conflicting_slip_id": {
+      "type": "string",
+      "title": "Conflicting Slip Id"
+     },
+     "conflicting_slip_title": {
+      "type": "string",
+      "title": "Conflicting Slip Title"
+     },
+     "conflicting_slip_date": {
+      "type": "string",
+      "title": "Conflicting Slip Date"
+     },
+     "other_board": {
+      "type": "string",
+      "enum": [
+       "daily_pick",
+       "daily_public"
+      ],
+      "title": "Other Board"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "market",
+     "conflicting_slip_id",
+     "conflicting_slip_title",
+     "conflicting_slip_date",
+     "other_board"
+    ],
+    "title": "RecoBoardConflictWarningDTO",
+    "description": "同一场比赛的同一盘口已被另一个板块的非作废单占用(2026-09,只提醒\n不拦截——写入仍然成功,前端据此展示提示条)。"
+   },
    "RecoDailyLockedSlipDTO": {
     "properties": {
      "id": {
@@ -14606,6 +14740,28 @@
     "title": "RecoOverviewResponse",
     "description": "匿名聚合面:今日发布状态 + 近 30 天已结算汇总(无任何单据内容)。"
    },
+   "RecoPublicResponse": {
+    "properties": {
+     "window_days": {
+      "type": "integer",
+      "title": "Window Days"
+     },
+     "slips": {
+      "items": {
+       "$ref": "#/components/schemas/RecoSlipDTO"
+      },
+      "type": "array",
+      "title": "Slips"
+     }
+    },
+    "type": "object",
+    "required": [
+     "window_days",
+     "slips"
+    ],
+    "title": "RecoPublicResponse",
+    "description": "每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,\n不需要登录。刻意不复用 RecoDailyResponse——那个模型的 slips 是\nUnion[解锁,锁定]两态,而公推板块不存在锁定态,响应里连\naccess_required 这个字段都不应该出现。"
+   },
    "RecoSettleBody": {
     "properties": {
      "leg_results": {
@@ -14675,6 +14831,15 @@
       ],
       "title": "Note"
      },
+     "board": {
+      "type": "string",
+      "enum": [
+       "daily_pick",
+       "daily_public"
+      ],
+      "title": "Board",
+      "default": "daily_pick"
+     },
      "legs": {
       "items": {
        "$ref": "#/components/schemas/RecoLegInput"
@@ -14696,6 +14861,14 @@
      "id": {
       "type": "string",
       "title": "Id"
+     },
+     "warnings": {
+      "items": {
+       "$ref": "#/components/schemas/RecoBoardConflictWarningDTO"
+      },
+      "type": "array",
+      "title": "Warnings",
+      "default": []
      }
     },
     "type": "object",
@@ -14862,6 +15035,21 @@
       ],
       "title": "Slip Date"
      },
+     "board": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "daily_pick",
+         "daily_public"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Board"
+     },
      "legs": {
       "anyOf": [
        {
@@ -14879,6 +15067,28 @@
     },
     "type": "object",
     "title": "RecoSlipEditBody"
+   },
+   "RecoSlipEditResponse": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "const": "ok",
+      "title": "Status"
+     },
+     "warnings": {
+      "items": {
+       "$ref": "#/components/schemas/RecoBoardConflictWarningDTO"
+      },
+      "type": "array",
+      "title": "Warnings",
+      "default": []
+     }
+    },
+    "type": "object",
+    "required": [
+     "status"
+    ],
+    "title": "RecoSlipEditResponse"
    },
    "RecoSlipPreviewResponse": {
     "properties": {

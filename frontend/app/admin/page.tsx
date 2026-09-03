@@ -909,6 +909,20 @@ const RECO_STATUS_ZH: Record<string, string> = {
 const RECO_SETTLE_SOURCE_ZH: Record<string, string> = {
   auto: "系统自动结算", manual: "人工结算",
 };
+// 板块(2026-09 新增):每日公推与每日精选并列,完全公开、不需要授权。
+const RECO_BOARD_ZH: Record<string, string> = {
+  daily_pick: "每日精选", daily_public: "每日公推",
+};
+/** 跨板块盘口冲突提示(2026-09,只提醒不拦截)——拼成一行人话,点名具体
+ * 是哪场比赛、哪个盘口、被哪个板块的哪张单占用。 */
+function formatBoardWarnings(warnings: RecoCreateResp["warnings"]): string {
+  return warnings
+    .map((w) =>
+      `比赛#${w.match_id} 的「${w.market}」盘口已在${RECO_BOARD_ZH[w.other_board]}` +
+      `板块的「${w.conflicting_slip_title}」(${w.conflicting_slip_date})中出现`,
+    )
+    .join(";");
+}
 /** 港盘/十进制中文说明——不直接暴露 odds_format 内部枚举值拼写。 */
 const ODDS_FORMAT_ZH: Record<string, string> = { hk: "港盘", decimal: "十进制" };
 
@@ -1164,12 +1178,15 @@ export function RecoTab() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterBoard, setFilterBoard] = useState("");
   const [offset, setOffset] = useState(0);
 
-  // 新建表单
+  // 新建表单(board 默认每日精选,2026-09 新增每日公推——fail-closed,
+  // 不手动选就不会把内容变成全网公开)
   const [slipDate, setSlipDate] = useState(beijingToday());
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const [board, setBoard] = useState<"daily_pick" | "daily_public">("daily_pick");
   const [legs, setLegs] = useState<LegDraft[]>([emptyLeg()]);
 
   // 结算面板:slipId → legId → result
@@ -1183,6 +1200,7 @@ export function RecoTab() {
   const [editTitle, setEditTitle] = useState("");
   const [editNote, setEditNote] = useState("");
   const [editSlipDate, setEditSlipDate] = useState("");
+  const [editBoard, setEditBoard] = useState<"daily_pick" | "daily_public">("daily_pick");
   const [editLegsMode, setEditLegsMode] = useState(false);
   const [editLegs, setEditLegs] = useState<LegDraft[]>([]);
   const [publishErrors, setPublishErrors] = useState<Record<string, string>>({});
@@ -1209,12 +1227,13 @@ export function RecoTab() {
     if (filterStatus) qs.set("status", filterStatus);
     if (filterDateFrom) qs.set("date_from", filterDateFrom);
     if (filterDateTo) qs.set("date_to", filterDateTo);
+    if (filterBoard) qs.set("board", filterBoard);
     try {
       setData(await clientFetch<RecoSlipsResp>(`/api/v1/admin/reco/slips?${qs.toString()}`));
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "推荐单列表加载失败") });
     }
-  }, [offset, filterStatus, filterDateFrom, filterDateTo]);
+  }, [offset, filterStatus, filterDateFrom, filterDateTo, filterBoard]);
   // 经微任务回调触发,effect 体内不同步 setState(react-hooks/set-state-in-effect)
   useEffect(() => {
     void Promise.resolve().then(() => load());
@@ -1224,6 +1243,7 @@ export function RecoTab() {
   const onFilterStatus = (v: string) => { setOffset(0); setFilterStatus(v); };
   const onFilterDateFrom = (v: string) => { setOffset(0); setFilterDateFrom(v); };
   const onFilterDateTo = (v: string) => { setOffset(0); setFilterDateTo(v); };
+  const onFilterBoard = (v: string) => { setOffset(0); setFilterBoard(v); };
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / RECO_PAGE_LIMIT)) : 1;
   const currentPage = Math.floor(offset / RECO_PAGE_LIMIT) + 1;
@@ -1235,11 +1255,15 @@ export function RecoTab() {
       return;
     }
     try {
-      await clientFetch<RecoCreateResp>("/api/v1/admin/reco/slips", {
+      const r = await clientFetch<RecoCreateResp>("/api/v1/admin/reco/slips", {
         method: "POST",
-        body: { slip_date: slipDate, title: title.trim(), note: note.trim() || null, legs: parsed },
+        body: {
+          slip_date: slipDate, title: title.trim(), note: note.trim() || null,
+          board, legs: parsed,
+        },
       });
-      setMsg({ kind: "ok", text: "已创建草稿" });
+      const warnText = r.warnings.length > 0 ? `;注意:${formatBoardWarnings(r.warnings)}` : "";
+      setMsg({ kind: "ok", text: `已创建草稿${warnText}` });
       setTitle(""); setNote(""); setLegs([emptyLeg()]);
       void load();
     } catch (e) {
@@ -1314,6 +1338,7 @@ export function RecoTab() {
     setEditTitle(s.title);
     setEditNote(s.note ?? "");
     setEditSlipDate(s.slip_date);
+    setEditBoard(s.board);
     setEditLegsMode(false);
     setEditLegs(s.legs.map((l) => ({
       match_id: l.match_id ?? null, match_desc: l.match_desc, market: l.market,
@@ -1333,8 +1358,11 @@ export function RecoTab() {
       setMsg({ kind: "err", text: "标题不能为空" });
       return;
     }
-    const body: { title: string; note: string | null; slip_date: string; legs?: unknown } = {
+    const body: {
+      title: string; note: string | null; slip_date: string; board: string; legs?: unknown;
+    } = {
       title: trimmedTitle, note: editNote.trim() || null, slip_date: editSlipDate,
+      board: editBoard,
     };
     if (editLegsMode) {
       const parsed = buildLegPayloads(editLegs);
@@ -1346,11 +1374,12 @@ export function RecoTab() {
     }
     setBusyId(s.id);
     try {
-      await clientFetch<RecoEditResp>(`/api/v1/admin/reco/slips/${s.id}`, {
+      const r = await clientFetch<RecoEditResp>(`/api/v1/admin/reco/slips/${s.id}`, {
         method: "PATCH",
         body,
       });
-      setMsg({ kind: "ok", text: "已保存编辑" });
+      const warnText = r.warnings.length > 0 ? `;注意:${formatBoardWarnings(r.warnings)}` : "";
+      setMsg({ kind: "ok", text: `已保存编辑${warnText}` });
       setEditFor(null);
       void load();
     } catch (e) {
@@ -1429,12 +1458,33 @@ export function RecoTab() {
             <input type="date" className={styles.input} aria-label="结束日期" value={filterDateTo}
                    onChange={(e) => onFilterDateTo(e.target.value)} />
           </label>
+          <label className={styles.fieldInline}>
+            <span>板块筛选</span>
+            <select className={styles.input} aria-label="板块筛选" value={filterBoard}
+                    onChange={(e) => onFilterBoard(e.target.value)}>
+              <option value="">全部板块</option>
+              <option value="daily_pick">每日精选</option>
+              <option value="daily_public">每日公推</option>
+            </select>
+          </label>
         </div>
       </section>
 
       <section className={styles.recoPanel}>
         <h2 className={styles.panelTitle}>新建推荐单(草稿)</h2>
         <div className={styles.formRow}>
+          <label className={styles.fieldInline}>
+            <span>板块</span>
+            {/* 不用 aria-label="板块筛选" 或 "编辑板块":wrapping <label> 的
+                文本本身参与 getByLabelText 匹配,与筛选栏/编辑面板同时存在于
+                DOM 里,三处必须各自唯一,不能只靠 aria-label 区分
+                (aria-label 不会盖过 wrapping label 的文本关联)。 */}
+            <select className={styles.input} aria-label="板块" value={board}
+                    onChange={(e) => setBoard(e.target.value as "daily_pick" | "daily_public")}>
+              <option value="daily_pick">每日精选</option>
+              <option value="daily_public">每日公推</option>
+            </select>
+          </label>
           <label className={styles.fieldInline}>
             <span>日期</span>
             <input type="date" className={styles.input} value={slipDate}
@@ -1446,6 +1496,12 @@ export function RecoTab() {
                    onChange={(e) => setTitle(e.target.value)} />
           </label>
         </div>
+        {board === "daily_public" && (
+          <p className={styles.dim}>
+            每日公推:任何人不登录都能看到全文。草稿阶段还能改板块,发布后只能从
+            每日精选改成每日公推,不能改回去(已经公开过的内容收不回来)。
+          </p>
+        )}
         <label className={styles.fieldInline}>
           <span>思路(可空)</span>
           <input className={styles.input} value={note}
@@ -1477,6 +1533,7 @@ export function RecoTab() {
               <div>
                 <strong>{s.slip_date} · {s.title}</strong>
                 {" "}
+                <span className={styles.badge} data-board={s.board}>{RECO_BOARD_ZH[s.board]}</span>
                 <span className={styles.badge}>{RECO_STATUS_ZH[s.status]}</span>
                 {s.result && <span className={styles.badge}>{RECO_RESULT_ZH[s.result]}</span>}
                 {s.return_units != null && <span className={styles.dim}> 回报 {s.return_units} 单位</span>}
@@ -1596,6 +1653,22 @@ export function RecoTab() {
 
               {editFor === s.id && (
                 <div className={styles.formRow} data-testid="edit-panel">
+                  <label className={styles.fieldInline}>
+                    <span>编辑板块</span>
+                    <select
+                      className={styles.input} aria-label="编辑板块" value={editBoard}
+                      disabled={s.status === "published" && s.board === "daily_public"}
+                      onChange={(e) =>
+                        setEditBoard(e.target.value as "daily_pick" | "daily_public")
+                      }
+                    >
+                      <option value="daily_pick">每日精选</option>
+                      <option value="daily_public">每日公推</option>
+                    </select>
+                    {s.status === "published" && s.board === "daily_public" && (
+                      <span className={styles.dim}>已公开发布,不能改回精选</span>
+                    )}
+                  </label>
                   <label className={styles.fieldInline}>
                     <span>日期</span>
                     <input type="date" className={styles.input} value={editSlipDate}

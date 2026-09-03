@@ -43,6 +43,9 @@ type DailyResp = GetJson<"/api/v1/reco/daily">;
 type DailyItem = DailyResp["slips"][number];
 type TrackResp = GetJson<"/api/v1/reco/track-record">;
 export type Slip = TrackResp["slips"][number];
+// 每日公推(2026-09 新增,board='daily_public'):完全公开、匿名可见,
+// 响应形状同 RecoSlipDTO——直接复用既有 SlipCard,不新造投影/组件。
+type PublicResp = GetJson<"/api/v1/reco/public">;
 
 // half_win/half_loss(2026-08-16 四分之一盘口扩展):半仓赢半仓走水 / 半仓
 // 本金退回半仓告负。措辞遵守 CLAUDE.md §1(不用"红单""连红"等收益承诺式表述)。
@@ -294,7 +297,7 @@ function SummaryRow({ summary }: { summary: NonNullable<TrackResp["summary"]> })
   );
 }
 
-type Tab = "daily" | "record";
+type Tab = "daily" | "record" | "public";
 
 function RecoBody() {
   const searchParams = useSearchParams();
@@ -303,6 +306,8 @@ function RecoBody() {
   const [dailyErr, setDailyErr] = useState<string | null>(null);
   const [track, setTrack] = useState<TrackResp | null>(null);
   const [trackErr, setTrackErr] = useState<string | null>(null);
+  const [pub, setPub] = useState<PublicResp | null>(null);
+  const [pubErr, setPubErr] = useState<string | null>(null);
 
   // 历史战绩(2026-08-16 起匿名可见):不依赖登录态,挂载后直接拉取。
   useEffect(() => {
@@ -313,6 +318,22 @@ function RecoBody() {
       })
       .catch((e) => {
         if (!cancelled) setTrackErr(apiErrorMessage(e, "战绩加载失败"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 每日公推(2026-09 新增):完全公开、匿名可见,不依赖登录态,挂载后
+  // 直接拉取——与历史战绩同一模式。
+  useEffect(() => {
+    let cancelled = false;
+    clientFetch<PublicResp>("/api/v1/reco/public")
+      .then((p) => {
+        if (!cancelled) setPub(p);
+      })
+      .catch((e) => {
+        if (!cancelled) setPubErr(apiErrorMessage(e, "每日公推加载失败"));
       });
     return () => {
       cancelled = true;
@@ -358,9 +379,13 @@ function RecoBody() {
 
   // 显式 ?tab= 优先;否则默认落在人人可看的「历史战绩」——每日精选没有
   // 任何"整体已解锁"的全局状态可以据此决定默认标签,具体到某一场是否可看
-  // 只在列表渲染时逐条判断。
+  // 只在列表渲染时逐条判断。「每日公推」(2026-09 新增)同样人人可看,但
+  // 不改变既有默认落点,只作为可显式切换到的第三个 tab。
   const explicit = searchParams.get("tab");
-  const tab: Tab = explicit === "daily" || explicit === "record" ? explicit : "record";
+  const tab: Tab =
+    explicit === "daily" || explicit === "record" || explicit === "public"
+      ? explicit
+      : "record";
 
   return (
     <main className={styles.page}>
@@ -383,6 +408,13 @@ function RecoBody() {
           aria-current={tab === "record" ? "page" : undefined}
         >
           历史战绩
+        </Link>
+        <Link
+          href="/reco?tab=public"
+          className={tab === "public" ? styles.tabActive : styles.tab}
+          aria-current={tab === "public" ? "page" : undefined}
+        >
+          每日公推
         </Link>
       </nav>
 
@@ -426,7 +458,7 @@ function RecoBody() {
             )}
           </section>
         )
-      ) : (
+      ) : tab === "record" ? (
         <section>
           {trackErr && <p className={styles.errText}>{trackErr}</p>}
           {summary && <SummaryRow summary={summary} />}
@@ -442,6 +474,23 @@ function RecoBody() {
             <p className={styles.empty}>还没有结算完的单子。</p>
           ) : (
             track?.slips.map((s) => <SlipCard key={s.id} slip={s} />)
+          )}
+        </section>
+      ) : (
+        <section>
+          {pubErr && <p className={styles.errText}>{pubErr}</p>}
+          <h2 className={styles.sectionTitle}>近 {pub?.window_days ?? 7} 天公推</h2>
+          <p className={styles.archiveNote}>
+            不需要登录，任何人都能看到全部内容。中没中都留着，作废的也照样列出来。
+          </p>
+          {!pub && !pubErr ? (
+            <div className={styles.card} aria-busy="true">
+              <div className={styles.skeleton} />
+            </div>
+          ) : pub && pub.slips.length === 0 ? (
+            <p className={styles.empty}>这 {pub?.window_days ?? 7} 天还没发过公推。</p>
+          ) : (
+            pub?.slips.map((s) => <SlipCard key={s.id} slip={s} />)
           )}
         </section>
       )}

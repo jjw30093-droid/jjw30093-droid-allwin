@@ -67,13 +67,17 @@ def _prov_leg(match_desc, market, selection, odds, match_id, *, snapshot_ref=Non
     }
 
 
-def _create_slip(admin, slip_date="2026-08-10", title="测试二串一", legs=None):
+def _create_slip(admin, slip_date="2026-08-10", title="测试二串一", legs=None, board=None):
+    """board=None(默认)不下发,后端 RecoSlipCreateBody.board 自己落
+    daily_pick——既有调用方不需要感知每日公推(2026-09 新增)的存在。"""
     legs = legs or [
         _prov_leg("A vs B", "1x2", "主胜", 1.9, 910101),
         _prov_leg("C vs D", "ou", "大2.5", 1.8, 910102),
     ]
-    r = admin.post("/api/v1/admin/reco/slips", headers=_csrf(admin),
-                   json={"slip_date": slip_date, "title": title, "note": None, "legs": legs})
+    body = {"slip_date": slip_date, "title": title, "note": None, "legs": legs}
+    if board is not None:
+        body["board"] = board
+    r = admin.post("/api/v1/admin/reco/slips", headers=_csrf(admin), json=body)
     assert r.status_code == 200, r.text
     return r.json()["id"]
 

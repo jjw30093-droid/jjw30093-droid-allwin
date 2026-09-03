@@ -33,6 +33,11 @@ from backend.commands.reco_settlement_math import SettlementUnresolvable, resolv
 from backend.db.util import utc_now
 
 RECO_DAILY_WINDOW_DAYS = 30
+
+# 每日公推(board='daily_public',2026-09 新增,经用户批准):与「每日精选」
+# 并列的完全公开板块,不需要登录/授权。公推是引流面,窗口比精选(30天)
+# 短——近 7 天足够展示连续性,一个常量,随时可调。
+RECO_PUBLIC_WINDOW_DAYS = 7
 _RESULT_BREAKDOWN_SQL = """
              SUM(CASE WHEN status='settled' AND result='win'        THEN 1 ELSE 0 END) AS wins,
              SUM(CASE WHEN status='settled' AND result='lose'       THEN 1 ELSE 0 END) AS loses,
@@ -116,8 +121,8 @@ def daily_slips(conn: sqlite3.Connection, user_id: str) -> list[dict]:
     同一纪律)。"""
     cutoff = (utc_now() - timedelta(days=RECO_DAILY_WINDOW_DAYS)).strftime("%Y-%m-%d")
     rows = conn.execute(
-        "SELECT * FROM reco_slips WHERE status != 'draft' AND slip_date >= ?"
-        " ORDER BY slip_date DESC, published_at DESC",
+        "SELECT * FROM reco_slips WHERE status != 'draft' AND board='daily_pick'"
+        " AND slip_date >= ? ORDER BY slip_date DESC, published_at DESC",
         (cutoff,),
     ).fetchall()
     granted_slip_ids = {
@@ -146,7 +151,8 @@ def daily_slip_detail(conn: sqlite3.Connection, slip_id: str) -> dict | None:
     负责"这张单是否存在、内容长什么样",调用方(路由层)先查存在性再查
     授权,顺序保证未授权用户拿到的是明确的 403 而不是被"不存在"掩盖。"""
     row = conn.execute(
-        "SELECT * FROM reco_slips WHERE id=? AND status != 'draft'", (slip_id,)
+        "SELECT * FROM reco_slips WHERE id=? AND status != 'draft' AND board='daily_pick'",
+        (slip_id,),
     ).fetchone()
     if row is None:
         return None
@@ -157,13 +163,16 @@ def daily_slip_detail(conn: sqlite3.Connection, slip_id: str) -> dict | None:
 def track_record_slips(
     conn: sqlite3.Connection, limit: int = 50, offset: int = 0
 ) -> tuple[int, list[dict]]:
-    """登录面:settled/voided 全历史归档(命中/未中/走水/作废全展示,不挑选不隐藏)。"""
+    """登录面:settled/voided 全历史归档(命中/未中/走水/作废全展示,不挑选
+    不隐藏)。只取 board='daily_pick'——每日公推(board='daily_public')战绩
+    本期不做,绝不能静默混进这份已公开的精选战绩数字里(2026-09)。"""
     total = conn.execute(
         "SELECT COUNT(*) FROM reco_slips WHERE status IN ('settled','voided')"
+        " AND board='daily_pick'"
     ).fetchone()[0]
     rows = conn.execute(
         "SELECT * FROM reco_slips WHERE status IN ('settled','voided')"
-        " ORDER BY slip_date DESC, settled_at DESC LIMIT ? OFFSET ?",
+        " AND board='daily_pick' ORDER BY slip_date DESC, settled_at DESC LIMIT ? OFFSET ?",
         (limit, offset),
     ).fetchall()
     legs = _legs_by_slip(conn, [r["id"] for r in rows])
@@ -171,13 +180,15 @@ def track_record_slips(
 
 
 def track_record_summary(conn: sqlite3.Connection) -> dict:
+    """同 track_record_slips():只聚合 board='daily_pick',公推不计入精选
+    已公开的命中率/盈亏单位(2026-09)。"""
     row = conn.execute(
         f"""SELECT
              SUM(CASE WHEN status='settled' THEN 1 ELSE 0 END)                    AS settled,
 {_RESULT_BREAKDOWN_SQL}
              SUM(CASE WHEN status='voided' THEN 1 ELSE 0 END)                     AS voided,
              SUM(CASE WHEN status='settled' THEN return_units - 1 ELSE 0 END)     AS net_units
-           FROM reco_slips""",
+           FROM reco_slips WHERE board='daily_pick'""",
     ).fetchone()
     return _summarize_result_row(
         row, settled=row["settled"] or 0, voided=row["voided"] or 0,
@@ -208,13 +219,16 @@ def public_overview(conn: sqlite3.Connection) -> dict:
     未结算 published 单只贡献"今天已发布 N 场"的计数与最近发布时间——
     这是运营层面主动公开的发布状态,不泄漏付费赛果。
     slip_date 是站长录入的自然日(北京时间语境),"今天"按 Asia/Shanghai 判定。
+    只统计 board='daily_pick'——这是「每日精选」模块的摘要,每日公推
+    (board='daily_public')有自己独立的公开列表,不共用这份聚合数字,
+    避免两个板块的样本混在一起(2026-09)。
     """
     from zoneinfo import ZoneInfo
 
     today = utc_now().astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
     today_row = conn.execute(
         """SELECT COUNT(*) AS n, MAX(published_at) AS latest
-           FROM reco_slips WHERE slip_date=? AND status != 'draft'""",
+           FROM reco_slips WHERE slip_date=? AND status != 'draft' AND board='daily_pick'""",
         (today,),
     ).fetchone()
 
@@ -225,7 +239,7 @@ def public_overview(conn: sqlite3.Connection) -> dict:
 {_RESULT_BREAKDOWN_SQL}
              SUM(CASE WHEN status='voided' THEN 1 ELSE 0 END)                     AS voided,
              SUM(CASE WHEN status='settled' THEN return_units - 1 ELSE 0 END)     AS net_units
-           FROM reco_slips WHERE slip_date >= ?""",
+           FROM reco_slips WHERE board='daily_pick' AND slip_date >= ?""",
         (cutoff,),
     ).fetchone()
     summary = _summarize_result_row(
@@ -240,6 +254,78 @@ def public_overview(conn: sqlite3.Connection) -> dict:
         **summary,
         "published_match_ids": sorted(published_match_ids(conn)),
     }
+
+
+def public_slips(conn: sqlite3.Connection) -> list[dict]:
+    """每日公推(board='daily_public')的完全公开列表(2026-09 新增):近
+    RECO_PUBLIC_WINDOW_DAYS 天非 draft 单,全部完整正文,不做任何按身份/按
+    授权的投影裁剪——这是这个板块与「每日精选」daily_slips() 的核心区别:
+    没有 access_required 这一步,响应对匿名和登录用户完全一致。结构上是
+    daily_slips() 去掉 reco_access_grants 联查后的形态,共用同一套
+    _slip_dto/_legs_by_slip,不重新发明投影逻辑。voided 单同样展示(与精选
+    "作废不消失"同一纪律)。draft 仍不出现。
+    """
+    cutoff = (utc_now() - timedelta(days=RECO_PUBLIC_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        "SELECT * FROM reco_slips WHERE board='daily_public' AND status != 'draft'"
+        " AND slip_date >= ? ORDER BY slip_date DESC, published_at DESC",
+        (cutoff,),
+    ).fetchall()
+    legs = _legs_by_slip(conn, [r["id"] for r in rows])
+    return [_slip_dto(r, legs.get(r["id"], [])) for r in rows]
+
+
+def cross_board_market_conflicts(
+    conn: sqlite3.Connection,
+    *,
+    board: str,
+    legs: list[dict],
+    exclude_slip_id: str | None = None,
+) -> list[dict]:
+    """同一场比赛的同一盘口是否已在**另一个**板块被非 voided 单占用
+    (2026-09,站长决策:只提醒,不拦截)。
+
+    判定粒度是 (match_id, market),不含 line/side/selection——同一盘口在两个
+    板块给出相反方向的推荐(如精选"大2.5"、公推"小2.5")是最需要提醒站长的
+    情形,按更细粒度判定会放过这种情况。market 两边做 TRIM(LOWER(...))归一,
+    因为 legacy_manual 草稿允许自由文本,大小写/空白差异不应造成漏判。
+
+    match_id 为空的腿(站外赛事,只有 match_desc 文本)跳过,无法判定是否
+    同场。voided 单不占用盘口——作废等于内容已撤回。
+
+    只返回提醒信息(不抛异常),调用方(commands/reco.py)决定如何展示;不
+    在这里做拦截,保持"只提醒不拦截"的产品决策清晰体现在这一层。
+    """
+    other_board = "daily_public" if board == "daily_pick" else "daily_pick"
+    warnings: list[dict] = []
+    for leg in legs:
+        match_id = leg.get("match_id")
+        market = leg.get("market")
+        if match_id is None or not market:
+            continue
+        params: list = [match_id, market, other_board]
+        exclude_sql = ""
+        if exclude_slip_id is not None:
+            exclude_sql = " AND s.id != ?"
+            params.append(exclude_slip_id)
+        row = conn.execute(
+            f"""SELECT s.id, s.title, s.slip_date, s.status FROM reco_legs l
+                JOIN reco_slips s ON s.id = l.slip_id
+                WHERE l.match_id = ? AND TRIM(LOWER(l.market)) = TRIM(LOWER(?))
+                  AND s.board = ? AND s.status != 'voided'{exclude_sql}
+                ORDER BY s.slip_date DESC LIMIT 1""",
+            params,
+        ).fetchone()
+        if row is not None:
+            warnings.append({
+                "match_id": match_id,
+                "market": market,
+                "conflicting_slip_id": row["id"],
+                "conflicting_slip_title": row["title"],
+                "conflicting_slip_date": row["slip_date"],
+                "other_board": other_board,
+            })
+    return warnings
 
 
 def slip_member_preview(conn: sqlite3.Connection, slip_id: str) -> dict | None:
@@ -422,6 +508,7 @@ def _admin_slip_dto(row: sqlite3.Row, legs: list[dict]) -> dict:
         "settle_source": row["settle_source"],
         "edit_count": row["edit_count"],
         "last_edited_at": row["updated_at"],
+        "board": row["board"],
         "legs": legs,
     }
 
@@ -435,9 +522,11 @@ def admin_slips(
     status: str = "",
     date_from: str = "",
     date_to: str = "",
+    board: str = "",
 ) -> tuple[int, list[dict]]:
-    """admin 面:全状态含 draft;可选 status/date_from/date_to(按 slip_date)
-    筛选,与既有 limit/offset 配合。total 是筛选后的计数,不是全库总数。"""
+    """admin 面:全状态含 draft;可选 status/date_from/date_to(按 slip_date)/
+    board 筛选,与既有 limit/offset 配合。total 是筛选后的计数,不是全库
+    总数。board 不传即两个板块都返回(admin 需要一眼看到全貌)。"""
     where = []
     params: list = []
     if status:
@@ -449,6 +538,9 @@ def admin_slips(
     if date_to:
         where.append("slip_date <= ?")
         params.append(date_to)
+    if board:
+        where.append("board = ?")
+        params.append(board)
     where_sql = f" WHERE {' AND '.join(where)}" if where else ""
 
     total = conn.execute(f"SELECT COUNT(*) FROM reco_slips{where_sql}", params).fetchone()[0]

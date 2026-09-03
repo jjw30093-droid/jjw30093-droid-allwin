@@ -1797,6 +1797,16 @@ class RecoDailyResponse(BaseModel):
     slips: list[RecoDailySlipItem]
 
 
+class RecoPublicResponse(BaseModel):
+    """每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
+    不需要登录。刻意不复用 RecoDailyResponse——那个模型的 slips 是
+    Union[解锁,锁定]两态,而公推板块不存在锁定态,响应里连
+    access_required 这个字段都不应该出现。"""
+
+    window_days: int
+    slips: list[RecoSlipDTO]
+
+
 class RecoSlipPreviewResponse(BaseModel):
     """admin 用:该单如果 published,一个真实会员在 /reco/daily 会看到的内容
     形状——与 RecoDailyResponse 里的单据字段完全一致(同一个 RecoSlipDTO,
@@ -1883,6 +1893,9 @@ class RecoSlipCreateBody(BaseModel):
     slip_date: str                             # YYYY-MM-DD(北京时间自然日)
     title: str
     note: Optional[str] = None
+    # 板块(2026-09 每日公推新增):默认 daily_pick(每日精选)——不传即精选,
+    # 既有调用方一行不改仍合法,且默认落在"需要授权"这一侧(fail-closed)。
+    board: Literal["daily_pick", "daily_public"] = "daily_pick"
     legs: list[RecoLegInput]
 
 
@@ -1890,6 +1903,7 @@ class RecoSlipEditBody(BaseModel):
     title: Optional[str] = None
     note: Optional[str] = None
     slip_date: Optional[str] = None
+    board: Optional[Literal["daily_pick", "daily_public"]] = None  # 传入才改
     legs: Optional[list[RecoLegInput]] = None  # 传入即整组替换
 
 
@@ -1902,8 +1916,26 @@ class RecoVoidBody(BaseModel):
     reason: str
 
 
+class RecoBoardConflictWarningDTO(BaseModel):
+    """同一场比赛的同一盘口已被另一个板块的非作废单占用(2026-09,只提醒
+    不拦截——写入仍然成功,前端据此展示提示条)。"""
+
+    match_id: int
+    market: str
+    conflicting_slip_id: str
+    conflicting_slip_title: str
+    conflicting_slip_date: str
+    other_board: Literal["daily_pick", "daily_public"]
+
+
 class RecoSlipCreatedDTO(BaseModel):
     id: str
+    warnings: list[RecoBoardConflictWarningDTO] = []
+
+
+class RecoSlipEditResponse(BaseModel):
+    status: Literal["ok"]
+    warnings: list[RecoBoardConflictWarningDTO] = []
 
 
 class RecoSettledDTO(BaseModel):
@@ -1956,6 +1988,7 @@ class AdminRecoSlipDTO(BaseModel):
     settle_source: Optional[Literal["auto", "manual"]] = None
     edit_count: int
     last_edited_at: str
+    board: Literal["daily_pick", "daily_public"]
     legs: list[AdminRecoLegDTO]
 
 

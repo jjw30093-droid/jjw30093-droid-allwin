@@ -51,6 +51,7 @@ function baseSlip(overrides: Partial<Slip> = {}): Slip {
     settle_source: null,
     edit_count: 0,
     last_edited_at: "2026-08-16T08:00:00Z",
+    board: "daily_pick",
     legs: [
       {
         id: "leg-1",
@@ -130,9 +131,12 @@ function mockFetch(handlers: {
         }),
       );
     }
-    // publish / settle / void / patch 等写操作:统一回一个通用成功体。
+    // publish / settle / void / patch / create 等写操作:统一回一个通用
+    // 成功体。warnings: []——create/edit 响应形状(2026-09 跨板块盘口冲突
+    // 提示新增)都含这个字段,不带会让 r.warnings.length 在真实调用路径里
+    // 抛错,即便当前这条断言不关心 warnings 内容。
     return Promise.resolve(
-      new Response(JSON.stringify({ status: "ok" }), {
+      new Response(JSON.stringify({ status: "ok", id: "slip-new", warnings: [] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -169,6 +173,78 @@ describe("筛选栏(状态 + 日期区间)", () => {
     expect(lastListCall.url).toContain("status=published");
     expect(lastListCall.url).toContain("date_from=2026-08-01");
     expect(lastListCall.url).toContain("date_to=2026-08-31");
+  });
+});
+
+describe("每日公推板块(2026-09 新增)", () => {
+  it("筛选栏板块变化时列表请求带上 board 查询参数", async () => {
+    const calls = mockFetch({ slips: { total: 0, slips: [] } });
+    render(<RecoTab />);
+
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "GET" && c.url.includes("/api/v1/admin/reco/slips"))).toBe(true),
+    );
+
+    fireEvent.change(screen.getByLabelText("板块筛选"), { target: { value: "daily_public" } });
+    await waitFor(() => expect(calls.some((c) => c.url.includes("board=daily_public"))).toBe(true));
+  });
+
+  it("新建表单默认板块是每日精选,选择每日公推后创建请求带上 board 字段", async () => {
+    const calls = mockFetch({ slips: { total: 0, slips: [] } });
+    render(<RecoTab />);
+
+    const boardSelect = screen.getByLabelText("板块") as HTMLSelectElement;
+    expect(boardSelect.value).toBe("daily_pick");
+
+    fireEvent.change(boardSelect, { target: { value: "daily_public" } });
+    expect(screen.getByText(/任何人不登录都能看到全文/)).not.toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText("如:今日三串一"), { target: { value: "测试公推单" } });
+    fireEvent.change(screen.getByPlaceholderText("比赛(搜索队名,或手动填写描述)"), {
+      target: { value: "A队 vs B队 09-01 20:00" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("玩法"), { target: { value: "1x2" } });
+    fireEvent.change(screen.getByPlaceholderText("选项(如 主胜)"), { target: { value: "主胜" } });
+    fireEvent.change(screen.getByPlaceholderText("赔率"), { target: { value: "1.9" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建草稿" }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.method === "POST" &&
+            c.url.includes("/api/v1/admin/reco/slips") &&
+            !c.url.includes("access-grants") &&
+            (c.body as { board?: string })?.board === "daily_public",
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("列表行展示板块徽标", async () => {
+    mockFetch({ slips: { total: 1, slips: [baseSlip({ board: "daily_public" })] } });
+    render(<RecoTab />);
+    // "每日公推"同时出现在板块 <select> 的 <option> 里,用 data-board 属性
+    // 精确定位行卡片上的徽标,避免和表单选项撞上导致 getByText 命中多个元素。
+    await waitFor(() =>
+      expect(document.querySelector('[data-board="daily_public"]')).not.toBeNull(),
+    );
+  });
+
+  it("已发布的公推单编辑面板里板块选择器被禁用", async () => {
+    mockFetch({
+      slips: {
+        total: 1,
+        slips: [baseSlip({ status: "published", board: "daily_public" })],
+      },
+    });
+    render(<RecoTab />);
+    await waitFor(() => expect(screen.getByText(/测试推荐单/)).not.toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const editBoardSelect = screen.getByLabelText("编辑板块") as HTMLSelectElement;
+    expect(editBoardSelect.disabled).toBe(true);
+    expect(screen.getByText("已公开发布,不能改回精选")).not.toBeNull();
   });
 });
 

@@ -440,6 +440,14 @@
   color: var(--ink-3);
 }
 
+/* 板块徽标(2026-09 每日公推新增):每日公推用 --brand-teal(DESIGN.md:
+ * 青绿=主要操作/选中),与其它中性徽标区分开,一眼看出这条是完全公开内容。
+ * 每日精选沿用默认中性灰,不需要额外强调(仍是站点原有默认板块)。 */
+.badge[data-board="daily_public"] {
+  border-color: var(--brand-teal);
+  color: var(--brand-teal);
+}
+
 /* 待确认(needs_review,2026-08-16):published 单里比赛已完赛但腿结果尚未
  * 判定——克制的提示色(--brand-teal,与 /reco 页"未结算"同一语义色),刻意
  * 不用 --loss(红,同"未中")或 --win(绿,同"命中"),避免让 admin 误以为

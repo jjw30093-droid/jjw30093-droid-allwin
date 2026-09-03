@@ -516,8 +516,9 @@ def test_reco_odds_contract_backfill_preserves_existing_settled_rows(tmp_path):
     # 升级:指向真实迁移目录(含 0014 及之后的全部迁移)
     applied = migrate.apply_all("platform", db_file=db, quiet=True)
     # 0014(reco 赔率合约)+ 0015(reco 按场授权)+ 0016(兑换码改为按场,
-    # 2026-08-16)+ 0017(兑换码整体下架,2026-08-17)= 4 个新迁移。
-    assert applied == 4
+    # 2026-08-16)+ 0017(兑换码整体下架,2026-08-17)+ 0018(每日公推板块,
+    # 2026-09)= 5 个新迁移。
+    assert applied == 5
 
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
@@ -654,7 +655,7 @@ def test_redeem_codes_table_dropped_upgrade_from_pre_0017_db(tmp_path):
     assert "redeem_codes" in _tables(db)
 
     applied = migrate.apply_all("platform", db_file=db, quiet=True)
-    assert applied == 1  # 只有 0017
+    assert applied == 2  # 0017(兑换码下架)+ 0018(每日公推板块,2026-09)
 
     assert "redeem_codes" not in _tables(db)
     conn = sqlite3.connect(db)
@@ -809,3 +810,77 @@ def test_ledger_version_missing_from_manifest_is_rejected_without_change(tmp_pat
         )
 
     assert db.read_bytes() == before
+
+
+# ── 每日公推板块(0018_reco_board)────────────────────────────────────────
+#
+# 背景(2026-09,产品新增,经用户批准):新增与「每日精选」并列的完全公开
+# 板块「每日公推」,不需要登录/授权。两个板块共用 reco_slips/reco_legs,
+# 只新增一个 board 归属字段,DEFAULT 'daily_pick' 保证历史数据零变化。
+
+
+def test_reco_board_column_fresh_db(tmp_path):
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, quiet=True)
+    conn = sqlite3.connect(db)
+    slip_cols = {r[1] for r in conn.execute("PRAGMA table_info(reco_slips)")}
+    assert "board" in slip_cols
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+    conn.execute(
+        "INSERT INTO users (id, display_name, created_at, updated_at) VALUES"
+        " ('u1', '测试用户', 'now', 'now')")
+    conn.execute(
+        "INSERT INTO reco_slips (id, slip_date, title, combo_type, status,"
+        " created_by, created_at, updated_at) VALUES"
+        " ('s1', '2026-09-01', 't', 'single', 'draft', 'u1', 'now', 'now')")
+    assert conn.execute(
+        "SELECT board FROM reco_slips WHERE id='s1'").fetchone()[0] == "daily_pick"
+
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO reco_slips (id, slip_date, title, combo_type, status,"
+            " created_by, created_at, updated_at, board) VALUES"
+            " ('s-bad', '2026-09-01', 't', 'single', 'draft', 'u1', 'now', 'now',"
+            " 'not_a_real_board')")
+    conn.close()
+
+
+def test_reco_board_upgrade_from_pre_0018_db_defaults_existing_rows(tmp_path):
+    """升级场景:既有库已经跑到 0017(reco_slips 里已有历史精选数据,真实
+    data/platform.db 生产库在本次改动前经只读查询确认为 21 行,20 settled
+    + 1 voided)。升级到 0018 后,全部历史行必须自动落在 board='daily_pick',
+    现有按精选口径的一切查询结果不受影响。"""
+    staged = tmp_path / "staged_migrations"
+    staged.mkdir()
+    src = migrate.MIGRATIONS_ROOT / "platform"
+    pre_0018 = [
+        (v, name, path)
+        for v, name, path in migrate.migration_files(src)
+        if v <= 17
+    ]
+    assert pre_0018 and pre_0018[-1][0] == 17, "0017 必须存在,否则本升级场景前提不成立"
+    for _, name, path in pre_0018:
+        shutil.copyfile(path, staged / name)
+
+    db = tmp_path / "platform.db"
+    migrate.apply_all("platform", db_file=db, migrations_dir=staged, quiet=True)
+
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO users (id, display_name, created_at, updated_at) VALUES"
+        " ('u1', '测试用户', 'now', 'now')")
+    for i in range(3):
+        conn.execute(
+            "INSERT INTO reco_slips (id, slip_date, title, combo_type, status,"
+            " created_by, created_at, updated_at) VALUES"
+            f" ('s{i}', '2026-08-2{i}', 't{i}', 'single', 'settled', 'u1', 'now', 'now')")
+    conn.commit()
+
+    applied = migrate.apply_all("platform", db_file=db, quiet=True)
+    assert applied == 1  # 只有 0018
+
+    boards = {r[0] for r in conn.execute("SELECT board FROM reco_slips")}
+    assert boards == {"daily_pick"}, "既有精选数据升级后必须全部归为 daily_pick,零变化"
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    conn.close()

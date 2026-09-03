@@ -135,6 +135,9 @@ def _validate_legs(legs: list[LegInput]) -> None:
                 raise RecoError(f"canonical_decimal_odds 计算结果非法: {canonical}")
 
 
+_RECO_BOARDS = ("daily_pick", "daily_public")
+
+
 def create_slip(
     conn: sqlite3.Connection,
     *,
@@ -143,22 +146,28 @@ def create_slip(
     legs: list[LegInput],
     note: str | None,
     actor: str,
+    board: str = "daily_pick",
 ) -> str:
+    """board 默认 'daily_pick'(每日精选)——不传即精选,既有调用方(测试、
+    历史前端)一行不改仍然合法,且默认落在"需要授权"这一侧(fail-closed:
+    漏传板块参数不会意外把内容变成全网公开,2026-09 每日公推新增)。"""
     if not title.strip():
         raise RecoError("标题不能为空")
+    if board not in _RECO_BOARDS:
+        raise RecoError(f"非法板块: {board}")
     _validate_legs(legs)
     now = utc_now_iso()
     slip_id = new_uuid()
     combo = "parlay" if len(legs) > 1 else "single"
     conn.execute(
         "INSERT INTO reco_slips (id, slip_date, title, note, combo_type, status,"
-        " created_by, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)",
-        (slip_id, slip_date, title, note, combo, actor, now, now),
+        " board, created_by, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)",
+        (slip_id, slip_date, title, note, combo, board, actor, now, now),
     )
     _insert_legs(conn, slip_id, legs, now)
     write_audit(conn, "reco.create", actor, target_type="reco_slip", target_id=slip_id,
-                detail={"slip_date": slip_date, "title": title, "legs": len(legs)})
+                detail={"slip_date": slip_date, "title": title, "legs": len(legs), "board": board})
     return slip_id
 
 
@@ -187,29 +196,47 @@ def edit_slip(
     note: str | None = None,
     slip_date: str | None = None,
     legs: list[LegInput] | None = None,
+    board: str | None = None,
 ) -> None:
     """编辑(draft/published 均可;settled/voided 拒绝——结算修正走 settle 重录)。
 
     留痕:edit_count+1 + audit(含修改前值摘要)。legs 传入即整组替换。
+    board 传入才改(None = 不动既有板块,2026-09 每日公推新增)。
+
+    单向安全阀:已发布的公推单不能改回精选——内容已经全网公开过(可能已被
+    缓存/搬运),"收回付费墙后面"只是自欺欺人,不产生真实的访问收紧效果。
+    反方向(精选→公推,把已发布的精选单转为公开)允许,那是单向的信息释放。
+    draft 状态下双向都允许改。
     """
     row = _require_slip(conn, slip_id)
     if row["status"] in ("settled", "voided"):
         raise RecoError(f"状态 {row['status']} 不允许编辑;结算修正请重新 settle")
+    if (
+        board == "daily_pick" and row["board"] == "daily_public"
+        and row["status"] == "published"
+    ):
+        raise RecoError("该单已发布为每日公推(完全公开内容),不能改回每日精选;如需下线请使用作废")
+    if board is not None and board not in _RECO_BOARDS:
+        raise RecoError(f"非法板块: {board}")
     now = utc_now_iso()
-    before = {"title": row["title"], "note": row["note"], "slip_date": row["slip_date"]}
+    before = {
+        "title": row["title"], "note": row["note"], "slip_date": row["slip_date"],
+        "board": row["board"],
+    }
     conn.execute(
         "UPDATE reco_slips SET title=COALESCE(?, title), note=COALESCE(?, note),"
-        " slip_date=COALESCE(?, slip_date), combo_type=CASE WHEN ? THEN"
+        " slip_date=COALESCE(?, slip_date), board=COALESCE(?, board),"
+        " combo_type=CASE WHEN ? THEN"
         " (CASE WHEN ? > 1 THEN 'parlay' ELSE 'single' END) ELSE combo_type END,"
         " updated_at=?, edit_count=edit_count+1 WHERE id=?",
-        (title, note, slip_date, legs is not None, len(legs or []), now, slip_id),
+        (title, note, slip_date, board, legs is not None, len(legs or []), now, slip_id),
     )
     if legs is not None:
         _validate_legs(legs)
         conn.execute("DELETE FROM reco_legs WHERE slip_id=?", (slip_id,))
         _insert_legs(conn, slip_id, legs, now)
     write_audit(conn, "reco.edit", actor, target_type="reco_slip", target_id=slip_id,
-                detail={"before": before, "legs_replaced": legs is not None})
+                detail={"before": before, "legs_replaced": legs is not None, "board": board})
 
 
 def require_provenance_bound_legs(conn: sqlite3.Connection, slip_id: str) -> None:

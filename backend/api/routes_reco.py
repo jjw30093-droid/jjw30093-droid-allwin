@@ -7,21 +7,31 @@
 - GET  /api/v1/reco/daily/{slip_id}             登录+按场授权 正文(401/403/200)
 - GET  /api/v1/reco/my-access                   登录       个人授权查询
 - GET  /api/v1/reco/track-record                匿名可见   结算/作废归档 + 聚合
+- GET  /api/v1/reco/public                      匿名可见   每日公推(完全公开,2026-09 新增)
 - POST /api/v1/admin/reco/access-grants         admin+CSRF 授权
 - POST /api/v1/admin/reco/access-grants/{id}/revoke admin+CSRF 撤销
 - GET  /api/v1/admin/reco/access-grants         admin      授权记录列表(筛选+分页)
 - /api/v1/admin/reco/slips 等                   admin+CSRF 录入/编辑/发布/结算/作废
 
-每日精选是全站唯一需要 admin 授权的内容,必须按"用户 + 单条 slip"授予
-(backend/commands/reco_access.py)——用户获得一场的权限不因此看到其它场次。
-admin 角色本身不自动获得访问:/reco/daily(/{slip_id}) 与
+每日精选是全站唯一需要 admin 授权才能访问的内容,必须按"用户 + 单条 slip"
+授予(backend/commands/reco_access.py)——用户获得一场的权限不因此看到其它
+场次。admin 角色本身不自动获得访问:/reco/daily(/{slip_id}) 与
 /admin/reco/slips/{slip_id}/preview 是两个彻底独立的端点,后者是 admin
 后台预览用,不受这里的按场授权约束,也不能让前者绕过按场授权。
 
-全部路径**不进** PUBLIC_ALLOWLIST:中间件 default-deny 强制 private, no-store;
-带 Cookie 请求同样触发强制 no-store——双层兜底,每日精选内容永不进共享缓存。
-reco/daily(/{slip_id})、reco/my-access:匿名 401(引导登录);已登录但未获
-该 slip 授权 403(响应体只含中性说明,不含正文任何字段)。
+每日公推(board='daily_public',2026-09 新增)是与每日精选并列、完全公开
+的板块,管理端操作方式相同(建单/发布/结算/作废),只是多一个板块归属;
+不需要也不能对公推单发放 reco_access_grants 授权(backend/commands/
+reco_access.py::grant_access 会拒绝)。两个板块的 (match_id, market) 互斥
+——同一盘口不得跨板块重复推荐,只提醒不拦截(见 queries/reco.py::
+cross_board_market_conflicts)。
+
+除 `/reco/public` 外,全部路径**不进** PUBLIC_ALLOWLIST:中间件 default-deny
+强制 private, no-store;带 Cookie 请求同样触发强制 no-store——双层兜底,
+每日精选内容永不进共享缓存。reco/daily(/{slip_id})、reco/my-access:匿名
+401(引导登录);已登录但未获该 slip 授权 403(响应体只含中性说明,不含
+正文任何字段)。`/reco/public` 是本文件唯一进入 PUBLIC_ALLOWLIST 的路径,
+签名里不读任何身份,响应对匿名与登录用户完全一致。
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -34,6 +44,7 @@ from backend.db.connections import tx
 from backend.queries import odds as q_odds
 from backend.queries import reco as q_reco
 
+from .cache_policy import PUBLIC_CACHE_SHORT
 from .deps import (
     NO_STORE,
     AuthContext,
@@ -56,12 +67,14 @@ from .schemas import (
     RecoMatchOddsOptionsResponse,
     RecoMyAccessResponse,
     RecoOverviewResponse,
+    RecoPublicResponse,
     RecoSettleBody,
     RecoSettledDTO,
     RecoSlipCreateBody,
     RecoSlipCreatedDTO,
     RecoSlipDTO,
     RecoSlipEditBody,
+    RecoSlipEditResponse,
     RecoSlipPreviewResponse,
     RecoTrackRecordResponse,
     RecoVoidBody,
@@ -94,6 +107,24 @@ def reco_overview(
     """
     _no_store(response)
     return q_reco.public_overview(conn)
+
+
+@router.get("/reco/public", response_model=RecoPublicResponse)
+def reco_public(
+    response: Response,
+    conn=Depends(platform_ro),
+):
+    """每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
+    不需要登录——与「每日精选」并列的板块,签名里刻意不注入 AuthContext,
+    不存在按身份分叉的任何分支,响应对所有人完全一致。这是本文件**唯一**
+    进入 PUBLIC_ALLOWLIST 的路径(见 backend/api/cache_policy.py),其余全部
+    reco 路径继续维持中间件 default-deny 的 no-store。
+    """
+    response.headers["Cache-Control"] = PUBLIC_CACHE_SHORT
+    return {
+        "window_days": q_reco.RECO_PUBLIC_WINDOW_DAYS,
+        "slips": q_reco.public_slips(conn),
+    }
 
 
 # ── 登录面(每日精选按"用户 + 单条 slip"授权;2026-08-16 修订) ──────
@@ -213,19 +244,21 @@ def admin_list_slips(
     status: str = "",
     date_from: str = "",
     date_to: str = "",
+    board: str = "",
     ctx: AuthContext = Depends(get_auth_context),
     conn=Depends(platform_ro),
     conn_core=Depends(core_ro),
 ):
-    """status/date_from/date_to(按 slip_date)均可选,不传即不筛选;total 是
-    筛选后的计数,不是全库总数。"""
+    """status/date_from/date_to(按 slip_date)/board 均可选,不传即不筛选;
+    total 是筛选后的计数,不是全库总数。board 不传返回两个板块(每日精选/
+    每日公推,2026-09 新增)。"""
     _no_store(response)
     if not ctx.authenticated:
         raise HTTPException(status_code=401, detail="请先登录")
     _require_admin(ctx)
     total, slips = q_reco.admin_slips(
         conn, conn_core, limit=max(1, min(limit, 200)), offset=max(0, offset),
-        status=status, date_from=date_from, date_to=date_to,
+        status=status, date_from=date_from, date_to=date_to, board=board,
     )
     return {"total": total, "slips": slips}
 
@@ -310,6 +343,21 @@ def admin_reco_match_odds_options(
     return {"match_id": match_id, "options": q_odds.raw_market_options(conn_odds, match_id)}
 
 
+def _conflict_warnings(conn, slip_id: str) -> list[dict]:
+    """建单/改单后,读取这张单当前(post-write)真实的 board + 全部腿,查跨
+    板块盘口冲突(2026-09,只提醒不拦截)。读的是写入后的落库真相而不是
+    请求体本身,不管这次调用改没改 board/legs 都能拿到正确的当前状态。"""
+    row = conn.execute("SELECT board FROM reco_slips WHERE id=?", (slip_id,)).fetchone()
+    leg_rows = conn.execute(
+        "SELECT match_id, market FROM reco_legs WHERE slip_id=?", (slip_id,)
+    ).fetchall()
+    return q_reco.cross_board_market_conflicts(
+        conn, board=row["board"],
+        legs=[{"match_id": r["match_id"], "market": r["market"]} for r in leg_rows],
+        exclude_slip_id=slip_id,
+    )
+
+
 @router.post("/admin/reco/slips", response_model=RecoSlipCreatedDTO, tags=["admin"])
 def admin_create_slip(
     body: RecoSlipCreateBody,
@@ -324,13 +372,15 @@ def admin_create_slip(
             slip_id = cmd.create_slip(
                 conn, slip_date=body.slip_date, title=body.title,
                 legs=_legs(body.legs), note=body.note, actor=ctx.user_id,
+                board=body.board,
             )
+            warnings = _conflict_warnings(conn, slip_id)
     except RecoError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"id": slip_id}
+    return {"id": slip_id, "warnings": warnings}
 
 
-@router.patch("/admin/reco/slips/{slip_id}", response_model=OkDTO, tags=["admin"])
+@router.patch("/admin/reco/slips/{slip_id}", response_model=RecoSlipEditResponse, tags=["admin"])
 def admin_edit_slip(
     slip_id: str,
     body: RecoSlipEditBody,
@@ -344,12 +394,13 @@ def admin_edit_slip(
         with tx(conn):
             cmd.edit_slip(
                 conn, slip_id, actor=ctx.user_id, title=body.title, note=body.note,
-                slip_date=body.slip_date,
+                slip_date=body.slip_date, board=body.board,
                 legs=_legs(body.legs) if body.legs is not None else None,
             )
+            warnings = _conflict_warnings(conn, slip_id)
     except RecoError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"status": "ok"}
+    return {"status": "ok", "warnings": warnings}
 
 
 @router.post("/admin/reco/slips/{slip_id}/publish", response_model=OkDTO, tags=["admin"])

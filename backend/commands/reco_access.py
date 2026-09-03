@@ -58,9 +58,14 @@ def grant_access(
     user = conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone()
     if user is None:
         raise RecoAccessError(f"用户不存在: {user_id}")
-    slip = conn.execute("SELECT id FROM reco_slips WHERE id=?", (slip_id,)).fetchone()
+    slip = conn.execute("SELECT id, board FROM reco_slips WHERE id=?", (slip_id,)).fetchone()
     if slip is None:
         raise RecoAccessError(f"推荐单不存在: {slip_id}")
+    if slip["board"] != "daily_pick":
+        # 每日公推(2026-09 新增)是完全公开内容,不需要也不能授权——避免
+        # 产生永远不被任何判定读取的死记录,污染 /reco/my-access 与 admin
+        # 授权列表。
+        raise RecoAccessError(f"该推荐单属于每日公推板块,是完全公开内容,不需要授权: {slip_id}")
 
     existing = conn.execute(
         "SELECT id FROM reco_access_grants WHERE user_id=? AND slip_id=? AND status='active'",

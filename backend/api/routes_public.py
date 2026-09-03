@@ -25,6 +25,7 @@ from backend.queries import matches as q_matches
 from backend.queries import odds as q_odds
 from backend.queries.leagues import LEAGUE_META, anonymous_cacheable_league_ids, league_data_profiles
 
+from .cache_policy import PUBLIC_CACHE, PUBLIC_CACHE_SHORT
 from .deps import NO_STORE, AuthContext, core_ro, get_auth_context, odds_ro, platform_ro
 from .schemas import (
     AnalysisBundleDTO,
@@ -51,9 +52,6 @@ router = APIRouter(
     tags=["public"],
     responses=error_responses(400, 404, 422),
 )
-
-PUBLIC_CACHE = "public, s-maxage=300, stale-while-revalidate=60"
-PUBLIC_CACHE_SHORT = "public, s-maxage=60, stale-while-revalidate=30"
 
 # 全部已收录联赛现在对匿名与登录用户返回一致内容(单一真源见 queries/leagues.py)。
 # 取代散落的 `league_id == 47` 硬编码——所有联赛都应进公共缓存,不再有需要

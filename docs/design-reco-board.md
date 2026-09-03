@@ -153,3 +153,36 @@ POST /api/v1/admin/reco/slips/{id}/void    # admin:作废(保留可查,不物理
 
 确认以上 5 点后,第二部分按本设计实施(预计:migration 0010 + queries/reco.py +
 commands/reco.py + routes_reco.py + admin 页签 + 测试全套)。
+
+## 10. 每日公推(board 字段,2026-09,已实现,经用户批准)
+
+新增与「每日精选」并列的完全公开板块「每日公推」——不需要登录、不需要
+`reco_access_grants` 授权,管理端操作方式与精选完全一样(建单/编辑/发布/
+结算/作废),只是建单时多选一个板块。
+
+- 数据模型:`reco_slips.board`(migration `0018_reco_board.sql`,`ALTER TABLE
+  ADD COLUMN`,`NOT NULL DEFAULT 'daily_pick'`,`CHECK IN ('daily_pick',
+  'daily_public')`)。默认值保证历史数据(本迁移前全部 21 条精选单)零变化。
+- 读面:新增 `GET /api/v1/reco/public`(完全公开,`queries/reco.py::
+  public_slips()`,近 `RECO_PUBLIC_WINDOW_DAYS=7` 天,复用既有
+  `_slip_dto`/`_legs_by_slip`,不存在锁定态)。既有 `daily_slips` /
+  `daily_slip_detail` / `track_record_slips` / `track_record_summary` /
+  `public_overview` 全部加 `board='daily_pick'` 过滤,保证公推板块的存在
+  与结算绝不污染精选已公开的数字。
+- 业务约束:同一 `(match_id, market)` 不得跨板块重复推荐——只提醒不拦截
+  (`queries/reco.py::cross_board_market_conflicts()`,应用层判定,DB 层
+  无法表达"同板块允许、跨板块禁止"这种条件唯一性)。
+- 安全阀:已发布的公推单不能改回精选(内容已公开过,收不回);draft 状态
+  与"精选→公推"方向不受限。
+- 授权:对公推单调用 `grant_access()` 直接拒绝(`RecoAccessError`)——完全
+  公开内容不需要也不能被"授权"。
+- 缓存:`GET /reco/public` 是本文件唯一进入 `PUBLIC_ALLOWLIST` 的 reco 路径,
+  `PUBLIC_CACHE_SHORT`(`public, s-maxage=60, stale-while-revalidate=30`)。
+- 前端:`/reco` 页(既有 client-only 组件)新增第三个 tab(`?tab=public`),
+  不新建独立路由——复用既有 `SlipCard`/`LegRow`,匿名可见,继承 `/reco`
+  既有的"不进 sitemap"隔离(SEO 不新增任何配置)。
+- 公推板块的战绩归档本期不做(用户决策),但页面窗口内含已结算结果。
+- 测试:`tests/backend/test_reco_board.py`(22 项,含两条"红线"断言——
+  结算公推单前后 `/reco/track-record`/`/reco/overview` 数字逐字段不变)、
+  `tests/admin-reco-tab.test.tsx` 新增板块相关用例、`tests/backend/
+  test_migrations.py` 新增 0018 的 fresh_db + upgrade_from_pre_0018。
