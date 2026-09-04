@@ -174,8 +174,55 @@ describe("/reco 已登录且有权限:完整内容", () => {
   });
 });
 
+describe("/reco 默认标签:每日公推(2026-09 起,导航栏「每日精选」入口点进来直接看到公推)", () => {
+  it("未登录、不带 ?tab= 时默认展示每日公推,不要求登录即可看到完整内容", async () => {
+    mockFetchByUrl({
+      "/api/v1/me": { authenticated: false, plan: "free", entitlements: [] },
+      "/api/v1/reco/track-record": EMPTY_TRACK_RECORD,
+      "/api/v1/reco/public": {
+        window_days: 7,
+        slips: [
+          {
+            id: "public-slip-1",
+            slip_date: "2026-09-01",
+            title: "匿名可见公推单",
+            note: null,
+            combo_type: "single",
+            status: "published",
+            result: null,
+            return_units: null,
+            published_at: "2026-09-01T08:00:00Z",
+            settled_at: null,
+            edit_count: 0,
+            last_edited_at: "2026-09-01T08:00:00Z",
+            legs: [
+              {
+                id: "leg-public-1",
+                match_id: null,
+                match_desc: "公推队 vs 对手队 09-02 20:00",
+                market: "1x2",
+                selection: "主胜",
+                odds: 1.85,
+                result: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(<RecoPage />);
+
+    await waitFor(() => expect(screen.queryByText("匿名可见公推单")).not.toBeNull());
+    expect(screen.queryByText("主胜", { exact: false })).not.toBeNull();
+    // 默认标签不应该是「今日精选」的登录引导文案。
+    expect(screen.queryByText(/每日精选按场开通/)).toBeNull();
+  });
+});
+
 describe("/reco 历史战绩:匿名可见,不要求登录", () => {
-  it("未登录状态下默认标签(历史战绩)正常拉取并展示已结算记录", async () => {
+  it("显式 ?tab=record 时正常拉取并展示已结算记录", async () => {
+    searchParamsValue = "tab=record";
     mockFetchByUrl({
       "/api/v1/me": { authenticated: false, plan: "free", entitlements: [] },
       "/api/v1/reco/track-record": {

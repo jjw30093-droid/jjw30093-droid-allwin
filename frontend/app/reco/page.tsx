@@ -377,15 +377,14 @@ function RecoBody() {
   const authed = me !== "loading" && Boolean(me?.authenticated);
   const summary = track?.summary;
 
-  // 显式 ?tab= 优先;否则默认落在人人可看的「历史战绩」——每日精选没有
-  // 任何"整体已解锁"的全局状态可以据此决定默认标签,具体到某一场是否可看
-  // 只在列表渲染时逐条判断。「每日公推」(2026-09 新增)同样人人可看,但
-  // 不改变既有默认落点,只作为可显式切换到的第三个 tab。
+  // 显式 ?tab= 优先;否则默认落在完全公开的「每日公推」(2026-09 起,站长
+  // 明确要求:导航栏"每日精选"入口点进来直接看到公推,不需要登录门槛——
+  // 每日公推排最左,是这一路由现在的默认落点)。
   const explicit = searchParams.get("tab");
   const tab: Tab =
     explicit === "daily" || explicit === "record" || explicit === "public"
       ? explicit
-      : "record";
+      : "public";
 
   return (
     <main className={styles.page}>
@@ -395,6 +394,13 @@ function RecoBody() {
       </p>
 
       <nav className={styles.tabs} aria-label="精选内容切换">
+        <Link
+          href="/reco?tab=public"
+          className={tab === "public" ? styles.tabActive : styles.tab}
+          aria-current={tab === "public" ? "page" : undefined}
+        >
+          每日公推
+        </Link>
         <Link
           href="/reco?tab=daily"
           className={tab === "daily" ? styles.tabActive : styles.tab}
@@ -408,13 +414,6 @@ function RecoBody() {
           aria-current={tab === "record" ? "page" : undefined}
         >
           历史战绩
-        </Link>
-        <Link
-          href="/reco?tab=public"
-          className={tab === "public" ? styles.tabActive : styles.tab}
-          aria-current={tab === "public" ? "page" : undefined}
-        >
-          每日公推
         </Link>
       </nav>
 
