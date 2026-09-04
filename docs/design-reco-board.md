@@ -296,3 +296,66 @@ DTO 把 `hit_rate` 与 `decided_count` 放在同一个对象里,让"只渲染百
 生产 20 单(2026-08-14~09-02,16胜3负1走)按 `published_at` 排序的尾部序列是
 `win×5, push, lose` → **连中 = 5**,banner 会显示「每日精选 · 近 5 单全中」。
 连中一旦被打断,阶梯的下一顺位是西甲(联赛 87)5单5中 100%(真实数据,已核对)。
+
+## 13. 首页两条 banner 改版为横条(2026-09,经站长批准)
+
+参照站长另一个项目 `miaomiaodi.cc` 的 `frontend/components/worldcup/
+VipPromoBanner.tsx`(线上当时 522,读的是源码)重做。改版前两块合计 740px
+(真机 375px 实测),把「重点比赛」整个挤出首屏;改版后约 250px。
+
+### 借过来的四个装置
+
+1. 横条形态,不是竖着的卡——省地方主要靠这一条;
+2. 两端浅染、中间留白的横向渐变底 + 同色柔光投影;
+3. 脉冲圆点 badge(`animate-ping`);
+4. 胶囊 CTA + 持续扫光(`banner-shimmer`)+ 箭头 nudge。
+
+### 刻意没照抄的
+
+- 配色:`.cc` 用 sky/blue,这里换成站内 `--brand-gold` 与 `--odds-up`
+  (后者是"红涨"那一档,不是 `--brand-red` 那个错误态语义色,§11.2);
+- `.cc` 那个位置放的是**赔率大数字**,公推的硬性要求是不出赔率,换成
+  推荐选项并用 `--brand-teal`(§11.2「青绿 = 主要操作/选中」);
+- 战绩条的圆点**不脉冲**:脉冲表示"正在发生",战绩是过去式;同屏两个点
+  一起跳也吵。脉冲只留给公推条;
+- `prefers-reduced-motion` 下三个动画全部关掉(`.cc` 原样保留了这条)。
+
+### 腿行:为了画队徽新增的下发字段
+
+`RecoPublicCurrentLegDTO` 补 `league_id` / `league_name_zh` / `home` /
+`away`(后两个是新的 `RecoPublicCurrentTeamDTO`:`team_id` + 中文名 +
+同源 `crest_url`,**不含 name_en**——banner 上没有位置展示英文名)。
+
+取数在 `backend/queries/reco.py::_banner_match_facts_for_ids`(整批取、
+跨库不 ATTACH,与 `reco_highlight.py::_league_ids_for_match_ids` 同一范式)。
+
+**全部字段可空且缺失即退化**:腿没有 `match_id`、`dim_match` 里查不到
+这一行、联赛不在 `LEAGUE_META`、队徽还没被媒体管线采到——任何一种情况
+都只是少画一个图标,前端仍用 `match_desc` 文本把这条腿完整渲染出来,
+绝不因缺图藏腿。三种退化路径各有一条后端测试。
+
+联赛徽走自托管静态图 `frontend/public/brand/leagues/{league_id}.png`,
+不是外链(§11.2);队徽 `crest_url` 为 None 时 `TeamBadge` 渲染两字缩写
+兜底,与全站既有行为一致,不是错误态。
+
+### 两处为宽度做的取舍(390px 实测,不是估计)
+
+- **玩法名不进可见文案**。这一行的实测余量只有约 19px,而「胜平负 」要
+  46px,加进去队名立刻被省略成「阿···」。腿行的展示优先级是"哪两支队、
+  几点、推什么";玩法放进 `title`(悬停可见),完整玩法在 /reco 公推页。
+- **开球时刻同日只出钟点,跨日才带日期**。一律写 "01:00" 在 2 天窗口下
+  分不清哪天;一律带 "9月5日" 又多占约 40px。用 `slip_date` 与开球的北京
+  自然日比对来二选一——**两个字符串比较,不读时钟**,服务端与客户端结果
+  恒等,没有水合风险。
+- 队名是这一行唯一允许收缩的元素(徽标、vs、时间、选项全是 `flex:none`):
+  窄屏先省略长队名,而不是让末尾的开球时刻被容器 `overflow` 裁掉——
+  时间被裁成"9月4日 16:"是残缺的事实,队名短一截只是省略的名字。
+
+### 战绩条的文案拆分
+
+`highlightLines` 从返回单个 `main` 扩成 `{main, boardShort, value, emphasize}`:
+横条把板块短标签(「精选」,脱掉「每日」前缀)做成灰色前缀、口径与计数用
+强调色。`main` 保留不变,它是"文案必含原始计数""不得出现裸百分比"两条
+不变量的断言对象;`frontend/tests/reco-highlight.test.ts` 另加一条
+`main === ${板块} · ${value}` 的防漂移断言,免得守卫守着一个页面上并不
+存在的字符串。

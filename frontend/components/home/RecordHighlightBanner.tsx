@@ -5,6 +5,10 @@
  * 完整背景、与记录面(/reco?tab=record 全样本)的分工、以及"这不是 bug、
  * 不要修复成全样本"的说明,见 backend/queries/reco_highlight.py 模块头注。
  *
+ * 2026-09 改版为横条形态(参照 miaomiaodi.cc 的 VipPromoBanner):板块短标签
+ * 做灰色前缀、口径与计数用强调色,一行放下两个板块,靠 flex-wrap 在窄屏
+ * 折成两行,「全部 →」始终钉在右侧不参与折行。
+ *
  * **与公推 banner 的结构差异(不要照抄成三段式)**:公推 banner 需要一个
  * "use client" 组件,是因为它有"开球 +2h 精确撤下"的时间判定,必须由各客户端
  * 按自己的当前时间算。本 banner 没有任何时间撤下逻辑——内容只在某张单结算时
@@ -41,23 +45,29 @@ export async function RecordHighlightBanner() {
   if (rows.length === 0) return null;
 
   return (
-    <Link href="/reco?tab=record" className={styles.recordHighlightBanner}>
-      <div className={styles.picksHead}>
-        <h2>推荐战绩</h2>
-      </div>
-      {/* 2026-09 站长要求:只留主行,去掉细行与 CTA 文案。整块仍然是 <Link>,
-          点任意位置进 /reco?tab=record 的全样本记录面——入口没丢,只是不再
-          有一行文字标注它。 */}
-      {rows.map((r) => (
-        <div key={r.board} className={styles.recordHighlightRow}>
-          <span
-            className={styles.recordHighlightMain}
-            data-emphasize={r.lines.emphasize ? "1" : undefined}
-          >
-            {r.lines.main}
+    <Link
+      href="/reco?tab=record"
+      className={styles.recordStrip}
+      aria-label="推荐战绩,查看完整记录"
+    >
+      <span className={styles.recordStripBody}>
+        <span className={styles.recordChip}>
+          <span className={styles.recordChipDot} aria-hidden />
+          战绩
+        </span>
+        {rows.map((r) => (
+          <span key={r.board} className={styles.recordItem}>
+            {r.lines.boardShort}{" "}
+            <span
+              className={styles.recordItemValue}
+              data-emphasize={r.lines.emphasize ? "1" : undefined}
+            >
+              {r.lines.value}
+            </span>
           </span>
-        </div>
-      ))}
+        ))}
+      </span>
+      <span className={styles.recordStripMore}>全部 →</span>
     </Link>
   );
 }

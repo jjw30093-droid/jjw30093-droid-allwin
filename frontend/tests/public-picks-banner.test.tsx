@@ -51,6 +51,21 @@ function slip(overrides: Partial<PublicPickSlip> = {}): PublicPickSlip {
   };
 }
 
+/** 带结构化比赛事实的腿(联赛 + 主客队)。crest_url 为 null 是常见合法状态
+ *  ——媒体管线还没采到这支球队的队徽,TeamBadge 走两字缩写兜底。 */
+const STRUCTURED_LEG: PublicPickSlip["legs"][number] = {
+  id: "leg-1",
+  match_id: 9001,
+  match_desc: "阿森纳 vs 切尔西 04-01 20:00",
+  market: "ou",
+  selection: "大2.5",
+  kickoff_at_utc: KICKOFF,
+  league_id: 47,
+  league_name_zh: "英超",
+  home: { team_id: 1001, name: "阿森纳", crest_url: null },
+  away: { team_id: 1002, name: "切尔西", crest_url: null },
+};
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -85,13 +100,18 @@ describe("PublicPicksBannerLive", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("未到点的单正常展示比赛与「玩法 · 选项」", async () => {
+  it("未到点的单正常展示比赛与选项;玩法名只进 title 不进可见文案", async () => {
+    // 2026-09 横条改版:腿行可见文案是「比赛 + 时间 + 选项」,玩法名让位给
+    // 队名(390px 实测余量约 19px,放不下「胜平负 」的 46px)。信息不丢失——
+    // 玩法在 title 里,完整玩法在 /reco 公推页。
     vi.setSystemTime(KICKOFF_MS - HOUR);
     render(<PublicPicksBannerLive slips={[slip()]} hideAfterHours={2} />);
     await flush();
     expect(screen.getByText("阿森纳 vs 切尔西 04-01 20:00")).not.toBeNull();
-    expect(screen.getByText("大小球 · 大2.5")).not.toBeNull();
-    expect(screen.getByText("今日单关")).not.toBeNull();
+    const pick = screen.getByText("大2.5");
+    expect(pick).not.toBeNull();
+    expect(pick.getAttribute("title")).toBe("大小球 · 大2.5");
+    expect(screen.queryByText("大小球 · 大2.5")).toBeNull();
   });
 
   it("页面开着不动,到点后自动撤下(定时器生效)", async () => {
@@ -142,7 +162,10 @@ describe("PublicPicksBannerLive", () => {
       />,
     );
     await flush();
-    expect(screen.getByText("btts · 双方进球")).not.toBeNull();
+    // `?? leg.market` 兜底:未登记的 market 原样进 title,不因查不到映射而崩。
+    expect(screen.getByText("双方进球").getAttribute("title")).toBe(
+      "btts · 双方进球",
+    );
   });
 
   it("串关渲染全部腿并标出 2串1", async () => {
@@ -220,6 +243,59 @@ describe("PublicPicksBannerLive", () => {
     expect(container.querySelector("a")?.getAttribute("href")).toBe(
       "/reco?tab=public",
     );
+  });
+
+  it("有结构化比赛事实时画联赛徽与两枚队徽,并渲染中文队名", async () => {
+    vi.setSystemTime(KICKOFF_MS - HOUR);
+    const { container } = render(
+      <PublicPicksBannerLive slips={[slip({ legs: [STRUCTURED_LEG] })]} hideAfterHours={2} />,
+    );
+    await flush();
+    expect(screen.getByText("阿森纳")).not.toBeNull();
+    expect(screen.getByText("切尔西")).not.toBeNull();
+    // 联赛徽走自托管静态图(/brand/leagues/{id}.png),不是外链。
+    const league = container.querySelector('img[src*="/brand/leagues/47"]');
+    expect(league).not.toBeNull();
+    // crest_url 为 null → TeamBadge 走两字缩写兜底,不是错误态。
+    expect(container.querySelectorAll('[data-testid="team-badge-fallback"]').length).toBe(2);
+    // 有了结构化字段就不再重复渲染录入时的 match_desc 文本。
+    expect(container.textContent).not.toContain("阿森纳 vs 切尔西 04-01 20:00");
+  });
+
+  it("缺 home/away 时退回 match_desc 文本——少画图标,不藏腿", async () => {
+    vi.setSystemTime(KICKOFF_MS - HOUR);
+    const { container } = render(
+      <PublicPicksBannerLive slips={[slip()]} hideAfterHours={2} />,
+    );
+    await flush();
+    expect(screen.getByText("阿森纳 vs 切尔西 04-01 20:00")).not.toBeNull();
+    expect(container.querySelector('[data-testid="team-badge-fallback"]')).toBeNull();
+    expect(container.querySelector('[data-testid="team-badge-image"]')).toBeNull();
+  });
+
+  it("开球与 slip_date 同一北京日 → 只出钟点", async () => {
+    vi.setSystemTime(KICKOFF_MS - HOUR);
+    // KICKOFF = 2027-04-01T12:00:00Z → 北京 20:00,与 slip_date 2027-04-01 同日。
+    render(
+      <PublicPicksBannerLive slips={[slip({ legs: [STRUCTURED_LEG] })]} hideAfterHours={2} />,
+    );
+    await flush();
+    expect(screen.getByText("20:00")).not.toBeNull();
+    expect(screen.queryByText(/月.*日/)).toBeNull();
+  });
+
+  it("开球跨到 slip_date 的次日 → 带上日期,不让读者以为是当天", async () => {
+    // 2027-04-01T17:00:00Z → 北京 4月2日 01:00,与 slip_date 2027-04-01 不同日。
+    const late = "2027-04-01T17:00:00Z";
+    vi.setSystemTime(Date.parse(late) - HOUR);
+    render(
+      <PublicPicksBannerLive
+        slips={[slip({ legs: [{ ...STRUCTURED_LEG, kickoff_at_utc: late }] })]}
+        hideAfterHours={2}
+      />,
+    );
+    await flush();
+    expect(screen.getByText("4月2日 01:00")).not.toBeNull();
   });
 
   it("卸载后定时器被清掉(不泄漏、不在卸载后 setState)", async () => {

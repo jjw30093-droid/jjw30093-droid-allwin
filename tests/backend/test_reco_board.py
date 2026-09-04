@@ -489,6 +489,93 @@ class TestPublicCurrentEndpoint:
             "2027-04-01T12:00:00Z", "2027-04-01T15:00:00Z",
         ]
 
+    def test_leg_carries_league_and_team_facts_for_badges(self, app, data_dir, fresh_ip):
+        """2026-09 横条改版:腿要能画联赛徽与两枚队徽,所以下发 league_id +
+        主客队(中文名 + 同源队徽地址)。
+
+        `insert_match` 默认 League_ID=47(英超)、1001 Arsenal vs 1002 Chelsea。
+        """
+        _seed_core_match(830040, "2027-04-01T12:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="带队徽的公推", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "ou", "大2.5", 1.9, 830040)])
+        _publish(admin, sid)
+
+        slip = next(s for s in TestClient(app).get("/api/v1/reco/public/current")
+                     .json()["slips"] if s["id"] == sid)
+        leg = slip["legs"][0]
+        assert leg["league_id"] == 47
+        assert leg["league_name_zh"] == "英超"
+        assert leg["home"]["team_id"] == 1001
+        assert leg["away"]["team_id"] == 1002
+        assert leg["home"]["name"]
+        assert leg["away"]["name"]
+        # 队徽没被媒体管线采过 → crest_url 为 None 是合法状态,不是错误;
+        # 前端 TeamBadge 走两字缩写兜底。字段必须存在(而不是整个 home 缺失)。
+        assert "crest_url" in leg["home"]
+        # 不下发 name_en:banner 上没有位置展示英文名。
+        assert "name_en" not in leg["home"]
+
+    def test_leg_without_core_match_row_degrades_but_is_not_dropped(
+        self, app, data_dir, fresh_ip
+    ):
+        """core 库里查不到这场比赛(legacy 数据/尚未同步)时,联赛与主客队
+        字段全部为 None,但**这条腿本身照常下发**——缺图标只是少画一个图标,
+        绝不能因此把腿藏起来。"""
+        admin = _admin_client(app, data_dir, fresh_ip)
+        # 刻意不 _seed_core_match:match_id 在 core 库里不存在
+        sid = _create_slip(admin, title="core 无此场", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("孤儿场 A vs B", "1x2", "主胜", 1.9, 839999)])
+        _publish(admin, sid)
+
+        slip = next(s for s in TestClient(app).get("/api/v1/reco/public/current")
+                     .json()["slips"] if s["id"] == sid)
+        leg = slip["legs"][0]
+        assert leg["match_desc"] == "孤儿场 A vs B"   # 腿在,文本兜底在
+        assert leg["selection"] == "主胜"
+        assert leg["league_id"] is None
+        assert leg["league_name_zh"] is None
+        assert leg["home"] is None
+        assert leg["away"] is None
+        assert leg["kickoff_at_utc"] is None
+
+    def test_league_outside_league_meta_keeps_leg_but_drops_zh_name(
+        self, app, data_dir, fresh_ip
+    ):
+        """未登记进 LEAGUE_META 的联赛:league_name_zh 为 None(不能把内部
+        league_id 当名字露给用户 §11.2),但腿与 league_id 照常下发——
+        前端 LeagueBadge 找不到图就静默不渲染。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        # dim_match 有赛季守卫(迁移 0011 §6.3):联赛必须先登记进制度表,
+        # 否则 INSERT 直接被触发器拒绝。所以"不在 LEAGUE_META"这个场景只能
+        # 由"制度表有、LEAGUE_META 没有"构造出来——这也正是它在生产上唯一
+        # 可能的形态(新联赛先接数据、中文名后补)。
+        conn.execute(
+            "INSERT OR REPLACE INTO dim_league_season_regime"
+            " (league_id, effective_from, season_kind, cutover_month, note)"
+            " VALUES (999999, '1900-01-01', 'cross_year', 7, '尚未登记中文名的新联赛')"
+        )
+        insert_match(conn, 830041, league_id=999999,
+                     date="2027-04-01", status="NotStarted",
+                     kickoff_at_utc="2027-04-01T12:00:00Z")
+        conn.commit()
+        conn.close()
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="未登记联赛", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("X vs Y", "1x2", "主胜", 1.9, 830041)])
+        _publish(admin, sid)
+
+        slip = next(s for s in TestClient(app).get("/api/v1/reco/public/current")
+                     .json()["slips"] if s["id"] == sid)
+        leg = slip["legs"][0]
+        assert leg["league_id"] == 999999
+        assert leg["league_name_zh"] is None
+        assert leg["match_desc"] == "X vs Y"
+
     def test_featured_board_slip_never_leaks(self, app, data_dir, fresh_ip):
         """最严重的越权可能:每日精选(需授权)混进完全公开的 banner 面。"""
         _seed_core_match(830020, "2027-04-01T12:00:00Z")

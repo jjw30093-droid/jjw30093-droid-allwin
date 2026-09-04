@@ -40,10 +40,23 @@ function segmentLabel(seg: NonNullable<BoardHighlight["segment"]>): string {
 }
 
 export type HighlightLines = {
+  /** 整行文案(板块 + 口径 + 计数)。横条 banner 不直接渲染它,但它是
+   *  「文案必含原始计数」那条不变量的断言对象,也是无样式场景的兜底。 */
   main: string;
+  /** 板块短标签(「精选」/「公推」)。横条把它做成灰色前缀,与彩色的
+   *  value 分开——`每日` 两字在一行里出现两次纯属噪音。未知板块标签原样
+   *  返回,不硬切前两字(切错比长一点更糟)。 */
+  boardShort: string;
+  /** 除板块外的口径与计数,横条里用强调色渲染。 */
+  value: string;
   /** 有没有值得强调的徽章(连中 / 达标命中率);不达标的不加强调。 */
   emphasize: boolean;
 };
+
+/** 「每日精选」→「精选」。只脱已知前缀,不做盲切。 */
+function shortBoard(label: string): string {
+  return label.startsWith("每日") ? label.slice(2) : label;
+}
 
 /**
  * 把一个板块的择优结果变成一行文案。返回 null 表示这一行不渲染
@@ -68,31 +81,30 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     if (s.skipped_push_count > 0) skipped.push(`${s.skipped_push_count} 单走水`);
     if (s.skipped_void_count > 0) skipped.push(`${s.skipped_void_count} 单作废`);
     const note = skipped.length > 0 ? `（其间 ${skipped.join("、")}不计）` : "";
-    return {
-      main: `${board} · 近 ${s.length} 单全中${note}`,
-      emphasize: true,
-    };
+    const value = `近 ${s.length} 单全中${note}`;
+    return { main: `${board} · ${value}`, boardShort: shortBoard(board), value, emphasize: true };
   }
 
   if (h.kind === "parlay_return" && h.window) {
     const n = h.parlay_slip_count ?? 0;
     const net = h.parlay_net_units ?? 0;
     const sign = net >= 0 ? "+" : "";
-    return {
-      main: `${board} · ${windowLabel(h.window)} · 串关 ${n} 单 回报 ${sign}${net.toFixed(2)} 单位`,
-      emphasize: false,
-    };
+    const value = `${windowLabel(h.window)} · 串关 ${n} 单 回报 ${sign}${net.toFixed(2)} 单位`;
+    return { main: `${board} · ${value}`, boardShort: shortBoard(board), value, emphasize: false };
   }
 
   if (h.rate && h.window) {
     const r = h.rate;
     const seg = h.segment ? segmentLabel(h.segment) : "";
     // 主体是原始计数「N 单 M 中」,不是裸百分比。
-    const parts = [board, windowLabel(h.window)];
+    const parts = [windowLabel(h.window)];
     if (seg) parts.push(seg);
     parts.push(`${r.decided_count} 单 ${r.win_count} 中`);
+    const value = parts.join(" · ");
     return {
-      main: parts.join(" · "),
+      main: `${board} · ${value}`,
+      boardShort: shortBoard(board),
+      value,
       emphasize: h.kind === "rate_qualified",
     };
   }

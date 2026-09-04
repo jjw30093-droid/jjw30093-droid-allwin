@@ -4116,6 +4116,12 @@ export interface components {
             selection: string;
             /** Kickoff At Utc */
             kickoff_at_utc?: string | null;
+            /** League Id */
+            league_id?: number | null;
+            /** League Name Zh */
+            league_name_zh?: string | null;
+            home?: components["schemas"]["RecoPublicCurrentTeamDTO"] | null;
+            away?: components["schemas"]["RecoPublicCurrentTeamDTO"] | null;
         };
         /**
          * RecoPublicCurrentResponse
@@ -4149,6 +4155,21 @@ export interface components {
             published_at?: string | null;
             /** Legs */
             legs: components["schemas"]["RecoPublicCurrentLegDTO"][];
+        };
+        /**
+         * RecoPublicCurrentTeamDTO
+         * @description banner 的球队投影。**不含 name_en**——banner 上没有位置展示英文名。
+         *
+         *     crest_url 为 None 是合法且常见状态(媒体管线还没采到这支球队的队徽),
+         *     前端 TeamBadge 在缺失时渲染两字缩写兜底,与全站既有行为一致。
+         */
+        RecoPublicCurrentTeamDTO: {
+            /** Team Id */
+            team_id: number;
+            /** Name */
+            name: string;
+            /** Crest Url */
+            crest_url?: string | null;
         };
         /**
          * RecoPublicResponse

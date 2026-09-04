@@ -807,132 +807,273 @@
  * 公推 banner 上方,两块同等重量的卡会让首屏顶部打架,而公推(实际产品)
  * 才是主角,战绩只是佐证。 */
 
-/* 红色发光边框(2026-09 站长指定要"醒目")。
+/* ── 首页顶部两条横条(2026-09 改版,参照 miaomiaodi.cc 的 VipPromoBanner)──
  *
- * 用的是 --odds-up 那一档深红,不是 --brand-red——后者是"真实错误/不可用"
- * 的语义色(CLAUDE.md §11.2),战绩条不是错误态,借用会让错误提示和营销位
- * 撞色。--odds-up 本身也是为了"红涨"从错误红里分出来的一档,正好复用。
- * 深浅两套主题各有取值,不硬编码十六进制。 */
-.recordHighlightBanner {
-  display: block;
+ * 借过来的四个装置:横条形态(不是竖卡)、两端浅染中间留白的横向渐变底 +
+ * 同色柔光投影、脉冲圆点 badge、胶囊 CTA + 持续扫光 + 箭头 nudge。
+ * 没照抄的是配色:.cc 用 sky/blue,这里换成站内 --brand-gold 与 --odds-up;
+ * .cc 那个位置放的是赔率大数字,公推不展示赔率,换成推荐选项并用
+ * --brand-teal(§11.2「青绿 = 主要操作/选中」)。
+ *
+ * 改版前两块合计 740px(真机 375px 实测),把「重点比赛」整个挤出首屏;
+ * 现在合计约 250px。
+ *
+ * 战绩条的红用 --odds-up 那一档深红,不是 --brand-red——后者是"真实错误/
+ * 不可用"的语义色(§11.2),战绩条不是错误态,借用会让错误提示和营销位撞色。
+ * --odds-up 本身就是为了"红涨"从错误红里分出来的一档,深浅两套主题各有
+ * 取值,不硬编码十六进制。 */
+
+@keyframes bannerPing {
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes bannerShimmer {
+  0% {
+    left: -100%;
+  }
+  55%,
+  100% {
+    left: 150%;
+  }
+}
+
+@keyframes bannerArrowNudge {
+  0%,
+  65%,
+  100% {
+    transform: translateX(0);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+/* ── 战绩横条 ─────────────────────────────────────────── */
+
+.recordStrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0 0 10px;
-  border: 1.5px solid var(--odds-up);
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--odds-up) 32%, transparent);
   border-radius: var(--r-card-sm);
-  background: var(--surface);
-  padding: 12px 16px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 0%,
+    var(--surface) 46%,
+    color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 100%
+  );
+  box-shadow: 0 4px 18px -8px color-mix(in srgb, var(--odds-up) 55%, transparent);
   text-decoration: none;
   color: var(--ink);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--odds-up) 16%, transparent),
-    0 0 14px color-mix(in srgb, var(--odds-up) 34%, transparent);
 }
 
 @media (hover: hover) {
-  .recordHighlightBanner:hover {
-    box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--odds-up) 24%, transparent),
-      0 0 20px color-mix(in srgb, var(--odds-up) 48%, transparent);
+  .recordStrip:hover {
+    border-color: color-mix(in srgb, var(--odds-up) 52%, transparent);
+    box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--odds-up) 70%, transparent);
   }
 }
 
-@media (max-width: 760px) {
-  .recordHighlightBanner {
-    margin-bottom: 8px;
-    padding: 10px 14px;
-  }
+.recordStripBody {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  flex-grow: 1;
+  min-width: 0;
 }
 
-.recordHighlightRow {
-  padding: 3px 0;
+/* 战绩 chip 的圆点**不脉冲**:脉冲表示"正在发生",战绩是过去式;而且同屏
+ * 两个点一起跳很吵。脉冲只留给下面的公推 chip。 */
+.recordChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--odds-up) 38%, transparent);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--odds-up) 8%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--odds-up);
+  white-space: nowrap;
 }
 
-/* 主行以原始计数(「5 单 5 中」/「N 单 M 中」)为主体,不是裸百分比。 */
-.recordHighlightMain {
-  display: block;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.5;
-  color: var(--ink);
+.recordChipDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--r-pill);
+  background: var(--odds-up);
 }
 
-.recordHighlightMain[data-emphasize="1"] {
+.recordItem {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.recordItemValue {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* 被后端择优逻辑判定为"值得强调"的那一条(连中 / 达标命中率)才上红。 */
+.recordItemValue[data-emphasize="1"] {
   color: var(--odds-up);
 }
 
-/* ── 每日公推 banner(2026-09,首页最顶部)──────────────────
- *
- * 视觉基线抄 .picksCard(同一套边框/圆角/底色/内边距),但它在页面最顶部,
- * 所以 margin 改成"下外边距"而不是 .picksCard 的 margin-top: 26px。
- * 整块是 <Link>,必须自己吃掉链接默认的下划线与颜色。
- * 头部复用 .picksHead / .picksBadge,不复制新类。
- *
- * 字号(§11.2):正文 ≥14px、辅助说明 ≥12px。**不要照抄本文件里既有的
- * 10.5/11.5px**——那些是历史遗留,本身就不合规。 */
+.recordStripMore {
+  flex: none;
+  font-size: 12px;
+  color: var(--brand-gold-deep);
+  white-space: nowrap;
+}
 
-.publicPicksBanner {
-  display: block;
+/* ── 公推横条 ─────────────────────────────────────────── */
+
+.picksStrip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: 0 0 14px;
-  border: 1px solid var(--border);
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand-gold) 65%, transparent);
   border-radius: var(--r-card);
-  background: var(--surface);
-  padding: 18px 20px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--brand-gold) 12%, var(--surface)) 0%,
+    var(--surface) 46%,
+    color-mix(in srgb, var(--brand-gold) 12%, var(--surface)) 100%
+  );
+  box-shadow: 0 6px 22px -10px color-mix(in srgb, var(--brand-gold-deep) 60%, transparent);
   text-decoration: none;
   color: var(--ink);
 }
 
 @media (hover: hover) {
-  .publicPicksBanner:hover {
+  .picksStrip:hover {
     border-color: var(--brand-gold);
+    box-shadow: 0 10px 28px -10px color-mix(in srgb, var(--brand-gold-deep) 78%, transparent);
   }
 }
 
-@media (max-width: 760px) {
-  .publicPicksBanner {
-    margin-bottom: 8px;
-    padding: 14px 14px;
-  }
-}
-
-.publicPicksSlip {
-  padding: 10px 0 0;
-  border-top: 1px solid var(--border);
-  margin-top: 10px;
-}
-
-.publicPicksSlip:first-of-type {
-  border-top: 0;
-  margin-top: 0;
-  padding-top: 0;
-}
-
-.publicPicksSlipHead {
+.picksStripHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  margin: 0 0 6px;
 }
 
-.publicPicksTitle {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink);
+.picksChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--brand-gold) 78%, transparent);
+  border-radius: var(--r-pill);
+  background: var(--gold-hi-accent);
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--brand-gold-deep);
+  white-space: nowrap;
 }
 
-.publicPicksCombo {
+.picksChipDot {
+  position: relative;
+  display: inline-flex;
+  width: 6px;
+  height: 6px;
+  flex: none;
+}
+
+.picksChipDot::before,
+.picksChipDot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: var(--brand-gold-deep);
+}
+
+.picksChipDot::before {
+  opacity: 0.6;
+  animation: bannerPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.picksStripMeta {
   font-size: 12px;
   color: var(--ink-3);
 }
 
-/* 窄屏靠减列(比赛名与选项换行堆叠),不靠缩字号——§11.2。 */
-.publicPicksLeg {
+.picksStripSlips {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 3px 0;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.publicPicksMatch {
+.picksSlipRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.picksSlipLabel {
+  flex: none;
+  width: 40px;
+  padding-top: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+/* 串关多条腿共用一个标签,靠这根竖轨把它们收成一组——不是给第二条腿留
+ * 一个空标签列(那样读起来像漏了字)。 */
+.picksSlipRail {
+  width: 2px;
+  flex: none;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--brand-gold) 50%, transparent);
+}
+
+.picksSlipLegs {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.picksLeg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.picksLegLeft {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+/* 队名是这一行里**唯一允许收缩**的东西:窄屏放不下时先把长队名省略,
+ * 而不是让末尾的开球时刻被容器的 overflow 裁掉(徽标、vs、时间、推荐选项
+ * 全是 flex:none)。时间被裁成"9月4日 16:"比队名短一截严重得多——前者是
+ * 残缺的事实,后者只是省略的名字。 */
+.picksLegTeam {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 13px;
   color: var(--ink-2);
   overflow: hidden;
@@ -940,44 +1081,90 @@
   white-space: nowrap;
 }
 
-/* 「玩法 · 选项」是本 banner 的信息核心,永不省略。 */
-.publicPicksPick {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
+.picksLegVs {
   flex: none;
-}
-
-@media (max-width: 560px) {
-  /* 窄屏减列:比赛名与「玩法 · 选项」上下堆叠。父级 display:block 之后,
-     两个子元素本身是 inline <span>,不显式转成 block 会挤在同一行连成
-     "…今晚 23:00亚洲让球 · 让-0.5 主"。 */
-  .publicPicksLeg {
-    display: block;
-    padding: 5px 0;
-  }
-
-  .publicPicksMatch,
-  .publicPicksPick {
-    display: block;
-    white-space: normal;
-  }
-
-  .publicPicksMatch {
-    margin-bottom: 2px;
-  }
-}
-
-.publicPicksCta {
-  display: block;
-  margin: 12px 0 0;
   font-size: 12px;
-  font-weight: 700;
-  color: var(--brand-gold-deep);
+  color: var(--ink-3);
 }
 
-:global(html[data-theme="dark"]) .publicPicksCta {
-  color: var(--brand-gold);
+.picksLegTime {
+  flex: none;
+  margin-left: 2px;
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* 取不到结构化比赛事实时(legacy 腿没有 match_id、dim_match 里没有这一行)
+ * 退回渲染录入时的 match_desc 文本——少画图标,不藏腿。 */
+.picksLegDesc {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picksLegPick {
+  flex: none;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--brand-teal);
+}
+
+.picksCtaRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.picksStripCta {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--r-pill);
+  background: var(--brand-gold);
+  color: var(--on-gold);
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.picksCtaShine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  transform: skewX(-12deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--paper-bright) 60%, transparent),
+    transparent
+  );
+  animation: bannerShimmer 2.8s ease-in-out infinite;
+}
+
+.picksCtaArrow {
+  position: relative;
+  display: inline-block;
+  animation: bannerArrowNudge 2s ease-in-out infinite;
+}
+
+/* 三个动画都尊重"减少动态效果"系统偏好——.cc 原样保留了这条,这里同样。 */
+@media (prefers-reduced-motion: reduce) {
+  .picksChipDot::before,
+  .picksCtaShine,
+  .picksCtaArrow {
+    animation: none;
+  }
 }
 
 /* ── 今日精选卡 ─────────────────────────────────────────── */

@@ -1896,6 +1896,26 @@ class RecoPublicCurrentLegDTO(BaseModel):
     market: str
     selection: str
     kickoff_at_utc: Optional[str] = None
+    # 展示用的比赛事实(2026-09 banner 改版补齐):联赛徽 + 两队队徽/中文名。
+    # 全部 Optional 且缺失即退化——腿没有 match_id、dim_match 里查不到这一行、
+    # 联赛不在 LEAGUE_META、队徽还没被媒体管线采到,任何一种情况都只是少画一个
+    # 图标,前端仍用 match_desc 文本把这条腿完整渲染出来,绝不因缺图藏腿。
+    league_id: Optional[int] = None
+    league_name_zh: Optional[str] = None
+    home: Optional["RecoPublicCurrentTeamDTO"] = None
+    away: Optional["RecoPublicCurrentTeamDTO"] = None
+
+
+class RecoPublicCurrentTeamDTO(BaseModel):
+    """banner 的球队投影。**不含 name_en**——banner 上没有位置展示英文名。
+
+    crest_url 为 None 是合法且常见状态(媒体管线还没采到这支球队的队徽),
+    前端 TeamBadge 在缺失时渲染两字缩写兜底,与全站既有行为一致。
+    """
+
+    team_id: int
+    name: str
+    crest_url: Optional[str] = None
 
 
 class RecoPublicCurrentSlipDTO(BaseModel):

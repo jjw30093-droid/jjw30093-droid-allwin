@@ -31,6 +31,9 @@ from datetime import timedelta
 
 from backend.commands.reco_settlement_math import SettlementUnresolvable, resolve_leg_result
 from backend.db.util import utc_now
+from backend.media.team_crests import resolve_team_crest_url
+from backend.queries.leagues import LEAGUE_META
+from backend.queries.teams import display_name_for_team, team_display_map
 
 RECO_DAILY_WINDOW_DAYS = 30
 
@@ -307,35 +310,73 @@ RECO_PUBLIC_CURRENT_WINDOW_DAYS = 2
 RECO_PUBLIC_HIDE_AFTER_KICKOFF_HOURS = 2.0
 
 
-def _kickoffs_for_match_ids(
+def _banner_team_ref(team_id, provider_name, display) -> dict | None:
+    """banner 的球队投影:中文名 + 同源队徽地址。
+
+    与 queries/matches.py::_team_ref 同一套解析(display_name_for_team +
+    resolve_team_crest_url),但**不下发 name_en**——banner 上没有位置展示
+    英文名,下发了也只会变成前端要额外丢弃的字段。
+
+    crest_url 为 None 是合法且常见的状态(媒体管线还没采到这支球队的队徽):
+    前端 TeamBadge 在 crestUrl 缺失时渲染两字缩写兜底,不是错误态。
+    """
+    if team_id is None:
+        return None
+    tid = int(team_id)
+    return {
+        "team_id": tid,
+        "name": display_name_for_team(tid, provider_name=provider_name, display=display),
+        "crest_url": resolve_team_crest_url("fotmob", tid),
+    }
+
+
+def _banner_match_facts_for_ids(
     conn_core: sqlite3.Connection, match_ids: set[int]
-) -> dict[int, str | None]:
-    """批量取 dim_match.kickoff_at_utc——与 _match_facts_for_ids 同一范式
-    (整批取而不是逐条腿取,避免 N+1;跨库不 ATTACH,Python 层按 match_id 拼装)。
+) -> dict[int, dict]:
+    """批量取首页 banner 展示所需的 dim_match 事实:精确开球时刻、联赛、主客队。
+
+    整批取而不是逐条腿取(避免 N+1);跨库不 ATTACH,Python 层按 match_id 拼装
+    ——与 reco_highlight.py::_league_ids_for_match_ids 同一范式。
 
     刻意**不复用** queries/matches.py::list_matches:那个函数 limit 默认 50
-    (按 id 精确查却带分页 LIMIT,漏传就静默丢腿)、league_ids 是硬过滤
-    (不在 LEAGUE_META 的联赛直接返回空),而且会额外跑 COUNT(*) + 队名 i18n
-    + 队徽解析——banner 一个都不用(比赛展示走 reco_legs.match_desc 这个
-    录入时的展示冗余字段)。这里只要一列,就只查一列。
+    (按 id 精确查却带分页 LIMIT,漏传就静默丢腿),而且 league_ids 是硬过滤
+    (不在 LEAGUE_META 的联赛直接返回空行)——banner 的联赛徽缺了应该只是
+    不画徽标,不能把整条腿弄丢。这里对未登记联赛只让 league_name_zh 为
+    None,腿本身照常下发。
 
     kickoff_at_utc 可空是合法状态(§6.2.1:来源只给自然日时该列必须 NULL,
     不得补成当天 00:00),本函数如实返回 None,由调用方决定怎么处理,绝不
-    用 Date 列顶替。conn_core 缺表(旧测试布景)时返回空 dict,调用方等价于
-    "全部 kickoff 未知",不报错。
+    用 Date 列顶替。conn_core 缺表或缺列(旧测试布景)时返回空 dict,调用方
+    等价于"全部比赛事实未知",不报错——banner 退回只用 match_desc 文本渲染。
     """
     if not match_ids:
         return {}
     placeholders = ",".join("?" for _ in match_ids)
     try:
         rows = conn_core.execute(
-            f"SELECT Match_ID, kickoff_at_utc FROM dim_match"
-            f" WHERE Match_ID IN ({placeholders})",
+            f"SELECT Match_ID, kickoff_at_utc, League_ID,"
+            f" Home_Team_ID, Home_Team_Name, Away_Team_ID, Away_Team_Name"
+            f" FROM dim_match WHERE Match_ID IN ({placeholders})",
             tuple(match_ids),
         ).fetchall()
     except sqlite3.OperationalError:
         return {}
-    return {int(r["Match_ID"]): r["kickoff_at_utc"] for r in rows}
+    try:
+        display = team_display_map(conn_core)
+    except sqlite3.OperationalError:
+        display = {}
+    out: dict[int, dict] = {}
+    for r in rows:
+        league_id = r["League_ID"]
+        meta = LEAGUE_META.get(int(league_id)) if league_id is not None else None
+        out[int(r["Match_ID"])] = {
+            "kickoff_at_utc": r["kickoff_at_utc"],
+            "league_id": int(league_id) if league_id is not None else None,
+            "league_name_zh": meta["name_zh"] if meta else None,
+            "home": _banner_team_ref(r["Home_Team_ID"], r["Home_Team_Name"], display),
+            "away": _banner_team_ref(r["Away_Team_ID"], r["Away_Team_Name"], display),
+        }
+    return out
 
 
 def _public_current_legs_by_slip(
@@ -356,20 +397,26 @@ def _public_current_legs_by_slip(
         f"  FROM reco_legs WHERE slip_id IN ({placeholders}) ORDER BY sort_order",
         slip_ids,
     ).fetchall()
-    kickoffs = _kickoffs_for_match_ids(
+    facts = _banner_match_facts_for_ids(
         conn_core, {r["match_id"] for r in rows if r["match_id"] is not None}
     )
     out: dict[str, list[dict]] = {}
     for r in rows:
+        # 取不到比赛事实(legacy_manual 腿没有 match_id、或 dim_match 里没有
+        # 这一行)时全部字段为 None,前端退回只渲染 match_desc 文本——不因为
+        # 缺队徽就把腿藏起来。
+        f = facts.get(r["match_id"]) if r["match_id"] is not None else None
         out.setdefault(r["slip_id"], []).append({
             "id": r["id"],
             "match_id": r["match_id"],
             "match_desc": r["match_desc"],
             "market": r["market"],
             "selection": r["selection"],
-            "kickoff_at_utc": (
-                kickoffs.get(r["match_id"]) if r["match_id"] is not None else None
-            ),
+            "kickoff_at_utc": f["kickoff_at_utc"] if f else None,
+            "league_id": f["league_id"] if f else None,
+            "league_name_zh": f["league_name_zh"] if f else None,
+            "home": f["home"] if f else None,
+            "away": f["away"] if f else None,
         })
     return out
 

@@ -353,12 +353,12 @@ def select_for_board(
 
 
 def _leagues_for_match_ids(conn_core, match_ids: set[int]) -> dict[int, int | None]:
-    """批量取 dim_match.League_ID——严格镜像 reco.py::_kickoffs_for_match_ids
+    """批量取 dim_match.League_ID——严格镜像 reco.py::_banner_match_facts_for_ids
     的范式(整批取一列 + Python 层按 match_id 拼装;跨库不 ATTACH;
     conn_core 缺表时返回空 dict,调用方等价于"全部联赛未知",不报错)。
 
     不复用 queries/matches.py::list_matches:那个函数 limit 默认 50 会静默丢行、
-    league_ids 是硬过滤,理由与 _kickoffs_for_match_ids 的既有注释完全相同。
+    league_ids 是硬过滤,理由与 _banner_match_facts_for_ids 的既有注释完全相同。
     """
     import sqlite3 as _sqlite3
 

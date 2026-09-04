@@ -98,6 +98,42 @@ describe("文案必含原始计数(实事求是在展示层的唯一落点)", ()
   });
 });
 
+describe("横条拆分:boardShort / value 与 main 不得漂移", () => {
+  // 2026-09 横条改版把一行文案拆成"灰色板块前缀 + 彩色口径与计数"两段渲染。
+  // main 保留下来当不变量的断言对象(上面那两条"必含原始计数"就是断言它),
+  // 所以两者一旦漂移,守卫就会守着一个页面上并不存在的字符串。
+  it.each(ALL_FORMS.map((h, i) => [i, h] as const))(
+    "case %i:main === `${板块} · ${value}`",
+    (_i, h) => {
+      const l = highlightLines(h)!;
+      expect(l.main).toBe(`${h.board_label_zh} · ${l.value}`);
+    },
+  );
+
+  it("boardShort 脱掉「每日」前缀——一行里出现两次纯属噪音", () => {
+    const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
+      skipped_push_count: 0, skipped_void_count: 0,
+      from_date: "2026-09-01", to_date: "2026-09-02" } });
+    const l = highlightLines(h)!;
+    expect(l.boardShort).toBe("精选");
+    expect(l.value).toBe("近 5 单全中");
+  });
+
+  it("未知板块标签原样返回,不盲切前两字(切错比长一点更糟)", () => {
+    const h = base({ board_label_zh: "站长特选", kind: "streak",
+      streak: { length: 3, unit: "slip", skipped_push_count: 0,
+                skipped_void_count: 0, from_date: "2026-09-01",
+                to_date: "2026-09-02" } });
+    expect(highlightLines(h)!.boardShort).toBe("站长特选");
+  });
+
+  it("value 同样必含原始计数(横条上真正被渲染的是它,不是 main)", () => {
+    for (const h of ALL_FORMS.filter((x) => x.kind !== "parlay_return")) {
+      expect(highlightLines(h)!.value).toMatch(COUNT_RE);
+    }
+  });
+});
+
 describe("连中", () => {
   it("正常情形只有一行,不带任何附注", () => {
     const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
