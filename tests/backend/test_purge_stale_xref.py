@@ -9,7 +9,10 @@ import pytest
 from backend.cli.purge_stale_xref import purge
 from backend.db import migrate
 from backend.db.connections import connect_ro, connect_rw
-from backend.ingest.entity_resolution import HARD_REJECT_KICKOFF_SECONDS
+from backend.ingest.entity_resolution import (
+    HARD_REJECT_KICKOFF_SECONDS,
+    KICKOFF_TOLERANCE_SECONDS,
+)
 
 from .coreseed import seed_core_schema
 
@@ -130,3 +133,49 @@ class TestPurgeStaleXref:
         dry = purge(commit=False)
         result = purge(commit=True)
         assert dry["would_delete"] == result["deleted"] == 1
+
+
+class TestUnpromotableMode:
+    """`--unpromotable`(2026-09-04):把阈值降到 KICKOFF_TOLERANCE_SECONDS。
+
+    判据是一条可证明的性质——auto_ok 要求 |kickoff_diff| ≤ 容差,所以超出容差的
+    needs_review 行永远不可能被提升,只会占死 UNIQUE(provider, fotmob_match_id)
+    名额。生产上正是这批(女足/青年队错配,时差 1.5~5.75 小时)让 9 场比赛永久
+    无赔率,而默认的 6 小时阈值够不着它们。
+    """
+
+    def test_default_threshold_leaves_sub_hard_reject_rows(self, dbs):
+        """回归:默认模式必须仍然够不着 5 小时那条——否则就不是新增开关,
+        而是偷偷放宽了既有行为。"""
+        conn = connect_rw("odds")
+        _insert_xref(conn, 1, 9001, "3017480", kickoff_diff_seconds=UNDER_THRESHOLD_DIFF)
+        conn.close()
+        assert purge(commit=False)["would_delete"] == 0
+
+    def test_unpromotable_catches_them(self, dbs):
+        conn = connect_rw("odds")
+        _insert_xref(conn, 1, 9001, "3017480", kickoff_diff_seconds=UNDER_THRESHOLD_DIFF)
+        conn.close()
+        result = purge(commit=False, threshold=KICKOFF_TOLERANCE_SECONDS)
+        assert result["would_delete"] == 1
+        assert result["threshold_seconds"] == KICKOFF_TOLERANCE_SECONDS
+
+    def test_within_tolerance_never_deleted(self, dbs):
+        """容差**以内**的行还有机会被提升为 auto_ok,任何模式都不许删。"""
+        conn = connect_rw("odds")
+        _insert_xref(conn, 1, 9001, "3017480",
+                     kickoff_diff_seconds=KICKOFF_TOLERANCE_SECONDS - 60)
+        conn.close()
+        assert purge(commit=False, threshold=KICKOFF_TOLERANCE_SECONDS)["would_delete"] == 0
+
+    def test_protected_rows_still_untouched(self, dbs):
+        """放宽阈值不得削弱既有保护:confirmed / verified=1 一律不碰。"""
+        conn = connect_rw("odds")
+        _insert_xref(conn, 1, 9001, "3017480", kickoff_diff_seconds=UNDER_THRESHOLD_DIFF,
+                     review_status="confirmed")
+        _insert_xref(conn, 2, 9002, "9999999", kickoff_diff_seconds=UNDER_THRESHOLD_DIFF,
+                     verified=1)
+        conn.close()
+        result = purge(commit=True, threshold=KICKOFF_TOLERANCE_SECONDS)
+        assert result["deleted"] == 0
+        assert result["protected_before"] == result["protected_after"] == 2

@@ -12,6 +12,7 @@ import pytest
 from backend.db.connections import connect_rw
 from backend.ingest.entity_resolution import (
     _canonical_form,
+    _squad_qualifiers,
     _norm,
     seed_canonical_form_aliases,
 )
@@ -168,3 +169,70 @@ class TestSeedCanonicalFormAliases:
         n = conn.execute("SELECT COUNT(*) FROM dim_team_alias WHERE canonical_team_id=100").fetchone()[0]
         conn.close()
         assert out["added"] == 0 and n == 1
+
+
+# ── 队伍限定词(2026-09-04 生产事故回归)────────────────────────────────
+#
+# 根因:_canonical_form 原先把整个括号内容一律剥掉,"Arsenal (W)" 归一成
+# "arsenal" 与男足撞名;NowGoal 的女足/青年队场次因此成为男足正赛的候选,
+# 得分够高但开球时刻对不上 → 落成 needs_review → 占死
+# UNIQUE(provider, fotmob_match_id) 名额 → 正确场次永远写不进去 → 该场比赛
+# 永久无赔率。48h 内 9 场受影响,pipeline_gates 连报 CRITICAL 11 天。
+
+# (provider 侧写法, FotMob 正队写法) —— 绝不允许归一成同一支队
+DIFFERENT_SQUAD_PAIRS = [
+    ("Arsenal (W)", "Arsenal"),
+    ("Brighton H.A. (W)", "Brighton & Hove Albion"),
+    ("Umea IK (W)", "Umea IK"),
+    ("TSG Hoffenheim (Youth)", "Hoffenheim"),
+    ("SC Freiburg (Youth)", "Freiburg"),
+    ("Angers SCO U19", "Angers"),
+    ("TA Rennes U19", "Rennes"),
+]
+
+# 带限定词但**两边一致**——将来真接入女足/青年联赛时必须仍然匹配得上
+SAME_SQUAD_QUALIFIED_PAIRS = [
+    ("Arsenal (W)", "Arsenal W"),
+    ("Olympique Lyonnais (W)", "Lyon (W)"),
+]
+
+# 名字里恰好含限定词形态、但其实是男足一队 —— 误否决会静默丢掉正确映射,
+# 比漏否决更糟(它正是本次要修的那个故障)
+NOT_QUALIFIERS = [
+    "Willem II",              # 荷甲男足一队,名字里就带 II
+    "Eintracht Frankfurt am Main",  # 德语介词 am
+    "Real Madrid B",          # 单字母 B 无法只靠词元与真实队名区分
+    "Bournemouth",            # 不得被子串误伤
+]
+
+
+class TestSquadQualifiers:
+    @pytest.mark.parametrize("provider_name,fotmob_name", DIFFERENT_SQUAD_PAIRS)
+    def test_qualified_squad_never_collapses_into_first_team(self, provider_name, fotmob_name):
+        """女足/青年队绝不能与男足正队归一到同一串。"""
+        assert _canonical_form(provider_name) != _canonical_form(fotmob_name)
+
+    @pytest.mark.parametrize("provider_name,fotmob_name", DIFFERENT_SQUAD_PAIRS)
+    def test_qualifier_sets_differ_so_pairing_is_vetoed(self, provider_name, fotmob_name):
+        """resolve_match 的双边否决靠的是这个集合不相等。"""
+        assert _squad_qualifiers(provider_name) != _squad_qualifiers(fotmob_name)
+
+    @pytest.mark.parametrize("a,b", SAME_SQUAD_QUALIFIED_PAIRS)
+    def test_both_sides_qualified_still_pair(self, a, b):
+        """两边都是女足 → 限定词集合相等 → 不被否决(将来接女足联赛时成立)。"""
+        assert _squad_qualifiers(a) == _squad_qualifiers(b)
+
+    @pytest.mark.parametrize("name", NOT_QUALIFIERS)
+    def test_first_team_names_are_not_flagged(self, name):
+        """误否决比漏否决更糟:这些是男足一队,不得被判成另一支队伍。"""
+        assert _squad_qualifiers(name) == frozenset()
+
+    def test_non_qualifier_parentheses_still_stripped(self):
+        """只保留限定词,其余括号内容照旧剥掉——既有 PSG/QPR 归一不受影响。"""
+        assert _canonical_form("Paris Saint Germain (PSG)") == _canonical_form("Paris Saint-Germain")
+        assert _canonical_form("Queens Park Rangers (QPR)") == _canonical_form("Queens Park Rangers")
+
+    def test_qualifier_survives_into_canonical_form(self):
+        """限定词必须真的留在归一化结果里,不是只在集合里可见。"""
+        assert _canonical_form("Arsenal (W)") == "arsenal w"
+        assert _canonical_form("TSG Hoffenheim (Youth)") == "hoffenheim youth"

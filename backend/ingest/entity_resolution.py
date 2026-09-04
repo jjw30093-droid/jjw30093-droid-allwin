@@ -192,6 +192,61 @@ _CANON_PUNCT_RE = re.compile(r"[\-_/,&+:]")
 _CANON_YEAR_TOKEN_RE = re.compile(r"^(?:\d{2}|18\d{2}|19\d{2}|20\d{2})$")
 # 俱乐部法律形式/通名词缀——跨源书写差异的主要来源(NowGoal "AC Milan" vs
 # FotMob "Milan"、FotMob "FC Groningen" vs NowGoal "Groningen")。
+# 标记"这是俱乐部的另一支队伍"的限定词:女足、青年队/梯队、预备队/二队。
+#
+# 它们**不是书写差异**,是不同的球队——而 _canonical_form 原先把整个括号内容
+# 一律剥掉,于是 "Arsenal (W)" 归一成 "arsenal",与男足阿森纳撞在一起;
+# _tokenize 也把括号当分隔符并丢弃长度 <2 的 token,"Arsenal (W)" → {"arsenal"},
+# 子集规则下同样命中。
+#
+# 2026-09-04 生产实测(48h 内 9 场采不到赔率的根因):NowGoal 的女足/青年队场次
+# 成了男足正赛的候选,得分 0.5~1.0 但开球时刻对不上 → 落成 needs_review →
+# 占死 UNIQUE(provider, fotmob_match_id) 名额 → 正确的那场再也写不进去,该场
+# 比赛永久无赔率。实例:FotMob「Arsenal vs Chelsea」(英超)被配到 NowGoal
+# 「Brighton H.A. (W) vs Arsenal (W)」;「Angers vs Rennes」(法甲)被配到
+# 「TA Rennes U19 vs Angers SCO U19」。
+#
+# 2026-08-24 的 HARD_REJECT_KICKOFF_SECONDS(6 小时)只挡住了时差特别大的一批,
+# 这次这些时差是 1.5~5.75 小时,全在阈值内——那次修的是症状,没修产生错误候选
+# 的归一化本身。
+#
+# 判据用"双边限定词集合必须相等"而不是"带限定词就一律不匹配":都不带 → 与现状
+# 完全一致;都带 (W) → 仍然匹配(将来真接入女足联赛也成立);一边带一边不带 →
+# 否决。生产实测 dim_team_alias 里带限定词的别名为 0 条,本次改动不影响任何
+# 既有映射。
+_SQUAD_QUALIFIER_TOKENS = frozenset({
+    "w", "women", "womens", "ladies", "fem", "feminin", "feminine", "femenino",
+    "youth", "junior", "juniors", "jr", "academy", "acad", "jugend",
+    "reserve", "reserves", "amateure",
+    *(f"u{n}" for n in range(15, 24)),
+})
+# 刻意**不收**的词元(误否决比漏否决更糟——它会静默丢掉正确映射,正是本次要修
+# 的那个故障):
+#   ii / iii / b —— "Willem II"(荷甲男足一队)、"Real Madrid B" 里的 B 队标记
+#     与真实队名无法只靠词元区分,实测 Willem II 会被误判;
+#   am           —— 德语队名里的介词("Frankfurt am Main");
+#   res          —— 过短且在多语言里有真实词义。
+# 这几类若真出现错配,仍由 kickoff ±30 分钟校验兜底。
+
+_QUALIFIER_SPLIT_RE = re.compile(r"[^0-9a-z]+")
+
+
+def _squad_qualifiers(name: str | None) -> frozenset[str]:
+    """名称里出现的队伍限定词集合(女足/青年队/预备队)。
+
+    只认**括号内**与**独立词元**两种形态,不做子串匹配——"Bournemouth" 里的
+    "b"、"Willem II" 里的 "ii" 必须原样是独立词元才算,否则会把一堆男足正队
+    误判成预备队。
+    """
+    if not name:
+        return frozenset()
+    text = str(name).translate(_LATIN_FOLD_MAP)
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c)).lower()
+    tokens = [t for t in _QUALIFIER_SPLIT_RE.split(text) if t]
+    return frozenset(t for t in tokens if t in _SQUAD_QUALIFIER_TOKENS)
+
+
 _CANON_AFFIX_TOKENS = frozenset({
     "fc", "afc", "ac", "as", "sc", "sv", "fsv", "cf", "cd", "aj", "il", "if",
     "bk", "sk", "ssc", "us", "uc", "rc", "rcd", "vfb", "vfl", "tsg", "bsc",
@@ -199,6 +254,13 @@ _CANON_AFFIX_TOKENS = frozenset({
     "club", "football", "futbol", "fussball", "calcio", "clube",
     "association", "sportif", "sporting",
 })
+
+
+def _keep_squad_qualifier(m: "re.Match[str]") -> str:
+    """括号内容的替换函数:只留下队伍限定词,其余整块丢弃。"""
+    inner = m.group(0)[1:-1]
+    quals = [t for t in _QUALIFIER_SPLIT_RE.split(inner.lower()) if t in _SQUAD_QUALIFIER_TOKENS]
+    return " " + " ".join(quals) + " " if quals else " "
 
 
 def _canonical_form(name: str | None) -> str:
@@ -220,7 +282,10 @@ def _canonical_form(name: str | None) -> str:
     text = str(name).translate(_LATIN_FOLD_MAP)
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
-    text = _CANON_PAREN_RE.sub(" ", text)
+    # 括号内容照旧剥掉("Paris Saint Germain (PSG)" → "paris saint germain"),
+    # **但保留其中的队伍限定词**——(W)/(Youth)/(II) 标记的是另一支队伍,剥掉会
+    # 让它与正队归一到同一串(见 _SQUAD_QUALIFIER_TOKENS 的完整背景)。
+    text = _CANON_PAREN_RE.sub(_keep_squad_qualifier, text)
     text = _CANON_DROP_RE.sub("", text)
     text = _CANON_PUNCT_RE.sub(" ", text)
     tokens = [t for t in text.lower().split() if t]
@@ -828,6 +893,17 @@ def resolve_match(
     home_fuzzy = _fuzzy_team_ids(conn_odds, schedule_row["home_name"]) if not home_exact else set()
     away_fuzzy = _fuzzy_team_ids(conn_odds, schedule_row["away_name"]) if not away_exact else set()
 
+    # 队伍限定词否决:provider 侧写的是女足/青年队,候选却是男足正赛(或反之)
+    # → 这不是同一支队,直接不给分。
+    #
+    # 必须在**这里**做而不是只改 _canonical_form:模糊召回走 _tokenize,它把括号
+    # 当分隔符、又丢弃长度 <2 的词元,"Arsenal (W)" → {"arsenal"};而子集规则
+    # (候选别名词元 ⊆ 查询词元)本来就刻意容忍"多出来的后缀"(这正是
+    # "internacional" ⊆ "internacional rs" 要的效果),所以改分词救不了模糊这条
+    # 路径,只能显式否决。完整背景见 _SQUAD_QUALIFIER_TOKENS。
+    prov_home_q = _squad_qualifiers(schedule_row["home_name"])
+    prov_away_q = _squad_qualifiers(schedule_row["away_name"])
+
     def _pair_score(
         id1: int, exact1: set[int], fuzzy1: set[int],
         id2: int, exact2: set[int], fuzzy2: set[int],
@@ -853,8 +929,14 @@ def resolve_match(
     for cand in _candidate_matches(conn_odds, conn_core, schedule_row["date"]):
         h, a = int(cand["Home_Team_ID"]), int(cand["Away_Team_ID"])
         cand_by_id[int(cand["Match_ID"])] = cand
-        fwd = _pair_score(h, home_exact, home_fuzzy, a, away_exact, away_fuzzy)
-        inv = _pair_score(h, away_exact, away_fuzzy, a, home_exact, home_fuzzy)
+        cand_home_q = _squad_qualifiers(cand["Home_Team_Name"])
+        cand_away_q = _squad_qualifiers(cand["Away_Team_Name"])
+        # 正向(provider 主 ↔ 候选主)与反向各自校验限定词一致;两边都不带限定词
+        # 时恒等于现状,不改变任何既有映射。
+        fwd_ok = prov_home_q == cand_home_q and prov_away_q == cand_away_q
+        inv_ok = prov_home_q == cand_away_q and prov_away_q == cand_home_q
+        fwd = _pair_score(h, home_exact, home_fuzzy, a, away_exact, away_fuzzy) if fwd_ok else 0.0
+        inv = _pair_score(h, away_exact, away_fuzzy, a, home_exact, home_fuzzy) if inv_ok else 0.0
         if fwd > 0:
             scored.append((fwd, int(cand["Match_ID"]), 0))
         if inv > 0:
