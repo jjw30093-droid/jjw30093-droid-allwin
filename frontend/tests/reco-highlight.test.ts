@@ -126,7 +126,7 @@ describe("横条拆分:boardShort / value 与 main 不得漂移", () => {
       net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } });
     const l = highlightLines(h)!;
     expect(l.boardShort).toBe("精选");
-    expect(l.value).toBe("近 5 单全中 · 回报 +119%");
+    expect(l.value).toBe("近 5 单全中 · 回报 +597%");
   });
 
   it("未知板块标签原样返回,不盲切前两字(切错比长一点更糟)", () => {
@@ -150,7 +150,7 @@ describe("连中", () => {
       skipped_push_count: 0, skipped_void_count: 0,
       net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } });
     const l = highlightLines(h)!;
-    expect(l.main).toBe("每日精选 · 近 5 单全中 · 回报 +119%");
+    expect(l.main).toBe("每日精选 · 近 5 单全中 · 回报 +597%");
     expect(l.emphasize).toBe(true);
   });
 
@@ -195,15 +195,15 @@ describe("parts:横条真正渲染的分段", () => {
     const parts = highlightLines(h)!.parts;
     expect(parts.find((p) => p.big)?.text).toBe("5");
     const muted = parts.find((p) => p.muted)!;
-    expect(muted.text).toBe(" · 回报 +119%");
+    expect(muted.text).toBe(" · 回报 +597%");
     expect(muted.big).toBeUndefined();
   });
 
-  it("回报率 = net_units / length,用生产真实数(5.965 / 5 → +119%)", () => {
+  it("口径 = 净单位 × 100%(累计净利 ÷ 单注),用生产真实数 5.965 → +597%", () => {
     const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
       skipped_push_count: 0, skipped_void_count: 0, net_units: 5.965,
       from_date: "2026-09-01", to_date: "2026-09-02" } });
-    expect(highlightLines(h)!.value).toContain("回报 +119%");
+    expect(highlightLines(h)!.value).toContain("回报 +597%");
   });
 
   it("net_units 缺失时整段回报不渲染,不得出现 NaN", () => {

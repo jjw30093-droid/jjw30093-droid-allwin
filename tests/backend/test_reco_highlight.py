@@ -162,7 +162,8 @@ class TestStreak:
 
     def test_production_streak_net_units_matches_real_data(self):
         """生产真实数据回归:5 单 return_units = 3.66/1.425/1.95/1.93/2.0
-        → 净 +5.965,回报率 5.965/5 = +119%。"""
+        → 净 +5.965。展示口径是**净单位 × 100%**(累计净利 ÷ 单注,站长
+        2026-09-04 选定),所以横条上是 +597%,不是 ROI 的 +119%。"""
         rets = [2.0, 1.93, 1.95, 1.425, 3.66]      # 升序(最早在前)
         seq = [
             slip(f"s{i:02d}", result="win", ret=r,
@@ -173,7 +174,11 @@ class TestStreak:
         assert st is not None
         assert st.length == 5
         assert st.net_units == 5.965
-        assert round(st.net_units / st.length * 100) == 119
+        # **不在这里断言展示出来的百分比**:5.965*100 = 596.5 恰好落在 .5
+        # 边界上,Python 的 round 是银行家舍入(→596)、JS 的 Math.round 是
+        # 四舍五入(→597),两边会得出不同的数。页面由 JS 渲染,真正展示的是
+        # 597,该断言归前端(frontend/tests/reco-highlight.test.ts)。后端只
+        # 负责 net_units 这个契约值本身。
 
     def test_trailing_push_not_counted_as_within_streak(self):
         """生产真实形态:走水落在连中**之外**(更早),不是夹在中间。
@@ -437,10 +442,11 @@ class TestHighlightEndpoint:
         assert pub["kind"] == "streak"
         st = pub["streak"]
         assert st["length"] == 3
-        # 每单赔率 2.0 → 返还 2.0,3 单净 = 6.0 - 3 = 3.0,回报率 100%
+        # 每单赔率 2.0 → 返还 2.0,3 单净 = 6.0 - 3 = 3.0 单位 → 展示 +300%
         assert st["net_units"] == 3.0
-        assert round(st["net_units"] / st["length"] * 100) == 100
+        assert round(st["net_units"] * 100) == 300
         # 百分比不由后端下发
+        # 百分比不由后端下发——展示口径(净单位 × 100%)是前端的事
         assert "roi" not in st and "return_rate" not in st
 
     def test_never_leaks_slip_content(self, app, data_dir, fresh_ip):

@@ -103,10 +103,18 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     if (s.skipped_push_count > 0) skipped.push(`${s.skipped_push_count} 单走水`);
     if (s.skipped_void_count > 0) skipped.push(`${s.skipped_void_count} 单作废`);
     const note = skipped.length > 0 ? `（其间 ${skipped.join("、")}不计）` : "";
-    // 回报率只加在连中分支:parlay_return 本来就在展示回报(单位制),
-    // rate 分支保持命中率口径,两种单位不混在同一条文案里。
-    // 样本与 length 逐单一致(后端 Streak.net_units 已保证),所以「近 N 单
-    // 全中」和「回报 +X%」说的是同一批单。
+    // 回报只加在连中分支:rate 分支保持命中率口径,不混。样本与 length
+    // 逐单一致(后端 Streak.net_units 已保证),所以「近 N 单全中」和
+    // 「回报 +X%」说的是同一批单。
+    //
+    // **口径 = 累计净利 ÷ 单注**(净单位 × 100%),不是 ROI(净利 ÷ 总投入)。
+    // 站长 2026-09-04 明确选定,举的例子是"一单 100 赢 80、再一单赢 80,
+    // 累计 160 就是 160%"。与站内既有的「净单位」(app/page.tsx、
+    // app/reco/page.tsx、下面 parlay 分支)是同一把尺子,只是换成百分比表达。
+    //
+    // 已如实告知站长的代价:这个数**随出单量增长,不只随水平增长**——
+    // 100 单每单净赚 0.5 是 +5000%,5 单每单净赚 1.19 是 +597%,前者看着好
+    // 8 倍但每单其实差一半。它是"累计战绩"不是"效率",不同时期不可比。
     // net_units 缺失/非有限值时**整段回报不渲染**,退回改版前的文案。
     // 这不是防御性洁癖:/reco/highlight 带 s-maxage=300 且服务端 fetch
     // revalidate=300,所以每次部署后最长 5 分钟内,新前端会真实收到不含
@@ -116,7 +124,7 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     const roi =
       typeof net === "number" && Number.isFinite(net) && s.length > 0
         ? [{
-            text: ` · 回报 ${net >= 0 ? "+" : ""}${Math.round((net / s.length) * 100)}%`,
+            text: ` · 回报 ${net >= 0 ? "+" : ""}${Math.round(net * 100)}%`,
             muted: true,
           }]
         : [];
