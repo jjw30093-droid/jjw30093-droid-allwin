@@ -1082,30 +1082,34 @@
   gap: 6px;
 }
 
+/* 一条腿 = 两行(2026-09-04 生产真机实测后从单行改的)。
+ *
+ * 单行版本在真实数据下失败:固定开销(联赛徽 14 + 队徽 24×2 + vs 12 +
+ * 跨日时间 67 + 间距 30 = 171px)吃掉可用宽度后只剩 16px 给两个队名,
+ * 「皇家贝蒂斯」被压到 7px。本地测时用的是 3 字队名 + 同日钟点 + 短选项,
+ * 真实数据在三个维度上同时更重。折成两行后第一行实测 229px / 余 53px,
+ * 6 字队名也不截;代价是每条腿从 22px 涨到 44px。 */
 .picksLeg {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.picksLegLeft {
-  flex-grow: 1;
-  min-width: 0;
+/* 第一行:联赛徽 + 双队徽 + 完整队名。所有元素都不收缩——这一行现在放得下,
+ * 真放不下(超长队名)时宁可让最后一个队名省略,也不再压所有元素。 */
+.picksLegTeams {
   display: flex;
   align-items: center;
   gap: 5px;
-  overflow: hidden;
+  min-width: 0;
 }
 
-/* 队名是这一行里**唯一允许收缩**的东西:窄屏放不下时先把长队名省略,
- * 而不是让末尾的开球时刻被容器的 overflow 裁掉(徽标、vs、时间、推荐选项
- * 全是 flex:none)。时间被裁成"9月4日 16:"比队名短一截严重得多——前者是
- * 残缺的事实,后者只是省略的名字。 */
 .picksLegTeam {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: 13px;
-  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1117,21 +1121,47 @@
   color: var(--ink-3);
 }
 
-.picksLegTime {
-  flex: none;
-  margin-left: 2px;
-  font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 /* 取不到结构化比赛事实时(legacy 腿没有 match_id、dim_match 里没有这一行)
  * 退回渲染录入时的 match_desc 文本——少画图标,不藏腿。 */
 .picksLegDesc {
   flex-grow: 1;
   min-width: 0;
-  font-size: 13px;
-  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 第二行:左边时间与玩法(次级),右边选项(主角)。 */
+.picksLegMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.picksLegMetaLeft {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.picksLegTime {
+  flex: none;
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.picksLegMarket {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

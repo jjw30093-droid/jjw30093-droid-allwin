@@ -100,18 +100,18 @@ describe("PublicPicksBannerLive", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("未到点的单正常展示比赛与选项;玩法名只进 title 不进可见文案", async () => {
-    // 2026-09 横条改版:腿行可见文案是「比赛 + 时间 + 选项」,玩法名让位给
-    // 队名(390px 实测余量约 19px,放不下「胜平负 」的 46px)。信息不丢失——
-    // 玩法在 title 里,完整玩法在 /reco 公推页。
+  it("未到点的单正常展示比赛、时间、玩法与选项", async () => {
+    // 2026-09-04 生产真机实测后腿行改成两行:第一行队徽+完整队名,第二行
+    // 时间/玩法(次级)+ 选项(主角)。单行版本在真实数据下把「皇家贝蒂斯」
+    // 压到了 7px,玩法名当时被迫退进 title;两行腾出空间后玩法回到可见文案。
     vi.setSystemTime(KICKOFF_MS - HOUR);
     render(<PublicPicksBannerLive slips={[slip()]} hideAfterHours={2} />);
     await flush();
     expect(screen.getByText("阿森纳 vs 切尔西 04-01 20:00")).not.toBeNull();
-    const pick = screen.getByText("大2.5");
-    expect(pick).not.toBeNull();
-    expect(pick.getAttribute("title")).toBe("大小球 · 大2.5");
-    expect(screen.queryByText("大小球 · 大2.5")).toBeNull();
+    expect(screen.getByText("大2.5")).not.toBeNull();
+    expect(screen.getByText("大小球")).not.toBeNull();
+    // 横条不渲染 slip 标题,标签列给的是 comboLabel(单关 / N串1)。
+    expect(screen.getByText("单关")).not.toBeNull();
   });
 
   it("页面开着不动,到点后自动撤下(定时器生效)", async () => {
@@ -162,10 +162,9 @@ describe("PublicPicksBannerLive", () => {
       />,
     );
     await flush();
-    // `?? leg.market` 兜底:未登记的 market 原样进 title,不因查不到映射而崩。
-    expect(screen.getByText("双方进球").getAttribute("title")).toBe(
-      "btts · 双方进球",
-    );
+    // `?? leg.market` 兜底:未登记的 market 原样渲染,不因查不到映射而崩。
+    expect(screen.getByText("双方进球")).not.toBeNull();
+    expect(screen.getByText("btts")).not.toBeNull();
   });
 
   it("串关渲染全部腿并标出 2串1", async () => {
@@ -296,6 +295,40 @@ describe("PublicPicksBannerLive", () => {
     );
     await flush();
     expect(screen.getByText("4月2日 01:00")).not.toBeNull();
+  });
+
+  it("长队名 + 长选项 + 跨日时间同时出现时,队名与选项都完整渲染", async () => {
+    // 2026-09-04 生产真实数据回归:单行结构下「皇家贝蒂斯」被压到 7px
+    // (固定开销 171px,只剩 16px 给两个队名)。两行结构后队名独占第一行,
+    // 与时间/玩法/选项不再抢宽度。
+    vi.setSystemTime(Date.parse("2027-04-01T10:00:00Z"));
+    render(
+      <PublicPicksBannerLive
+        slips={[slip({
+          slip_date: "2027-04-01",
+          legs: [{
+            id: "leg-long",
+            match_id: 9001,
+            match_desc: "皇家贝蒂斯 vs 皇家马德里 04-02 03:00",
+            market: "ah",
+            selection: "客队让1.25球",
+            kickoff_at_utc: "2027-04-01T19:00:00Z",   // 北京 4月2日 03:00,跨日
+            league_id: 87,
+            league_name_zh: "西甲",
+            home: { team_id: 1, name: "皇家贝蒂斯", crest_url: null },
+            away: { team_id: 2, name: "皇家马德里", crest_url: null },
+          }],
+        })]}
+        hideAfterHours={2}
+      />,
+    );
+    await flush();
+    expect(screen.getByText("皇家贝蒂斯")).not.toBeNull();
+    expect(screen.getByText("皇家马德里")).not.toBeNull();
+    expect(screen.getByText("客队让1.25球")).not.toBeNull();
+    // 跨日 → 带上日期,不让读者以为是当天
+    expect(screen.getByText("4月2日 03:00")).not.toBeNull();
+    expect(screen.getByText("亚洲让球")).not.toBeNull();
   });
 
   it("卸载后定时器被清掉(不泄漏、不在卸载后 setState)", async () => {

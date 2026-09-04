@@ -50,19 +50,27 @@ const REFRESH_INTERVAL_MS = 60_000;
 function LegRow({ leg, slipDate }: { leg: PublicPickLeg; slipDate: string }) {
   const structured = leg.home && leg.away;
   // 北京时间(§11.2:赛程语境默认 UTC+8)。**同日只出钟点,跨日才带日期**:
-  // banner 窗口是 2 天(覆盖跨零点的深夜场),一律写 "01:00" 分不清是哪天;
-  // 但一律带上 "9月5日" 又要多占约 40px,在 390px 下会把队名挤成「阿···」
-  // (实测)。用 slip_date 与开球的北京自然日比对来二选一——两个字符串比较,
-  // 不读时钟,服务端与客户端结果恒等,没有水合风险。
+  // banner 窗口是 2 天(覆盖跨零点的深夜场),一律写 "03:00" 分不清是哪天。
+  // 用 slip_date 与开球的北京自然日比对来二选一——两个字符串比较,不读时钟,
+  // 服务端与客户端结果恒等,没有水合风险。
   // kickoff_at_utc 可空是合法状态(§6.2.1),缺就不画这一段,不用 Date 顶替。
   const kickoff = leg.kickoff_at_utc
     ? beijingDateKey(leg.kickoff_at_utc) === slipDate
       ? formatBeijingHM(leg.kickoff_at_utc)
       : formatBeijingZh(leg.kickoff_at_utc)
     : null;
+  const market = MARKET_ZH[leg.market] ?? leg.market;
+
   return (
     <span className={styles.picksLeg}>
-      <span className={styles.picksLegLeft}>
+      {/* 第一行:联赛徽 + 两枚队徽 + 完整队名。
+          2026-09-04 生产真机实测:单行塞进"联赛徽 + 双队徽 + 双队名 + vs +
+          时间 + 选项"后,固定开销 171px、只剩 16px 给两个队名,「皇家贝蒂斯」
+          被压到 **7px**(等于看不见)。本地测的是 3 字队名 + 同日钟点 + 短选项,
+          真实数据在队名长度、跨日日期、选项长度三个维度上同时更重,单行结构
+          不成立。算过所有单行补救(去联赛徽 19px、去 vs 17px、时间只留钟点
+          31px)全做也只腾出 83px,5 字队名仍要截——所以折成两行。 */}
+      <span className={styles.picksLegTeams}>
         {structured ? (
           <>
             {leg.league_id != null && (
@@ -81,27 +89,26 @@ function LegRow({ leg, slipDate }: { leg: PublicPickLeg; slipDate: string }) {
               size={24}
             />
             <span className={styles.picksLegTeam}>{leg.away!.name}</span>
-            {kickoff && (
-              <time className={styles.picksLegTime} dateTime={leg.kickoff_at_utc!}>
-                {kickoff}
-              </time>
-            )}
           </>
         ) : (
           <span className={styles.picksLegDesc}>{leg.match_desc}</span>
         )}
       </span>
-      {/* selection 本身已是中文展示文案("主胜"/"大2.5"),原样渲染,严禁解析。
-          玩法名(「大小球」「胜平负」)**不进可见文案**:390px 下这一行的实测
-          余量只有约 19px,而「胜平负 」要 46px,加进去队名立刻被省略成
-          「阿···」——腿行的展示优先级是"哪两支队、几点、推什么"。玩法放进
-          title 保住信息不丢失(悬停可见),完整玩法在 /reco 公推页。
+
+      {/* 第二行:左边时间与玩法(次级),右边推荐选项(主角)。
+          玩法名回到可见文案——两行结构腾出了空间,不必再退到 title 里。
           `?? leg.market` 兜底必须保留:market 是自由文本不锁枚举。 */}
-      <span
-        className={styles.picksLegPick}
-        title={`${MARKET_ZH[leg.market] ?? leg.market} · ${leg.selection}`}
-      >
-        {leg.selection}
+      <span className={styles.picksLegMeta}>
+        <span className={styles.picksLegMetaLeft}>
+          {kickoff && (
+            <time className={styles.picksLegTime} dateTime={leg.kickoff_at_utc!}>
+              {kickoff}
+            </time>
+          )}
+          <span className={styles.picksLegMarket}>{market}</span>
+        </span>
+        {/* selection 本身已是中文展示文案("主胜"/"大3.5"),原样渲染,严禁解析。 */}
+        <span className={styles.picksLegPick}>{leg.selection}</span>
       </span>
     </span>
   );
