@@ -186,3 +186,113 @@ commands/reco.py + routes_reco.py + admin 页签 + 测试全套)。
   结算公推单前后 `/reco/track-record`/`/reco/overview` 数字逐字段不变)、
   `tests/admin-reco-tab.test.tsx` 新增板块相关用例、`tests/backend/
   test_migrations.py` 新增 0018 的 fresh_db + upgrade_from_pre_0018。
+
+## 11. 首页公推 banner(2026-09,已实现,经用户批准)
+
+首页「重点比赛」上方加一个 banner:有在架公推时才出现,显示**比赛 + 推荐
+选项**、**不含赔率**(赔率留在 `/reco` 页),比赛开球 2 小时后撤下。
+
+- 端点 `GET /api/v1/reco/public/current`(零 auth 依赖,双库注入
+  `platform_ro` + `core_ro`,`PUBLIC_CACHE_SHORT`,进 `PUBLIC_ALLOWLIST`
+  ——这是第二条、也是目前最后一条进 allowlist 的 reco 路径)。
+- 查询 `backend/queries/reco.py::public_current_slips()`:
+  `board='daily_public' AND status='published'`,窗口
+  `RECO_PUBLIC_CURRENT_WINDOW_DAYS=2`(按**北京自然日**算 cutoff——
+  `slip_date` 是站长录入的北京日,2 天窗口下 8 小时时差会真实影响边界,
+  这点与 `public_slips` 的 7 天窗口不同)。开球时刻用
+  `_kickoffs_for_match_ids()` 批量取(**不复用** `list_matches`:它 limit
+  默认 50 会静默丢腿、`league_ids` 是硬过滤、且会多跑 COUNT/队名/队徽三次
+  查询,而 banner 一个都不用)。腿投影 `_public_current_legs_by_slip()`
+  在 **SQL 层就不 SELECT odds**,值从头到尾不进进程。
+- **撤下判定刻意不在服务端做**:该端点走 `s-maxage=60` 共享缓存、首页又是
+  ISR(`revalidate:60`),服务端算出的"该不该显示"会被烘进共享 HTML 并随
+  缓存变陈旧、所有访客共用同一份陈旧判定。后端只下发 `kickoff_at_utc`
+  这个**事实**,由各客户端按自己的当前时间判定
+  (`frontend/lib/reco-banner.ts::visiblePublicPicks`,接收 `now` 参数、
+  不读时钟,与 `physical_stats_poll.py::within_candidate_window` 同一写法)。
+  服务端组件也用同一个纯函数粗过滤一次,保证 SSR 首帧不含已过期的单。
+- **两条撤下规则的精度不同,如实记录**:「开球 +2h 撤下」是精确的(客户端
+  每 60 秒重算,页面开着也会自动撤);「结算/作废撤下」受缓存链路限制,
+  最坏约 2.5 分钟(`s-maxage=60` + ISR 60 + swr 30)。
+- 串关按**最后一场**开球 +2h 撤下;任一条腿缺精确 `kickoff_at_utc` 则整单
+  **不进 banner**(fail-closed:算不出何时该撤的东西不能放进一个靠时间自动
+  撤下的位置;§6.2.1 也禁止对缺精确时间的比赛补零推断)。实践上几乎不会
+  触发——发布要求每条腿有真实盘口溯源,而赔率采集只针对有精确开球时间的
+  比赛。
+- 前端三文件边界(§11.4):纯逻辑 `frontend/lib/reco-banner.ts`(**无
+  `"use client"`**,服务端与客户端都 import)、`PublicPicksBanner.tsx`
+  (server,取数 + 粗过滤;`Date.now()` 放在 `cache()` 包住的普通异步函数
+  里而不是组件 render 体内,组件 render 必须纯)、`PublicPicksBannerLive.tsx`
+  (client,精确过滤 + 渲染)。客户端初始 state 必须是 `null` 并原样渲染
+  服务端列表,首帧逐字节等同 SSR——写成 `useState(() => filter(…, Date.now()))`
+  会水合不匹配,且本地 dev 往往复现不出来。
+- 测试:`tests/backend/test_reco_board.py::TestPublicCurrentEndpoint`(12 项,
+  含"响应原始文本不得出现 odds/result/entry_type/snapshot_ref"的哨兵断言、
+  精选板块不得泄漏、结算/作废即撤下、缺 kickoff 如实下发 null)、
+  `frontend/tests/reco-banner.test.ts`(21 项纯函数,含恰好 2h 边界、串关取
+  最后一场、缺 kickoff fail-closed、返回同一对象引用)、
+  `frontend/tests/public-picks-banner.test.tsx`(11 项,含 SSR 产物水合安全、
+  定时器到点自动撤下、渲染结果不含赔率)。
+
+## 12. 首页战绩 banner(2026-09,经站长明确决定的**择优展示**)
+
+首页最顶部(公推 banner 之上)展示推荐战绩,**从数十个统计口径候选里挑当前
+最好看的一个**。站长在被明确告知这与 CLAUDE.md §2.2/§8.1 冲突后重申坚持,
+并同步删除了 CLAUDE.md 的三处相关条款(原 :17 禁用词与因果表述、:37 战绩
+完整性三条、:479 不挑选不隐藏),且明确选择**不补任何替代条款**。
+
+### 与记录面的分工(最重要的一条)
+
+- **记录面**(`/reco?tab=record`、`GET /api/v1/reco/track-record`)仍然全样本,
+  命中/未中/走水/作废一条不少。本功能**不改它们的任何数字**,有红线测试守住
+  (`test_reco_highlight.py::TestHighlightEndpoint::test_does_not_change_record_face_numbers`)。
+- **banner**是引流位,择优展示,整块链回记录面。
+
+### 口径定义
+
+- **连中**:排序 `published_at ASC, id ASC`——**不用 `settled_at`**(它会被
+  重结算覆盖,`commands/reco.py::settle_slip`,沿用它会导致"纠正一次 8 月旧
+  结算 → 首页那个'近5单全中'静默变数");也不用 `slip_date`(只到天,同日多单
+  无法定序)。`win` 延续;`lose`/`half_loss`/**`half_win`** 断连(「全中」不能
+  由半赢撑起来);`push` 跳过且必须披露;`voided` 跳过且披露。必须是**当前**
+  连中,不是历史最佳——挑一段历史连胜写成"近N单全中"是事实性谎言,有测试守住。
+  被拒方案:按最后一场腿的 `kickoff_at_utc` 排序(语义最贴近真实先后,但
+  `match_id`/`kickoff_at_utc` 均可空,缺一条腿就得 fail-open 或整单剔除,
+  等于用不完整数据决定一个对外宣称的数字)。
+- **命中率**:复用 `reco.py::hit_rate_from_counts`(2026-09 从
+  `_summarize_result_row` 提取,算式只有一份实现)。**只统计单关**——站长决策
+  "串子是串子,串子和单关分开算";这同时解决了腿/单口径冲突(单关腿==单,
+  market/league 归属唯一,不存在串关混 ah+ou 的歧义)。
+- **串关**:走"回报"口径(`Σreturn_units - 单数`),不算也不展示命中率。
+
+### 选择顺序
+
+连中(≥`MIN_STREAK`=3)→ 命中率候选 argmax。阈值 70% **只决定 kind**
+(`rate_qualified` / `rate_best_effort`),不决定选谁——达标与否共用同一个
+argmax,避免两套破平逻辑。比较器全序:命中率 → 样本量 → 窗口(天窗口优先于
+场次窗口、宽优先)→ 分段(overall > market > league > league_market)→
+`candidate_key`。破平方向刻意偏向**更少自由度、更难被挑选**的候选。
+
+站长明确拒绝样本量下限,所以 n=1 的 100% 是可能被选中的——正因如此,展示层
+强制把原始计数写出来(见下)。
+
+### 展示约定(设计决定,不再有文档条款兜底)
+
+**百分比永远与原始计数同现**(主行「5 单 5 中」,细行「命中率 100.0%(5 / 5)」),
+每条带完整口径标签(板块+窗口+分段+单位),窗口除名义值外还给
+`observed_from_date`/`observed_to_date` 实际覆盖区间(名义"近30天"会高估跨度)。
+DTO 把 `hit_rate` 与 `decided_count` 放在同一个对象里,让"只渲染百分比"在类型
+上就很别扭;`frontend/tests/reco-highlight.test.ts` 有正则断言守住。
+**删掉那个测试,就没有任何东西阻止后人把文案简化成裸百分比。**
+
+### 结构差异(不要照抄公推 banner)
+
+公推 banner 需要 `"use client"` 组件是因为它有"开球+2h 精确撤下"的时间判定;
+战绩 banner **没有任何时间撤下逻辑**,内容只在某张单结算时变化,`PUBLIC_CACHE`
+(300s)陈旧无害且自愈——所以纯服务端渲染,不需要 client 组件、不需要定时器。
+
+### 上线时的真实预期
+
+生产 20 单(2026-08-14~09-02,16胜3负1走)按 `published_at` 排序的尾部序列是
+`win×5, push, lose` → **连中 = 5**,banner 会显示「每日精选 · 近 5 单全中」。
+连中一旦被打断,阶梯的下一顺位是西甲(联赛 87)5单5中 100%(真实数据,已核对)。

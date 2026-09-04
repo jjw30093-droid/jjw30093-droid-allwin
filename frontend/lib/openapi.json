@@ -2748,6 +2748,150 @@
     }
    }
   },
+  "/api/v1/reco/highlight": {
+   "get": {
+    "tags": [
+     "reco"
+    ],
+    "summary": "Reco Highlight",
+    "description": "首页战绩 banner:**从数十个统计口径候选里择优展示**(2026-09,经站长\n明确决定)。这不是 bug——完整背景、与记录面的分工、以及\"不要修复成全样本\"\n的说明,见 backend/queries/reco_highlight.py 的模块头注。\n\n记录面(/api/v1/reco/track-record、/reco?tab=record)不受影响,仍然全样本。\n本端点不写库、不改任何既有聚合数字。\n\n缓存用 PUBLIC_CACHE(300s)而不是 SHORT:内容只在某张单结算时变化,没有\n公推 banner 那种精确到分钟的撤下判定,陈旧 5 分钟无害且自愈——所以择优\n全部在服务端算,不需要客户端重算。",
+    "operationId": "reco_highlight_api_v1_reco_highlight_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoHighlightResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/reco/public/current": {
+   "get": {
+    "tags": [
+     "reco"
+    ],
+    "summary": "Reco Public Current",
+    "description": "首页 banner 数据面(2026-09):当前在架(published)的每日公推 +\n每条腿的精确开球时刻,**不含赔率**。同样零 auth 依赖、完全公开。\n\n刻意与 /reco/public 分开而不是给它加字段:RecoLegDTO/_legs_by_slip 被\n/reco/daily、/reco/daily/{id}、/reco/track-record、/admin/.../preview、\n/reco/public 五个端点共用(其中包含登录态的每日精选按场授权投影),\n给那条共享链路加一个需要 core 库才能填的 kickoff 字段,会逼所有共用\n端点都注入 conn_core,否则该字段在它们那里恒为 null。\n\n本端点只下发事实,不做「开球 +2 小时是否已过」的判定——理由见\nbackend/queries/reco.py::public_current_slips 的 docstring。",
+    "operationId": "reco_public_current_api_v1_reco_public_current_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoPublicCurrentResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/reco/daily": {
    "get": {
     "tags": [
@@ -14013,6 +14157,118 @@
     "title": "RecoBoardConflictWarningDTO",
     "description": "同一场比赛的同一盘口已被另一个板块的非作废单占用(2026-09,只提醒\n不拦截——写入仍然成功,前端据此展示提示条)。"
    },
+   "RecoBoardHighlightDTO": {
+    "properties": {
+     "board": {
+      "type": "string",
+      "enum": [
+       "daily_pick",
+       "daily_public"
+      ],
+      "title": "Board"
+     },
+     "board_label_zh": {
+      "type": "string",
+      "title": "Board Label Zh"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "streak",
+       "rate_qualified",
+       "rate_best_effort",
+       "parlay_return",
+       "empty"
+      ],
+      "title": "Kind"
+     },
+     "streak": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecoHighlightStreakDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "window": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecoHighlightWindowDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "segment": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecoHighlightSegmentDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "rate": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RecoHighlightRateDTO"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "parlay_slip_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Parlay Slip Count"
+     },
+     "parlay_net_units": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Parlay Net Units"
+     },
+     "candidate_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Candidate Key"
+     },
+     "candidates_considered": {
+      "type": "integer",
+      "title": "Candidates Considered"
+     }
+    },
+    "type": "object",
+    "required": [
+     "board",
+     "board_label_zh",
+     "kind",
+     "candidates_considered"
+    ],
+    "title": "RecoBoardHighlightDTO"
+   },
    "RecoDailyLockedSlipDTO": {
     "properties": {
      "id": {
@@ -14206,6 +14462,211 @@
     ],
     "title": "RecoDailyUnlockedSlipDTO",
     "description": "当前用户对该 slip 持有 active 按场授权时的完整投影(RecoSlipDTO 原样\n+access_required=False,供前端统一判断是否需要引导授权)。"
+   },
+   "RecoHighlightRateDTO": {
+    "properties": {
+     "unit": {
+      "type": "string",
+      "const": "slip",
+      "title": "Unit"
+     },
+     "decided_count": {
+      "type": "integer",
+      "title": "Decided Count"
+     },
+     "win_count": {
+      "type": "integer",
+      "title": "Win Count"
+     },
+     "lose_count": {
+      "type": "integer",
+      "title": "Lose Count"
+     },
+     "half_win_count": {
+      "type": "integer",
+      "title": "Half Win Count"
+     },
+     "half_loss_count": {
+      "type": "integer",
+      "title": "Half Loss Count"
+     },
+     "push_count": {
+      "type": "integer",
+      "title": "Push Count"
+     },
+     "hit_rate": {
+      "type": "number",
+      "title": "Hit Rate"
+     }
+    },
+    "type": "object",
+    "required": [
+     "unit",
+     "decided_count",
+     "win_count",
+     "lose_count",
+     "half_win_count",
+     "half_loss_count",
+     "push_count",
+     "hit_rate"
+    ],
+    "title": "RecoHighlightRateDTO",
+    "description": "命中率与它的原始计数**同层**下发(2026-09)。\n\n`hit_rate` 刻意不放在外层 DTO 上,而是和 `decided_count`/`win_count` 挤在\n同一个对象里:前端想\"只取百分比、不取计数\"在类型上就很别扭。这是把\n「百分比必与原始计数同现」这条设计约定做成结构性约束,而不是只写一行注释。"
+   },
+   "RecoHighlightResponse": {
+    "properties": {
+     "computed_at": {
+      "type": "string",
+      "title": "Computed At"
+     },
+     "rate_threshold": {
+      "type": "number",
+      "title": "Rate Threshold"
+     },
+     "min_streak": {
+      "type": "integer",
+      "title": "Min Streak"
+     },
+     "boards": {
+      "items": {
+       "$ref": "#/components/schemas/RecoBoardHighlightDTO"
+      },
+      "type": "array",
+      "title": "Boards"
+     }
+    },
+    "type": "object",
+    "required": [
+     "computed_at",
+     "rate_threshold",
+     "min_streak",
+     "boards"
+    ],
+    "title": "RecoHighlightResponse",
+    "description": "首页战绩 banner:**择优**展示的口径(经站长明确决定,见\nbackend/queries/reco_highlight.py 模块头注)。记录面\n(/api/v1/reco/track-record)仍然是全样本,两者互不影响。"
+   },
+   "RecoHighlightSegmentDTO": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "overall",
+       "market",
+       "league",
+       "league_market"
+      ],
+      "title": "Kind"
+     },
+     "market": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Market"
+     },
+     "league_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "League Id"
+     },
+     "league_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "League Name Zh"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind"
+    ],
+    "title": "RecoHighlightSegmentDTO"
+   },
+   "RecoHighlightStreakDTO": {
+    "properties": {
+     "length": {
+      "type": "integer",
+      "title": "Length"
+     },
+     "unit": {
+      "type": "string",
+      "const": "slip",
+      "title": "Unit"
+     },
+     "skipped_push_count": {
+      "type": "integer",
+      "title": "Skipped Push Count"
+     },
+     "skipped_void_count": {
+      "type": "integer",
+      "title": "Skipped Void Count"
+     },
+     "from_date": {
+      "type": "string",
+      "title": "From Date"
+     },
+     "to_date": {
+      "type": "string",
+      "title": "To Date"
+     }
+    },
+    "type": "object",
+    "required": [
+     "length",
+     "unit",
+     "skipped_push_count",
+     "skipped_void_count",
+     "from_date",
+     "to_date"
+    ],
+    "title": "RecoHighlightStreakDTO"
+   },
+   "RecoHighlightWindowDTO": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "days",
+       "count"
+      ],
+      "title": "Kind"
+     },
+     "value": {
+      "type": "integer",
+      "title": "Value"
+     },
+     "observed_from_date": {
+      "type": "string",
+      "title": "Observed From Date"
+     },
+     "observed_to_date": {
+      "type": "string",
+      "title": "Observed To Date"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind",
+     "value",
+     "observed_from_date",
+     "observed_to_date"
+    ],
+    "title": "RecoHighlightWindowDTO"
    },
    "RecoLegCornersDTO": {
     "properties": {
@@ -14739,6 +15200,135 @@
     ],
     "title": "RecoOverviewResponse",
     "description": "匿名聚合面:今日发布状态 + 近 30 天已结算汇总(无任何单据内容)。"
+   },
+   "RecoPublicCurrentLegDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "match_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Match Id"
+     },
+     "match_desc": {
+      "type": "string",
+      "title": "Match Desc"
+     },
+     "market": {
+      "type": "string",
+      "title": "Market"
+     },
+     "selection": {
+      "type": "string",
+      "title": "Selection"
+     },
+     "kickoff_at_utc": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kickoff At Utc"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "match_desc",
+     "market",
+     "selection"
+    ],
+    "title": "RecoPublicCurrentLegDTO",
+    "description": "首页公推 banner 的腿投影(2026-09)。**刻意不含 odds**——banner 的\n产品要求就是不展示赔率(赔率留在 /reco 页);查询层在 SQL 就不 SELECT\n该列,不是\"查了再靠 response_model 丢掉\"。同样不含 result(banner 只放\npublished,恒为 null)与全部溯源字段。\n\nmatch_id 保持 Optional:虽然 published 单的每条腿必有 match_id\n(require_provenance_bound_legs 的前置校验),但不因为这个不变量把类型\n收紧——万一有历史 legacy_manual 的 published 老单,收紧会让端点 500。\n\nkickoff_at_utc 可空(§6.2.1),只参与前端「开球 +N 小时撤下」的判定,\n不做展示(展示用的时间已经在 match_desc 文本里,两处都渲染会重复)。"
+   },
+   "RecoPublicCurrentResponse": {
+    "properties": {
+     "window_days": {
+      "type": "integer",
+      "title": "Window Days"
+     },
+     "hide_after_kickoff_hours": {
+      "type": "number",
+      "title": "Hide After Kickoff Hours"
+     },
+     "slips": {
+      "items": {
+       "$ref": "#/components/schemas/RecoPublicCurrentSlipDTO"
+      },
+      "type": "array",
+      "title": "Slips"
+     }
+    },
+    "type": "object",
+    "required": [
+     "window_days",
+     "hide_after_kickoff_hours",
+     "slips"
+    ],
+    "title": "RecoPublicCurrentResponse",
+    "description": "首页 banner 数据面:当前在架(published)的每日公推 + 开球事实。\n\nhide_after_kickoff_hours 把「开球 2 小时后撤下」这条产品规则作为单一\n真源从后端下发,前端纯函数把它当参数收,避免前后端各写一个 2。"
+   },
+   "RecoPublicCurrentSlipDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "slip_date": {
+      "type": "string",
+      "title": "Slip Date"
+     },
+     "title": {
+      "type": "string",
+      "title": "Title"
+     },
+     "combo_type": {
+      "type": "string",
+      "enum": [
+       "single",
+       "parlay"
+      ],
+      "title": "Combo Type"
+     },
+     "published_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Published At"
+     },
+     "legs": {
+      "items": {
+       "$ref": "#/components/schemas/RecoPublicCurrentLegDTO"
+      },
+      "type": "array",
+      "title": "Legs"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "slip_date",
+     "title",
+     "combo_type",
+     "legs"
+    ],
+    "title": "RecoPublicCurrentSlipDTO"
    },
    "RecoPublicResponse": {
     "properties": {

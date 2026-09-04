@@ -74,6 +74,15 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # /api/v1/reco/daily(/{slip_id})、/reco/my-access、/reco/overview
         # 与全部 /admin/reco/* 仍然**不在**本 allowlist 内,继续走 default-deny。
         ("GET", "/api/v1/reco/public"),
+        # 首页 banner 数据面:published 公推 + 开球时刻事实,不含赔率。
+        # 同样与身份无关。它下发的是**事实**而不是"该不该显示"的判定——
+        # 「开球 +2 小时撤下」由前端按各自当前时间算,所以这个响应可以安全
+        # 共享缓存(见 backend/queries/reco.py::public_current_slips)。
+        ("GET", "/api/v1/reco/public/current"),
+        # 首页战绩 banner:择优展示的聚合数字(不含任何单据内容),同样与身份
+        # 无关。用 PUBLIC_CACHE(300s)而不是 SHORT——内容只在某张单结算时变化,
+        # 没有精确到分钟的撤下判定,陈旧 5 分钟无害且自愈。
+        ("GET", "/api/v1/reco/highlight"),
     }
 )
 

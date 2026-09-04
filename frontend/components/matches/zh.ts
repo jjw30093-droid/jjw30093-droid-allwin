@@ -383,8 +383,13 @@ const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HAS_TZ_RE = /[Zz]|[+-]\d{2}:?\d{2}$/;
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-/** 精确 UTC 时刻(含时分)→ 毫秒;date_only 或无法解析一律 null,不猜测。 */
-function toExactEpochMs(iso: string): number | null {
+/** 精确 UTC 时刻(含时分)→ 毫秒;date_only 或无法解析一律 null,不猜测。
+ *
+ * 2026-09 起对外导出(首页公推 banner 的 lib/reco-banner.ts 要用它做
+ * 「开球 +N 小时」判定)。**实现一个字符都没改**——本文件无 "use client",
+ * 服务端组件与客户端组件都能安全 import。注意不要用裸 `new Date(iso)` 替代:
+ * 无时区后缀的 ISO 在 JS 里按浏览器本地时区解析,会引入 8 小时误差。 */
+export function toExactEpochMs(iso: string): number | null {
   if (DATE_ONLY_RE.test(iso)) return null;
   const normalized = HAS_TZ_RE.test(iso) ? iso : `${iso}Z`;
   const ms = Date.parse(normalized);

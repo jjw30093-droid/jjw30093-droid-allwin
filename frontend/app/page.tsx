@@ -11,6 +11,8 @@ import { selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { ContinueWatching } from "@/components/home/ContinueWatching";
 import { HomeMatchExperienceLive, FreshnessBlock } from "@/components/home/HomeMatchExperienceLive";
+import { PublicPicksBanner } from "@/components/home/PublicPicksBanner";
+import { RecordHighlightBanner } from "@/components/home/RecordHighlightBanner";
 import styles from "./page.module.css";
 
 type RecoOverview = GetJson<"/api/v1/reco/overview">;
@@ -265,6 +267,24 @@ async function DailyPicksSection() {
 export default function Home() {
   return (
     <main className={styles.page}>
+      {/* 推荐战绩 banner(2026-09):排在公推 banner 之上。展示的是**择优挑出
+          的口径**(经站长明确决定),不是全样本——完整背景见
+          backend/queries/reco_highlight.py 模块头注;全样本记录面在
+          /reco?tab=record,本 banner 整块链过去。 */}
+      <Suspense fallback={null}>
+        <RecordHighlightBanner />
+      </Suspense>
+
+      {/* 每日公推 banner(2026-09):有在架公推时才出现,排在「重点比赛」
+          之上。fallback 用 null 而不是骨架屏——banner 是条件出现的,骨架屏
+          会承诺一块可能永远不来的内容,并在没有公推的日子给首屏塞一次布局
+          抖动。放在 HomeMatchExperienceSection 外面是因为那个 client 组件
+          有 errored / !featured 两条 early return,塞进去会在"今天没有已
+          排期比赛"时被整块吞掉。 */}
+      <Suspense fallback={null}>
+        <PublicPicksBanner />
+      </Suspense>
+
       <Suspense fallback={<SectionSkeleton lines={5} />}>
         <HomeMatchExperienceSection />
       </Suspense>

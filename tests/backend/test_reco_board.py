@@ -29,6 +29,7 @@ from backend.commands import reco_access
 from backend.commands.reco_access import RecoAccessError
 from backend.db.connections import connect_rw, tx
 
+from .coreseed import insert_match, seed_core_schema
 from .test_reco import _admin_client, _create_slip, _csrf, _member_client, _prov_leg, _publish
 
 
@@ -336,3 +337,241 @@ class TestAdminBoardFilterAndDTO:
 def _legs_of(admin, slip_id):
     slips = admin.get("/api/v1/admin/reco/slips").json()["slips"]
     return next(s for s in slips if s["id"] == slip_id)["legs"]
+
+
+# ── 首页 banner 数据面 GET /api/v1/reco/public/current(2026-09)────────
+#
+# 只放 published 公推 + 每条腿的精确开球时刻,**不含赔率**。
+# 注意:「开球 +2 小时撤下」不在这里测——那条判定刻意留在前端(服务端算出
+# 来的结果会被 CDN/ISR 缓存住变陈旧),纯函数测试在
+# frontend/tests/reco-banner.test.ts。本类测的是"下发了正确的事实"。
+
+
+def _seed_core_match(match_id, kickoff_at_utc, *, status="NotStarted"):
+    """在 core 库种一场比赛,供 reco 腿的 match_id 关联出 kickoff。"""
+    conn = connect_rw("core")
+    seed_core_schema(conn)
+    insert_match(conn, match_id, date="2027-04-01", status=status,
+                 kickoff_at_utc=kickoff_at_utc)
+    conn.commit()
+    conn.close()
+
+
+class TestPublicCurrentEndpoint:
+    def test_anonymous_sees_published_slip_with_kickoff(self, app, data_dir, fresh_ip):
+        _seed_core_match(830001, "2027-04-01T12:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="banner 公推", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B 04-01 20:00", "ou", "大2.5", 1.9, 830001)])
+        _publish(admin, sid)
+
+        anon = TestClient(app)
+        r = anon.get("/api/v1/reco/public/current")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["hide_after_kickoff_hours"] == 2.0
+        slip = next(s for s in body["slips"] if s["id"] == sid)
+        leg = slip["legs"][0]
+        assert leg["match_desc"] == "A vs B 04-01 20:00"
+        assert leg["market"] == "ou"
+        assert leg["selection"] == "大2.5"
+        # kickoff 逐字节透传,不做任何时区/格式转换
+        assert leg["kickoff_at_utc"] == "2027-04-01T12:00:00Z"
+
+    def test_response_never_contains_odds_or_provenance(self, app, data_dir, fresh_ip):
+        """红线:banner 的产品要求是不展示赔率。用响应**原始文本**扫描,
+        连嵌在别处的 source_odds/odds_format 也一并挡住。"""
+        _seed_core_match(830002, "2027-04-01T12:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="不含赔率", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830002)])
+        _publish(admin, sid)
+
+        text = TestClient(app).get("/api/v1/reco/public/current").text
+        for forbidden in ("odds", "result", "return_units", "entry_type",
+                          "snapshot_ref", "provider"):
+            assert forbidden not in text, f"banner 响应不得出现 {forbidden}"
+
+    def test_draft_settled_voided_all_absent(self, app, data_dir, fresh_ip):
+        _seed_core_match(830003, "2027-04-01T12:00:00Z")
+        _seed_core_match(830004, "2027-04-01T12:00:00Z")
+        _seed_core_match(830005, "2027-04-01T12:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        anon = TestClient(app)
+
+        draft_id = _create_slip(admin, title="草稿", board="daily_public",
+                                 slip_date=_today(),
+                                 legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830003)])
+        settled_id = _create_slip(admin, title="待结算", board="daily_public",
+                                   slip_date=_today(),
+                                   legs=[_prov_leg("C vs D", "1x2", "主胜", 1.9, 830004)])
+        voided_id = _create_slip(admin, title="待作废", board="daily_public",
+                                  slip_date=_today(),
+                                  legs=[_prov_leg("E vs F", "1x2", "主胜", 1.9, 830005)])
+        _publish(admin, settled_id)
+        _publish(admin, voided_id)
+
+        ids = {s["id"] for s in anon.get("/api/v1/reco/public/current").json()["slips"]}
+        assert draft_id not in ids, "draft 永不外泄"
+        assert settled_id in ids and voided_id in ids
+
+        _settle(admin, settled_id, {_legs_of(admin, settled_id)[0]["id"]: "win"})
+        assert admin.post(f"/api/v1/admin/reco/slips/{voided_id}/void",
+                           headers=_csrf(admin), json={"reason": "测试"}).status_code == 200
+
+        ids_after = {s["id"] for s in anon.get("/api/v1/reco/public/current").json()["slips"]}
+        assert settled_id not in ids_after, "结算即撤下"
+        assert voided_id not in ids_after, "作废即撤下"
+
+    def test_voided_slip_still_visible_on_reco_public(self, app, data_dir, fresh_ip):
+        """红线回归:banner 撤下作废单,不代表 /reco 页记录面也跟着丢——
+        那边"作废不消失"的纪律必须原样成立。"""
+        _seed_core_match(830006, "2027-04-01T12:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="作废但记录面可见", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830006)])
+        _publish(admin, sid)
+        admin.post(f"/api/v1/admin/reco/slips/{sid}/void",
+                    headers=_csrf(admin), json={"reason": "测试"})
+
+        anon = TestClient(app)
+        assert sid not in {s["id"] for s in
+                            anon.get("/api/v1/reco/public/current").json()["slips"]}
+        assert sid in {s["id"] for s in anon.get("/api/v1/reco/public").json()["slips"]}
+
+    def test_missing_kickoff_reported_as_null_not_faked(self, app, data_dir, fresh_ip):
+        """§6.2.1:来源只给自然日时 kickoff_at_utc 必须是 NULL,绝不能用
+        Date 列顶替成当天 00:00。端点如实下发 null,由前端 fail-closed。"""
+        _seed_core_match(830007, None)
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="缺开球时间", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830007)])
+        _publish(admin, sid)
+
+        slip = next(s for s in TestClient(app).get("/api/v1/reco/public/current")
+                     .json()["slips"] if s["id"] == sid)
+        assert slip["legs"][0]["kickoff_at_utc"] is None
+
+    def test_match_absent_from_core_does_not_break_endpoint(self, app, data_dir, fresh_ip):
+        """腿的 match_id 在 core 库里根本查不到时,该腿 kickoff 为 null,
+        端点仍然 200(不能 KeyError/500)。"""
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="core 里没有这场", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 839999)])
+        _publish(admin, sid)
+
+        r = TestClient(app).get("/api/v1/reco/public/current")
+        assert r.status_code == 200
+        slip = next(s for s in r.json()["slips"] if s["id"] == sid)
+        assert slip["legs"][0]["kickoff_at_utc"] is None
+
+    def test_parlay_legs_keep_order_and_own_kickoffs(self, app, data_dir, fresh_ip):
+        _seed_core_match(830010, "2027-04-01T12:00:00Z")
+        _seed_core_match(830011, "2027-04-01T15:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="二串一", board="daily_public",
+                            slip_date=_today(), legs=[
+                                _prov_leg("早场 A vs B", "1x2", "主胜", 1.9, 830010),
+                                _prov_leg("晚场 C vs D", "ou", "大2.5", 1.8, 830011),
+                            ])
+        _publish(admin, sid)
+
+        slip = next(s for s in TestClient(app).get("/api/v1/reco/public/current")
+                     .json()["slips"] if s["id"] == sid)
+        assert slip["combo_type"] == "parlay"
+        assert [l["match_desc"] for l in slip["legs"]] == ["早场 A vs B", "晚场 C vs D"]
+        assert [l["kickoff_at_utc"] for l in slip["legs"]] == [
+            "2027-04-01T12:00:00Z", "2027-04-01T15:00:00Z",
+        ]
+
+    def test_featured_board_slip_never_leaks(self, app, data_dir, fresh_ip):
+        """最严重的越权可能:每日精选(需授权)混进完全公开的 banner 面。"""
+        _seed_core_match(830020, "2027-04-01T12:00:00Z")
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="精选不得进 banner", slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830020)])
+        _publish(admin, sid)
+
+        text = TestClient(app).get("/api/v1/reco/public/current").text
+        assert sid not in text
+        assert "精选不得进 banner" not in text
+
+    def test_window_excludes_old_slips(self, app, data_dir, fresh_ip):
+        from datetime import datetime, timedelta, timezone
+        from zoneinfo import ZoneInfo
+
+        _seed_core_match(830030, "2027-04-01T12:00:00Z")
+        _seed_core_match(830031, "2027-04-01T12:00:00Z")
+        beijing = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Shanghai"))
+        recent = (beijing - timedelta(days=1)).strftime("%Y-%m-%d")
+        old = (beijing - timedelta(days=5)).strftime("%Y-%m-%d")
+
+        admin = _admin_client(app, data_dir, fresh_ip)
+        recent_id = _create_slip(admin, title="窗口内", board="daily_public",
+                                  slip_date=recent,
+                                  legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830030)])
+        old_id = _create_slip(admin, title="窗口外", board="daily_public",
+                               slip_date=old,
+                               legs=[_prov_leg("C vs D", "1x2", "主胜", 1.9, 830031)])
+        _publish(admin, recent_id)
+        _publish(admin, old_id)
+
+        ids = {s["id"] for s in TestClient(app).get("/api/v1/reco/public/current")
+                .json()["slips"]}
+        assert recent_id in ids
+        assert old_id not in ids
+
+    def test_cache_control_public_anonymous_and_no_store_with_cookie(
+        self, app, data_dir, fresh_ip
+    ):
+        anon = TestClient(app)
+        assert anon.get("/api/v1/reco/public/current").headers["cache-control"] == (
+            "public, s-maxage=60, stale-while-revalidate=30"
+        )
+        admin = _admin_client(app, data_dir, fresh_ip)
+        assert admin.get("/api/v1/reco/public/current").headers["cache-control"] == (
+            "private, no-store"
+        )
+
+    def test_does_not_disturb_existing_reco_endpoints(self, app, data_dir, fresh_ip):
+        """红线:新端点不得改变 /reco/public、/reco/overview、
+        /reco/track-record 任何一个字段。"""
+        _seed_core_match(830040, "2027-04-01T12:00:00Z")
+        anon = TestClient(app)
+        before = (
+            anon.get("/api/v1/reco/public").json(),
+            anon.get("/api/v1/reco/overview").json(),
+            anon.get("/api/v1/reco/track-record").json(),
+        )
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="不影响既有端点", board="daily_public",
+                            slip_date=_today(),
+                            legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 830040)])
+        _publish(admin, sid)
+        anon.get("/api/v1/reco/public/current")
+
+        after_overview = anon.get("/api/v1/reco/overview").json()
+        after_track = anon.get("/api/v1/reco/track-record").json()
+
+        # /reco/track-record 是精选战绩面,必须逐字段完全不变。
+        assert after_track == before[2]
+
+        # /reco/overview 的**统计口径**逐字段不变(公推不进精选战绩数字)。
+        stat_keys = [
+            "settled_count", "win_count", "lose_count", "push_count",
+            "half_win_count", "half_loss_count", "voided_count",
+            "hit_rate", "net_units", "today_published_count",
+            "today_latest_published_at", "window_days",
+        ]
+        for k in stat_keys:
+            assert after_overview[k] == before[1][k], f"overview.{k} 被公推污染了"
+
+        # published_match_ids 是唯一会变的字段,且这是**既定设计**:它只表达
+        # "这场比赛有已发布推荐"的存在性(不含方向/赔率/标题),两个板块合计。
+        # 公推本身就完全公开,把它的场次标出来不构成任何泄漏。
+        assert 830040 in after_overview["published_match_ids"]

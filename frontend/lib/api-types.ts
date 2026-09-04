@@ -615,6 +615,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reco/highlight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reco Highlight
+         * @description 首页战绩 banner:**从数十个统计口径候选里择优展示**(2026-09,经站长
+         *     明确决定)。这不是 bug——完整背景、与记录面的分工、以及"不要修复成全样本"
+         *     的说明,见 backend/queries/reco_highlight.py 的模块头注。
+         *
+         *     记录面(/api/v1/reco/track-record、/reco?tab=record)不受影响,仍然全样本。
+         *     本端点不写库、不改任何既有聚合数字。
+         *
+         *     缓存用 PUBLIC_CACHE(300s)而不是 SHORT:内容只在某张单结算时变化,没有
+         *     公推 banner 那种精确到分钟的撤下判定,陈旧 5 分钟无害且自愈——所以择优
+         *     全部在服务端算,不需要客户端重算。
+         */
+        get: operations["reco_highlight_api_v1_reco_highlight_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reco/public/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reco Public Current
+         * @description 首页 banner 数据面(2026-09):当前在架(published)的每日公推 +
+         *     每条腿的精确开球时刻,**不含赔率**。同样零 auth 依赖、完全公开。
+         *
+         *     刻意与 /reco/public 分开而不是给它加字段:RecoLegDTO/_legs_by_slip 被
+         *     /reco/daily、/reco/daily/{id}、/reco/track-record、/admin/.../preview、
+         *     /reco/public 五个端点共用(其中包含登录态的每日精选按场授权投影),
+         *     给那条共享链路加一个需要 core 库才能填的 kickoff 字段,会逼所有共用
+         *     端点都注入 conn_core,否则该字段在它们那里恒为 null。
+         *
+         *     本端点只下发事实,不做「开球 +2 小时是否已过」的判定——理由见
+         *     backend/queries/reco.py::public_current_slips 的 docstring。
+         */
+        get: operations["reco_public_current_api_v1_reco_public_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reco/daily": {
         parameters: {
             query?: never;
@@ -3649,6 +3708,33 @@ export interface components {
              */
             other_board: "daily_pick" | "daily_public";
         };
+        /** RecoBoardHighlightDTO */
+        RecoBoardHighlightDTO: {
+            /**
+             * Board
+             * @enum {string}
+             */
+            board: "daily_pick" | "daily_public";
+            /** Board Label Zh */
+            board_label_zh: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "streak" | "rate_qualified" | "rate_best_effort" | "parlay_return" | "empty";
+            streak?: components["schemas"]["RecoHighlightStreakDTO"] | null;
+            window?: components["schemas"]["RecoHighlightWindowDTO"] | null;
+            segment?: components["schemas"]["RecoHighlightSegmentDTO"] | null;
+            rate?: components["schemas"]["RecoHighlightRateDTO"] | null;
+            /** Parlay Slip Count */
+            parlay_slip_count?: number | null;
+            /** Parlay Net Units */
+            parlay_net_units?: number | null;
+            /** Candidate Key */
+            candidate_key?: string | null;
+            /** Candidates Considered */
+            candidates_considered: number;
+        };
         /**
          * RecoDailyLockedSlipDTO
          * @description 当前用户对该 slip 没有 active 按场授权时的中性投影(2026-08-16,
@@ -3729,6 +3815,97 @@ export interface components {
              * @constant
              */
             access_required: false;
+        };
+        /**
+         * RecoHighlightRateDTO
+         * @description 命中率与它的原始计数**同层**下发(2026-09)。
+         *
+         *     `hit_rate` 刻意不放在外层 DTO 上,而是和 `decided_count`/`win_count` 挤在
+         *     同一个对象里:前端想"只取百分比、不取计数"在类型上就很别扭。这是把
+         *     「百分比必与原始计数同现」这条设计约定做成结构性约束,而不是只写一行注释。
+         */
+        RecoHighlightRateDTO: {
+            /**
+             * Unit
+             * @constant
+             */
+            unit: "slip";
+            /** Decided Count */
+            decided_count: number;
+            /** Win Count */
+            win_count: number;
+            /** Lose Count */
+            lose_count: number;
+            /** Half Win Count */
+            half_win_count: number;
+            /** Half Loss Count */
+            half_loss_count: number;
+            /** Push Count */
+            push_count: number;
+            /** Hit Rate */
+            hit_rate: number;
+        };
+        /**
+         * RecoHighlightResponse
+         * @description 首页战绩 banner:**择优**展示的口径(经站长明确决定,见
+         *     backend/queries/reco_highlight.py 模块头注)。记录面
+         *     (/api/v1/reco/track-record)仍然是全样本,两者互不影响。
+         */
+        RecoHighlightResponse: {
+            /** Computed At */
+            computed_at: string;
+            /** Rate Threshold */
+            rate_threshold: number;
+            /** Min Streak */
+            min_streak: number;
+            /** Boards */
+            boards: components["schemas"]["RecoBoardHighlightDTO"][];
+        };
+        /** RecoHighlightSegmentDTO */
+        RecoHighlightSegmentDTO: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "overall" | "market" | "league" | "league_market";
+            /** Market */
+            market?: string | null;
+            /** League Id */
+            league_id?: number | null;
+            /** League Name Zh */
+            league_name_zh?: string | null;
+        };
+        /** RecoHighlightStreakDTO */
+        RecoHighlightStreakDTO: {
+            /** Length */
+            length: number;
+            /**
+             * Unit
+             * @constant
+             */
+            unit: "slip";
+            /** Skipped Push Count */
+            skipped_push_count: number;
+            /** Skipped Void Count */
+            skipped_void_count: number;
+            /** From Date */
+            from_date: string;
+            /** To Date */
+            to_date: string;
+        };
+        /** RecoHighlightWindowDTO */
+        RecoHighlightWindowDTO: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "days" | "count";
+            /** Value */
+            value: number;
+            /** Observed From Date */
+            observed_from_date: string;
+            /** Observed To Date */
+            observed_to_date: string;
         };
         /** RecoLegCornersDTO */
         RecoLegCornersDTO: {
@@ -3911,6 +4088,67 @@ export interface components {
              * @default []
              */
             published_match_ids: number[];
+        };
+        /**
+         * RecoPublicCurrentLegDTO
+         * @description 首页公推 banner 的腿投影(2026-09)。**刻意不含 odds**——banner 的
+         *     产品要求就是不展示赔率(赔率留在 /reco 页);查询层在 SQL 就不 SELECT
+         *     该列,不是"查了再靠 response_model 丢掉"。同样不含 result(banner 只放
+         *     published,恒为 null)与全部溯源字段。
+         *
+         *     match_id 保持 Optional:虽然 published 单的每条腿必有 match_id
+         *     (require_provenance_bound_legs 的前置校验),但不因为这个不变量把类型
+         *     收紧——万一有历史 legacy_manual 的 published 老单,收紧会让端点 500。
+         *
+         *     kickoff_at_utc 可空(§6.2.1),只参与前端「开球 +N 小时撤下」的判定,
+         *     不做展示(展示用的时间已经在 match_desc 文本里,两处都渲染会重复)。
+         */
+        RecoPublicCurrentLegDTO: {
+            /** Id */
+            id: string;
+            /** Match Id */
+            match_id?: number | null;
+            /** Match Desc */
+            match_desc: string;
+            /** Market */
+            market: string;
+            /** Selection */
+            selection: string;
+            /** Kickoff At Utc */
+            kickoff_at_utc?: string | null;
+        };
+        /**
+         * RecoPublicCurrentResponse
+         * @description 首页 banner 数据面:当前在架(published)的每日公推 + 开球事实。
+         *
+         *     hide_after_kickoff_hours 把「开球 2 小时后撤下」这条产品规则作为单一
+         *     真源从后端下发,前端纯函数把它当参数收,避免前后端各写一个 2。
+         */
+        RecoPublicCurrentResponse: {
+            /** Window Days */
+            window_days: number;
+            /** Hide After Kickoff Hours */
+            hide_after_kickoff_hours: number;
+            /** Slips */
+            slips: components["schemas"]["RecoPublicCurrentSlipDTO"][];
+        };
+        /** RecoPublicCurrentSlipDTO */
+        RecoPublicCurrentSlipDTO: {
+            /** Id */
+            id: string;
+            /** Slip Date */
+            slip_date: string;
+            /** Title */
+            title: string;
+            /**
+             * Combo Type
+             * @enum {string}
+             */
+            combo_type: "single" | "parlay";
+            /** Published At */
+            published_at?: string | null;
+            /** Legs */
+            legs: components["schemas"]["RecoPublicCurrentLegDTO"][];
         };
         /**
          * RecoPublicResponse
@@ -6524,6 +6762,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecoPublicResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    reco_highlight_api_v1_reco_highlight_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoHighlightResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    reco_public_current_api_v1_reco_public_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoPublicCurrentResponse"];
                 };
             };
             /** @description Bad Request */

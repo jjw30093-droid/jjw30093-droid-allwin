@@ -8,6 +8,8 @@
 - GET  /api/v1/reco/my-access                   登录       个人授权查询
 - GET  /api/v1/reco/track-record                匿名可见   结算/作废归档 + 聚合
 - GET  /api/v1/reco/public                      匿名可见   每日公推(完全公开,2026-09 新增)
+- GET  /api/v1/reco/public/current              匿名可见   首页 banner:在架公推+开球时刻,不含赔率
+- GET  /api/v1/reco/highlight                   匿名可见   首页战绩 banner:择优口径(见 queries/reco_highlight.py)
 - POST /api/v1/admin/reco/access-grants         admin+CSRF 授权
 - POST /api/v1/admin/reco/access-grants/{id}/revoke admin+CSRF 撤销
 - GET  /api/v1/admin/reco/access-grants         admin      授权记录列表(筛选+分页)
@@ -26,13 +28,16 @@ reco_access.py::grant_access 会拒绝)。两个板块的 (match_id, market) 互
 ——同一盘口不得跨板块重复推荐,只提醒不拦截(见 queries/reco.py::
 cross_board_market_conflicts)。
 
-除 `/reco/public` 外,全部路径**不进** PUBLIC_ALLOWLIST:中间件 default-deny
-强制 private, no-store;带 Cookie 请求同样触发强制 no-store——双层兜底,
-每日精选内容永不进共享缓存。reco/daily(/{slip_id})、reco/my-access:匿名
-401(引导登录);已登录但未获该 slip 授权 403(响应体只含中性说明,不含
-正文任何字段)。`/reco/public` 是本文件唯一进入 PUBLIC_ALLOWLIST 的路径,
-签名里不读任何身份,响应对匿名与登录用户完全一致。
+除 `/reco/public`、`/reco/public/current` 与 `/reco/highlight` 三条外,
+全部路径**不进** PUBLIC_ALLOWLIST:中间件 default-deny 强制 private, no-store;带 Cookie 请求
+同样触发强制 no-store——双层兜底,每日精选内容永不进共享缓存。
+reco/daily(/{slip_id})、reco/my-access:匿名 401(引导登录);已登录但未获
+该 slip 授权 403(响应体只含中性说明,不含正文任何字段)。进入
+PUBLIC_ALLOWLIST 的只有公推板块那两条完全公开的路径,它们的签名里都不读
+任何身份,响应对匿名与登录用户完全一致。
 """
+
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -41,10 +46,13 @@ from backend.commands import reco_access
 from backend.commands.reco import LegInput, RecoError
 from backend.commands.reco_access import RecoAccessError
 from backend.db.connections import tx
+from backend.db.util import utc_now, utc_now_iso
 from backend.queries import odds as q_odds
 from backend.queries import reco as q_reco
+from backend.queries import reco_highlight as q_highlight
+from backend.queries.leagues import LEAGUE_META
 
-from .cache_policy import PUBLIC_CACHE_SHORT
+from .cache_policy import PUBLIC_CACHE, PUBLIC_CACHE_SHORT
 from .deps import (
     NO_STORE,
     AuthContext,
@@ -66,7 +74,9 @@ from .schemas import (
     RecoMatchCandidatesResponse,
     RecoMatchOddsOptionsResponse,
     RecoMyAccessResponse,
+    RecoHighlightResponse,
     RecoOverviewResponse,
+    RecoPublicCurrentResponse,
     RecoPublicResponse,
     RecoSettleBody,
     RecoSettledDTO,
@@ -124,6 +134,113 @@ def reco_public(
     return {
         "window_days": q_reco.RECO_PUBLIC_WINDOW_DAYS,
         "slips": q_reco.public_slips(conn),
+    }
+
+
+@router.get("/reco/highlight", response_model=RecoHighlightResponse)
+def reco_highlight(
+    response: Response,
+    conn=Depends(platform_ro),
+    conn_core=Depends(core_ro),
+):
+    """首页战绩 banner:**从数十个统计口径候选里择优展示**(2026-09,经站长
+    明确决定)。这不是 bug——完整背景、与记录面的分工、以及"不要修复成全样本"
+    的说明,见 backend/queries/reco_highlight.py 的模块头注。
+
+    记录面(/api/v1/reco/track-record、/reco?tab=record)不受影响,仍然全样本。
+    本端点不写库、不改任何既有聚合数字。
+
+    缓存用 PUBLIC_CACHE(300s)而不是 SHORT:内容只在某张单结算时变化,没有
+    公推 banner 那种精确到分钟的撤下判定,陈旧 5 分钟无害且自愈——所以择优
+    全部在服务端算,不需要客户端重算。
+    """
+    response.headers["Cache-Control"] = PUBLIC_CACHE
+    samples = q_highlight.record_highlight_samples(conn, conn_core)
+    now = utc_now().astimezone(ZoneInfo("Asia/Shanghai"))
+    league_names = {
+        lid: (meta.get("name_zh") or meta.get("name"))
+        for lid, meta in LEAGUE_META.items()
+        if isinstance(meta, dict) and (meta.get("name_zh") or meta.get("name"))
+    }
+    highlights = q_highlight.select_highlights(
+        samples, now, known_league_ids=league_names
+    )
+
+    boards = []
+    for h in highlights:
+        item: dict = {
+            "board": h.board,
+            "board_label_zh": q_highlight.BOARD_LABEL_ZH[h.board],
+            "kind": h.kind,
+            "candidates_considered": h.candidates_considered,
+        }
+        if h.streak is not None:
+            item["streak"] = {
+                "length": h.streak.length, "unit": "slip",
+                "skipped_push_count": h.streak.skipped_push,
+                "skipped_void_count": h.streak.skipped_void,
+                "from_date": h.streak.from_date, "to_date": h.streak.to_date,
+            }
+        c = h.candidate
+        if c is not None:
+            item["candidate_key"] = c.key
+            item["window"] = {
+                "kind": c.window_kind, "value": c.window_value,
+                "observed_from_date": c.observed_from,
+                "observed_to_date": c.observed_to,
+            }
+            # market 只下发原始值,中文由前端 components/matches/zh.ts::MARKET_ZH
+            # 映射(与公推 banner 同一做法,`?? leg.market` 兜底也在那边)。
+            # league 名必须后端给——前端没有 league_id→中文名的映射表。
+            item["segment"] = {
+                "kind": c.segment_kind,
+                "market": c.market,
+                "league_id": c.league_id,
+                "league_name_zh": league_names.get(c.league_id) if c.league_id else None,
+            }
+            if c.kind == "rate" and c.hit_rate is not None:
+                item["rate"] = {
+                    "unit": "slip", "decided_count": c.decided,
+                    "win_count": c.win, "lose_count": c.lose,
+                    "half_win_count": c.half_win, "half_loss_count": c.half_loss,
+                    "push_count": c.push, "hit_rate": c.hit_rate,
+                }
+            elif c.kind == "parlay_return":
+                item["parlay_slip_count"] = c.slip_count
+                item["parlay_net_units"] = c.net_units
+        boards.append(item)
+
+    return {
+        "computed_at": utc_now_iso(),
+        "rate_threshold": q_highlight.HIT_RATE_THRESHOLD,
+        "min_streak": q_highlight.MIN_STREAK,
+        "boards": boards,
+    }
+
+
+@router.get("/reco/public/current", response_model=RecoPublicCurrentResponse)
+def reco_public_current(
+    response: Response,
+    conn=Depends(platform_ro),
+    conn_core=Depends(core_ro),
+):
+    """首页 banner 数据面(2026-09):当前在架(published)的每日公推 +
+    每条腿的精确开球时刻,**不含赔率**。同样零 auth 依赖、完全公开。
+
+    刻意与 /reco/public 分开而不是给它加字段:RecoLegDTO/_legs_by_slip 被
+    /reco/daily、/reco/daily/{id}、/reco/track-record、/admin/.../preview、
+    /reco/public 五个端点共用(其中包含登录态的每日精选按场授权投影),
+    给那条共享链路加一个需要 core 库才能填的 kickoff 字段,会逼所有共用
+    端点都注入 conn_core,否则该字段在它们那里恒为 null。
+
+    本端点只下发事实,不做「开球 +2 小时是否已过」的判定——理由见
+    backend/queries/reco.py::public_current_slips 的 docstring。
+    """
+    response.headers["Cache-Control"] = PUBLIC_CACHE_SHORT
+    return {
+        "window_days": q_reco.RECO_PUBLIC_CURRENT_WINDOW_DAYS,
+        "hide_after_kickoff_hours": q_reco.RECO_PUBLIC_HIDE_AFTER_KICKOFF_HOURS,
+        "slips": q_reco.public_current_slips(conn, conn_core),
     }
 
 

@@ -801,6 +801,185 @@
   }
 }
 
+/* ── 推荐战绩 banner(2026-09,首页最顶部,在公推 banner 之上)──
+ *
+ * 视觉上刻意**比公推 banner 更轻**:更小内边距、不用金色 hover。它排在
+ * 公推 banner 上方,两块同等重量的卡会让首屏顶部打架,而公推(实际产品)
+ * 才是主角,战绩只是佐证。 */
+
+/* 红色发光边框(2026-09 站长指定要"醒目")。
+ *
+ * 用的是 --odds-up 那一档深红,不是 --brand-red——后者是"真实错误/不可用"
+ * 的语义色(CLAUDE.md §11.2),战绩条不是错误态,借用会让错误提示和营销位
+ * 撞色。--odds-up 本身也是为了"红涨"从错误红里分出来的一档,正好复用。
+ * 深浅两套主题各有取值,不硬编码十六进制。 */
+.recordHighlightBanner {
+  display: block;
+  margin: 0 0 10px;
+  border: 1.5px solid var(--odds-up);
+  border-radius: var(--r-card-sm);
+  background: var(--surface);
+  padding: 12px 16px;
+  text-decoration: none;
+  color: var(--ink);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--odds-up) 16%, transparent),
+    0 0 14px color-mix(in srgb, var(--odds-up) 34%, transparent);
+}
+
+@media (hover: hover) {
+  .recordHighlightBanner:hover {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--odds-up) 24%, transparent),
+      0 0 20px color-mix(in srgb, var(--odds-up) 48%, transparent);
+  }
+}
+
+@media (max-width: 760px) {
+  .recordHighlightBanner {
+    margin-bottom: 8px;
+    padding: 10px 14px;
+  }
+}
+
+.recordHighlightRow {
+  padding: 3px 0;
+}
+
+/* 主行以原始计数(「5 单 5 中」/「N 单 M 中」)为主体,不是裸百分比。 */
+.recordHighlightMain {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.recordHighlightMain[data-emphasize="1"] {
+  color: var(--odds-up);
+}
+
+/* ── 每日公推 banner(2026-09,首页最顶部)──────────────────
+ *
+ * 视觉基线抄 .picksCard(同一套边框/圆角/底色/内边距),但它在页面最顶部,
+ * 所以 margin 改成"下外边距"而不是 .picksCard 的 margin-top: 26px。
+ * 整块是 <Link>,必须自己吃掉链接默认的下划线与颜色。
+ * 头部复用 .picksHead / .picksBadge,不复制新类。
+ *
+ * 字号(§11.2):正文 ≥14px、辅助说明 ≥12px。**不要照抄本文件里既有的
+ * 10.5/11.5px**——那些是历史遗留,本身就不合规。 */
+
+.publicPicksBanner {
+  display: block;
+  margin: 0 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 18px 20px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+@media (hover: hover) {
+  .publicPicksBanner:hover {
+    border-color: var(--brand-gold);
+  }
+}
+
+@media (max-width: 760px) {
+  .publicPicksBanner {
+    margin-bottom: 8px;
+    padding: 14px 14px;
+  }
+}
+
+.publicPicksSlip {
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+.publicPicksSlip:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.publicPicksSlipHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.publicPicksTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.publicPicksCombo {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* 窄屏靠减列(比赛名与选项换行堆叠),不靠缩字号——§11.2。 */
+.publicPicksLeg {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.publicPicksMatch {
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「玩法 · 选项」是本 banner 的信息核心,永不省略。 */
+.publicPicksPick {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  flex: none;
+}
+
+@media (max-width: 560px) {
+  /* 窄屏减列:比赛名与「玩法 · 选项」上下堆叠。父级 display:block 之后,
+     两个子元素本身是 inline <span>,不显式转成 block 会挤在同一行连成
+     "…今晚 23:00亚洲让球 · 让-0.5 主"。 */
+  .publicPicksLeg {
+    display: block;
+    padding: 5px 0;
+  }
+
+  .publicPicksMatch,
+  .publicPicksPick {
+    display: block;
+    white-space: normal;
+  }
+
+  .publicPicksMatch {
+    margin-bottom: 2px;
+  }
+}
+
+.publicPicksCta {
+  display: block;
+  margin: 12px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-gold-deep);
+}
+
+:global(html[data-theme="dark"]) .publicPicksCta {
+  color: var(--brand-gold);
+}
+
 /* ── 今日精选卡 ─────────────────────────────────────────── */
 
 .picksCard {

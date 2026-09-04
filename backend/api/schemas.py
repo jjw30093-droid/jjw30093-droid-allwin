@@ -1807,6 +1807,118 @@ class RecoPublicResponse(BaseModel):
     slips: list[RecoSlipDTO]
 
 
+class RecoHighlightRateDTO(BaseModel):
+    """命中率与它的原始计数**同层**下发(2026-09)。
+
+    `hit_rate` 刻意不放在外层 DTO 上,而是和 `decided_count`/`win_count` 挤在
+    同一个对象里:前端想"只取百分比、不取计数"在类型上就很别扭。这是把
+    「百分比必与原始计数同现」这条设计约定做成结构性约束,而不是只写一行注释。
+    """
+
+    unit: Literal["slip"]                    # 命中率只按单算(串关另走回报口径)
+    decided_count: int                       # 分母:win+lose+half_win+half_loss
+    win_count: int
+    lose_count: int
+    half_win_count: int
+    half_loss_count: int
+    push_count: int                          # 走水,不进分母,但要展示
+    hit_rate: float                          # 0..1
+
+
+class RecoHighlightWindowDTO(BaseModel):
+    kind: Literal["days", "count"]
+    value: int                               # 30 天 / 最近 20 单
+    # 实际覆盖区间——名义窗口会高估跨度(生产 20 单集中在 08-14~09-02,
+    # "近30天"名义上比实际宽),细行要如实写出真实区间。
+    observed_from_date: str
+    observed_to_date: str
+
+
+class RecoHighlightSegmentDTO(BaseModel):
+    kind: Literal["overall", "market", "league", "league_market"]
+    market: Optional[str] = None
+    league_id: Optional[int] = None
+    league_name_zh: Optional[str] = None
+
+
+class RecoHighlightStreakDTO(BaseModel):
+    length: int
+    unit: Literal["slip"]
+    skipped_push_count: int                  # 期间走水单数,必须披露
+    skipped_void_count: int                  # 期间作废单数,必须披露
+    from_date: str
+    to_date: str
+
+
+class RecoBoardHighlightDTO(BaseModel):
+    board: Literal["daily_pick", "daily_public"]
+    board_label_zh: str
+    kind: Literal["streak", "rate_qualified", "rate_best_effort", "parlay_return", "empty"]
+    streak: Optional[RecoHighlightStreakDTO] = None
+    window: Optional[RecoHighlightWindowDTO] = None
+    segment: Optional[RecoHighlightSegmentDTO] = None
+    rate: Optional[RecoHighlightRateDTO] = None
+    parlay_slip_count: Optional[int] = None
+    parlay_net_units: Optional[float] = None
+    # 可复现:某天有人截图质疑,能精确回溯当时选了哪个口径、从多少候选里挑的。
+    candidate_key: Optional[str] = None
+    candidates_considered: int
+
+
+class RecoHighlightResponse(BaseModel):
+    """首页战绩 banner:**择优**展示的口径(经站长明确决定,见
+    backend/queries/reco_highlight.py 模块头注)。记录面
+    (/api/v1/reco/track-record)仍然是全样本,两者互不影响。"""
+
+    computed_at: str
+    rate_threshold: float
+    min_streak: int
+    boards: list[RecoBoardHighlightDTO]
+
+
+class RecoPublicCurrentLegDTO(BaseModel):
+    """首页公推 banner 的腿投影(2026-09)。**刻意不含 odds**——banner 的
+    产品要求就是不展示赔率(赔率留在 /reco 页);查询层在 SQL 就不 SELECT
+    该列,不是"查了再靠 response_model 丢掉"。同样不含 result(banner 只放
+    published,恒为 null)与全部溯源字段。
+
+    match_id 保持 Optional:虽然 published 单的每条腿必有 match_id
+    (require_provenance_bound_legs 的前置校验),但不因为这个不变量把类型
+    收紧——万一有历史 legacy_manual 的 published 老单,收紧会让端点 500。
+
+    kickoff_at_utc 可空(§6.2.1),只参与前端「开球 +N 小时撤下」的判定,
+    不做展示(展示用的时间已经在 match_desc 文本里,两处都渲染会重复)。
+    """
+
+    id: str
+    match_id: Optional[int] = None
+    match_desc: str
+    market: str
+    selection: str
+    kickoff_at_utc: Optional[str] = None
+
+
+class RecoPublicCurrentSlipDTO(BaseModel):
+    id: str
+    slip_date: str
+    title: str
+    combo_type: Literal["single", "parlay"]
+    published_at: Optional[str] = None
+    legs: list[RecoPublicCurrentLegDTO]
+
+
+class RecoPublicCurrentResponse(BaseModel):
+    """首页 banner 数据面:当前在架(published)的每日公推 + 开球事实。
+
+    hide_after_kickoff_hours 把「开球 2 小时后撤下」这条产品规则作为单一
+    真源从后端下发,前端纯函数把它当参数收,避免前后端各写一个 2。
+    """
+
+    window_days: int
+    hide_after_kickoff_hours: float
+    slips: list[RecoPublicCurrentSlipDTO]
+
+
 class RecoSlipPreviewResponse(BaseModel):
     """admin 用:该单如果 published,一个真实会员在 /reco/daily 会看到的内容
     形状——与 RecoDailyResponse 里的单据字段完全一致(同一个 RecoSlipDTO,

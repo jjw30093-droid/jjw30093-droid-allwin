@@ -47,6 +47,23 @@ _RESULT_BREAKDOWN_SQL = """
 """
 
 
+def hit_rate_from_counts(
+    win: int, lose: int, half_win: int, half_loss: int
+) -> float | None:
+    """命中率的唯一实现:`(win + 0.5*half_win) / (win + lose + half_win + half_loss)`。
+    push 不计分母;分母为 0 时返回 None(不是 0.0,也不是 1.0)。
+
+    2026-09 从 _summarize_result_row 提取成公开函数,供
+    backend/queries/reco_highlight.py(首页战绩 banner 的择优口径)复用——
+    命中率算式只能有一份实现,否则两处口径会各自漂移。提取是纯搬迁,
+    _summarize_result_row 的输出逐字节不变。
+    """
+    decided = win + lose + half_win + half_loss
+    if not decided:
+        return None
+    return round((win + 0.5 * half_win) / decided, 4)
+
+
 def _summarize_result_row(row: sqlite3.Row, *, settled: int, voided: int, net_units: float) -> dict:
     """把一行聚合 SQL 的原始计数,转成对外 DTO 形状(供 track_record_summary
     与 public_overview 共用,避免半赢/半输两个新枚举值在两处各写一套、
@@ -55,8 +72,6 @@ def _summarize_result_row(row: sqlite3.Row, *, settled: int, voided: int, net_un
     loses = row["loses"] or 0
     half_wins = row["half_wins"] or 0
     half_losses = row["half_losses"] or 0
-    decided = wins + loses + half_wins + half_losses   # push 不计分母
-    weighted_hits = wins + 0.5 * half_wins
     return {
         "settled_count": settled,
         "win_count": wins,
@@ -65,7 +80,7 @@ def _summarize_result_row(row: sqlite3.Row, *, settled: int, voided: int, net_un
         "half_win_count": half_wins,
         "half_loss_count": half_losses,
         "voided_count": voided,
-        "hit_rate": round(weighted_hits / decided, 4) if decided else None,
+        "hit_rate": hit_rate_from_counts(wins, loses, half_wins, half_losses),
         "net_units": round(net_units, 4),
     }
 
@@ -182,6 +197,9 @@ def track_record_slips(
 def track_record_summary(conn: sqlite3.Connection) -> dict:
     """同 track_record_slips():只聚合 board='daily_pick',公推不计入精选
     已公开的命中率/盈亏单位(2026-09)。"""
+    # 反向指针(2026-09):首页战绩 banner 的**择优**口径在
+    # backend/queries/reco_highlight.py。本函数永远全样本,
+    # 不得为了让 banner 好看在这里加任何过滤。
     row = conn.execute(
         f"""SELECT
              SUM(CASE WHEN status='settled' THEN 1 ELSE 0 END)                    AS settled,
@@ -223,6 +241,9 @@ def public_overview(conn: sqlite3.Connection) -> dict:
     (board='daily_public')有自己独立的公开列表,不共用这份聚合数字,
     避免两个板块的样本混在一起(2026-09)。
     """
+    # 反向指针(2026-09):首页战绩 banner 的**择优**口径在
+    # backend/queries/reco_highlight.py。本函数永远全样本,
+    # 不得为了让 banner 好看在这里加任何过滤。
     from zoneinfo import ZoneInfo
 
     today = utc_now().astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
@@ -273,6 +294,131 @@ def public_slips(conn: sqlite3.Connection) -> list[dict]:
     ).fetchall()
     legs = _legs_by_slip(conn, [r["id"] for r in rows])
     return [_slip_dto(r, legs.get(r["id"], [])) for r in rows]
+
+
+# ── 首页公推 banner 数据面(2026-09)──────────────────────────────────
+#
+# 窗口只是安全带,不是主判据:「开球 +2 小时撤下」由前端按各自当前时间精确
+# 判定(见下方 public_current_slips 的 docstring),这里只保证载荷有界、且
+# 不会有一张永远不结算的老单在首页挂死。
+RECO_PUBLIC_CURRENT_WINDOW_DAYS = 2
+# 「比赛开球 2 小时后从首页撤下」这条产品规则的单一真源,随响应下发给前端,
+# 避免前后端各写一个 2。
+RECO_PUBLIC_HIDE_AFTER_KICKOFF_HOURS = 2.0
+
+
+def _kickoffs_for_match_ids(
+    conn_core: sqlite3.Connection, match_ids: set[int]
+) -> dict[int, str | None]:
+    """批量取 dim_match.kickoff_at_utc——与 _match_facts_for_ids 同一范式
+    (整批取而不是逐条腿取,避免 N+1;跨库不 ATTACH,Python 层按 match_id 拼装)。
+
+    刻意**不复用** queries/matches.py::list_matches:那个函数 limit 默认 50
+    (按 id 精确查却带分页 LIMIT,漏传就静默丢腿)、league_ids 是硬过滤
+    (不在 LEAGUE_META 的联赛直接返回空),而且会额外跑 COUNT(*) + 队名 i18n
+    + 队徽解析——banner 一个都不用(比赛展示走 reco_legs.match_desc 这个
+    录入时的展示冗余字段)。这里只要一列,就只查一列。
+
+    kickoff_at_utc 可空是合法状态(§6.2.1:来源只给自然日时该列必须 NULL,
+    不得补成当天 00:00),本函数如实返回 None,由调用方决定怎么处理,绝不
+    用 Date 列顶替。conn_core 缺表(旧测试布景)时返回空 dict,调用方等价于
+    "全部 kickoff 未知",不报错。
+    """
+    if not match_ids:
+        return {}
+    placeholders = ",".join("?" for _ in match_ids)
+    try:
+        rows = conn_core.execute(
+            f"SELECT Match_ID, kickoff_at_utc FROM dim_match"
+            f" WHERE Match_ID IN ({placeholders})",
+            tuple(match_ids),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {int(r["Match_ID"]): r["kickoff_at_utc"] for r in rows}
+
+
+def _public_current_legs_by_slip(
+    conn: sqlite3.Connection, conn_core: sqlite3.Connection, slip_ids: list[str]
+) -> dict[str, list[dict]]:
+    """首页 banner 专用腿投影。刻意**不复用** _legs_by_slip:那个函数
+    SELECT * 并把 odds/result 带进 DTO,而 banner 的硬性要求是不展示赔率。
+    这里在 SQL 就不 SELECT odds,值从头到尾不进本进程——不依赖 Pydantic
+    response_model 丢弃多余键这种"查了再丢"的兜底。
+
+    ORDER BY sort_order 与 _legs_by_slip 一致:串关腿的展示顺序是站长录入顺序。
+    """
+    if not slip_ids:
+        return {}
+    placeholders = ",".join("?" for _ in slip_ids)
+    rows = conn.execute(
+        f"SELECT id, slip_id, match_id, match_desc, market, selection"
+        f"  FROM reco_legs WHERE slip_id IN ({placeholders}) ORDER BY sort_order",
+        slip_ids,
+    ).fetchall()
+    kickoffs = _kickoffs_for_match_ids(
+        conn_core, {r["match_id"] for r in rows if r["match_id"] is not None}
+    )
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        out.setdefault(r["slip_id"], []).append({
+            "id": r["id"],
+            "match_id": r["match_id"],
+            "match_desc": r["match_desc"],
+            "market": r["market"],
+            "selection": r["selection"],
+            "kickoff_at_utc": (
+                kickoffs.get(r["match_id"]) if r["match_id"] is not None else None
+            ),
+        })
+    return out
+
+
+def public_current_slips(
+    conn: sqlite3.Connection, conn_core: sqlite3.Connection
+) -> list[dict]:
+    """首页 banner 数据面:board='daily_public' 且 status='published' 的单,
+    带每条腿的精确开球时刻。
+
+    与 public_slips() 的三点区别,每一点都对应一条产品决策:
+    - 只要 status='published':settled/voided 立刻不再出现(站长决策)。
+      voided 单在 /reco 页仍然可见——那边"作废不消失"的记录面纪律不受影响,
+      banner 是引流位不是记录面。
+    - 窗口 2 天而不是 7 天(见 RECO_PUBLIC_CURRENT_WINDOW_DAYS)。
+    - 不下发 odds/result(见 _public_current_legs_by_slip)。
+
+    **本函数不做"开球 +2 小时是否已过"的判定**,只如实下发 kickoff 事实。
+    该判定会被 CDN(s-maxage=60)与首页 ISR(revalidate 60)共同缓存,服务端
+    算出来的结果随缓存变陈旧、且所有访客共享同一份陈旧判定;由各客户端按
+    自己的当前时间判定才永远正确(frontend/lib/reco-banner.ts::
+    visiblePublicPicks)。这与 backend/ingest/physical_stats_poll.py::
+    within_candidate_window(接收 now 参数、不自己读时钟)是同一思路。
+
+    slip_date 是站长录入的**北京自然日**(同 public_overview 的口径),所以
+    cutoff 必须按北京时间算——public_slips 的 7 天窗口下那 8 小时偏差无所谓,
+    2 天窗口下会真实影响边界。
+    """
+    from zoneinfo import ZoneInfo
+
+    beijing_now = utc_now().astimezone(ZoneInfo("Asia/Shanghai"))
+    cutoff = (
+        beijing_now - timedelta(days=RECO_PUBLIC_CURRENT_WINDOW_DAYS)
+    ).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        "SELECT id, slip_date, title, combo_type, published_at FROM reco_slips"
+        " WHERE board='daily_public' AND status='published' AND slip_date >= ?"
+        " ORDER BY slip_date DESC, published_at DESC",
+        (cutoff,),
+    ).fetchall()
+    legs = _public_current_legs_by_slip(conn, conn_core, [r["id"] for r in rows])
+    return [{
+        "id": r["id"],
+        "slip_date": r["slip_date"],
+        "title": r["title"],
+        "combo_type": r["combo_type"],
+        "published_at": r["published_at"],
+        "legs": legs.get(r["id"], []),
+    } for r in rows]
 
 
 def cross_board_market_conflicts(
