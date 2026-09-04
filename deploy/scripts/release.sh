@@ -323,10 +323,30 @@ business_smoke() {
     --base-url "http://127.0.0.1:$LIVE_WEB_PORT" \
     || { log "业务冒烟失败:核心页面或 CSS/JS 静态资源不可用"; return 1; }
 
+  # 2026-09-04:这里**不能**写成 `curl ... | grep -qF`。本脚本顶部是
+  # `set -euo pipefail`,而 `grep -q` 命中后立即退出并关闭管道读端;首页 HTML
+  # 已达 ~131KB,远超管道缓冲区(64KB),curl 必然还在写 → 收到 SIGPIPE → 非零
+  # 退出 → pipefail 把整条管道判为失败,于是"页面明明含标记"却恒判失败。
+  #
+  # 真实事故:2026-09-04 连续两次发布(含回滚后对旧 release 的复验)都报
+  # 「业务冒烟失败:首页 HTML 不含 API 数据标志(赛程)」,但同期每 4 秒一次的
+  # 并行探针显示首页始终 http=200 / 131640 字节 / 含「赛程」2 次。在服务器上
+  # 直接对拍:开 pipefail 跑 20 次 PASS=0,关掉 pipefail 跑 20 次 PASS=20。
+  # 页面越大越容易触发,所以它是随页面增长才浮现的竞态,不是一直坏。
+  #
+  # 改成先把响应收进变量、再用 bash 自带的模式匹配:**全程没有任何管道**。
+  # 注意 `printf '%s' "$html" | grep -qF` 同样不行——grep -q 提前退出会让
+  # printf 吃 SIGPIPE,pipefail 下依旧误判;只有不建管道才根治。
+  # 顺带把「curl 取不到」与「取到了但没有标记」分成两种可区分的失败。
   for i in $(seq 1 "$BUSINESS_SMOKE_RETRIES"); do
-    if curl -sf "http://127.0.0.1:$LIVE_WEB_PORT/" | grep -qF -- "$SMOKE_HTML_MARKER"; then
-      html_ok=1
-      break
+    if smoke_html="$(curl -sf "http://127.0.0.1:$LIVE_WEB_PORT/")"; then
+      if [[ "$smoke_html" == *"$SMOKE_HTML_MARKER"* ]]; then
+        html_ok=1
+        break
+      fi
+      log "业务冒烟:首页已取到($((${#smoke_html})) 字节)但不含标记(${SMOKE_HTML_MARKER}),重试 $i/$BUSINESS_SMOKE_RETRIES"
+    else
+      log "业务冒烟:首页取不到(curl 非零),重试 $i/$BUSINESS_SMOKE_RETRIES"
     fi
     sleep "$BUSINESS_SMOKE_INTERVAL"
   done
