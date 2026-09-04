@@ -58,7 +58,7 @@ function rate(over: Partial<NonNullable<BoardHighlight["rate"]>> = {}) {
 
 const ALL_FORMS: BoardHighlight[] = [
   base({ kind: "streak", streak: { length: 5, unit: "slip", skipped_push_count: 0,
-         skipped_void_count: 0, from_date: "2026-09-01", to_date: "2026-09-02" } }),
+         skipped_void_count: 0, net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } }),
   base({ kind: "rate_qualified", window: WINDOW_30, rate: rate(),
          segment: { kind: "overall", market: null, league_id: null, league_name_zh: null } }),
   base({ kind: "rate_qualified", window: WINDOW_30,
@@ -91,6 +91,16 @@ describe("文案必含原始计数(实事求是在展示层的唯一落点)", ()
     },
   );
 
+  it("回报率百分比必须与原始计数同现(连中数就是那个计数)", () => {
+    // 这条以前恒真(全站没有 %),2026-09 加了回报率之后才真正开始生效。
+    const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
+      skipped_push_count: 0, skipped_void_count: 0, net_units: 5.965,
+      from_date: "2026-09-01", to_date: "2026-09-02" } });
+    const main = highlightLines(h)!.main;
+    expect(main).toContain("%");
+    expect(main).toMatch(COUNT_RE);
+  });
+
   it("裸百分比会被 COUNT_RE 抓住(反向验证正则不是恒真)", () => {
     expect("每日精选 · 命中率 100%").not.toMatch(COUNT_RE);
     expect("每日精选 · 18 单 15 中").toMatch(COUNT_RE);
@@ -113,16 +123,16 @@ describe("横条拆分:boardShort / value 与 main 不得漂移", () => {
   it("boardShort 脱掉「每日」前缀——一行里出现两次纯属噪音", () => {
     const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
       skipped_push_count: 0, skipped_void_count: 0,
-      from_date: "2026-09-01", to_date: "2026-09-02" } });
+      net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } });
     const l = highlightLines(h)!;
     expect(l.boardShort).toBe("精选");
-    expect(l.value).toBe("近 5 单全中");
+    expect(l.value).toBe("近 5 单全中 · 回报 +119%");
   });
 
   it("未知板块标签原样返回,不盲切前两字(切错比长一点更糟)", () => {
     const h = base({ board_label_zh: "站长特选", kind: "streak",
       streak: { length: 3, unit: "slip", skipped_push_count: 0,
-                skipped_void_count: 0, from_date: "2026-09-01",
+                skipped_void_count: 0, net_units: 5.965, from_date: "2026-09-01",
                 to_date: "2026-09-02" } });
     expect(highlightLines(h)!.boardShort).toBe("站长特选");
   });
@@ -138,24 +148,90 @@ describe("连中", () => {
   it("正常情形只有一行,不带任何附注", () => {
     const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
       skipped_push_count: 0, skipped_void_count: 0,
-      from_date: "2026-09-01", to_date: "2026-09-02" } });
+      net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } });
     const l = highlightLines(h)!;
-    expect(l.main).toBe("每日精选 · 近 5 单全中");
+    expect(l.main).toBe("每日精选 · 近 5 单全中 · 回报 +119%");
     expect(l.emphasize).toBe(true);
   });
 
   it("连中**其间**确实跳过了走水时仍然披露(否则「全中」失真)", () => {
     const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
       skipped_push_count: 1, skipped_void_count: 0,
-      from_date: "2026-09-01", to_date: "2026-09-02" } });
+      net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } });
     expect(highlightLines(h)!.main).toContain("其间 1 单走水不计");
   });
 
   it("作废同样披露", () => {
     const h = base({ kind: "streak", streak: { length: 4, unit: "slip",
       skipped_push_count: 0, skipped_void_count: 2,
-      from_date: "2026-09-01", to_date: "2026-09-02" } });
+      net_units: 5.965, from_date: "2026-09-01", to_date: "2026-09-02" } });
     expect(highlightLines(h)!.main).toContain("2 单作废");
+  });
+});
+
+describe("parts:横条真正渲染的分段", () => {
+  // 2026-09 站长要求把连中数放大、并挂上回报率。放大只能靠结构化分段——
+  // 三个 kind 的数字位置完全不同,正则切分是错的。
+
+  it.each(ALL_FORMS.map((h, i) => [i, h] as const))(
+    "case %i:parts 拼起来逐字节等于 value(拆分不得让守卫守着不存在的字符串)",
+    (_i, h) => {
+      const l = highlightLines(h)!;
+      expect(l.parts.map((p) => p.text).join("")).toBe(l.value);
+    },
+  );
+
+  it.each(ALL_FORMS.map((h, i) => [i, h] as const))(
+    "case %i:每条文案至多一个放大数字",
+    (_i, h) => {
+      expect(highlightLines(h)!.parts.filter((p) => p.big).length).toBeLessThanOrEqual(1);
+    },
+  );
+
+  it("连中:放大的是连中数,回报段是次级信息且不放大", () => {
+    const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
+      skipped_push_count: 0, skipped_void_count: 0, net_units: 5.965,
+      from_date: "2026-09-01", to_date: "2026-09-02" } });
+    const parts = highlightLines(h)!.parts;
+    expect(parts.find((p) => p.big)?.text).toBe("5");
+    const muted = parts.find((p) => p.muted)!;
+    expect(muted.text).toBe(" · 回报 +119%");
+    expect(muted.big).toBeUndefined();
+  });
+
+  it("回报率 = net_units / length,用生产真实数(5.965 / 5 → +119%)", () => {
+    const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
+      skipped_push_count: 0, skipped_void_count: 0, net_units: 5.965,
+      from_date: "2026-09-01", to_date: "2026-09-02" } });
+    expect(highlightLines(h)!.value).toContain("回报 +119%");
+  });
+
+  it("net_units 缺失时整段回报不渲染,不得出现 NaN", () => {
+    // 真实场景:/reco/highlight 带 s-maxage=300 且服务端 revalidate=300,
+    // 每次部署后最长 5 分钟,新前端会收到不含 net_units 的旧缓存响应。
+    // 本地实测过——没有这道兜底会渲染出「回报 NaN%」给真实用户看。
+    const h = base({ kind: "streak", streak: { length: 5, unit: "slip",
+      skipped_push_count: 0, skipped_void_count: 0,
+      from_date: "2026-09-01", to_date: "2026-09-02" } as never });
+    const l = highlightLines(h)!;
+    expect(l.value).toBe("近 5 单全中");
+    expect(l.value).not.toContain("NaN");
+    expect(l.parts.some((p) => p.muted)).toBe(false);
+    // 放大的连中数照常在——回报没了不影响主体文案。
+    expect(l.parts.find((p) => p.big)?.text).toBe("5");
+  });
+
+  it("命中率分支放大的是命中数,不是分母", () => {
+    const h = base({ kind: "rate_qualified", window: WINDOW_30, rate: rate(),
+      segment: { kind: "overall", market: null, league_id: null, league_name_zh: null } });
+    // rate() 是 18 单 15 中 → 放大 15
+    expect(highlightLines(h)!.parts.find((p) => p.big)?.text).toBe("15");
+  });
+
+  it("串关分支放大的是净回报数", () => {
+    const h = base({ kind: "parlay_return", window: WINDOW_30,
+      parlay_slip_count: 1, parlay_net_units: 2.66 });
+    expect(highlightLines(h)!.parts.find((p) => p.big)?.text).toBe("+2.66");
   });
 });
 

@@ -58,11 +58,29 @@ export async function RecordHighlightBanner() {
         {rows.map((r) => (
           <span key={r.board} className={styles.recordItem}>
             {r.lines.boardShort}{" "}
+            {/* 渲染 parts 而不是 value:连中数要放大成大号 Oswald 数字,
+                回报段要退成次级灰。两者都只能靠结构化分段——三个 kind 的
+                数字位置完全不同,正则切分是错的。parts 拼起来逐字节等于
+                value(有测试守着),所以 value 仍然是那两条文案不变量的
+                合法断言对象。 */}
             <span
               className={styles.recordItemValue}
               data-emphasize={r.lines.emphasize ? "1" : undefined}
             >
-              {r.lines.value}
+              {r.lines.parts.map((part, i) => (
+                <span
+                  key={i}
+                  className={
+                    part.big
+                      ? styles.recordBigNum
+                      : part.muted
+                        ? styles.recordItemMuted
+                        : undefined
+                  }
+                >
+                  {part.text}
+                </span>
+              ))}
             </span>
           </span>
         ))}

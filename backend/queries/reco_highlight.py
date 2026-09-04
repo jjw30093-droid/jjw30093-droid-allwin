@@ -124,6 +124,17 @@ class Streak:
     skipped_void: int
     from_date: str
     to_date: str
+    # 仅这 length 单的净回报 = Σ(return_units) − length。算式与
+    # queries/reco.py 的 SQL `SUM(return_units - 1)` 及下面 parlay 分支的
+    # `sum(...) - len(...)` 同口径,不发明第三种。
+    #
+    # **样本必须与 length 逐单一致**:被跳过的 push/voided 既不进分子也不
+    # 进分母,连中之外的单一条都不进——否则横条上「近 N 单全中」和「回报
+    # +X%」两个数字说的就不是同一批单了。
+    #
+    # 连中按定义全是 win(每单 return_units > 1),所以这个值结构上恒为正;
+    # 它不是一个会波动的绩效指标,读者能从「近 N 单全中」自行推出这一点。
+    net_units: float
 
 
 def current_streak(slips: Sequence[SlipFact], board: str) -> Streak | None:
@@ -139,6 +150,7 @@ def current_streak(slips: Sequence[SlipFact], board: str) -> Streak | None:
     skipped_push = 0
     skipped_void = 0
     dates: list[str] = []
+    gross = 0.0                                 # Σ(return_units),只累连中这几单
     # 尾随的 push/voided(还没遇到下一个命中就先记着)不算"连中期间跳过的"——
     # 它们在连中之外。只有当后面又数到一个命中时,才把它们计入披露数字。
     # 否则会把"5 连中之前恰好有一个走水"说成"连中其间有 1 单走水",描述失真。
@@ -160,6 +172,9 @@ def current_streak(slips: Sequence[SlipFact], board: str) -> Streak | None:
             pending_push = pending_void = 0
             length += 1
             dates.append(s.slip_date)
+            # None 按 0 计(与 parlay 分支的既有写法一致);实际不可达——
+            # settle_slip 写 status='settled' 时必然同时写 return_units。
+            gross += s.return_units or 0.0
             continue
         break                                   # lose / half_loss / half_win 断连
     if length == 0:
@@ -170,6 +185,7 @@ def current_streak(slips: Sequence[SlipFact], board: str) -> Streak | None:
         skipped_void=skipped_void,
         from_date=min(dates),
         to_date=max(dates),
+        net_units=round(gross - length, 4),
     )
 
 

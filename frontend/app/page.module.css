@@ -931,6 +931,36 @@
   color: var(--odds-up);
 }
 
+/* 文案里的头号数字(连中数 / 命中数 / 净回报),2026-09 站长要求放大。
+ *
+ * **不能照抄 WinProbabilityBar 的 transform: scale()**——那个先例用在
+ * 独占一个 flex 格的数字上,scale 不参与宽度计算正是它要的;而这里的数字
+ * 夹在「近」和「单全中」中间,不占位就会压到相邻的字。所以走 font-size,
+ * 代价是必须自己把行盒摁住。
+ *
+ * line-height:1 与 display:inline-block 两条都不能省:.recordStrip 全块
+ * 没有任何 line-height 声明,继承 body 的 1.5,20px 字不摁住会把 12px 的
+ * 行盒撑到 30px,整条横条变高、chip 与文字的 center 对齐关系也会跳。
+ *
+ * font-weight 上限是 700:Oswald 只加载了 500/600/700(app/layout.tsx),
+ * 写 900 会退化成合成加粗。 */
+.recordBigNum {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+/* 回报段是次级信息:红只留给「近 N 单全中」,整行全红会吵、也会抵消掉
+ * 大数字本身的重点。 */
+.recordItemMuted {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
 .recordStripMore {
   flex: none;
   font-size: 12px;

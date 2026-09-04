@@ -98,6 +98,83 @@ class TestStreak:
         assert st is not None
         assert st.length == 3 and st.skipped_push == 1
 
+    def test_net_units_covers_exactly_the_streak_slips(self):
+        """净回报的样本必须与 length 逐单一致——横条上「近 N 单全中」和
+        「回报 +X%」是同一行里的两个数字,取自不同批次就是在骗人。
+
+        时序(升序):lose(0) win(3.0) push(1.0) win(1.5) win(2.0)
+        连中从最新往回数 = 2(win 1.5 / win 2.0),push 跳过后遇到 win(3.0)
+        才延续……注意 push 不断连,所以连中其实是 3。
+        """
+        seq = [
+            slip("s01", result="lose", ret=0.0, published="2026-09-01T01:00:00Z"),
+            slip("s02", result="win", ret=3.0, published="2026-09-01T02:00:00Z"),
+            slip("s03", result="push", ret=1.0, published="2026-09-01T03:00:00Z"),
+            slip("s04", result="win", ret=1.5, published="2026-09-01T04:00:00Z"),
+            slip("s05", result="win", ret=2.0, published="2026-09-01T05:00:00Z"),
+        ]
+        st = current_streak(seq, "daily_pick")
+        assert st is not None
+        assert st.length == 3, "push 跳过不断连"
+        # 3.0 + 1.5 + 2.0 = 6.5,减 3 单本金 → 3.5。
+        # **被跳过的 push(1.0)不进分子**,连中之外的 lose(0.0)也不进。
+        assert st.net_units == 3.5
+        assert st.skipped_push == 1
+
+    def test_net_units_excludes_slips_outside_the_streak(self):
+        """连中之外更早的赢单,回报一分都不能算进来。"""
+        seq = [
+            slip("s01", result="win", ret=9.99, published="2026-09-01T01:00:00Z"),
+            slip("s02", result="lose", ret=0.0, published="2026-09-01T02:00:00Z"),
+            slip("s03", result="win", ret=2.0, published="2026-09-01T03:00:00Z"),
+        ]
+        st = current_streak(seq, "daily_pick")
+        assert st is not None
+        assert st.length == 1
+        assert st.net_units == 1.0, "s01 的 9.99 在 lose 之前,绝不能计入"
+
+    def test_net_units_counts_parlay_inside_streak(self):
+        """生产当前就是这个形态:5 连中里混着一张 2 串 1(返还 3.66)。
+        连中本来就不分单关/串关,回报口径必须跟连中保持同一批样本。"""
+        seq = [
+            slip("s01", result="win", ret=2.0, published="2026-09-01T01:00:00Z"),
+            slip("s02", result="win", combo="parlay", ret=3.66,
+                 published="2026-09-01T02:00:00Z"),
+        ]
+        st = current_streak(seq, "daily_pick")
+        assert st is not None
+        assert st.length == 2
+        assert st.net_units == 3.66  # (2.0 + 3.66) - 2
+
+    def test_net_units_skips_voided(self):
+        """作废单跳过 → 不进分子也不进分母(它的 return_units 是结算时的
+        残值,void_slip 不清空该列)。"""
+        seq = [
+            slip("s01", result="win", ret=2.0, published="2026-09-01T01:00:00Z"),
+            slip("s02", result="win", ret=5.0, status="voided",
+                 published="2026-09-01T02:00:00Z"),
+            slip("s03", result="win", ret=1.5, published="2026-09-01T03:00:00Z"),
+        ]
+        st = current_streak(seq, "daily_pick")
+        assert st is not None
+        assert st.length == 2 and st.skipped_void == 1
+        assert st.net_units == 1.5, "作废单的 5.0 残值不得混进回报"
+
+    def test_production_streak_net_units_matches_real_data(self):
+        """生产真实数据回归:5 单 return_units = 3.66/1.425/1.95/1.93/2.0
+        → 净 +5.965,回报率 5.965/5 = +119%。"""
+        rets = [2.0, 1.93, 1.95, 1.425, 3.66]      # 升序(最早在前)
+        seq = [
+            slip(f"s{i:02d}", result="win", ret=r,
+                 published=f"2026-09-01T{i:02d}:00:00Z")
+            for i, r in enumerate(rets, start=1)
+        ]
+        st = current_streak(seq, "daily_pick")
+        assert st is not None
+        assert st.length == 5
+        assert st.net_units == 5.965
+        assert round(st.net_units / st.length * 100) == 119
+
     def test_trailing_push_not_counted_as_within_streak(self):
         """生产真实形态:走水落在连中**之外**(更早),不是夹在中间。
         此时不能说"其间 1 单走水不计"——那是对事实的错误描述。"""
@@ -340,6 +417,31 @@ class TestHighlightEndpoint:
         assert pub["rate"] is not None
         assert pub["rate"]["win_count"] == 1 and pub["rate"]["decided_count"] == 1
         assert pub["candidate_key"]          # 可复现
+
+    def test_streak_dto_carries_net_units(self, app, data_dir, fresh_ip):
+        """streak 分支必须下发 net_units——前端靠 net_units / length 派生
+        回报率。**刻意不下发算好的百分比**:同 rate 把 hit_rate 与
+        decided_count 塞在一起的用意,让"只渲染百分比不渲染样本量"很别扭。
+        """
+        for i, mid in enumerate((940010, 940011, 940012), start=1):
+            self._seed_core(mid)
+        admin = _admin_client(app, data_dir, fresh_ip)
+        for i, mid in enumerate((940010, 940011, 940012), start=1):
+            sid = _create_slip(admin, title=f"连中样本{i}", board="daily_public",
+                                legs=[_prov_leg("A vs B", "ah", "主胜", 2.0, mid)])
+            _publish(admin, sid)
+            _settle_win(admin, sid)
+
+        body = TestClient(app).get("/api/v1/reco/highlight").json()
+        pub = next(b for b in body["boards"] if b["board"] == "daily_public")
+        assert pub["kind"] == "streak"
+        st = pub["streak"]
+        assert st["length"] == 3
+        # 每单赔率 2.0 → 返还 2.0,3 单净 = 6.0 - 3 = 3.0,回报率 100%
+        assert st["net_units"] == 3.0
+        assert round(st["net_units"] / st["length"] * 100) == 100
+        # 百分比不由后端下发
+        assert "roi" not in st and "return_rate" not in st
 
     def test_never_leaks_slip_content(self, app, data_dir, fresh_ip):
         """banner 只出聚合数字,绝不出单据内容(标题/选项/赔率/思路)。"""

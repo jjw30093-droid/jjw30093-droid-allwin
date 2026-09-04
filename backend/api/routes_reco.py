@@ -180,6 +180,7 @@ def reco_highlight(
                 "skipped_push_count": h.streak.skipped_push,
                 "skipped_void_count": h.streak.skipped_void,
                 "from_date": h.streak.from_date, "to_date": h.streak.to_date,
+                "net_units": h.streak.net_units,
             }
         c = h.candidate
         if c is not None:

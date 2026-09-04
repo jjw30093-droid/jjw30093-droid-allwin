@@ -14623,6 +14623,10 @@
      "to_date": {
       "type": "string",
       "title": "To Date"
+     },
+     "net_units": {
+      "type": "number",
+      "title": "Net Units"
      }
     },
     "type": "object",
@@ -14632,7 +14636,8 @@
      "skipped_push_count",
      "skipped_void_count",
      "from_date",
-     "to_date"
+     "to_date",
+     "net_units"
     ],
     "title": "RecoHighlightStreakDTO"
    },

@@ -1848,6 +1848,11 @@ class RecoHighlightStreakDTO(BaseModel):
     skipped_void_count: int                  # 期间作废单数,必须披露
     from_date: str
     to_date: str
+    # 仅本次连中这 length 单的净回报(1 单位注);回报率 = net_units / length。
+    # **刻意不下发算好的百分比**——同 RecoHighlightRateDTO 把 hit_rate 与
+    # decided_count 塞在同一对象里的用意:让"只渲染百分比、不渲染样本量"在
+    # 类型层面就很别扭。样本与 length 逐单一致(跳过的 push/voided 两头都不进)。
+    net_units: float
 
 
 class RecoBoardHighlightDTO(BaseModel):

@@ -3892,6 +3892,8 @@ export interface components {
             from_date: string;
             /** To Date */
             to_date: string;
+            /** Net Units */
+            net_units: number;
         };
         /** RecoHighlightWindowDTO */
         RecoHighlightWindowDTO: {

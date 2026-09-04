@@ -39,6 +39,14 @@ function segmentLabel(seg: NonNullable<BoardHighlight["segment"]>): string {
   }
 }
 
+export type HighlightPart = {
+  text: string;
+  /** 放大成大号 Oswald 数字。每条文案至多一个(有测试守着)。 */
+  big?: boolean;
+  /** 次级信息,用 --ink-2 覆盖父级的强调红。 */
+  muted?: boolean;
+};
+
 export type HighlightLines = {
   /** 整行文案(板块 + 口径 + 计数)。横条 banner 不直接渲染它,但它是
    *  「文案必含原始计数」那条不变量的断言对象,也是无样式场景的兜底。 */
@@ -47,8 +55,12 @@ export type HighlightLines = {
    *  value 分开——`每日` 两字在一行里出现两次纯属噪音。未知板块标签原样
    *  返回,不硬切前两字(切错比长一点更糟)。 */
   boardShort: string;
-  /** 除板块外的口径与计数,横条里用强调色渲染。 */
+  /** 除板块外的口径与计数。横条**不直接渲染它**(渲染的是 parts),但它是
+   *  "文案必含原始计数""不得出现裸百分比"两条不变量的断言对象。 */
   value: string;
+  /** 横条实际渲染的分段。不变量:parts 拼起来逐字节等于 value——拆分不得
+   *  让上面那两条守卫守着一个页面上并不存在的字符串。 */
+  parts: HighlightPart[];
   /** 有没有值得强调的徽章(连中 / 达标命中率);不达标的不加强调。 */
   emphasize: boolean;
 };
@@ -56,6 +68,16 @@ export type HighlightLines = {
 /** 「每日精选」→「精选」。只脱已知前缀,不做盲切。 */
 function shortBoard(label: string): string {
   return label.startsWith("每日") ? label.slice(2) : label;
+}
+
+/** 由分段派生 value + main,保证三者永不漂移(只有这一个出口构造它们)。 */
+function lines(
+  board: string,
+  parts: HighlightPart[],
+  emphasize: boolean,
+): HighlightLines {
+  const value = parts.map((p) => p.text).join("");
+  return { main: `${board} · ${value}`, boardShort: shortBoard(board), value, parts, emphasize };
 }
 
 /**
@@ -81,32 +103,54 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     if (s.skipped_push_count > 0) skipped.push(`${s.skipped_push_count} 单走水`);
     if (s.skipped_void_count > 0) skipped.push(`${s.skipped_void_count} 单作废`);
     const note = skipped.length > 0 ? `（其间 ${skipped.join("、")}不计）` : "";
-    const value = `近 ${s.length} 单全中${note}`;
-    return { main: `${board} · ${value}`, boardShort: shortBoard(board), value, emphasize: true };
+    // 回报率只加在连中分支:parlay_return 本来就在展示回报(单位制),
+    // rate 分支保持命中率口径,两种单位不混在同一条文案里。
+    // 样本与 length 逐单一致(后端 Streak.net_units 已保证),所以「近 N 单
+    // 全中」和「回报 +X%」说的是同一批单。
+    // net_units 缺失/非有限值时**整段回报不渲染**,退回改版前的文案。
+    // 这不是防御性洁癖:/reco/highlight 带 s-maxage=300 且服务端 fetch
+    // revalidate=300,所以每次部署后最长 5 分钟内,新前端会真实收到不含
+    // net_units 的旧缓存响应(本地实测就渲染出了「回报 NaN%」)。
+    // DTO 上该字段是必填,但"契约必填"挡不住"缓存里的旧响应"。
+    const net = s.net_units;
+    const roi =
+      typeof net === "number" && Number.isFinite(net) && s.length > 0
+        ? [{
+            text: ` · 回报 ${net >= 0 ? "+" : ""}${Math.round((net / s.length) * 100)}%`,
+            muted: true,
+          }]
+        : [];
+    return lines(board, [
+      { text: "近 " },
+      { text: String(s.length), big: true },
+      { text: ` 单全中${note}` },
+      ...roi,
+    ], true);
   }
 
   if (h.kind === "parlay_return" && h.window) {
     const n = h.parlay_slip_count ?? 0;
     const net = h.parlay_net_units ?? 0;
     const sign = net >= 0 ? "+" : "";
-    const value = `${windowLabel(h.window)} · 串关 ${n} 单 回报 ${sign}${net.toFixed(2)} 单位`;
-    return { main: `${board} · ${value}`, boardShort: shortBoard(board), value, emphasize: false };
+    return lines(board, [
+      { text: `${windowLabel(h.window)} · 串关 ${n} 单 回报 ` },
+      { text: `${sign}${net.toFixed(2)}`, big: true },
+      { text: " 单位" },
+    ], false);
   }
 
   if (h.rate && h.window) {
     const r = h.rate;
     const seg = h.segment ? segmentLabel(h.segment) : "";
     // 主体是原始计数「N 单 M 中」,不是裸百分比。
-    const parts = [windowLabel(h.window)];
-    if (seg) parts.push(seg);
-    parts.push(`${r.decided_count} 单 ${r.win_count} 中`);
-    const value = parts.join(" · ");
-    return {
-      main: `${board} · ${value}`,
-      boardShort: shortBoard(board),
-      value,
-      emphasize: h.kind === "rate_qualified",
-    };
+    const head = [windowLabel(h.window)];
+    if (seg) head.push(seg);
+    // 头号数字是"中了几单"——放大它,而不是分母。
+    return lines(board, [
+      { text: `${head.join(" · ")} · ${r.decided_count} 单 ` },
+      { text: String(r.win_count), big: true },
+      { text: " 中" },
+    ], h.kind === "rate_qualified");
   }
 
   return null;
