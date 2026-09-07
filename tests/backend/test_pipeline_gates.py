@@ -428,11 +428,20 @@ class TestFixtureRoundGap:
         assert g["violations"] == []
 
     def test_268_shape_critical(self, data_dir):
-        """1-3 缺,4 在,5-20 缺,21-38 在(268 真实形态:前段整体消失,后段完整)。"""
+        """268 生产真实形态:实存轮次 {4, 21, 23..38} 共 **18** 个,最大轮 38。
+
+        2026-09-07 修正:这条测试原来用的是 `[4] + range(20, 39)` = 恰好 **20**
+        个轮次,刚好压在当时 `G15_MIN_ROWS = 20` 的阈值上通过;而生产真实数据
+        只有 18 个,低于阈值被静默跳过、门一直报 OK。**测试用的形状比真实数据
+        多两轮,恰好绕过了那个下限,所以缺陷从未被暴露。**
+
+        现在按生产实测的轮次集合逐一列出(不再用 range 凑),缺陷若复发必炸。
+        """
         conn_core = connect_rw("core")
         seed_core_schema(conn_core)
         season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
-        present_rounds = [4] + list(range(20, 39))
+        present_rounds = [4, 21] + list(range(23, 39))
+        assert len(present_rounds) == 18, "必须复刻生产的 18 个轮次,不是凑够阈值的 20 个"
         mid = 6100
         for r in present_rounds:
             _seed_round(conn_core, mid, 268, season, str(r))
@@ -443,6 +452,10 @@ class TestFixtureRoundGap:
         assert g["level"] == "CRITICAL"
         v = next(x for x in g["violations"] if x["league_id"] == 268)
         assert v["max_round"] == 38
+        # missing_rounds 只保留前 15 个(门里 missing[:15]),所以 22 不在里面,
+        # 用 missing_count 断言完整规模:1-3、5-20、22 共 20 轮缺失。
+        assert v["missing_count"] == 20
+        assert v["rows_present"] == 18
         for expected_missing in (1, 2, 3, 5):
             assert expected_missing in v["missing_rounds"]
 
@@ -498,8 +511,13 @@ class TestFixtureRoundGap:
         assert all(v["league_id"] != orphan_id for v in g["violations"])
 
     def test_short_season_skipped(self, data_dir):
-        """行数 < G15_MIN_ROWS 或 max_round < G15_MIN_MAX_ROUND 时不判——
-        赛季刚开始的正常状态,不是数据丢失。"""
+        """max_round < G15_MIN_MAX_ROUND 时不判——轮次太小无法区分"刚接入"
+        与"丢数据"。
+
+        2026-09-07:原来这里还有一条 `行数 < G15_MIN_ROWS` 的下限,已删除
+        (它会随缺口变大而更容易跳过,是这道门的自我否定,见常量处注释)。
+        本用例只有一轮 "3"、max_round=3 < 5,由 MIN_MAX_ROUND 单独挡住,
+        删掉 MIN_ROWS 后行为不变。"""
         conn_core = connect_rw("core")
         seed_core_schema(conn_core)
         season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
@@ -509,6 +527,24 @@ class TestFixtureRoundGap:
         g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
         assert g["level"] == "OK"
         assert g["violations"] == []
+
+    def test_early_season_contiguous_rounds_still_ok(self, data_dir):
+        """删掉 G15_MIN_ROWS 后的关键回归:赛季刚开始(轮次从 1 连续)不得误报。
+
+        这正是当年加那条下限想防的场景,但它其实不需要下限——连续就意味着
+        missing 是空集。生产同日实测被旧下限跳过的四个 (联赛,赛季) 全部是
+        这个形状:10216 的 1-6、42 的 1-8、73 的 1-8、223/2026 的 1-19。
+        """
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 42, "2026-08-12T12:00:00Z")
+        for r in range(1, 9):          # 1-8 连续,只有 8 个轮次(远低于旧的 20)
+            _seed_round(conn_core, 6600 + r, 42, season, str(r))
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "OK"
+        assert all(v["league_id"] != 42 for v in g["violations"])
 
     def test_alert_row_written_and_job_not_failed(self, data_dir):
         conn_core = connect_rw("core")

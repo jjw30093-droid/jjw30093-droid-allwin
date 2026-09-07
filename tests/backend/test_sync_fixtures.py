@@ -150,11 +150,141 @@ class TestClobberGuard:
         # 来源错误地把已完赛比赛又当未开赛发回
         pl = _payload(48, "2026/2027", [_match(1, 100, 200, _future(48), status="notstarted")])
         s = _run(48, pl)
-        assert s["leagues"][0]["verdict"] == "refused_downgrade"
+        # 2026-09-07:从"整批拒写"改成"逐行剔除"。**守的核心一字未变**——
+        # 已完赛行绝不被未完赛行覆盖;变的只是其余行不再被这一行连累。
+        assert s["leagues"][0]["verdict"] == "written_with_conflicts"
+        assert "1" in s["leagues"][0]["detail"], "被剔除的 Match_ID 必须记进 detail,不得静默丢弃"
         conn = connect_rw("core")
         row = conn.execute("SELECT status,home_score FROM dim_match WHERE Match_ID=1").fetchone()
         conn.close()
         assert row["status"] == "Finish" and row["home_score"] == 2   # 未被覆盖
+
+    def test_conflict_row_skipped_but_other_rows_still_written(self, core):
+        """荷甲(57)事故的直接回归:一条脏行不得冻结整个联赛的赛程同步。
+
+        2026-09-06/07 生产实况:FotMob 对 match 5781733 返回自相矛盾的记录
+        (既带比分 1-3、又标 notStarted/finished:false,开球还从 09-05 16:45Z
+        改挂到 09-08 12:00Z)。旧的整批拒写让荷甲连续 4 次 written_rows=0、
+        停摆 24 小时,265 行一行没进库,而且脏数据不会自愈=无限期冻结。
+        """
+        conn = connect_rw("core")
+        conn.execute(
+            "INSERT INTO dim_match (Match_ID,Season,League_ID,Home_Team_ID,Away_Team_ID,"
+            "Home_Team_Name,Away_Team_Name,home_score,away_score,status) "
+            "VALUES (1,'2026/2027',48,100,200,'H','A',2,1,'Finish')")
+        conn.commit()
+        conn.close()
+        # 1 号是脏行(已完赛却被当未开赛发回),2/3 号是正常的未来赛程
+        pl = _payload(48, "2026/2027", [
+            _match(1, 100, 200, _future(48), status="notstarted"),
+            _match(2, 101, 201, _future(48)),
+            _match(3, 102, 202, _future(48)),
+        ])
+        s = _run(48, pl)
+        lg = s["leagues"][0]
+        assert lg["verdict"] == "written_with_conflicts"
+        assert lg["written"] == 2, "另外两行必须照常写入,不得被脏行连累"
+
+        conn = connect_rw("core")
+        kept = conn.execute(
+            "SELECT status,home_score FROM dim_match WHERE Match_ID=1").fetchone()
+        others = conn.execute(
+            "SELECT COUNT(*) FROM dim_match WHERE Match_ID IN (2,3)").fetchone()[0]
+        conn.close()
+        assert kept["status"] == "Finish" and kept["home_score"] == 2, "脏行不得覆盖已完赛数据"
+        assert others == 2, "正常行必须落库"
+
+
+class TestPostponedFinishedMatchKickoffOnly:
+    """已完赛行被来源改期时,只放行开球时刻(2026-09-07,站长选定方案 B)。
+
+    真实案例:荷甲 FC Utrecht vs Go Ahead Eagles(5781733)在**第 65 分钟被
+    中断**、比分 1-3,FotMob 把它改期到 09-08 12:00Z 并把 started/finished
+    置回 false。旧行为下守卫拒掉整行,而**被拒的正是唯一携带新开球时刻的行**,
+    新时间永远进不了库,页面一直显示旧的 09-05 已完赛。
+
+    方案 B 的取舍:不去猜"来源在破坏数据"还是"在更正数据",只放行**时间**
+    这一个维度——时间写错可自愈(下次同步再改),status/比分写错会污染战绩与
+    统计(不可自愈)。
+    """
+
+    def test_kickoff_updated_but_status_and_score_untouched(self, core):
+        conn = connect_rw("core")
+        conn.execute(
+            "INSERT INTO dim_match (Match_ID,Season,League_ID,Date,Home_Team_ID,Away_Team_ID,"
+            "Home_Team_Name,Away_Team_Name,home_score,away_score,status,kickoff_at_utc) "
+            "VALUES (1,'2026/2027',48,'2026-08-10',100,200,'H','A',1,3,'Finish',"
+            "'2026-08-10T16:45:00Z')")
+        conn.commit()
+        conn.close()
+
+        new_kickoff = _future(48)
+        pl = _payload(48, "2026/2027", [_match(1, 100, 200, new_kickoff, status="notstarted")])
+        s = _run(48, pl)
+        lg = s["leagues"][0]
+        assert lg["verdict"] == "written_with_conflicts"
+        assert lg["kickoff_only_updated"] == 1
+
+        conn = connect_rw("core")
+        row = conn.execute(
+            "SELECT status,home_score,away_score,kickoff_at_utc,Date"
+            " FROM dim_match WHERE Match_ID=1").fetchone()
+        conn.close()
+        # 时间跟着来源走了
+        assert row["kickoff_at_utc"] == new_kickoff, "开球时刻必须更新到新值"
+        assert row["Date"] == new_kickoff[:10], "Date 必须与新开球日一致,不能内部自相矛盾"
+        # 但 status 与比分一动不动 —— 这是方案 B 的全部意义
+        assert row["status"] == "Finish", "status 绝不能被降级"
+        assert row["home_score"] == 1 and row["away_score"] == 3, "比分绝不能被清空"
+
+    def test_other_rows_unaffected(self, core):
+        """改期行与正常行同批时,两条路径互不干扰。"""
+        conn = connect_rw("core")
+        conn.execute(
+            "INSERT INTO dim_match (Match_ID,Season,League_ID,Date,Home_Team_ID,Away_Team_ID,"
+            "Home_Team_Name,Away_Team_Name,home_score,away_score,status) "
+            "VALUES (1,'2026/2027',48,'2026-08-10',100,200,'H','A',1,3,'Finish')")
+        conn.commit()
+        conn.close()
+        pl = _payload(48, "2026/2027", [
+            _match(1, 100, 200, _future(48), status="notstarted"),
+            _match(2, 101, 201, _future(48)),
+        ])
+        s = _run(48, pl)
+        lg = s["leagues"][0]
+        assert lg["written"] == 1 and lg["kickoff_only_updated"] == 1
+        conn = connect_rw("core")
+        assert conn.execute(
+            "SELECT status FROM dim_match WHERE Match_ID=1").fetchone()["status"] == "Finish"
+        assert conn.execute(
+            "SELECT COUNT(*) FROM dim_match WHERE Match_ID=2").fetchone()[0] == 1
+        conn.close()
+
+    def test_season_label_change_skips_row_entirely(self, core):
+        """跨赛季分界的改期:整行不动,绝不为了写进去而改 Season。
+
+        dim_match 有触发器要求 Season 必须等于按 (League_ID, Date) 推导的赛季
+        (§6.3 / core 迁移 0011)。硬写会么触发器拒绝、么把赛季标错——后者正是
+        2026-08-25 那次 878 行赛季错标事故的成因。
+        """
+        conn = connect_rw("core")
+        conn.execute(
+            "INSERT INTO dim_match (Match_ID,Season,League_ID,Date,Home_Team_ID,Away_Team_ID,"
+            "Home_Team_Name,Away_Team_Name,home_score,away_score,status,kickoff_at_utc) "
+            "VALUES (1,'2025/2026',48,'2026-05-10',100,200,'H','A',1,3,'Finish',"
+            "'2026-05-10T16:45:00Z')")
+        conn.commit()
+        conn.close()
+        # 来源给的是 2026/2027 赛季的行(赛季标签与库里不同)
+        pl = _payload(48, "2026/2027", [_match(1, 100, 200, _future(48), status="notstarted")])
+        s = _run(48, pl)
+        assert s["leagues"][0]["kickoff_only_updated"] == 0, "赛季标签会变时必须整行不动"
+        conn = connect_rw("core")
+        row = conn.execute(
+            "SELECT Season,status,kickoff_at_utc FROM dim_match WHERE Match_ID=1").fetchone()
+        conn.close()
+        assert row["Season"] == "2025/2026" and row["status"] == "Finish"
+        assert row["kickoff_at_utc"] == "2026-05-10T16:45:00Z", "时间也不该被改"
 
 
 class TestFetchFailedDoesNotThrottle:

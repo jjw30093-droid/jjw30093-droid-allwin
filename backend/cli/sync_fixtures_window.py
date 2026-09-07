@@ -24,6 +24,7 @@ from backend.ingest.ingest_future_fixtures import (
     SeasonIdentityError,
     discover_season_identity,
     rows_from_payload,
+    update_fixture_kickoff_only,
     upsert_fixture_row,
 )
 from backend.ingest.poll_windows import (
@@ -164,33 +165,63 @@ def sync_one_league(
     conflict = [r["Match_ID"] for r in rows
                 if (r["Match_ID"] in finished or r["Match_ID"] in scored)
                 and r["status"] != "Finish"]
+
+    # 2026-09-07:冲突行**逐行剔除**,不再整批拒写。
+    #
+    # 安全性一字未变——已完赛/已有比分的行仍然绝不会被未完赛行覆盖,只是从
+    # "整个联赛拒写"改成"把这几行从写入集合里排除"。
+    #
+    # 改的原因是真实事故:荷甲(57)自 2026-09-06T06:06 起连续 4 次同步(每 ~6h)
+    # 全部 refused_downgrade、written_rows=0,**整个联赛的赛程同步停摆 24 小时**,
+    # 265 行一行没写进去。肇事的是 FotMob 一条自相矛盾的记录(match 5781733):
+    # 同一个对象里既带比分 home 1 / away 3,又标 notStarted:true、
+    # finished:false,并把开球从 09-05 16:45Z 改挂到 09-08 12:00Z。
+    # 这种脏数据不会自愈,旧写法会让该联赛**无限期**冻结。
+    #
+    # 一条坏行不该有能力冻结整个联赛;但也绝不能静默丢弃(CLAUDE.md §13),
+    # 所以剔除的 Match_ID 全部写进 ledger.detail,verdict 用独立取值
+    # written_with_conflicts,由 pipeline_gates 的 G2 照常暴露给人。
+    safe_rows = rows
+    conflict_rows: list = []
+    verdict = "written"
+    detail = None
     if conflict:
-        detail = f"来源试图用未完赛行覆盖已完赛/已有比分行: {conflict[:10]}"
-        result["verdict"] = "refused_downgrade"
-        result["detail"] = detail
-        _write_ledger(conn_odds, dry_run, run_at=now_iso, poll_run_id=poll_run_id,
-                      league_id=league_id, season=season,
-                      provider_selected_season=season, fallback_season_used=0,
-                      fetched_rows=fetched, horizon7_rows=horizon7, written_rows=0,
-                      prev_fetched_rows=baseline, verdict="refused_downgrade",
-                      detail=detail)
-        return result
+        conflict_set = set(conflict)
+        safe_rows = [r for r in rows if r["Match_ID"] not in conflict_set]
+        conflict_rows = [r for r in rows if r["Match_ID"] in conflict_set]
+        verdict = "written_with_conflicts"
 
     # 5. 写入(只更新赛程拥有列,不碰裁判/天气/比分/kickoff 回填)
+    #
+    # 冲突行走 update_fixture_kickoff_only:**只放行开球时刻**,status/比分
+    # 一律不动(2026-09-07 站长选定的方案 B)。理由见该函数 docstring——被守卫
+    # 拒掉的那一行恰恰是唯一携带新开球时刻的行,整行丢弃会让改期永远进不了库。
+    kickoff_only_updated = 0
     if not dry_run:
         with tx(conn_core_rw):
-            for r in rows:
+            for r in safe_rows:
                 upsert_fixture_row(conn_core_rw, r)
-    result["written"] = 0 if dry_run else fetched
-    result["verdict"] = "written"
+            for r in conflict_rows:
+                if update_fixture_kickoff_only(conn_core_rw, r):
+                    kickoff_only_updated += 1
+    if conflict:
+        skipped_entirely = len(conflict_rows) - kickoff_only_updated
+        detail = (f"{len(conflict)} 行已完赛/已有比分,保留原 status 与比分;"
+                  f"其中 {kickoff_only_updated} 行只更新了开球时刻,"
+                  f"{skipped_entirely} 行因赛季标签会变而整行未动: {conflict[:10]}")
+    result["kickoff_only_updated"] = kickoff_only_updated
+    result["written"] = 0 if dry_run else len(safe_rows)
+    result["verdict"] = verdict
     result["season"] = season
+    if detail:
+        result["detail"] = detail
     _write_ledger(conn_odds, dry_run, run_at=now_iso, poll_run_id=poll_run_id,
                   league_id=league_id, season=season,
                   provider_selected_season=season, fallback_season_used=0,
                   fetched_rows=fetched, horizon7_rows=horizon7,
                   written_rows=result["written"], prev_fetched_rows=baseline,
-                  verdict="written",
-                  detail="dry_run" if dry_run else None)
+                  verdict=verdict,
+                  detail=detail or ("dry_run" if dry_run else None))
     return result
 
 
@@ -264,7 +295,12 @@ def main(argv=None) -> int:
         only_league=args.league_id, dry_run=args.dry_run,
         now_iso=args.now, offline_payload=offline_payload)
     print(json.dumps(summary, ensure_ascii=False, indent=1))
-    # 有 refused_* / fetch_failed → 非零退出(供 worker 感知)
+    # 有 refused_* / fetch_failed → 非零退出(供 worker 感知)。
+    # written_with_conflicts **刻意不在这里**:那是部分成功(联赛照常同步,只是
+    # 剔了几行脏数据),让它把任务判失败会在数据源脏数据持续期间一直报错;
+    # 按 CLAUDE.md §13,这类"发现了问题"由 pipeline_gates 的告警表达,不由
+    # 任务失败表达。refused_downgrade 保留在集合里只为兼容历史 ledger 取值,
+    # 写入端 2026-09-07 起已不再产生它。
     bad = {"refused_regression", "refused_downgrade", "refused_identity", "fetch_failed"}
     return 1 if bad & set(summary["by_verdict"]) else 0
 

@@ -144,10 +144,20 @@ def test_lineup_snap_type_column_and_backfill(tmp_path):
     conn.close()
 
     applied = migrate.apply_all("odds", db_file=db, quiet=True)
-    # 不带 migrations_dir 时从真实目录(非 staged 副本)接着应用——staged 只到
-    # 0008,真实目录此时还有 0009(lineup_type)与 0010(PIPELINE_REDESIGN_V2 P4
-    # 的 postmatch_retry_state,与本测试主题无关但同样待应用)两个未应用版本。
-    assert applied == 2
+    # 不带 migrations_dir 时从真实目录(非 staged 副本)接着应用:staged 只到
+    # 0008,真实目录里 0008 之后的每一个版本都会在这里被应用。
+    #
+    # 2026-09-07:这里原本硬编码 `assert applied == 2`(当时 0008 之后只有
+    # 0009/0010)。每加一个 odds 迁移它就会失败一次,而失败原因与本用例主题
+    # (lineup_type 列 + 回填)毫无关系——同一个陷阱已经让
+    # test_schedule_state_schema.py 的三条用例长期挂红(硬编码 core 迁移数
+    # 13、实际 15)。改成从真实目录派生期望值,加迁移不再误伤。
+    expected = sum(
+        1 for f in sorted((migrate.MIGRATIONS_ROOT / "odds").glob("*.sql"))
+        if int(f.name.split("_", 1)[0]) > 8
+    )
+    assert expected >= 2, "0008 之后至少应有 0009/0010,否则本用例前提已变"
+    assert applied == expected
 
     conn = sqlite3.connect(db)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(bronze_fm_lineup_snap)")}

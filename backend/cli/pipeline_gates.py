@@ -82,7 +82,21 @@ G10_MAX_MISMATCH_RATE = 0.05
 # 未完赛行,中途接入的联赛历史已完赛场次永久漏采,见
 # backend/cli/backfill_fixtures.py 头注释)。行数/最大轮次太小时数据本身还
 # 不足以判断"轮次消失"还是"赛季刚开始",跳过不误报。
-G15_MIN_ROWS = 20
+# 2026-09-07:删掉了原来的 `G15_MIN_ROWS = 20`(判据是"当前存在的**不同轮次**
+# 个数 < 20 就跳过")。它是这道门的自我否定——**缺口越大,存在的轮次越少,
+# 越容易被它挡掉**,而这道门存在的唯一理由就是抓大缺口。
+#
+# 生产实测(2026-09-07):巴甲 268/2026 实存轮次 {4, 21, 23..38} 共 18 个、
+# 最大轮 38、轮 1-3/5-20/22 整段消失(165 行 vs 完整赛季 380 场),正是常量
+# 注释里点名的那次事故本身——却因为 18 < 20 被静默跳过,门报 OK。
+#
+# 它也没在保护任何真实场景:当时写它是怕"赛季刚开始"误报,但赛季刚开始时
+# 轮次是**从 1 开始连续**的,missing 本来就是空集、根本不会触发违规。同日
+# 实测被它跳过的另外四个 (联赛,赛季) 全部连续——10216:1-6、42:1-8、
+# 73:1-8、223/2026:1-19,零个会因为删掉它而变成误报。
+#
+# 真正需要的下限只有 max_round:轮次太小(如只有一轮"3")时 missing={1,2}
+# 无法区分"刚接入"与"丢数据",保留 G15_MIN_MAX_ROUND 挡住。
 G15_MIN_MAX_ROUND = 5
 # 已知例外(联赛真实存在结构性轮次缺口,不是数据丢失):今天为空,保留位置
 # 供将来发现真实赛制特例时登记,不要把这当成放宽阈值的入口。
@@ -142,17 +156,46 @@ def _gate_fixtures_window(conn_core, ledger_by_league, now_iso) -> dict:
             "violations": violations, "skipped_leagues": len(skipped)}
 
 
+_G2_REFUSED = ("refused_regression", "refused_downgrade")
+_G2_PARTIAL = ("written_with_conflicts",)
+
+
 def _gate_coverage_regression(ledger_by_league) -> dict:
-    """G2:最近一次同步被 G-A/G-B/G-C 门禁拒写(refused_regression/refused_downgrade)
-    ——写入端已经保护了旧数据,这里负责让人知道"有联赛的新数据被拒了"。"""
+    """G2:最近一次同步被写入端门禁拦下——写入端已经保护了旧数据,这里负责让人
+    知道"有联赛的新数据没能照原样写进去"。
+
+    分两级(2026-09-07):
+
+    - **CRITICAL**:整个联赛被拒写(refused_regression / refused_downgrade),
+      该联赛赛程同步实际上停摆,必须有人处理;
+    - **WARNING**:written_with_conflicts——联赛照常同步,只是若干行因为会把
+      已完赛/已有比分行降级而被剔除。数据是安全的、同步没停,但脏行是数据源
+      的问题、不会自愈,仍要有人看见,所以不静默(CLAUDE.md §13)。
+
+    分级的由来是荷甲(57)那次真实事故:一条 FotMob 自相矛盾的记录让整个联赛
+    连续 4 次拒写、停摆 24 小时。写入端改为逐行剔除后,同样的脏数据只会产生
+    WARNING,联赛不再被冻结——但如果哪天真的整批被拒,仍然是 CRITICAL。
+    """
     violations = [
         {"league_id": lid, "verdict": ledger["verdict"],
          "detail": (ledger.get("detail") or "")[:120]}
         for lid, ledger in ledger_by_league.items()
-        if ledger["verdict"] in ("refused_regression", "refused_downgrade")
+        if ledger["verdict"] in _G2_REFUSED
     ]
-    return {"gate": "league_coverage_regression",
-            "level": CRITICAL if violations else OK, "violations": violations}
+    partial = [
+        {"league_id": lid, "verdict": ledger["verdict"],
+         "detail": (ledger.get("detail") or "")[:120]}
+        for lid, ledger in ledger_by_league.items()
+        if ledger["verdict"] in _G2_PARTIAL
+    ]
+    if violations:
+        level = CRITICAL
+    elif partial:
+        level = WARNING
+    else:
+        level = OK
+    return {"gate": "league_coverage_regression", "level": level,
+            "violations": violations, "partial_writes": partial}
 
 
 def _gate_kickoff_precision(conn_core, now_iso) -> dict:
@@ -576,6 +619,8 @@ def _gate_fixture_round_gap(conn_core) -> dict:
 
     LEAGUE_META 17 个生产联赛全量校准过(2026-08-27):268/57/61 命中真实缺口,其余全部
     缺 0 轮,含非数字轮次的日职联(223)/澳超(113)/分组制韩K联(9080)零误报。
+    2026-09-07 复校:删掉 G15_MIN_ROWS 后重跑,只有 268 新增命中(它本就该命中),
+    其余联赛判定一字未变——详见该常量删除处的注释。
     "轮次不满员"(数量少于该赛季众数)被明确否决过——澳超季后赛赛制会让
     27/28 轮判定为"不满员",做成信号会在两周内被当噪音关掉(同 G10 注释里
     记过的教训)。
@@ -598,8 +643,6 @@ def _gate_fixture_round_gap(conn_core) -> dict:
     violations = []
     for (lid, season), rounds in sorted(by_key.items()):
         if (lid, season) in G15_EXEMPT:
-            continue
-        if len(rounds) < G15_MIN_ROWS:
             continue
         max_round = max(rounds)
         if max_round < G15_MIN_MAX_ROUND:

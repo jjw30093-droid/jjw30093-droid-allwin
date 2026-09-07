@@ -724,15 +724,32 @@ cleanup_old_releases
 
 
 class TestMarkerNotInjectable:
-    def test_source_uses_safe_grep_fixed_string(self):
-        """静态防回归:business_smoke 必须用 `grep -qF --` 处理用户可控 marker,
-        不能退化回可被当作选项解析的裸 `grep -q "$VAR"`。"""
+    def test_source_matches_marker_without_any_pipe(self):
+        """静态防回归,两条约束合一:
+
+        1. **不得建管道**。2026-09-04 生产事故:原来写的是
+           `curl -sf ... | grep -qF -- "$MARKER"`,而脚本顶部是
+           `set -euo pipefail`;`grep -q` 命中即退出并关闭管道读端,首页 HTML
+           已达 ~131KB 远超管道缓冲区,curl 必然还在写 → SIGPIPE → 非零退出
+           → pipefail 判定整条管道失败。页面明明含标记却恒判失败,连续两次
+           发布被误回滚。服务器上开关 pipefail 对拍:开 20 次全败、关 20 次全过。
+           注意 `printf '%s' "$html" | grep -qF` 同样不行(printf 照样吃
+           SIGPIPE),**只有不建管道才根治**。
+        2. **marker 仍须按纯文本匹配**(它由 SMOKE_HTML_MARKER 环境变量可控)。
+           `[[ "$var" == *"$MARKER"* ]]` 里 marker 在引号内,bash 按字面处理、
+           不做 glob 展开;且全程没有外部命令,选项解析这个风险面直接消失。
+        """
         src = RELEASE_SH.read_text()
-        assert 'grep -qF -- "$SMOKE_HTML_MARKER"' in src
+        assert '[[ "$smoke_html" == *"$SMOKE_HTML_MARKER"* ]]' in src
+        assert 'smoke_html="$(curl -sf' in src
+        # 冒烟里不得再出现 curl→grep 管道(SIGPIPE 复发)
+        assert "curl -sf \"http://127.0.0.1:$LIVE_WEB_PORT/\" | grep" not in src
+        assert "| grep -qF -- \"$SMOKE_HTML_MARKER\"" not in src
 
     def test_dash_prefixed_marker_matches_via_real_http_response(self, tmp_path):
-        """真实行为验证(不只是静态检查):marker 以 "-" 开头时,grep 仍然把它当
-        纯文本匹配,而不是被解析成选项导致误判或报错。"""
+        """真实行为验证(不只是静态检查):marker 以 "-" 开头时仍按纯文本匹配,
+        不会被当成选项。2026-09-07 起复刻的是 release.sh 真实用的无管道写法,
+        不再是已被弃用的 `curl | grep -qF` 管道。"""
         app_root = _setup_app_root(tmp_path)
         marker = "-e-looks-like-a-flag"
         html_body = f"<html><body>{marker}</body></html>".encode()
@@ -760,11 +777,142 @@ BUSINESS_SMOKE_RETRIES=1
 BUSINESS_SMOKE_INTERVAL=1
 release_py() {{ :; }}
 RELEASE_DIR="/nonexistent"
-curl -sf "http://127.0.0.1:{port}/" | grep -qF -- "$SMOKE_HTML_MARKER"
-echo "GREP_EXIT=$?"
+# 复刻 release.sh business_smoke 里真实用的写法(无管道 + 引号内字面匹配)
+if smoke_html="$(curl -sf "http://127.0.0.1:{port}/")"; then
+  if [[ "$smoke_html" == *"$SMOKE_HTML_MARKER"* ]]; then echo "GREP_EXIT=0"; else echo "GREP_EXIT=1"; fi
+else
+  echo "GREP_EXIT=curl_failed"
+fi
 '''
             r = _run(script, _base_env(app_root))
             assert "GREP_EXIT=0" in r.stdout, f"{r.stdout}\n{r.stderr}"
+        finally:
+            httpd.shutdown()
+            thread.join(timeout=5)
+
+
+class TestBusinessSmokeLargePageUnderPipefail:
+    """2026-09-04 生产事故的回归:大页面 + pipefail 下,业务冒烟必须通过。
+
+    当时 business_smoke 写的是 `curl -sf ... | grep -qF -- "$MARKER"`,而脚本
+    顶部是 `set -euo pipefail`。`grep -q` 命中即退出并关闭管道读端;首页 HTML
+    已达 ~131KB,远超管道缓冲区(64KB),curl 必然还在写 → SIGPIPE → 非零退出
+    → pipefail 判整条管道失败。结果:页面含标记却恒判失败,连续两次发布被误
+    回滚,连回滚后对旧 release 的复验也失败,脚本打出"请人工介入"。
+
+    **为什么之前的测试没抓到**:既有用例的 HTML body 只有几十字节,完全塞得进
+    管道缓冲区,curl 写完就退出、根本不会收到 SIGPIPE——小页面下新旧两种写法
+    行为完全一致。这个 bug 只在页面大到超过缓冲区时才出现,所以本用例的关键
+    不是"跑一遍冒烟",而是**页面必须足够大**。
+    """
+
+    PIPE_BUF_SAFE_MARGIN = 256 * 1024   # 远超 Linux 默认 64KB 管道缓冲区
+
+    def test_marker_found_in_large_page(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        marker = "赛程"
+        filler = "x" * self.PIPE_BUF_SAFE_MARGIN
+        # marker 放在**开头**:grep -q 会尽早命中并关闭管道,最大化 SIGPIPE 概率
+        html_body = f"<html><body>{marker}{filler}</body></html>".encode()
+        assert len(html_body) > 64 * 1024, "页面必须大于管道缓冲区,否则测不出这个 bug"
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(html_body)
+
+            def log_message(self, *a):
+                pass
+
+        port = _free_port()
+        httpd = http.server.HTTPServer(("127.0.0.1", port), Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # 只跑 marker 那一段(products/matches/verify_next_assets 需要真实
+            # release .venv,不属于本回归的判据)。逐字复刻 release.sh 的写法,
+            # 并显式打开 pipefail——事故正是 pipefail 才触发的。
+            script = f'''
+set -euo pipefail
+{SOURCE_RELEASE}
+LIVE_WEB_PORT={port}
+SMOKE_HTML_MARKER="{marker}"
+BUSINESS_SMOKE_RETRIES=1
+BUSINESS_SMOKE_INTERVAL=1
+html_ok=0
+for i in $(seq 1 "$BUSINESS_SMOKE_RETRIES"); do
+  if smoke_html="$(curl -sf "http://127.0.0.1:{port}/")"; then
+    if [[ "$smoke_html" == *"$SMOKE_HTML_MARKER"* ]]; then
+      html_ok=1
+      break
+    fi
+  fi
+  sleep "$BUSINESS_SMOKE_INTERVAL"
+done
+echo "HTML_OK=$html_ok BYTES=${{#smoke_html}}"
+'''
+            r = _run(script, _base_env(app_root, tmp_path), timeout=60)
+            assert "HTML_OK=1" in r.stdout, (
+                "大页面 + pipefail 下冒烟判失败——SIGPIPE 回归了\n"
+                f"stdout={r.stdout}\nstderr={r.stderr}"
+            )
+        finally:
+            httpd.shutdown()
+            thread.join(timeout=5)
+
+    def test_old_pipe_form_reproduces_only_on_some_platforms(self, tmp_path):
+        """反向验证上面那条正向断言在**当前环境**有没有鉴别力。
+
+        用旧写法(curl | grep -qF)跑同一个大页面。若它也通过,说明本机复现不了
+        SIGPIPE,上面那条正向断言在这里就是恒真的——本用例据实 skip 并说明,
+        **不假装验证过**。
+
+        2026-09-07 实测结论(必须如实记录,别让后人以为本机跑绿就等于验证过):
+
+        - 生产 Linux(Ubuntu/lightsail):旧写法在 pipefail 下 **20 次全败**、
+          关掉 pipefail **20 次全过**——必现,正是那次误回滚的直接原因;
+        - 开发机 macOS:同样 262KB 页面,旧写法**照样通过**,复现不了。
+
+        所以这组用例只在 Linux(CI/生产同构环境)上才真正守得住这个回归;在
+        macOS 上它只证明"新写法能正常工作",证明不了"旧写法会坏"。
+        """
+        marker = "赛程"
+        html_body = f"<html><body>{marker}{'x' * self.PIPE_BUF_SAFE_MARGIN}</body></html>".encode()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(html_body)
+
+            def log_message(self, *a):
+                pass
+
+        port = _free_port()
+        httpd = http.server.HTTPServer(("127.0.0.1", port), Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            script = f'''
+set -euo pipefail
+if curl -sf "http://127.0.0.1:{port}/" | grep -qF -- "{marker}"; then
+  echo "OLD_FORM=pass"
+else
+  echo "OLD_FORM=fail"
+fi
+'''
+            r = subprocess.run(["bash", "-c", script], capture_output=True,
+                               text=True, timeout=60)
+            if "OLD_FORM=fail" not in r.stdout:
+                pytest.skip(
+                    f"本环境({sys.platform})复现不了 SIGPIPE:{len(html_body)} 字节"
+                    " 的页面用旧的 curl|grep -qF 写法仍然通过。生产 Linux 上实测"
+                    " 是 pipefail 开 20 次全败 / 关 20 次全过。因此上面那条正向"
+                    " 断言在本机不具鉴别力,只在 Linux 上才真正守住这个回归。"
+                )
         finally:
             httpd.shutdown()
             thread.join(timeout=5)

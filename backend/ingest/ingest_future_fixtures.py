@@ -195,6 +195,48 @@ def upsert_fixture_row(conn, row: dict) -> None:
     )
 
 
+# 已完赛/已有比分的行被来源改期时,**只放行开球时刻这几列**(2026-09-07,站长
+# 选定的方案 B)。status/比分/队伍一律不动——反退化保护一字未变。
+KICKOFF_ONLY_COLUMNS = ("Date", "kickoff_at_utc", "kickoff_precision", "kickoff_source")
+
+
+def update_fixture_kickoff_only(conn, row: dict) -> bool:
+    """把一场**已存在**比赛的开球时刻更新到来源的新值,不碰任何其它列。
+
+    为什么需要它(2026-09-07 荷甲真实案例):FC Utrecht vs Go Ahead Eagles
+    (5781733)在第 65 分钟被中断、比分 1-3,FotMob 把它改期到 09-08 12:00Z
+    并把 started/finished 置回 false。反退化守卫看到"未完赛行要覆盖已完赛行"
+    就拒绝整行——而**被拒的那一行恰恰是唯一携带新开球时刻的行**,于是新时间
+    永远进不了库,页面会一直显示旧的 09-05 已完赛。
+
+    守卫本身没写错(它防的是"来源用空赛程行覆盖好数据"那类真实事故),问题是
+    它分不清"来源在破坏数据"和"来源在更正数据"。方案 B 的取舍:不去猜是哪一
+    种,只放行**时间**这一个维度——时间写错的后果是页面显示错时间(可自愈,
+    下次同步会再改),而 status/比分写错的后果是战绩与统计被污染(不可自愈)。
+
+    **赛季标签不变才写**:Date 变动可能跨赛季分界,而 dim_match 有触发器要求
+    Season 必须等于按 (League_ID, Date) 推导的赛季(§6.3 / migrations/core/0011)。
+    跨界时这里直接不写并返回 False,由调用方如实记录——绝不为了写进去而去改
+    Season(那正是 2026-08-25 赛季错标事故的成因)。
+
+    返回 True=已更新,False=跳过(行不存在 / 赛季标签会变)。
+    """
+    cur = conn.execute(
+        "SELECT Season FROM dim_match WHERE Match_ID=?", (row["Match_ID"],)
+    ).fetchone()
+    if cur is None:
+        return False
+    existing_season = cur[0] if not hasattr(cur, "keys") else cur["Season"]
+    if row.get("Season") != existing_season:
+        return False
+    set_sql = ", ".join(f"{c}=?" for c in KICKOFF_ONLY_COLUMNS)
+    conn.execute(
+        f"UPDATE dim_match SET {set_sql} WHERE Match_ID=?",
+        [row.get(c) for c in KICKOFF_ONLY_COLUMNS] + [row["Match_ID"]],
+    )
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--league-id", type=int, default=47)
