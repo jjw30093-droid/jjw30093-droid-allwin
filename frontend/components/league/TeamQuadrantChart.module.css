@@ -93,6 +93,42 @@
 .legendVal {
   color: var(--ink-2);
   word-break: break-word;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+/* 图表宽度测量元素:不能有 padding/border,内容宽度必须等于图表宽度 */
+.chartBox {
+  width: 100%;
+}
+
+/* 名单里的队名是真按钮:点名字等同点队徽,顺带给键盘与读屏 */
+.legendTeam,
+.legendTeamOn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  cursor: pointer;
+  /* 手机端点击目标不小于 28px */
+  min-height: 28px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.legendTeam:hover {
+  color: var(--ink);
+  border-color: var(--brand-teal);
+}
+
+.legendTeamOn {
+  color: var(--ink);
+  border-color: var(--brand-teal);
+  background: var(--surface-soft);
+  font-weight: 600;
 }
 
 .note {

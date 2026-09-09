@@ -7010,3 +7010,77 @@ test_match_preview.py` 既有夹具的历史比赛赛季从与被测比赛(9002,
 > 文件 `test_physical_stats_poll.py` + `test_worker_argv.py`:28 passed
 > (25 新增 + 3 既有,含本轮追加的 argv 接线断言)。CLAUDE.md §13 已补充
 > physical_stats_poll 独立 timer 说明。
+
+## 63. 象限图队徽化 + 点击交互 + 术语校准(2026-09-09)
+
+站长在抖音验证过"坐标点直接画队徽,20 支球队一眼全认得出"的效果,现把它带回
+网站,覆盖联赛球队数据页(`league/TeamQuadrantChart`)与比赛详情页
+(`matches/TeamStyleQuadrant`)两张象限图。
+
+### 术语校准(前后端同一次改完)
+- 联赛页三视角:攻防 → **攻守兼备 / 重守轻攻 / 攻守俱弱 / 对攻型**;战术 →
+  **双线开花 / 依赖定位球 / 进攻乏术 / 运动战主导**;原"出手"(篮球词)改
+  **射门质量** → **量质齐优 / 少而精 / 量质皆低 / 广种薄收**。xG 轴改
+  "场均预期进球 xG / 场均预期失球 xGA"。"阵地战为主"原本用错(该象限是运动
+  战强、定位球弱),已纠正。射门多而 xG 低通常是远射多,但没有射门距离数据,
+  只写"广种薄收"描述现象,不写"远射为主"断言原因。
+- 后端 `_TEAM_STAT_VIEWS`(比赛详情页):**控快兼备 / 阵地控球 / 防守反击 /
+  控守被动**;**两翼齐飞 / 边路起球 / 中路渗透 / 难入禁区**;**对攻型 / 攻守
+  兼备 / 攻守俱弱 / 重守轻攻**(注意该组按原始高低下标,与联赛页的好坏下标
+  约定不同,两套 quadrant 判定不合并)。
+- e2e 里守方向语义 bug 的断言(阿森纳/曼城/利物浦必须落在攻守兼备)换标签
+  不换保护。
+
+### 实现
+- 纯布局模块 `frontend/components/charts/crestQuadrantLayout.ts`:显式 nice
+  端点 + 固定像素 grid → 像素映射可用纯 JS 精确复算(SSR 实测与 ECharts 逐
+  像素一致,`team-quadrant-layout.test.ts` 用 SVG transform 回读守着);确定性
+  圆形排斥避让,只改 `symbolOffset` 不改 value;位移 >12px 画引线 + 真实坐标
+  小圆点(引线终点 = `api.coord` + 同一组偏移,容器测宽有偏差也不会错位)。
+  **未改 `EChart.tsx`**。
+- `league/quadrantViews.ts` / `quadrantOption.ts`(§11.3 可 headless 冒烟的
+  `buildQuadrantOption`)/ `teamMetrics.ts`(联赛内并列排名 1224 制、分母只
+  数有值的队、派生指标任一缺失即 null)/ `TeamQuadrantDetail.tsx`(常驻面板,
+  当前视角两根轴 + view.related 相关指标,每项带 第 N/M,选中两队并排 + 差值)。
+- 选中态是字符串 key + `dataIndex` 优先解析(ECharts 克隆 data[i],引用判等
+  会永远落空);最多 2 队,第三支 FIFO;点已选取消;点空白靠外层 div 的 DOM
+  onClick(ECharts click 只在命中元素时触发)+ ref 记"已被图上元素消费";Esc
+  清空;下方分组名单的队名改为真 `<button aria-pressed>`,顺带键盘/读屏。
+- 调暗只作用在图片队徽且下限 0.55:象限色在 0.35–0.45 透明度下合成对比度
+  仅 1.4–2.2:1;选中光环用 `--ink` 不用品牌金(金压白底 1.74:1)——两条都写成
+  `team-quadrant-contrast.test.ts` 的回归护栏。
+- 比赛详情页:`MatchPreviewStylePointDTO` 新增 `crest_url`(按球队并集一次
+  解析,不在三个视角里重复读文件),OpenAPI/TS 类型已重生成;默认选中主客两队,
+  点其它队徽换成对比它,「恢复本场两队」。
+- `collectPoints` 按 teamKey 去重:本地测试库 47 联赛混入 16 行重复的 1001
+  (阿森纳),重复 key 会让队徽叠在一处且 React key 冲突;生产数据无此问题。
+- `data-crest-layout`(仅非生产环境)输出每个队徽实际像素位置,供 e2e /
+  Playwright 点得中它。
+
+### 验证
+- vitest 594 passed(新增 layout 21 / contrast 8 / metrics 14 / click 2 /
+  smoke 10);eslint、tsc 干净;pytest `test_team_style_preview.py` 16 passed
+  (含 crest_url 只解析一次的断言)。
+- Playwright 手机视口(390×844,本地 dev + 本地库 意甲 2025/2026):队徽全部
+  渲染、避让引线正确;点队徽/名单选中 → 面板出数值与"第 N/20";第二支并排
+  对比 + 差值;第三支 FIFO;再点同一队徽取消;点空白/Esc 清空;切"射门质量"
+  视角摘要正确。比赛详情页(4803409):默认主客高亮、点第三队换成对比、恢复。
+- 本地 dev 用 3002 端口(3000 被站长另一项目的 remotion 进程占着),浏览器
+  控制台的 `/api/v1/me` CORS 报错是这个端口不在后端 ALLOWED_ORIGINS 的开发
+  环境副作用,与本次改动无关。
+
+### 本轮不做(已记录)
+URL 深链接 `?team=`;额外请求 `/standings`;面板堆全部 17 项;抖音 PNG 导出
+脚本复用(布局已是纯函数,以后要接很便宜);3 队以上对比;球队详情页。
+
+### 分支合并说明
+本节工作是在本地 `main`(`faae4e0`,2026-08-31)上做的,期间发现生产实际跑的
+是未合并进 `main` 的 `claude/serene-turing-93a921`(`063b57b`,209 文件差异,
+含本文件 §61/§62 记录的赛季泄漏修复与赛季归属重构)——`main` 落后生产超过
+一周。已将本节工作单独提交到 `feature/crest-quadrant-chart`,把本地 `main`
+快进合并到 `063b57b`,再把该分支 rebase 到新 `main` 上。`backend/api/schemas.py`
+与 `backend/queries/team_style_preview.py` 两处自动合并成功(§61/§62 加的
+`season` 形参与本节加的 `crest_url` 解析在文件里是不同区域,无结构冲突);
+唯一需要手动改的是 `tests/backend/test_team_style_preview.py` 里本节新增的
+`test_points_carry_crest_url_resolved_once_per_team`——它写于 `league_style_views`
+加 `season` 形参之前,调用签名需要补上 `SEASON` 实参。

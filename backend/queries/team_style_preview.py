@@ -36,6 +36,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from backend.media.team_crests import resolve_team_crest_url
 from backend.queries.teams import display_name_for_team, team_display_for
 
 WINDOW = 5
@@ -56,27 +57,33 @@ _SITUATION_ZH: dict[str, str] = {
 
 # 三个视角的定义:(id, tab短标签, 标题, x字段, y字段, x轴名, y轴名, 小数位, 四象限中文名)
 # 象限顺序:x高y高 / x高y低 / x低y高 / x低y低(与 TeamStyleQuadrant.tsx 的 quadOf 对应)。
+#
+# 文案纪律(2026-09-09 术语校准):象限名一律用中文足球术语(攻守兼备 / 防守反击 /
+# 两翼齐飞……),不用口语("既控又快""少压向禁区")。xG 轴给中文全称"预期进球 /
+# 预期失球",英文缩写跟在后面,新用户不认识 xG 也能读。
 _TEAM_STAT_VIEWS = [
     {
         "id": "poss-fastbreak", "tab": "控球 × 快攻", "title": "控球率 × 快攻射门占比",
         "x_label": "控球率 %", "y_label": "快攻射门占比 %", "digits": 1,
-        "quadrants": ["既控又快", "阵地控球", "纯反击型", "被动型"],
+        # 控球高+快攻高 / 控球高+快攻低 / 控球低+快攻高 / 控球低+快攻低
+        "quadrants": ["控快兼备", "阵地控球", "防守反击", "控守被动"],
     },
     {
         "id": "cross-box", "tab": "传中 × 禁区触球", "title": "场均成功传中 × 禁区触球",
         "x_label": "场均成功传中", "y_label": "场均禁区触球", "digits": 1,
-        "quadrants": ["两翼齐飞", "边路为主", "中路渗透", "少压向禁区"],
+        # 传中多+禁区触球多 / 传中多+禁区触球少 / 传中少+禁区触球多 / 传中少+禁区触球少
+        "quadrants": ["两翼齐飞", "边路起球", "中路渗透", "难入禁区"],
     },
     {
-        # x(创造 xG)越高越好,y(让出 xG)越低越好——quadrants 数组仍按既有
+        # x(预期进球)越高越好,y(预期失球)越低越好——quadrants 数组仍按既有
         # [x高y高, x高y低, x低y高, x低y低](原始高低,不是好坏)下标约定,
-        # 但文案必须换算成"两个方向都指向好"才算"两头都强":
-        # x高y低(创造多+让出少)才是两头都强;x高y高(创造多+让出多)是同时开放的对攻型;
-        # x低y低(创造少+让出少)是守强攻弱;x低y高(创造少+让出多)才是真正的两头都弱。
+        # 但文案必须换算成"两个方向都指向好"才算"攻守兼备":
+        # x高y低(进球多+失球少)才是攻守兼备;x高y高(进球多+失球多)是同时开放的对攻型;
+        # x低y低(进球少+失球少)是重守轻攻;x低y高(进球少+失球多)才是真正的攻守俱弱。
         # 见 tests/backend/test_team_style_preview.py::test_direction_semantics_propagated_and_quadrant_labels_correct
-        "id": "xg-for-against", "tab": "创造 × 让出 xG", "title": "创造 xG × 让出 xG",
-        "x_label": "场均创造 xG", "y_label": "场均让出 xG", "digits": 2,
-        "quadrants": ["对攻型", "两头都强", "两头都弱", "守强攻弱"],
+        "id": "xg-for-against", "tab": "攻防 xG", "title": "预期进球 × 预期失球",
+        "x_label": "场均预期进球 xG", "y_label": "场均预期失球 xGA", "digits": 2,
+        "quadrants": ["对攻型", "攻守兼备", "攻守俱弱", "重守轻攻"],
         "y_lower_is_better": True,
     },
 ]
@@ -211,6 +218,9 @@ def league_style_views(
         all_team_ids.update(points_map.keys())
 
     display = team_display_for(conn_core, all_team_ids)
+    # 队徽按球队并集一次性解析(resolve_team_crest_url 会读本地文件),
+    # 不在每个视角的循环里逐队重复调用——三个视角的球队集合几乎完全重叠。
+    crest_map = {tid: resolve_team_crest_url("fotmob", tid) for tid in all_team_ids}
 
     out: list[dict[str, Any]] = []
     for view, points_map in view_points:
@@ -219,6 +229,7 @@ def league_style_views(
             points.append({
                 "team_id": team_id,
                 "name": display_name_for_team(team_id, display=display),
+                "crest_url": crest_map.get(team_id),
                 "x": round(xy["x"], view["digits"]) if isinstance(xy["x"], (int, float)) else None,
                 "y": round(xy["y"], view["digits"]) if isinstance(xy["y"], (int, float)) else None,
             })

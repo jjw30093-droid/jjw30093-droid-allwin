@@ -20,6 +20,15 @@ import { buildBuckets, buildOption as buildThreatOption } from "@/components/mat
 import { cumulativeSeries, buildOption as buildXgRaceOption } from "@/components/matches/XgRaceChart";
 import { buildOption as buildShotMapOption } from "@/components/matches/ShotMapChart";
 import { buildOption as buildQuadrantOption } from "@/components/matches/TeamStyleQuadrant";
+import { buildQuadrantOption as buildLeagueQuadrantOption } from "@/components/league/quadrantOption";
+import { VIEWS, collectPoints, mean, outlierNames } from "@/components/league/quadrantViews";
+import {
+  QUADRANT_GRID,
+  crestSizeFor,
+  layoutCrests,
+  niceAxisRange,
+} from "@/components/charts/crestQuadrantLayout";
+import type { TeamSeasonStatRow } from "@/lib/api-v1";
 import type { ChartColors } from "@/components/charts/useChartColors";
 
 const COLORS: ChartColors = {
@@ -51,11 +60,26 @@ const NON_BRAND_COLORS: ChartColors = { ...COLORS, teal: "#f13c26", navy: "#1040
  * `<path` 会把画出来的标记全部漏计。这是让计数口径对上实际渲染,不是降低
  * 断言(返回值语义不变:画出的图元数)。 */
 function renderOrThrow(option: echarts.EChartsOption): number {
-  const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 920, height: 200 });
+  return renderSvg(option).paths;
+}
+
+function renderSvg(
+  option: echarts.EChartsOption,
+  size: { width: number; height: number } = { width: 920, height: 200 },
+): { paths: number; images: number; svg: string } {
+  const chart = echarts.init(null, null, { renderer: "svg", ssr: true, ...size });
   try {
     chart.setOption(option);
     const svg = chart.renderToSVGString();
-    return (svg.match(/<(path|circle|polygon|rect|line|image)\b/g) || []).length;
+    // paths 口径含 circle/polygon/rect/line/image(2026-08-25:射门图标记从
+    // scatter 换成 custom 系列后,zrender→SVG 映射是 circle/polygon/line,
+    // 只数 <path 会把画出来的标记全部漏计);images 单独精确计数,供队徽
+    // 渲染断言使用(2026-09-09)。
+    return {
+      paths: (svg.match(/<(path|circle|polygon|rect|line|image)\b/g) || []).length,
+      images: (svg.match(/<image/g) || []).length,
+      svg,
+    };
   } finally {
     chart.dispose();
   }
@@ -318,5 +342,154 @@ describe("TeamStyleQuadrant.buildOption 渲染冒烟", () => {
   it("真实球队配色(非品牌色)不抛异常且画出散点", () => {
     const paths = renderOrThrow(buildQuadrantOption(view, pts, 1.35, 1.25, 1, 2, NON_BRAND_COLORS));
     expect(paths).toBeGreaterThan(0);
+  });
+
+  describe("2026-09-09 队徽坐标点 + 点击对比(第 8 个可选参数 opts)", () => {
+    const SIZE = { width: 360, height: 320 };
+    const crested = pts.map((p) => ({
+      ...p,
+      crest_url: p.team_id === 3 ? null : `data:image/png;base64,iVBORw0KGgo=#${p.team_id}`,
+    }));
+    const xr = niceAxisRange(crested.map((p) => p.x));
+    const yr = niceAxisRange(crested.map((p) => p.y));
+    const box = { ...SIZE, grid: QUADRANT_GRID };
+    const layout = layoutCrests({ pts: crested, box, xr, yr, yInverse: false, radius: 15 });
+
+    it("带队徽 + 布局:<image> 数 = 有队徽的队数,无队徽的队名出现在 SVG 里", () => {
+      const r = renderSvg(
+        buildQuadrantOption(view, crested, 1.35, 1.25, 1, 2, COLORS, { crestSize: 22, layout, xr, yr }),
+        SIZE,
+      );
+      expect(r.images).toBe(3);
+      expect(r.svg).toContain("第三队");
+    });
+
+    it("默认选中主客两队 → 有光环;换成对比第三队也不抛", () => {
+      const def = renderSvg(
+        buildQuadrantOption(view, crested, 1.35, 1.25, 1, 2, COLORS, { crestSize: 22, layout, xr, yr }),
+        SIZE,
+      ).paths;
+      const none = renderSvg(
+        buildQuadrantOption(view, crested, 1.35, 1.25, 1, 2, COLORS, {
+          crestSize: 22, layout, xr, yr, selectedIds: [],
+        }),
+        SIZE,
+      ).paths;
+      expect(def).toBeGreaterThan(none);
+      expect(() =>
+        renderSvg(
+          buildQuadrantOption(view, crested, 1.35, 1.25, 1, 2, COLORS, {
+            crestSize: 22, layout, xr, yr, selectedIds: [3, 4],
+          }),
+          SIZE,
+        ),
+      ).not.toThrow();
+    });
+  });
+});
+
+describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标点)", () => {
+  const SIZE = { width: 360, height: 380 };
+  const view = VIEWS[0]; // 攻防:y 轴 inverse
+
+  function teamRow(i: number, crest: boolean): TeamSeasonStatRow {
+    return {
+      team: {
+        team_id: 100 + i,
+        name: `球队${i}`,
+        name_en: null,
+        // 用 data URI 而不是相对路径:SSR SVG 只把 href 原样写进 <image>,不发请求
+        crest_url: crest ? `data:image/png;base64,iVBORw0KGgo=#${i}` : null,
+      },
+      matches_played: 3,
+      avg_total_shots: 10 + (i % 7),
+      avg_expected_goals: 1.0 + ((i * 7) % 10) / 10,
+      avg_expected_goals_open_play: 0.8 + ((i * 3) % 6) / 10,
+      avg_expected_goals_set_play: 0.2 + (i % 4) / 10,
+      avg_expected_goals_non_penalty: 1.1,
+      avg_expected_goals_conceded: 0.9 + ((i * 3) % 8) / 10,
+    } as TeamSeasonStatRow;
+  }
+
+  function args(rows: TeamSeasonStatRow[], selectedIndexes: number[] = [], withLayout = true) {
+    const pts = collectPoints(rows, view);
+    const mx = mean(pts.map((p) => p.x));
+    const my = mean(pts.map((p) => p.y));
+    const xr = niceAxisRange(pts.map((p) => p.x));
+    const yr = niceAxisRange(pts.map((p) => p.y));
+    const box = { ...SIZE, grid: QUADRANT_GRID };
+    const crestSize = crestSizeFor(box, pts.length);
+    const layout = withLayout
+      ? layoutCrests({ pts, box, xr, yr, yInverse: true, radius: crestSize / 2 + 4 })
+      : null;
+    const labelled = outlierNames(pts, mx, my);
+    for (const p of pts) if (!p.crestUrl) labelled.add(p.name);
+    return { view, pts, mx, my, colors: COLORS, labelled, crestSize, layout, xr, yr, grid: QUADRANT_GRID, selectedIndexes };
+  }
+
+  const twenty = Array.from({ length: 20 }, (_, i) => teamRow(i, true));
+
+  it("20 队全有队徽:不抛异常,且 <image> 恰好 20 个(队徽真的画出来了,不只是没崩)", () => {
+    const r = renderSvg(buildLeagueQuadrantOption(args(twenty)), SIZE);
+    expect(r.paths).toBeGreaterThan(0);
+    expect(r.images).toBe(20);
+  });
+
+  it("3 队缺队徽:<image> 仍然 17 个(圆点兜底不受标签摘除影响)", () => {
+    // 2026-09-09:不再断言"缺队徽的队永远带名字"——那正是用户反馈的 bug 的
+    // 根源假设(队名会压住旁边队徽时必须摘掉,见 crestQuadrantLayout.ts::
+    // resolveLabelVisibility)。标签是否真的显示由该函数的碰撞几何决定,
+    // 精确断言见 tests/team-quadrant-layout.test.ts;这里只守"圆点兜底本身
+    // 不受标签摘除影响,该画的徽章/圆点一个不少"。
+    const rows = twenty.map((row, i) => (i % 7 === 0 ? teamRow(i, false) : row));
+    const r = renderSvg(buildLeagueQuadrantOption(args(rows)), SIZE);
+    expect(r.images).toBe(17);
+  });
+
+  it("选中 1 队:多出光环 + 到两轴的虚线,不抛异常", () => {
+    const none = renderSvg(buildLeagueQuadrantOption(args(twenty)), SIZE).paths;
+    const one = renderSvg(buildLeagueQuadrantOption(args(twenty, [3])), SIZE).paths;
+    expect(one).toBeGreaterThan(none);
+  });
+
+  it("选中 2 队:不抛异常", () => {
+    expect(() => renderSvg(buildLeagueQuadrantOption(args(twenty, [3, 11])), SIZE)).not.toThrow();
+  });
+
+  it("layout 为 null(宽度尚未测得):零偏移渲染不抛", () => {
+    const r = renderSvg(buildLeagueQuadrantOption(args(twenty, [], false)), SIZE);
+    expect(r.images).toBe(20);
+  });
+
+  it("4 点最小集 / 坐标全同 / export 模式 / 非品牌色 都不抛", () => {
+    const four = Array.from({ length: 4 }, (_, i) => teamRow(i, true));
+    expect(() => renderSvg(buildLeagueQuadrantOption(args(four)), SIZE)).not.toThrow();
+    const same = Array.from({ length: 5 }, (_, i) =>
+      teamRow(i, true),
+    ).map((r) => ({ ...r, avg_expected_goals: 1.4, avg_expected_goals_conceded: 1.2 }));
+    expect(() => renderSvg(buildLeagueQuadrantOption(args(same)), SIZE)).not.toThrow();
+    expect(() =>
+      renderSvg(buildLeagueQuadrantOption({ ...args(twenty), mode: "export" }), SIZE),
+    ).not.toThrow();
+    expect(() =>
+      renderSvg(buildLeagueQuadrantOption({ ...args(twenty), colors: NON_BRAND_COLORS }), SIZE),
+    ).not.toThrow();
+  });
+
+  it("非反转视角(战术)也不抛", () => {
+    const pts = collectPoints(twenty, VIEWS[1]);
+    const mx = mean(pts.map((p) => p.x));
+    const my = mean(pts.map((p) => p.y));
+    const xr = niceAxisRange(pts.map((p) => p.x));
+    const yr = niceAxisRange(pts.map((p) => p.y));
+    expect(() =>
+      renderSvg(
+        buildLeagueQuadrantOption({
+          view: VIEWS[1], pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+          layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [0],
+        }),
+        SIZE,
+      ),
+    ).not.toThrow();
   });
 });

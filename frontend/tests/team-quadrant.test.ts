@@ -11,8 +11,11 @@ function row(
   name: string,
   over: Partial<TeamSeasonStatRow> = {},
 ): TeamSeasonStatRow {
+  // 2026-09-09:修掉此前 { id, name, badge_url } 的假类型——真实 TeamRef 是
+  // { team_id, name, name_en, crest_url }(backend/api/schemas.py:83-87)。
+  // 不修的话所有队徽相关用例都会静默只跑无队徽兜底路径,等于没测。
   return {
-    team: { id: 1, name, badge_url: null },
+    team: { team_id: name.length, name, name_en: null, crest_url: null },
     matches_played: 38,
     avg_total_shots: 12,
     avg_shots_on_target: 4,

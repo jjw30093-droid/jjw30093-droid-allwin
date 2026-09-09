@@ -1142,6 +1142,9 @@ class MatchPreviewStylePointDTO(BaseModel):
     name: str
     x: Optional[float] = None
     y: Optional[float] = None
+    # 2026-09-09:象限图坐标点改用真实队徽渲染。同源版本化媒体地址(与 TeamRef.crest_url
+    # 同一来源 resolve_team_crest_url),本地没有已验证 PNG 时为 None,前端降级为圆点 + 队名。
+    crest_url: Optional[str] = None
 
 
 class MatchPreviewStyleViewDTO(BaseModel):

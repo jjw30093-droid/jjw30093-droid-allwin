@@ -222,19 +222,41 @@ test("球队象限图:三视角可切换,缺数据的视角诚实禁用而不是
     .poll(() => page.locator("canvas").count(), { timeout: 20_000 })
     .toBeGreaterThan(0);
 
-  // 攻防视角的"两头都强"必须是真的攻守兼备(创造多 + 被创造少)。
+  // 攻防视角的"攻守兼备"必须是真的攻守兼备(预期进球多 + 预期失球少)。
   // 这条断言守的是一个真实修过的 bug:quadrantOf 早先按数值高低命名,
-  // 被创造 xG 越低越好的轴上,攻守兼备会被反着标成"对攻型"。
-  const summary = page.getByText(/进攻创造 × 防守让出象限图/);
-  await expect(summary).toContainText("两头都强：");
+  // 预期失球越低越好的轴上,攻守兼备会被反着标成"对攻型"。
+  // (2026-09-09 术语校准把"两头都强"改名为"攻守兼备",这层保护原样保留。)
+  const summary = page.getByText(/预期进球 × 预期失球象限图/);
+  await expect(summary).toContainText("攻守兼备：");
   for (const team of ["阿森纳", "曼城", "利物浦"]) {
-    await expect(summary).toContainText(new RegExp(`两头都强：[^；]*${team}`));
+    await expect(summary).toContainText(new RegExp(`攻守兼备：[^；]*${team}`));
   }
+
+  // 2026-09-09 队徽坐标点 + 点击交互:点下方名单里的队名(真按钮)= 点队徽
+  const card = page.locator("section", { has: page.getByRole("heading", { name: "球队象限图" }) });
+  const panel = card.locator("[aria-live]");
+  await expect(panel).toHaveAttribute("data-empty", "true");
+  const teamButtons = card.locator("button[aria-pressed]");
+  await expect.poll(() => teamButtons.count()).toBeGreaterThanOrEqual(4);
+  await teamButtons.nth(0).click();
+  await expect(panel).not.toHaveAttribute("data-empty", "true");
+  await expect(panel).toContainText(/第 \d+\/\d+/); // 数值带联赛内排名
+  await expect(panel).toContainText("场均预期进球 xG");
+  // 第二支 → 并排对比;第三支 → FIFO 顶掉最早的,始终最多 2 支
+  await teamButtons.nth(1).click();
+  await expect(panel).toContainText("差值");
+  await expect(card.locator("button[aria-pressed='true']")).toHaveCount(2);
+  await teamButtons.nth(2).click();
+  await expect(card.locator("button[aria-pressed='true']")).toHaveCount(2);
+  await expect(teamButtons.nth(0)).toHaveAttribute("aria-pressed", "false");
+  // Esc 清空
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveAttribute("data-empty", "true");
 
   // 三个视角都在,点了要真的换图
   await page.getByRole("tab", { name: "战术" }).click();
   await expect(page.getByText(/运动战 × 定位球象限图/)).toBeVisible();
-  await expect(page.getByText(/两条路都通/).first()).toBeVisible();
+  await expect(page.getByText(/双线开花/).first()).toBeVisible();
 
   // 数据源没给 xg 档的赛季:攻防视角禁用并说明原因,默认落到战术,不静默补 0
   await page.goto("/league/53/team-stats?season=2020%2F2021");

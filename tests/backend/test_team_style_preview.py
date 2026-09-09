@@ -80,7 +80,30 @@ class TestLeagueStyleViews:
         assert [v["id"] for v in views] == ["poss-fastbreak", "cross-box", "xg-for-against"]
         pf = views[0]
         assert pf["x_label"] == "控球率 %"
-        assert pf["quadrants"] == ["既控又快", "阵地控球", "纯反击型", "被动型"]
+        assert pf["quadrants"] == ["控快兼备", "阵地控球", "防守反击", "控守被动"]
+
+    def test_points_carry_crest_url_resolved_once_per_team(self, style_league, monkeypatch):
+        """2026-09-09:象限图坐标点改用真实队徽。每个点必须带 crest_url;本地没有
+        已验证 PNG 时是 None(前端降级为圆点 + 队名),不能伪造 URL;且解析按球队
+        并集只做一次,不在三个视角里重复读文件。"""
+        calls: list[int] = []
+
+        def fake_resolve(provider, team_id, **_):
+            calls.append(team_id)
+            return f"/api/v1/media/team-crests/{provider}/{team_id}.png?v=abc" if team_id == 1001 else None
+
+        monkeypatch.setattr(q, "resolve_team_crest_url", fake_resolve)
+        conn = connect_rw("core")
+        views = q.league_style_views(conn, LEAGUE, SEASON, "2026-01-20", window=5)
+        for view in views:
+            by_id = {p["team_id"]: p for p in view["points"]}
+            assert all("crest_url" in p for p in view["points"])
+            if 1001 in by_id:
+                assert by_id[1001]["crest_url"] == "/api/v1/media/team-crests/fotmob/1001.png?v=abc"
+            if 1002 in by_id:
+                assert by_id[1002]["crest_url"] is None
+        # 三个视角共 3 支球队 → 只解析 3 次,不是 3 视角 × N 队
+        assert sorted(calls) == sorted(set(calls))
 
     def test_poss_fastbreak_values(self, style_league):
         conn = connect_rw("core")
@@ -115,14 +138,14 @@ class TestLeagueStyleViews:
         传播(query 返回的 dict 必须带 y_lower_is_better),且象限标签数组本身要按
         "x 好/y 好"的真实组合写,不能假定"y 高 = 好"。
 
-        用真值表逐一核对(x=创造xG 越高越好,y=让出xG 越低越好):
-          创造多(x高)+ 让出少(y低,方向好) → 两头都强
-          创造多(x高)+ 让出多(y高,方向差) → 对攻型
-          创造少(x低)+ 让出少(y低,方向好) → 守强攻弱
-          创造少(x低)+ 让出多(y高,方向差) → 两头都弱
+        用真值表逐一核对(x=预期进球 越高越好,y=预期失球 越低越好):
+          进球多(x高)+ 失球少(y低,方向好) → 攻守兼备
+          进球多(x高)+ 失球多(y高,方向差) → 对攻型
+          进球少(x低)+ 失球少(y低,方向好) → 重守轻攻
+          进球少(x低)+ 失球多(y高,方向差) → 攻守俱弱
         这与 quadrants 数组按 [x高y高, x高y低, x低y高, x低y低](原始高低,不是好坏)
-        的既有下标约定必须一致换算:index0=x高y高=对攻型,index1=x高y低=两头都强,
-        index2=x低y高=两头都弱,index3=x低y低=守强攻弱。
+        的既有下标约定必须一致换算:index0=x高y高=对攻型,index1=x高y低=攻守兼备,
+        index2=x低y高=攻守俱弱,index3=x低y低=重守轻攻。
         """
         conn = connect_rw("core")
         views = q.league_style_views(conn, LEAGUE, SEASON, "2026-01-20", window=5)
@@ -132,7 +155,9 @@ class TestLeagueStyleViews:
         # 其余两个视角的 y 轴本来就是"越高越偏向该风格",不需要反转
         assert views[0].get("y_lower_is_better", False) is False
         assert views[1].get("y_lower_is_better", False) is False
-        assert xg_view["quadrants"] == ["对攻型", "两头都强", "两头都弱", "守强攻弱"]
+        assert xg_view["quadrants"] == ["对攻型", "攻守兼备", "攻守俱弱", "重守轻攻"]
+        assert xg_view["x_label"] == "场均预期进球 xG"
+        assert xg_view["y_label"] == "场均预期失球 xGA"
 
 
 class TestSeasonScoping:

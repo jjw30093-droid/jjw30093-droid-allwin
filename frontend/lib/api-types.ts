@@ -2946,6 +2946,8 @@ export interface components {
             x?: number | null;
             /** Y */
             y?: number | null;
+            /** Crest Url */
+            crest_url?: string | null;
         };
         /** MatchPreviewStyleViewDTO */
         MatchPreviewStyleViewDTO: {

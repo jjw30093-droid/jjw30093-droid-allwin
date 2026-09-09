@@ -4,20 +4,99 @@
     {
       "name": "backend",
       "runtimeExecutable": ".venv/bin/uvicorn",
-      "runtimeArgs": ["backend.api.app:app", "--host", "127.0.0.1", "--port", "8000"],
+      "runtimeArgs": [
+        "backend.api.app:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
       "port": 8000
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3000"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3000"
+      ],
       "port": 3000
     },
     {
       "name": "frontend-prod",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "start", "--", "--port", "3000"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "start",
+        "--",
+        "--port",
+        "3000"
+      ],
       "port": 3000
+    },
+    {
+      "name": "backend-worktree",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": [
+        "backend.api.app:app",
+        "--app-dir",
+        ".claude/worktrees/serene-turing-93a921",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "port": 8000,
+      "env": {
+        "ALLOWED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
+      }
+    },
+    {
+      "name": "frontend-worktree",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        ".claude/worktrees/serene-turing-93a921/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3001"
+      ],
+      "port": 3001
+    },
+    {
+      "name": "frontend-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3002"
+      ],
+      "port": 3002
+    },
+    {
+      "name": "video-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "/Users/wanglujun/projects/miaomiaodi.vip/marketing/remotion-5795429-splitshow/exports"
+      ],
+      "port": 8765
     }
   ]
 }
