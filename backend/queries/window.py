@@ -7,7 +7,14 @@ fallback 会让预测力损失 22~35%。本模块提供**分级 fallback 的同�
 严格约束(全部有实测或明确设计依据,不是随手写的默认值):
 - **exact pre-kickoff**:边界统一用 COALESCE(kickoff_at_utc, Date),精确到
   时刻;缺精确开球时间时如实降级到自然日,不是砍掉这场比赛(CLAUDE.md §6.2.1)。
-- **same competition**:只在同一 League_ID 内取历史,不跨联赛。
+- **same competition(默认)**:传入 League_ID 时只在该联赛内取历史。
+  **例外**:`league_id=None` 显式放宽为"不限赛事"。这道口子只给参赛队来自
+  不同国内联赛的赛事(欧战三项,见 queries/leagues.py::is_cross_league_competition)
+  ——那里"同一 League_ID 内取历史"这个前提本身不成立:欧冠联赛阶段每队只
+  踢 8 场(主客各 4 场),同主客场样本永远到不了 min_n,只圈本赛事等于恒空。
+  代价是窗口里各场比赛的对手强度差异极大(挪超球队踢挪超 vs 踢拜仁),
+  聚合出来的数值是"近期比赛"而非"同水平比赛",调用方在展示层必须靠
+  `label_zh` 如实说明,不得暗示可比。
 - **venue-aware**:主队只用主场历史、客队只用客场历史——实测主客场差异
   达 17~18%(创造 xG/射门/禁区触球),混算会失真。
 - **deterministic order**:`ORDER BY COALESCE(kickoff_at_utc, Date) DESC,
@@ -68,6 +75,7 @@ class WindowResult:
     matches: int
     from_date: str | None
     to_date: str | None
+    cross_league: bool = False
 
     @property
     def mixed_venues(self) -> bool:
@@ -79,11 +87,17 @@ class WindowResult:
     def label_zh(self) -> str:
         venue = "主场" if self.is_home else "客场"
         tpl = _TIER_LABEL_ZH[self.tier]
-        return tpl.format(n=self.matches, venue=venue, max_n=DEFAULT_MAX_N)
+        label = tpl.format(n=self.matches, venue=venue, max_n=DEFAULT_MAX_N)
+        # 跨赛事窗口的 tier 仍然是 venue_full,光看档位读不出"这 10 场不在
+        # 同一个联赛里"。少了这个前缀,界面就会写"近 10 个主场"却隐瞒了它
+        # 混了欧冠和国内联赛——那是错误陈述,不是省略。
+        if self.cross_league and self.tier != "unavailable":
+            return f"不限赛事·{label}"
+        return label
 
 
 def _match_ids(
-    conn: sqlite3.Connection, team_id: int, league_id: int, before_boundary: str,
+    conn: sqlite3.Connection, team_id: int, league_id: int | None, before_boundary: str,
     *, venue: Literal["home", "away", "any"], max_n: int, lookback_floor: str,
 ) -> list[sqlite3.Row]:
     venue_clause = {
@@ -91,7 +105,11 @@ def _match_ids(
         "away": "m.Away_Team_ID=?",
         "any": "(m.Home_Team_ID=? OR m.Away_Team_ID=?)",
     }[venue]
-    params: list[Any] = [league_id, before_boundary, lookback_floor]
+    # league_id 非 None 时拼出来的 SQL 与放宽之前**逐字节相同**,这是"常规
+    # 联赛路径零回归"的落点;None 才整条去掉联赛谓词。
+    league_clause = "m.League_ID=? AND " if league_id is not None else ""
+    params: list[Any] = [] if league_id is None else [league_id]
+    params += [before_boundary, lookback_floor]
     if venue == "any":
         params += [team_id, team_id]
     else:
@@ -99,7 +117,7 @@ def _match_ids(
     params.append(max_n)
     return conn.execute(
         f"""SELECT Match_ID, Date FROM dim_match m
-             WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+             WHERE {league_clause}m.status IN ('Finish','Finished')
                AND COALESCE(m.kickoff_at_utc, m.Date) < ?
                AND COALESCE(m.kickoff_at_utc, m.Date) >= ?
                AND {venue_clause}
@@ -127,7 +145,7 @@ def _lookback_floor(before_boundary: str) -> str:
 
 
 def venue_window(
-    conn: sqlite3.Connection, team_id: int, league_id: int, before_boundary: str,
+    conn: sqlite3.Connection, team_id: int, league_id: int | None, before_boundary: str,
     *, is_home: bool, max_n: int = DEFAULT_MAX_N, min_n: int = DEFAULT_MIN_N,
 ) -> WindowResult:
     """该队近 max_n 场"同主客场"比赛,四档递降 fallback:
@@ -138,9 +156,13 @@ def venue_window(
                          回溯上限约束),界面必须显式标"已合并主客场"
     4. unavailable   —— 混合后仍是 0 场
 
+    `league_id=None` 表示"不限赛事"(见模块 docstring 的 same competition 例外),
+    此时结果的 `cross_league=True`,`label_zh` 会带上"不限赛事·"前缀。
+
     `before_boundary` 建议传目标比赛的 `COALESCE(kickoff_at_utc, date_utc)`
     (与 team_style_preview.py / player_form.py 现有函数同一套边界口径)。
     """
+    cross_league = league_id is None
     floor_ = _lookback_floor(before_boundary)
     venue = "home" if is_home else "away"
     rows = _match_ids(conn, team_id, league_id, before_boundary, venue=venue, max_n=max_n, lookback_floor=floor_)
@@ -157,10 +179,12 @@ def venue_window(
 
     if not rows:
         return WindowResult(team_id=team_id, is_home=is_home, tier="unavailable",
-                             match_ids=[], matches=0, from_date=None, to_date=None)
+                             match_ids=[], matches=0, from_date=None, to_date=None,
+                             cross_league=cross_league)
     dates = [r["Date"] for r in rows]
     return WindowResult(
         team_id=team_id, is_home=is_home, tier=tier,
         match_ids=[r["Match_ID"] for r in rows],
         matches=len(rows), from_date=min(dates), to_date=max(dates),
+        cross_league=cross_league,
     )

@@ -2447,6 +2447,14 @@ export interface components {
             highlights: components["schemas"]["MatchProfileHighlightDTO"][];
             /** Unavailable Reason */
             unavailable_reason?: string | null;
+            /**
+             * Comparison Mode
+             * @default league_percentile
+             * @enum {string}
+             */
+            comparison_mode: "league_percentile" | "cross_league_raw";
+            /** Scope Note */
+            scope_note?: string | null;
         };
         /** MatchDetailResponse */
         MatchDetailResponse: {

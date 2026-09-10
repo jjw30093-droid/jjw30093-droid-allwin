@@ -305,23 +305,31 @@ def team_window_bounds(
 
 
 def team_attack_sources(
-    conn_core: sqlite3.Connection, team_id: int, league_id: int, season: str, before_date: str,
-    window: int = WINDOW,
+    conn_core: sqlite3.Connection, team_id: int, league_id: int | None, season: str | None,
+    before_date: str, window: int = WINDOW,
 ) -> list[dict[str, Any]]:
     """近 window 场按 Situation 拆解的射门来源:次数 + 占比 + xG(缺失给 None,不补 0)。
 
     只返回该队真实出现过的来源(不凑满全部 8 种);按射门数降序排列。
     该队近 window 场完全没有射门记录时返回空列表。
+
+    `league_id=None`(欧战等跨联赛赛事)时不限赛事取近 window 场。`season`
+    必须一并置 None:跨联赛比赛两队的赛季串本来就对不上(欧冠 "2026/2027"
+    vs 挪超 "2026"),留着按赛季过滤会把该队的比赛全筛没。这个模块只算单队
+    自己的射门构成、不需要任何联赛分布,所以放宽后语义完全成立。
     """
+    league_clause = "m.League_ID=? AND " if league_id is not None else ""
+    season_clause = "m.Season=? AND " if season is not None else ""
+    scope_params = [p for p in (league_id, season) if p is not None]
     rows = conn_core.execute(
-        """
+        f"""
         WITH ranked AS (
           SELECT m.Match_ID mid,
                  ROW_NUMBER() OVER (
                    ORDER BY COALESCE(m.kickoff_at_utc, m.Date) DESC, m.Match_ID DESC
                  ) rn
             FROM dim_match m
-           WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
+           WHERE {league_clause}{season_clause}m.status IN ('Finish','Finished')
              AND COALESCE(m.kickoff_at_utc, m.Date) < ?
              AND (m.Home_Team_ID=? OR m.Away_Team_ID=?)
         ),
@@ -333,7 +341,7 @@ def team_attack_sources(
          GROUP BY f.Situation
          ORDER BY shots DESC
         """,
-        (league_id, season, before_date, team_id, team_id, window, team_id),
+        (*scope_params, before_date, team_id, team_id, window, team_id),
     ).fetchall()
     total_shots = sum(r["shots"] for r in rows) or 1
     out = []

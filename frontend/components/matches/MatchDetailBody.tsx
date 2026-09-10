@@ -51,7 +51,7 @@ import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSect
 import { TeamStyleQuadrant } from "@/components/matches/TeamStyleQuadrant";
 import { MatchProfileOverview } from "@/components/matches/MatchProfileOverview";
 import { PercentileGroupSection } from "@/components/matches/PercentileGroupSection";
-import { profileWindowNote } from "@/components/matches/matchProfile";
+import { groupSectionTitle, profileWindowNote } from "@/components/matches/matchProfile";
 import { MatchupSection } from "@/components/matches/MatchupSection";
 import {
   AttackSourceCard,
@@ -216,7 +216,10 @@ function DataGroup({
               {preview.data_profile.groups.map((g, i) => (
                 <PercentileGroupSection
                   key={g.key}
-                  title={`${g.title_zh === "攻" ? "进攻" : g.title_zh === "守" ? "防守" : "控球"}百分位`}
+                  title={groupSectionTitle(
+                    g.title_zh === "攻" ? "进攻" : g.title_zh === "守" ? "防守" : "控球",
+                    preview.data_profile.comparison_mode,
+                  )}
                   windowNote={profileWindowNote(homeName, awayName, preview.data_profile)}
                   homeName={homeName}
                   awayName={awayName}
@@ -226,6 +229,7 @@ function DataGroup({
                   // 口径说明只在最后一个百分位模块底部出现一次——三段几乎
                   // 相同的说明原来每个模块各印一遍。
                   showMethodNote={i === preview.data_profile.groups.length - 1}
+                  mode={preview.data_profile.comparison_mode}
                 />
               ))}
               <MatchupSection
@@ -233,6 +237,7 @@ function DataGroup({
                 awayName={awayName}
                 home={preview.matchup_profiles.home}
                 away={preview.matchup_profiles.away}
+                crossLeague={preview.data_profile.comparison_mode === "cross_league_raw"}
               />
               {homeTeamId != null && awayTeamId != null ? (
                 <TeamStyleQuadrant
@@ -244,6 +249,7 @@ function DataGroup({
                   homeTeamColor={m.home_team_color}
                   awayTeamColor={m.away_team_color}
                   windowNote={windowNote(homeName, awayName, preview.home_window, preview.away_window)}
+                  crossLeague={preview.data_profile.comparison_mode === "cross_league_raw"}
                 />
               ) : null}
               <AttackSourceSection>

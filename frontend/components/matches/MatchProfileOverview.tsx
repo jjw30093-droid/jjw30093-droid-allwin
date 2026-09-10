@@ -47,6 +47,12 @@ export function MatchProfileOverview({
     );
   }
 
+  // 跨联赛赛事(欧战):没有共同的参照人群,组级百分位轴、对标球队、
+  // 「最大的差距」榜全部建立在分布之上,这里一个都算不出来——不是数据缺失,
+  // 是这些概念对跨联赛比赛本身不成立。总览退化为一句口径说明,具体数值
+  // 由下面攻/守/控三段并排展示。
+  const crossLeague = profile.comparison_mode === "cross_league_raw";
+
   return (
     <section className={pageStyles.section}>
       <h2 className={pageStyles.sectionTitle}>
@@ -56,59 +62,68 @@ export function MatchProfileOverview({
       <div className={styles.card}>
         <div className={styles.teams}>
           <span className={styles.teamName}>{homeName}</span>
-          <span className={styles.vs}>联赛百分位对比</span>
+          <span className={styles.vs}>{crossLeague ? "近期数据对比" : "联赛百分位对比"}</span>
           <span className={styles.teamName}>{awayName}</span>
         </div>
 
-        {profile.groups.map((g) => {
-          const homePeerLine = peerSentence(homeName, g.home_peers);
-          const awayPeerLine = peerSentence(awayName, g.away_peers);
-          return (
-            <div className={styles.groupBlock} key={g.key}>
-              <div className={styles.groupRow}>
-                <span className={styles.groupLabel}>{GROUP_LABEL[g.key] ?? g.key}</span>
-                {g.home_group_percentile != null && g.away_group_percentile != null ? (
-                  <div
-                    className={styles.groupAxis}
-                    role="img"
-                    aria-label={`${g.title_zh}:${homeName} 联赛第 ${Math.round(g.home_group_percentile)} 百分位,${awayName} 联赛第 ${Math.round(g.away_group_percentile)} 百分位。`}
-                  >
-                    <CrestDot pct={g.home_group_percentile} crestUrl={homeCrestUrl} teamName={homeName} side="home" />
-                    <CrestDot pct={g.away_group_percentile} crestUrl={awayCrestUrl} teamName={awayName} side="away" />
-                  </div>
-                ) : (
-                  <span className={styles.groupUnavailable}>样本口径不同或数据不足,暂不作整体比较。</span>
+        {!crossLeague &&
+          profile.groups.map((g) => {
+            const homePeerLine = peerSentence(homeName, g.home_peers);
+            const awayPeerLine = peerSentence(awayName, g.away_peers);
+            return (
+              <div className={styles.groupBlock} key={g.key}>
+                <div className={styles.groupRow}>
+                  <span className={styles.groupLabel}>{GROUP_LABEL[g.key] ?? g.key}</span>
+                  {g.home_group_percentile != null && g.away_group_percentile != null ? (
+                    <div
+                      className={styles.groupAxis}
+                      role="img"
+                      aria-label={`${g.title_zh}:${homeName} 联赛第 ${Math.round(g.home_group_percentile)} 百分位,${awayName} 联赛第 ${Math.round(g.away_group_percentile)} 百分位。`}
+                    >
+                      <CrestDot pct={g.home_group_percentile} crestUrl={homeCrestUrl} teamName={homeName} side="home" />
+                      <CrestDot pct={g.away_group_percentile} crestUrl={awayCrestUrl} teamName={awayName} side="away" />
+                    </div>
+                  ) : (
+                    <span className={styles.groupUnavailable}>样本口径不同或数据不足,暂不作整体比较。</span>
+                  )}
+                </div>
+                {(homePeerLine || awayPeerLine) && (
+                  <p className={styles.peerLine}>
+                    {[homePeerLine, awayPeerLine].filter(Boolean).join(" · ")}
+                  </p>
                 )}
               </div>
-              {(homePeerLine || awayPeerLine) && (
-                <p className={styles.peerLine}>
-                  {[homePeerLine, awayPeerLine].filter(Boolean).join(" · ")}
-                </p>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
 
-        <div className={styles.highlights}>
-          <h3 className={styles.highlightsTitle}>最大的差距</h3>
-          {profile.highlights.length === 0 ? (
-            <p className={styles.noHighlight}>两队在本联赛的位置接近,没有拉开明显差距的项。</p>
-          ) : (
-            profile.highlights.map((h) => {
-              const semantic =
-                profile.groups.flatMap((g) => g.metrics).find((m) => m.key === h.key)?.semantic ?? "performance";
-              return (
-                <p className={styles.highlightItem} key={h.key}>
-                  {highlightSentence(h, semantic, homeName, awayName)}
-                </p>
-              );
-            })
-          )}
-        </div>
+        {!crossLeague && (
+          <div className={styles.highlights}>
+            <h3 className={styles.highlightsTitle}>最大的差距</h3>
+            {profile.highlights.length === 0 ? (
+              <p className={styles.noHighlight}>两队在本联赛的位置接近,没有拉开明显差距的项。</p>
+            ) : (
+              profile.highlights.map((h) => {
+                const semantic =
+                  profile.groups.flatMap((g) => g.metrics).find((m) => m.key === h.key)?.semantic ?? "performance";
+                return (
+                  <p className={styles.highlightItem} key={h.key}>
+                    {highlightSentence(h, semantic, homeName, awayName)}
+                  </p>
+                );
+              })
+            )}
+          </div>
+        )}
 
         <p className={styles.footNote}>
-          {homeName}对联赛主场分布取百分位,{awayName}对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子;
-          百分位是历史统计描述,不是本场预测。
+          {crossLeague ? (
+            profile.scope_note
+          ) : (
+            <>
+              {homeName}对联赛主场分布取百分位,{awayName}对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子;
+              百分位是历史统计描述,不是本场预测。
+            </>
+          )}
         </p>
       </div>
     </section>

@@ -323,16 +323,21 @@ _EMPTY_BASELINE_ENTRY: dict[str, Any] = {"own_avg": None, "conceded_avg": None, 
 
 
 def team_matchup_profile(
-    conn: sqlite3.Connection, team_id: int, league_id: int, before_boundary: str,
+    conn: sqlite3.Connection, team_id: int, league_id: int | None, before_boundary: str,
     *, is_home: bool, max_n: int = DEFAULT_MAX_N, min_n: int = DEFAULT_MIN_N,
 ) -> dict[str, Any]:
+    """`league_id=None`(欧战等跨联赛赛事)时窗口不限赛事,且**不生成联赛
+    Situation 基准**——没有共同联赛就没有基准可比,下游 `comparison_complete`
+    因此为 False,前端的"关键对位"结论会自动消失,只剩两队各自的原始数值。
+    这是诚实降级,不是数据缺失。"""
     w = venue_window(conn, team_id, league_id, before_boundary, is_home=is_home, max_n=max_n, min_n=min_n)
     ids = w.match_ids
     n = w.matches
     # 目标自己是 mixed/unavailable 时完全不生成 Situation 基准——这两档
     # 口径本来就跟"纯同场景窗口"的联赛分布不可比,生成一个"看起来有效"
-    # 的基准数字比诚实缺失更危险。
-    if w.tier in _BASELINE_ELIGIBLE_TIERS:
+    # 的基准数字比诚实缺失更危险。跨联赛赛事(league_id is None)同理:
+    # 根本没有"该联赛的分布"这个东西可算。
+    if league_id is not None and w.tier in _BASELINE_ELIGIBLE_TIERS:
         baseline = league_situation_baseline(
             conn, league_id, before_boundary, is_home=is_home, tier=w.tier, max_n=max_n, min_n=min_n,
         )

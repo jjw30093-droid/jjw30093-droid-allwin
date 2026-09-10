@@ -31,6 +31,7 @@ from typing import Any
 from backend.db.util import utc_now_iso
 from backend.queries import (
     league_percentile,
+    leagues,
     lineup_preview,
     matchup,
     player_form,
@@ -50,6 +51,16 @@ def build_match_preview(
     # 下游查询统一用 COALESCE(kickoff_at_utc, Date) 比较,两种边界值格式都
     # 兼容(ISO 时间戳按字符串比较与按时间比较结果一致)。
     before_date = match.get("kickoff_at_utc") or match["date_utc"]
+
+    # 欧战三项:两队来自不同国内联赛,"把分布圈在本场 League_ID 内"这个前提
+    # 不成立(该赛事每队只踢 8 场,同主客场样本永远不够,整块恒空)。这类比赛
+    # 的球队级模块改走"不限赛事"窗口,用 scoped=None 表达。
+    # **象限图与窗口说明(style_views / team_window_bounds)不在这条口子里**:
+    # 它们画的是"该联赛全部球队",跨联赛赛事下这个概念本身不成立,不是换个
+    # 窗口就能修的,本轮只保证它们的空态文案说得清楚。
+    cross_league = leagues.is_cross_league_competition(league_id)
+    scoped_league_id = None if cross_league else league_id
+    scoped_season = None if cross_league else season
 
     lineup = lineup_preview.latest_lineup(conn_odds, conn_core, match_id)
 
@@ -71,15 +82,17 @@ def build_match_preview(
         },
         "style_views": team_style_preview.league_style_views(conn_core, league_id, season, before_date),
         "attack_sources": {
-            "home": team_style_preview.team_attack_sources(conn_core, home_id, league_id, season, before_date),
-            "away": team_style_preview.team_attack_sources(conn_core, away_id, league_id, season, before_date),
+            "home": team_style_preview.team_attack_sources(conn_core, home_id, scoped_league_id, scoped_season, before_date),
+            "away": team_style_preview.team_attack_sources(conn_core, away_id, scoped_league_id, scoped_season, before_date),
         },
         "data_profile": dataclasses.asdict(
-            league_percentile.match_data_profile(conn_core, league_id, before_date, home_id, away_id)
+            league_percentile.match_data_profile(
+                conn_core, scoped_league_id, before_date, home_id, away_id, cross_league=cross_league
+            )
         ),
         "matchup_profiles": {
-            "home": matchup.team_matchup_profile(conn_core, home_id, league_id, before_date, is_home=True),
-            "away": matchup.team_matchup_profile(conn_core, away_id, league_id, before_date, is_home=False),
+            "home": matchup.team_matchup_profile(conn_core, home_id, scoped_league_id, before_date, is_home=True),
+            "away": matchup.team_matchup_profile(conn_core, away_id, scoped_league_id, before_date, is_home=False),
         },
         "key_players": {
             "home": player_form.team_key_players(conn_core, home_id, league_id, before_date),

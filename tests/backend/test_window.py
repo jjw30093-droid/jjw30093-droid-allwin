@@ -150,3 +150,78 @@ class TestLeagueIsolation:
         conn.commit()
         r = w.venue_window(conn, TEAM, LEAGUE, "2026-02-01", is_home=True)
         assert 9710 not in r.match_ids
+
+
+class TestCrossLeagueWindow:
+    """`league_id=None`(不限赛事)——只给参赛队来自不同国内联赛的赛事用。
+
+    2026-09-10 真实缺陷:欧冠比赛的「数据→风格」整个 tab 全空,因为窗口按
+    本场 League_ID(42)圈,而欧冠联赛阶段每队只踢 8 场(主客各 4),同主客场
+    永远到不了 min_n=5(生产实测欧冠够格球队 0 支)。
+    """
+
+    def _seed_domestic_plus_cup(self, conn):
+        """挪超 6 个主场 + 欧冠 1 个主场——模拟维京的真实形态。"""
+        for i in range(6):
+            insert_match(conn, 9800 + i, league_id=59, season="2026",
+                         date=f"2026-08-{10+i:02d}", home_id=TEAM, away_id=8100 + i,
+                         home="队A", away=f"挪超对手{i}", status="Finish",
+                         home_score=1, away_score=0)
+        insert_match(conn, 9850, league_id=42, season="2026/2027", date="2026-09-09",
+                     home_id=TEAM, away_id=8200, home="队A", away="欧冠对手",
+                     status="Finish", home_score=0, away_score=2)
+
+    def test_scoped_to_cup_league_is_empty_which_is_the_bug(self, data_dir):
+        """先把缺陷本身钉住:圈在欧冠内只有 1 场,连 mixed 都救不回 min_n。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed_domestic_plus_cup(conn)
+        conn.commit()
+        r = w.venue_window(conn, TEAM, 42, "2026-10-13", is_home=True)
+        assert r.matches == 1
+        assert r.tier == "mixed"  # 同主客场 1 场 < min_n,退到混合仍只有这 1 场
+
+    def test_unscoped_window_spans_competitions(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed_domestic_plus_cup(conn)
+        conn.commit()
+        r = w.venue_window(conn, TEAM, None, "2026-10-13", is_home=True)
+        assert r.matches == 7  # 6 场挪超 + 1 场欧冠
+        assert 9850 in r.match_ids  # 欧冠那场也算数
+        assert r.tier == "venue_partial"  # 7 >= min_n,不再是 mixed
+        assert r.cross_league is True
+
+    def test_label_says_cross_competition_not_just_recent_home_games(self, data_dir):
+        """tier 仍是 venue_full/partial,光看档位读不出"这几场不在同一联赛里"
+        ——label 必须自己说出来,否则界面写"近 7 个主场"就是错误陈述。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed_domestic_plus_cup(conn)
+        conn.commit()
+        r = w.venue_window(conn, TEAM, None, "2026-10-13", is_home=True)
+        assert "不限赛事" in r.label_zh
+        assert "主场" in r.label_zh
+
+    def test_unavailable_tier_gets_no_misleading_prefix(self, data_dir):
+        """零场比赛时不该出现"不限赛事·暂无可比较的历史比赛"这种拼接。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        conn.commit()
+        r = w.venue_window(conn, 9999, None, "2026-10-13", is_home=True)
+        assert r.tier == "unavailable"
+        assert "不限赛事" not in r.label_zh
+
+    def test_league_scoped_path_byte_identical_to_before(self, data_dir):
+        """零回归锚:传 int 时行为与放宽之前完全一致——跨赛事的比赛不进窗口,
+        label 也不带"不限赛事"前缀。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed_domestic_plus_cup(conn)
+        conn.commit()
+        r = w.venue_window(conn, TEAM, 59, "2026-10-13", is_home=True)
+        assert r.match_ids == [9805, 9804, 9803, 9802, 9801, 9800]
+        assert 9850 not in r.match_ids
+        assert r.tier == "venue_partial"
+        assert r.cross_league is False
+        assert r.label_zh == "近 6 个主场(样本不足 10,已如实展示实际场次)"

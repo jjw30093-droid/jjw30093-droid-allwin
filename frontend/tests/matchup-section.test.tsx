@@ -354,4 +354,35 @@ describe("MatchupSection", () => {
       expect(details?.contains(conclusion)).toBe(false);
     });
   });
+
+  describe("跨联赛赛事(欧战)", () => {
+    it("说出真正的原因,不把「没有共同基准」说成「数据不足/口径不同」", () => {
+      // 后端拿不到同联赛基准时全部 comparison_complete=false,没有任何类型
+      // 能入选关键对位。沿用原来的兜底话术会把这说成数据问题,是误导。
+      const incomparable = situation("open_play", "运动战", {
+        comparison_complete: false, own_baseline_value: null, conceded_baseline_value: null,
+      });
+      const home = profile({ situations: [incomparable] });
+      const away = profile({ situations: [incomparable], label_zh: "近 10 个客场" });
+      const { container } = render(
+        <MatchupSection homeName="维京" awayName="拜仁" home={home} away={away} crossLeague />,
+      );
+      const text = container.textContent ?? "";
+      expect(text).toMatch(/不在同一联赛|不同联赛/);
+      expect(text).not.toContain("可比数据不足");
+      expect(text).not.toContain("样本口径不同");
+      // 不评选关键对位时不得出现该标签
+      expect(container.querySelector('[class*="rowTag"]')).toBeNull();
+    });
+
+    it("常规联赛比赛的文案不受影响", () => {
+      const home = profile();
+      const away = profile({ label_zh: "近 10 个客场" });
+      const { container } = render(
+        <MatchupSection homeName="主队" awayName="客队" home={home} away={away} />,
+      );
+      expect(container.textContent).toContain("同联赛同场景的基准均值");
+      expect(container.textContent).not.toContain("跨联赛赛事没有共同的基准");
+    });
+  });
 });

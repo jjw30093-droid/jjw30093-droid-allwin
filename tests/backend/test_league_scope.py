@@ -82,6 +82,32 @@ def test_accessible_league_ids_is_universal_regardless_of_entitlements():
     assert 48 in empty  # 原 league:lottery(英冠)现同样恒可访问
 
 
+def test_cross_league_competitions_are_exactly_the_european_cups():
+    """跨联赛判定必须由 entitlement 派生,不是另手抄一份 id 名单——两份名单
+    一定会漂移,而这是库里唯一能区分杯赛与联赛的信号。"""
+    from backend.queries.leagues import CROSS_LEAGUE_LEAGUE_IDS, is_cross_league_competition
+
+    assert CROSS_LEAGUE_LEAGUE_IDS == NEW_EUROPEAN_CUP_IDS
+    for league_id in NEW_EUROPEAN_CUP_IDS:
+        assert is_cross_league_competition(league_id) is True
+
+
+def test_domestic_leagues_are_not_cross_league():
+    from backend.queries.leagues import is_cross_league_competition
+
+    for league_id in EXISTING_LEAGUE_IDS | NEW_LOTTERY_IDS:
+        assert is_cross_league_competition(league_id) is False, league_id
+
+
+def test_unknown_and_missing_league_id_are_not_cross_league():
+    """未登记的联赛和 None 都不该被当成欧战——这条判定只放宽它明确认识的
+    赛事,拿不准时走保守路径(联赛作用域),不是反过来。"""
+    from backend.queries.leagues import is_cross_league_competition
+
+    assert is_cross_league_competition(None) is False
+    assert is_cross_league_competition(999999) is False
+
+
 def test_content_pipeline_registry_does_not_drift():
     """第二套注册表(content_pipeline.LEAGUES)只允许出现 LEAGUE_META 已知的联赛,
     或历史遗留的 MLS 130——防止两套注册表悄悄漂移(本轮不合并,但钉住不扩大)。"""

@@ -103,8 +103,21 @@ def _venue_col(is_home: bool) -> str:
     return "m.Home_Team_ID" if is_home else "m.Away_Team_ID"
 
 
-def _ranked_cte(is_home: bool, *, with_opponent: bool) -> str:
+def _ranked_cte(
+    is_home: bool, *, with_opponent: bool, league_scoped: bool = True, team_count: int = 0,
+) -> str:
+    """`league_scoped=True` 且 `team_count=0` 时拼出的 SQL 与放宽之前**逐字节
+    相同**——常规联赛路径零回归的落点。
+
+    `team_count>0` 把候选收窄到指定球队。跨赛事模式(`league_scoped=False`)
+    **必须**用它:没有联赛谓词时这条 CTE 会扫全库每一支球队的历史,而那时
+    我们只需要本场两队的数值(不算分布,见 `cross_league_metric_values`)。
+    """
     opp_col = ", CASE WHEN t.Team_ID=m.Home_Team_ID THEN m.Away_Team_ID ELSE m.Home_Team_ID END opp_id" if with_opponent else ""
+    league_clause = "m.League_ID=? AND " if league_scoped else ""
+    team_clause = (
+        f"\n         AND t.Team_ID IN ({','.join('?' * team_count)})" if team_count else ""
+    )
     return f"""
       SELECT t.Team_ID tid, t.Match_ID mid, t.extra_json extra_json{opp_col},
              ROW_NUMBER() OVER (
@@ -114,14 +127,28 @@ def _ranked_cte(is_home: bool, *, with_opponent: bool) -> str:
         FROM dim_match m
         JOIN fact_team_match_stats t ON t.Match_ID=m.Match_ID AND t.Period='All'
                                      AND t.Team_ID={_venue_col(is_home)}
-       WHERE m.League_ID=? AND m.status IN ('Finish','Finished')
+       WHERE {league_clause}m.status IN ('Finish','Finished')
          AND COALESCE(m.kickoff_at_utc, m.Date) < ?
-         AND COALESCE(m.kickoff_at_utc, m.Date) >= ?
+         AND COALESCE(m.kickoff_at_utc, m.Date) >= ?{team_clause}
     """
 
 
+def _ranked_params(
+    league_id: int | None, before_boundary: str, floor_: str,
+    team_ids: tuple[int, ...] | None, max_n: int,
+) -> list[Any]:
+    """`_ranked_cte()` 的绑定值,顺序必须与它拼出的占位符一一对应。"""
+    params: list[Any] = [] if league_id is None else [league_id]
+    params += [before_boundary, floor_]
+    if team_ids:
+        params += list(team_ids)
+    params.append(max_n)
+    return params
+
+
 def league_window_matches(
-    conn: sqlite3.Connection, league_id: int, before_boundary: str, *, is_home: bool, max_n: int = DEFAULT_MAX_N,
+    conn: sqlite3.Connection, league_id: int | None, before_boundary: str, *, is_home: bool,
+    max_n: int = DEFAULT_MAX_N, team_ids: tuple[int, ...] | None = None,
 ) -> dict[int, list[int]]:
     """每支球队近 max_n 场同 venue 比赛的 match_id 列表(全联赛一次查完)。
 
@@ -131,11 +158,11 @@ def league_window_matches(
     """
     floor_ = _lookback_floor(before_boundary)
     sql = f"""
-      WITH ranked AS ({_ranked_cte(is_home, with_opponent=False)})
+      WITH ranked AS ({_ranked_cte(is_home, with_opponent=False, league_scoped=league_id is not None, team_count=len(team_ids or ()))})
       SELECT tid, mid FROM ranked WHERE rn<=?
       ORDER BY tid, mid
     """
-    rows = conn.execute(sql, (league_id, before_boundary, floor_, max_n)).fetchall()
+    rows = conn.execute(sql, _ranked_params(league_id, before_boundary, floor_, team_ids, max_n)).fetchall()
     out: dict[int, list[int]] = {}
     for r in rows:
         out.setdefault(int(r["tid"]), []).append(int(r["mid"]))
@@ -143,8 +170,8 @@ def league_window_matches(
 
 
 def _league_own_avg_batch(
-    conn: sqlite3.Connection, league_id: int, before_boundary: str, floor_: str, *,
-    is_home: bool, max_n: int, fields: dict[str, str],
+    conn: sqlite3.Connection, league_id: int | None, before_boundary: str, floor_: str, *,
+    is_home: bool, max_n: int, fields: dict[str, str], team_ids: tuple[int, ...] | None = None,
 ) -> dict[int, dict[str, TeamMetricValue]]:
     if not fields:
         return {}
@@ -155,11 +182,11 @@ def _league_own_avg_batch(
         for k, f in fields.items()
     )
     sql = f"""
-      WITH ranked AS ({_ranked_cte(is_home, with_opponent=False)}),
+      WITH ranked AS ({_ranked_cte(is_home, with_opponent=False, league_scoped=league_id is not None, team_count=len(team_ids or ()))}),
       last_n AS (SELECT tid, extra_json FROM ranked WHERE rn<=?)
       SELECT tid, COUNT(*) n, {cols} FROM last_n GROUP BY tid
     """
-    rows = conn.execute(sql, (league_id, before_boundary, floor_, max_n)).fetchall()
+    rows = conn.execute(sql, _ranked_params(league_id, before_boundary, floor_, team_ids, max_n)).fetchall()
     out: dict[int, dict[str, TeamMetricValue]] = {}
     for r in rows:
         n = r["n"]
@@ -171,8 +198,8 @@ def _league_own_avg_batch(
 
 
 def _league_opponent_avg_batch(
-    conn: sqlite3.Connection, league_id: int, before_boundary: str, floor_: str, *,
-    is_home: bool, max_n: int, fields: dict[str, str],
+    conn: sqlite3.Connection, league_id: int | None, before_boundary: str, floor_: str, *,
+    is_home: bool, max_n: int, fields: dict[str, str], team_ids: tuple[int, ...] | None = None,
 ) -> dict[int, dict[str, TeamMetricValue]]:
     if not fields:
         return {}
@@ -181,14 +208,14 @@ def _league_opponent_avg_batch(
         for k, f in fields.items()
     )
     sql = f"""
-      WITH ranked AS ({_ranked_cte(is_home, with_opponent=True)}),
+      WITH ranked AS ({_ranked_cte(is_home, with_opponent=True, league_scoped=league_id is not None, team_count=len(team_ids or ()))}),
       last_n AS (SELECT tid, mid, opp_id FROM ranked WHERE rn<=?)
       SELECT l.tid tid, COUNT(*) n, {cols}
         FROM last_n l
         JOIN fact_team_match_stats opp ON opp.Match_ID=l.mid AND opp.Team_ID=l.opp_id AND opp.Period='All'
        GROUP BY l.tid
     """
-    rows = conn.execute(sql, (league_id, before_boundary, floor_, max_n)).fetchall()
+    rows = conn.execute(sql, _ranked_params(league_id, before_boundary, floor_, team_ids, max_n)).fetchall()
     out: dict[int, dict[str, TeamMetricValue]] = {}
     for r in rows:
         n = r["n"]
@@ -200,8 +227,9 @@ def _league_opponent_avg_batch(
 
 
 def _league_ratio_batch(
-    conn: sqlite3.Connection, league_id: int, before_boundary: str, floor_: str, *,
+    conn: sqlite3.Connection, league_id: int | None, before_boundary: str, floor_: str, *,
     is_home: bool, max_n: int, fields: dict[str, tuple[str, str]], scale: float = 100.0,
+    team_ids: tuple[int, ...] | None = None,
 ) -> dict[int, dict[str, TeamMetricValue]]:
     if not fields:
         return {}
@@ -218,11 +246,11 @@ def _league_ratio_batch(
         )
     cols = ", ".join(parts)
     sql = f"""
-      WITH ranked AS ({_ranked_cte(is_home, with_opponent=False)}),
+      WITH ranked AS ({_ranked_cte(is_home, with_opponent=False, league_scoped=league_id is not None, team_count=len(team_ids or ()))}),
       last_n AS (SELECT tid, extra_json FROM ranked WHERE rn<=?)
       SELECT tid, COUNT(*) n, {cols} FROM last_n GROUP BY tid
     """
-    rows = conn.execute(sql, (league_id, before_boundary, floor_, max_n)).fetchall()
+    rows = conn.execute(sql, _ranked_params(league_id, before_boundary, floor_, team_ids, max_n)).fetchall()
     out: dict[int, dict[str, TeamMetricValue]] = {}
     for r in rows:
         n = r["n"]
@@ -262,6 +290,41 @@ def league_metric_distribution(
             merged.setdefault(tid, {}).update(metrics)
     # 三条批量 SQL 各自基于同一个 (league_id, venue, max_n) 选窗口,window_matches
     # 理应一致;样本不足的球队三条 SQL 都会给同样小的 n,一致被剔除。
+    return merged
+
+
+def cross_league_metric_values(
+    conn: sqlite3.Connection, before_boundary: str, *,
+    is_home: bool, team_ids: tuple[int, ...], max_n: int = DEFAULT_MAX_N,
+) -> dict[int, dict[str, TeamMetricValue]]:
+    """指定球队近 max_n 场同 venue 比赛的指标值——**不限赛事**。
+
+    给欧战这类跨联赛赛事用(见 `queries/leagues.py::is_cross_league_competition`)。
+    与 `league_metric_distribution()` 的两处**故意**不同:
+
+    1. **不圈联赛**。欧冠联赛阶段每队只踢 8 场(主客各 4),圈在本赛事内同主
+       客场样本永远到不了 min_n,整块恒空(生产实测欧冠够格球队 0 支)。
+    2. **不做 min_n 过滤,也不构造分布**。这条路径的产出只用于"并排列出两队
+       各自的原始数值",不算百分位——两队分处不同联赛,没有共同的参照人群,
+       硬凑一个出来是编造。因此"够不够 5 场"这个百分位资格门槛在这里没有
+       意义,有几场就如实用几场,场次由 `window_matches` 如实带出。
+
+    必须传 `team_ids`:没有联赛谓词时不收窄会扫全库每一支球队的历史。
+    """
+    if not team_ids:
+        return {}
+    floor_ = _lookback_floor(before_boundary)
+    merged: dict[int, dict[str, TeamMetricValue]] = {}
+    for batch in (
+        _league_own_avg_batch(conn, None, before_boundary, floor_, is_home=is_home,
+                              max_n=max_n, fields=_OWN_AVG_FIELDS, team_ids=team_ids),
+        _league_opponent_avg_batch(conn, None, before_boundary, floor_, is_home=is_home,
+                                   max_n=max_n, fields=_OPPONENT_AVG_FIELDS, team_ids=team_ids),
+        _league_ratio_batch(conn, None, before_boundary, floor_, is_home=is_home,
+                            max_n=max_n, fields=_RATIO_FIELDS, team_ids=team_ids),
+    ):
+        for tid, metrics in batch.items():
+            merged.setdefault(tid, {}).update(metrics)
     return merged
 
 
@@ -317,6 +380,15 @@ class MatchDataProfileDTO:
     groups: list[GroupProfileDTO]
     highlights: list[Highlight]
     unavailable_reason: str | None = None
+    # "league_percentile" = 常规:两队各自对本联赛同场景分布取百分位。
+    # "cross_league_raw" = 欧战等跨联赛赛事:没有共同参照人群,只并排列出
+    # 两队各自的原始数值,全部 percentile 为 None。
+    # 前端据这个字段分支,**不靠"percentile 全是 null"嗅探**——那种嗅探
+    # 在"联赛模式下恰好所有指标都缺样本"时会误判成杯赛模式。
+    comparison_mode: str = "league_percentile"
+    # 杯赛模式下为什么没有百分位、这些数字到底是什么口径。由后端出文案,
+    # 保证与实际取数逻辑同源,不靠前端另写一句可能漂移的解释。
+    scope_note: str | None = None
 
 
 def _team_window_matches(dist: dict[int, dict[str, TeamMetricValue]], team_id: int) -> int:
@@ -378,9 +450,75 @@ def _resolve_peers(
     ]
 
 
+# 2026-09-10 站长复看:原文案把"为什么没有百分位"的完整推导(欧冠每队只踢
+# 8 场、凑不出分布…)全写在手机首屏上,一百多字。站长原话"手机端说明的文字
+# 都太多了,只要说一下数据来自最近比赛,即可"。推导过程属于工程理由,不是
+# 用户要读的东西;这里只留两件用户真正需要知道的事:数字是哪来的、能不能
+# 拿来比强弱。
+CROSS_LEAGUE_SCOPE_NOTE = "数据取自两队各自最近的比赛,不限赛事;两队不在同一联赛,不比强弱。"
+
+
+def _cross_league_profile(
+    conn: sqlite3.Connection, before_boundary: str, home_id: int, away_id: int, *, max_n: int,
+) -> MatchDataProfileDTO:
+    """跨联赛赛事的原始数值画像——三组照填,但全部 percentile 为 None。
+
+    `groups` 必须照填三段而不是返回空列表:前端是 `groups.map()` 渲染的,
+    给空列表等于攻/守/控三块**整块消失且页面上零解释**(2026-09-10 站长
+    报告的正是这个现象)。
+    """
+    home_vals = cross_league_metric_values(conn, before_boundary, is_home=True, team_ids=(home_id,), max_n=max_n)
+    away_vals = cross_league_metric_values(conn, before_boundary, is_home=False, team_ids=(away_id,), max_n=max_n)
+
+    home_matches = _team_window_matches(home_vals, home_id)
+    away_matches = _team_window_matches(away_vals, away_id)
+
+    if home_matches == 0 and away_matches == 0:
+        return MatchDataProfileDTO(
+            home_matches=0, away_matches=0, home_available=False, away_available=False,
+            groups=[], highlights=[],
+            unavailable_reason="两队近期都没有可用的比赛数据。",
+            comparison_mode="cross_league_raw", scope_note=CROSS_LEAGUE_SCOPE_NOTE,
+        )
+
+    groups: list[GroupProfileDTO] = []
+    for group_key, keys in GROUPS.items():
+        metrics: list[MetricProfileDTO] = []
+        for key in keys:
+            meta: MetricDef = get_metric(key)
+            home_row = home_vals.get(home_id, {}).get(key)
+            away_row = away_vals.get(away_id, {}).get(key)
+            home_value = home_row.value if home_row else None
+            away_value = away_row.value if away_row else None
+            metrics.append(MetricProfileDTO(
+                key=key, name_zh=meta.name_zh, unit=meta.unit, direction=meta.direction,
+                semantic=meta.semantic,
+                home_value=round(home_value, 3) if home_value is not None else None,
+                away_value=round(away_value, 3) if away_value is not None else None,
+                home_percentile=None, away_percentile=None,
+                home_complete=home_row.complete if home_row else False,
+                away_complete=away_row.complete if away_row else False,
+                league_sample_size=0,  # 没有参照人群,不是"人群里 0 支队"而是这个概念不适用
+            ))
+        groups.append(GroupProfileDTO(
+            key=group_key, title_zh=GROUP_TITLE_ZH[group_key], metrics=metrics,
+            home_group_percentile=None, away_group_percentile=None,
+            home_peers=[], away_peers=[],  # 对标球队同样需要分布,这里没有
+        ))
+
+    return MatchDataProfileDTO(
+        home_matches=home_matches, away_matches=away_matches,
+        home_available=home_matches > 0, away_available=away_matches > 0,
+        groups=groups,
+        highlights=[],  # 「最大的差距」榜是按百分位差排的,没有百分位就没有这个榜
+        unavailable_reason=None,
+        comparison_mode="cross_league_raw", scope_note=CROSS_LEAGUE_SCOPE_NOTE,
+    )
+
+
 def match_data_profile(
-    conn: sqlite3.Connection, league_id: int, before_boundary: str, home_id: int, away_id: int,
-    *, max_n: int = DEFAULT_MAX_N, min_n: int = DEFAULT_MIN_N,
+    conn: sqlite3.Connection, league_id: int | None, before_boundary: str, home_id: int, away_id: int,
+    *, max_n: int = DEFAULT_MAX_N, min_n: int = DEFAULT_MIN_N, cross_league: bool = False,
 ) -> MatchDataProfileDTO:
     """本场两队的攻/守/控三组联赛百分位画像。
 
@@ -388,7 +526,17 @@ def match_data_profile(
     独立分布,不共用同一个原始联赛均值(主客场系统性差异 17~18%,见
     `window.py` 文档)。两队因此不在同一条绝对数值尺上,但在各自的百分位尺
     上可比,前端措辞必须讲清楚这一点。
+
+    `cross_league=True`(欧战三项)走另一条路:两队来自不同国内联赛,没有
+    共同的参照人群,改为只列两队各自不限赛事的近期原始数值,不给百分位。
     """
+    if cross_league:
+        return _cross_league_profile(conn, before_boundary, home_id, away_id, max_n=max_n)
+    if league_id is None:
+        # 接线错误要大声失败:没有联赛就构造不出百分位分布,静默返回空画像
+        # 会变成"页面莫名其妙没数据"——正是本次要修的那个故障形态。
+        raise ValueError("league_id 为 None 时必须显式传 cross_league=True")
+
     home_dist = league_metric_distribution(conn, league_id, before_boundary, is_home=True, max_n=max_n, min_n=min_n)
     away_dist = league_metric_distribution(conn, league_id, before_boundary, is_home=False, max_n=max_n, min_n=min_n)
 

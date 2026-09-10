@@ -40,6 +40,7 @@ import { TeamBadge } from "@/components/teams/TeamBadge";
 import { CrestDot } from "./CrestDot";
 import styles from "./PercentileGroupSection.module.css";
 import {
+  DEFAULT_MODE,
   decimalsFor,
   formatMetricValue,
   groupVerdict,
@@ -48,6 +49,7 @@ import {
   valueDelta,
   type GroupProfile,
   type MetricProfile,
+  type ProfileMode,
   type ValueDelta,
 } from "./matchProfile";
 
@@ -78,28 +80,41 @@ function SideValue({
   teamName,
   crestUrl,
   isLeader,
+  mode,
 }: {
   metric: MetricProfile;
   side: "home" | "away";
   teamName: string;
   crestUrl?: string | null;
   isLeader: boolean;
+  mode: ProfileMode;
 }) {
   const digits = decimalsFor(metric.unit);
   const value = side === "home" ? metric.home_value : metric.away_value;
   const pct = side === "home" ? metric.home_percentile : metric.away_percentile;
   const complete = side === "home" ? metric.home_complete : metric.away_complete;
+  const showPct = mode !== "cross_league_raw";
+  const partial = value != null && !complete;
   return (
-    <span className={styles.side} data-side={side} data-leader={isLeader ? "true" : undefined}>
+    <span
+      className={styles.side}
+      data-side={side}
+      // 跨联赛模式不给"领先方"高亮:那层队色加粗读作"这队更好",而两队分处
+      // 不同联赛,这个判断站不住脚(站长明确要求不下强弱结论)。
+      data-leader={isLeader && showPct ? "true" : undefined}
+    >
       <TeamBadge teamName={teamName} crestUrl={crestUrl} size={24} />
       <span className={styles.sideText}>
         <b className={`${styles.sideValue} num`}>
           {formatMetricValue(value ?? null, metric.unit, digits)}
         </b>
-        <span className={styles.sidePct}>
-          {pct != null ? `第 ${pct} 分位` : "暂无分位"}
-          {value != null && !complete && <sup className={styles.partial}>*</sup>}
-        </span>
+        {(showPct || partial) && (
+          <span className={styles.sidePct}>
+            {/* 跨联赛模式一个分位都没有,每行印一遍"暂无分位"只是噪声 */}
+            {showPct && (pct != null ? `第 ${pct} 分位` : "暂无分位")}
+            {partial && <sup className={styles.partial}>*</sup>}
+          </span>
+        )}
       </span>
     </span>
   );
@@ -112,6 +127,7 @@ function MetricRow({
   homeCrestUrl,
   awayCrestUrl,
   showAxisScale,
+  mode,
 }: {
   metric: MetricProfile;
   homeName: string;
@@ -121,6 +137,7 @@ function MetricRow({
   /** 轴刻度「垫底/联赛中游/第一」只在每组首行标一次——原来每行都标,
    * 一屏内重复 12 次。 */
   showAxisScale: boolean;
+  mode: ProfileMode;
 }) {
   const digits = decimalsFor(metric.unit);
   const noData = metric.home_value == null && metric.away_value == null;
@@ -134,32 +151,36 @@ function MetricRow({
       </div>
     );
   }
-  const { leader } = metricGap(metric);
-  const delta = valueDelta(metric, homeName, awayName);
+  // 跨联赛模式没有百分位轴可画——画一根空轴比不画更让人困惑(轴在,点没有)。
+  const showAxis = mode !== "cross_league_raw";
+  const { leader } = metricGap(metric, mode);
+  const delta = valueDelta(metric, homeName, awayName, mode);
   return (
     <div className={styles.row}>
       <div className={styles.rowHead}>
         <span className={styles.label}>{metric.name_zh}</span>
         {delta && <DeltaChip delta={delta} />}
       </div>
-      <div
-        className={styles.axis}
-        role="img"
-        aria-label={`${metric.name_zh}:${homeName} ${formatMetricValue(metric.home_value ?? null, metric.unit, digits)}${
-          metric.home_percentile != null ? `,联赛第 ${metric.home_percentile} 百分位` : ",暂无联赛百分位"
-        };${awayName} ${formatMetricValue(metric.away_value ?? null, metric.unit, digits)}${
-          metric.away_percentile != null ? `,联赛第 ${metric.away_percentile} 百分位` : ",暂无联赛百分位"
-        }。`}
-      >
-        <span className={styles.meanTick} aria-hidden />
-        {metric.home_percentile != null && (
-          <CrestDot pct={metric.home_percentile} crestUrl={homeCrestUrl} teamName={homeName} side="home" />
-        )}
-        {metric.away_percentile != null && (
-          <CrestDot pct={metric.away_percentile} crestUrl={awayCrestUrl} teamName={awayName} side="away" />
-        )}
-      </div>
-      {showAxisScale && (
+      {showAxis && (
+        <div
+          className={styles.axis}
+          role="img"
+          aria-label={`${metric.name_zh}:${homeName} ${formatMetricValue(metric.home_value ?? null, metric.unit, digits)}${
+            metric.home_percentile != null ? `,联赛第 ${metric.home_percentile} 百分位` : ",暂无联赛百分位"
+          };${awayName} ${formatMetricValue(metric.away_value ?? null, metric.unit, digits)}${
+            metric.away_percentile != null ? `,联赛第 ${metric.away_percentile} 百分位` : ",暂无联赛百分位"
+          }。`}
+        >
+          <span className={styles.meanTick} aria-hidden />
+          {metric.home_percentile != null && (
+            <CrestDot pct={metric.home_percentile} crestUrl={homeCrestUrl} teamName={homeName} side="home" />
+          )}
+          {metric.away_percentile != null && (
+            <CrestDot pct={metric.away_percentile} crestUrl={awayCrestUrl} teamName={awayName} side="away" />
+          )}
+        </div>
+      )}
+      {showAxis && showAxisScale && (
         <div className={styles.axisLabels}>
           <span>垫底</span>
           <span>联赛中游</span>
@@ -173,6 +194,7 @@ function MetricRow({
           teamName={homeName}
           crestUrl={homeCrestUrl}
           isLeader={leader === "home"}
+          mode={mode}
         />
         <SideValue
           metric={metric}
@@ -180,6 +202,7 @@ function MetricRow({
           teamName={awayName}
           crestUrl={awayCrestUrl}
           isLeader={leader === "away"}
+          mode={mode}
         />
       </div>
     </div>
@@ -197,6 +220,7 @@ export function PercentileGroupSection({
   /** 口径说明只在最后一个百分位模块底部出现一次——三段几乎相同的说明
    * 原来每个模块各印一遍(「两套独立分布…」全页出现 4 次)。 */
   showMethodNote = false,
+  mode = DEFAULT_MODE,
 }: {
   title: string;
   windowNote: string;
@@ -206,12 +230,15 @@ export function PercentileGroupSection({
   awayCrestUrl?: string | null;
   group: GroupProfile;
   showMethodNote?: boolean;
+  mode?: ProfileMode;
 }) {
   const semantic = group.metrics[0]?.semantic ?? "performance";
-  const { ordered, visibleCount } = splitMetricsByGap(group.metrics);
+  const { ordered, visibleCount } = splitMetricsByGap(group.metrics, mode);
   const visible = ordered.slice(0, visibleCount);
   const hidden = ordered.slice(visibleCount);
   const sampleSize = group.metrics.find((m) => m.league_sample_size > 0)?.league_sample_size ?? 0;
+  // 跨联赛模式下为空串——那句免责只在总览说一次,不在三张卡片各印一遍。
+  const verdict = groupVerdict(group, semantic, homeName, awayName, mode);
 
   const renderRow = (m: MetricProfile, index: number) => (
     <MetricRow
@@ -222,6 +249,7 @@ export function PercentileGroupSection({
       homeCrestUrl={homeCrestUrl}
       awayCrestUrl={awayCrestUrl}
       showAxisScale={index === 0}
+      mode={mode}
     />
   );
 
@@ -233,10 +261,12 @@ export function PercentileGroupSection({
       </h2>
       <p className={styles.windowNote}>{windowNote}</p>
       <div className={styles.card}>
-        <div className={styles.cardHead}>
-          <span className={styles.verdict}>{groupVerdict(group, semantic, homeName, awayName)}</span>
-          {sampleSize > 0 && <span className={styles.sampleNote}>联赛样本 {sampleSize} 队</span>}
-        </div>
+        {(verdict || sampleSize > 0) && (
+          <div className={styles.cardHead}>
+            {verdict && <span className={styles.verdict}>{verdict}</span>}
+            {sampleSize > 0 && <span className={styles.sampleNote}>联赛样本 {sampleSize} 队</span>}
+          </div>
+        )}
         {visible.map(renderRow)}
         {hidden.length > 0 && (
           <details className={styles.moreDetail}>
@@ -248,9 +278,18 @@ export function PercentileGroupSection({
           <details className={styles.methodDetail}>
             <summary className={styles.methodSummary}>口径说明</summary>
             <p className={styles.footNote}>
-              横轴是本联赛同场景分布里的百分位,不是两队互相比较的比值。主队对联赛主场分布取百分位,
-              客队对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子。带 * 的数值表示该场景窗口内
-              有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。
+              {mode === "cross_league_raw" ? (
+                // scopeNote 已经在总览卡片里说过一次,这里不重复,只解释 * 标记。
+                <>
+                  带 * 的数值表示该窗口内有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。
+                </>
+              ) : (
+                <>
+                  横轴是本联赛同场景分布里的百分位,不是两队互相比较的比值。主队对联赛主场分布取百分位,
+                  客队对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子。带 * 的数值表示该场景窗口内
+                  有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。
+                </>
+              )}
             </p>
           </details>
         )}

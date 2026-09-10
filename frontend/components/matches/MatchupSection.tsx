@@ -156,11 +156,16 @@ export function MatchupSection({
   awayName,
   home,
   away,
+  crossLeague = false,
 }: {
   homeName: string;
   awayName: string;
   home: MatchupProfile;
   away: MatchupProfile;
+  /** 欧战等跨联赛赛事:两队分处不同国内联赛,后端拿不到"同联赛同场景基准",
+   * 因此没有任何类型能入选「关键对位」。这时必须说出真正的原因,不能沿用
+   * "可比数据不足"或"样本口径不同"——那两句都把它说成了数据问题。 */
+  crossLeague?: boolean;
 }) {
   const homeAttack = buildRows(homeName, home, awayName, away);
   const awayAttack = buildRows(awayName, away, homeName, home);
@@ -171,13 +176,15 @@ export function MatchupSection({
   // 验收返工三:tier 不兼容时不能用笼统的"可比数据不足"掩盖真正原因,
   // 必须明确说"样本口径不同"。
   const directionComparable = tiersComparable(home.tier, away.tier);
-  const summary = !directionComparable
-    ? INCOMPARABLE_NOTE
-    : top2.length
-      ? top2
-          .map((r) => `${r.attackerName}的「${r.situation.label}」是本场值得关注的对位`)
-          .join(";") + "。"
-      : "两队近期同主客场比赛可比数据不足,暂无法给出关键对位。";
+  const summary = crossLeague
+    ? "两队不在同一联赛,不评选关键对位,只列各自近期的产出与让出。"
+    : !directionComparable
+      ? INCOMPARABLE_NOTE
+      : top2.length
+        ? top2
+            .map((r) => `${r.attackerName}的「${r.situation.label}」是本场值得关注的对位`)
+            .join(";") + "。"
+        : "两队近期同主客场比赛可比数据不足,暂无法给出关键对位。";
 
   return (
     <section className={pageStyles.section}>
@@ -187,8 +194,12 @@ export function MatchupSection({
       </h2>
       <p className={styles.windowNote}>
         {homeName}({home.label_zh}) · {awayName}({away.label_zh})——箭头左边是进攻方的场均产出,
-        右边是防守方在同类型场均让出的量。「关键对位」只在进攻方产出、防守方让出同时
-        高于同联赛同场景的基准均值时才标记,不是原始数字大小排的。
+        右边是防守方在同类型场均让出的量。
+        {/* 跨联赛时这里不再补一句免责:结论行(summary)已经说了"不在同一联赛、
+            不评选关键对位",窗口标签也已带"不限赛事",再写一遍就是手机首屏上的
+            第三遍重复(2026-09-10 站长复看要求收短说明文字)。 */}
+        {!crossLeague &&
+          "「关键对位」只在进攻方产出、防守方让出同时高于同联赛同场景的基准均值时才标记,不是原始数字大小排的。"}
       </p>
       <div className={styles.card}>
         {/* 2026-09 移动端修复:结论先行,8 行明细默认折叠——这张卡此前

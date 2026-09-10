@@ -267,3 +267,168 @@ class TestMatchDataProfile:
         for keys in GROUPS.values():
             for key in keys:
                 get_metric(key)  # 找不到直接 KeyError,测试即失败
+
+
+CUP = 42        # 欧冠
+DOMESTIC_H = 59  # 挪威超(主队的国内联赛)
+DOMESTIC_A = 54  # 德甲(客队的国内联赛)
+BEFORE = "2025-02-01T00:00:00Z"
+
+
+class TestCrossLeagueProfile:
+    """欧战等跨联赛赛事:不给百分位,只并排列两队不限赛事的近期原始数值。
+
+    2026-09-10 真实缺陷:欧冠比赛整个「数据→风格」tab 全空。根因是分布按
+    本场 League_ID(42)圈,而欧冠联赛阶段每队只踢 8 场(主客各 4),同主客场
+    永远到不了 min_n=5,该赛事内也凑不出 5 支够格球队。生产实测:欧冠够格
+    球队 0 支,复现比赛两队各自 0 场可用。
+    """
+
+    def _seed(self, conn, home_id, away_id, *, n_domestic=5):
+        """主队在挪超打 n 场主场 + 欧冠 1 场主场;客队在德甲打 n 场客场 + 欧冠 1 场客场。"""
+        mid = 8000
+        for i in range(n_domestic):
+            insert_match(conn, mid, league_id=DOMESTIC_H, season="2025",
+                         date=f"2025-01-{i+1:02d}", home_id=home_id, away_id=8600 + i,
+                         home="主队", away=f"挪超对手{i}", status="Finish",
+                         home_score=1, away_score=0,
+                         kickoff_at_utc=f"2025-01-{i+1:02d}T12:00:00Z")
+            _stats(conn, mid, home_id, expected_goals=1.0, total_shots=10)
+            mid += 1
+        # 欧冠主场那一场:数值刻意不同,便于断言它真的被算进来了
+        self.cup_home_mid = mid
+        insert_match(conn, mid, league_id=CUP, season="2024/2025", date="2025-01-20",
+                     home_id=home_id, away_id=8700, home="主队", away="欧冠对手",
+                     status="Finish", home_score=0, away_score=3,
+                     kickoff_at_utc="2025-01-20T12:00:00Z")
+        _stats(conn, mid, home_id, expected_goals=4.0, total_shots=40)
+        mid += 1
+
+        for i in range(n_domestic):
+            insert_match(conn, mid, league_id=DOMESTIC_A, season="2024/2025",
+                         date=f"2025-01-{i+1:02d}", home_id=8800 + i, away_id=away_id,
+                         home=f"德甲对手{i}", away="客队", status="Finish",
+                         home_score=0, away_score=1,
+                         kickoff_at_utc=f"2025-01-{i+1:02d}T12:00:00Z")
+            _stats(conn, mid, away_id, expected_goals=2.0, total_shots=20)
+            mid += 1
+        insert_match(conn, mid, league_id=CUP, season="2024/2025", date="2025-01-21",
+                     home_id=8900, away_id=away_id, home="欧冠对手", away="客队",
+                     status="Finish", home_score=1, away_score=1,
+                     kickoff_at_utc="2025-01-21T12:00:00Z")
+        _stats(conn, mid, away_id, expected_goals=2.0, total_shots=20)
+
+    def test_scoped_to_cup_league_is_empty_which_is_the_bug(self, data_dir):
+        """先钉住缺陷本身:圈在欧冠内两队各只有 1 场,达不到 min_n,整块空。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed(conn, 3901, 3902)
+        conn.commit()
+
+        profile = match_data_profile(conn, CUP, BEFORE, 3901, 3902)
+        assert profile.groups == []
+        assert not profile.home_available and not profile.away_available
+
+    def test_cross_league_gives_raw_values_without_percentiles(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed(conn, 3901, 3902)
+        conn.commit()
+
+        profile = match_data_profile(conn, None, BEFORE, 3901, 3902, cross_league=True)
+
+        assert profile.comparison_mode == "cross_league_raw"
+        assert profile.scope_note is not None
+        assert profile.unavailable_reason is None
+        assert profile.home_available and profile.away_available
+        # 三段必须照填——给空列表等于前端 groups.map() 渲染 0 个 section,
+        # 攻/守/控整块消失且页面上零解释,正是本次要修的故障形态。
+        assert [g.key for g in profile.groups] == list(GROUPS)
+
+        for group in profile.groups:
+            assert group.home_group_percentile is None
+            assert group.away_group_percentile is None
+            assert group.home_peers == [] and group.away_peers == []
+            for metric in group.metrics:
+                assert metric.home_percentile is None
+                assert metric.away_percentile is None
+                assert metric.league_sample_size == 0
+        # 「最大的差距」榜按百分位差排序,没有百分位就不该有这个榜
+        assert profile.highlights == []
+
+        xg = next(m for g in profile.groups if g.key == "attack" for m in g.metrics if m.key == "xg")
+        assert xg.home_value is not None and xg.away_value is not None
+
+    def test_window_actually_spans_competitions(self, data_dir):
+        """主队 5 场挪超 xg=1.0 + 1 场欧冠 xg=4.0 → 均值 1.5,证明欧冠那场
+        真的被算进来了(只算挪超会是 1.0)。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed(conn, 3901, 3902)
+        conn.commit()
+
+        profile = match_data_profile(conn, None, BEFORE, 3901, 3902, cross_league=True)
+        xg = next(m for g in profile.groups if g.key == "attack" for m in g.metrics if m.key == "xg")
+        assert xg.home_value == 1.5
+        assert profile.home_matches == 6
+
+    def test_cross_league_selection_matches_venue_window(self, data_dir):
+        """跨赛事窗口不许出现第二份选窗口实现——沿用本文件既有的
+        "两条路径不许漂移"范式(见 TestLeagueWindowMatches)。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed(conn, 3901, 3902)
+        conn.commit()
+
+        batch = league_window_matches(conn, None, BEFORE, is_home=True, team_ids=(3901,))
+        expected = venue_window(conn, 3901, None, BEFORE, is_home=True)
+        assert sorted(batch[3901]) == sorted(expected.match_ids)
+        assert self.cup_home_mid in expected.match_ids
+
+    def test_team_scoping_keeps_other_teams_out_of_the_query(self, data_dir):
+        """没有联赛谓词时必须靠 team_ids 收窄,否则会扫全库每一支球队。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        self._seed(conn, 3901, 3902)
+        conn.commit()
+
+        batch = league_window_matches(conn, None, BEFORE, is_home=True, team_ids=(3901,))
+        assert set(batch) == {3901}
+
+    def test_no_history_at_all_is_reported_honestly(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        conn.commit()
+
+        profile = match_data_profile(conn, None, BEFORE, 4901, 4902, cross_league=True)
+        assert profile.groups == []
+        assert profile.home_matches == 0 and profile.away_matches == 0
+        assert profile.unavailable_reason is not None
+        assert profile.comparison_mode == "cross_league_raw"
+
+    def test_regular_league_path_still_reports_percentile_mode(self, data_dir):
+        """零回归锚:常规联赛比赛必须仍走百分位模式,且不带杯赛的口径说明。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3101, 3102
+        for i, (tid, v) in enumerate({3103: 1.0, 3104: 1.2, 3105: 1.3, 3106: 1.4, 3107: 1.5, home_id: 6.0}.items()):
+            for j in range(5):
+                mid = 8500 + i * 10 + j
+                _seed_home_match(conn, mid, tid, 9500 + mid, day=j + 1, expected_goals=v)
+        conn.commit()
+
+        profile = match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id)
+        assert profile.comparison_mode == "league_percentile"
+        assert profile.scope_note is None
+        xg = next(m for g in profile.groups if g.key == "attack" for m in g.metrics if m.key == "xg")
+        assert xg.home_percentile == 100
+
+    def test_missing_cross_league_flag_fails_loudly(self, data_dir):
+        """接线错误不能静默返回空画像——那正是本次要修的故障形态。"""
+        import pytest
+
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        conn.commit()
+        with pytest.raises(ValueError):
+            match_data_profile(conn, None, BEFORE, 3901, 3902)

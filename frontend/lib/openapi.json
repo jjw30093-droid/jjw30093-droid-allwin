@@ -9643,6 +9643,26 @@
        }
       ],
       "title": "Unavailable Reason"
+     },
+     "comparison_mode": {
+      "type": "string",
+      "enum": [
+       "league_percentile",
+       "cross_league_raw"
+      ],
+      "title": "Comparison Mode",
+      "default": "league_percentile"
+     },
+     "scope_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scope Note"
      }
     },
     "type": "object",

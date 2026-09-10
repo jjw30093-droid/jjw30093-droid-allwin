@@ -1235,6 +1235,14 @@ class MatchDataProfileDTO(BaseModel):
     groups: list[MatchProfileGroupDTO]
     highlights: list[MatchProfileHighlightDTO]
     unavailable_reason: Optional[str] = None
+    # 欧战等跨联赛赛事没有共同的参照人群(该赛事每队只踢 8 场,凑不出分布),
+    # 走 "cross_league_raw":三段照填,但全部 percentile 为 None,只并排列出
+    # 两队各自不限赛事的近期原始数值。前端据这个字段分支,**不靠"percentile
+    # 全是 null"嗅探**——那种嗅探在"联赛模式下恰好所有指标都缺样本"时会误判。
+    comparison_mode: Literal["league_percentile", "cross_league_raw"] = "league_percentile"
+    # 跨联赛模式下为什么没有百分位、这些数字是什么口径。后端出文案,保证与
+    # 实际取数逻辑同源。
+    scope_note: Optional[str] = None
 
 
 class MatchPreviewAttackSourceDTO(BaseModel):

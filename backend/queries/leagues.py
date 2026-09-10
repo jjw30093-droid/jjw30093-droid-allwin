@@ -50,12 +50,42 @@ LEAGUE_META = {
     268: {"code": "brasileirao", "name_zh": "巴甲", "name_en": "Brasileirão Série A", "entitlement": "league:lottery", "season_kind": "calendar_year"},
     # 2026-08-11 权限矩阵互换(用户拍板):欧战三项从 league:lottery 改挂
     # league:european_cup,与五大联赛同批进入免费面(见 migrations/platform/0012)。
-    # 实测这三项联赛 dim_match 里 0 行数据(见 docs/current-state.md),开放免费
-    # 是提前占位,不是当前有内容;联赛入口按 data_status 而非 accessible 控制点击。
+    # 2026-09-10 更新:此处原注释写"这三项 dim_match 里 0 行数据、开放免费是
+    # 提前占位",该判断已过期——2026/2027 赛季欧战已入库(42=144 场/73=144/
+    # 10216=108)。这条过期注释正是"跨联赛赛事没人当真实场景考虑过"的由来,
+    # 见下面 is_cross_league_competition 的说明。
     42: {"code": "ucl", "name_zh": "欧冠", "name_en": "Champions League", "entitlement": "league:european_cup", "season_kind": "cross_year"},
     73: {"code": "uel", "name_zh": "欧联", "name_en": "Europa League", "entitlement": "league:european_cup", "season_kind": "cross_year"},
     10216: {"code": "uecl", "name_zh": "欧协联", "name_en": "Conference League", "entitlement": "league:european_cup", "season_kind": "cross_year"},
 }
+
+# 参赛队来自不同国内联赛的赛事。`entitlement == "league:european_cup"` 是本库
+# **唯一**能区分杯赛与联赛的信号:schema 里没有 is_cup/competition_type 列,
+# 没有 dim_team 表,也没有任何 team→所属联赛的映射。
+CROSS_LEAGUE_LEAGUE_IDS = frozenset(
+    league_id
+    for league_id, meta in LEAGUE_META.items()
+    if meta["entitlement"] == "league:european_cup"
+)
+
+
+def is_cross_league_competition(league_id: int | None) -> bool:
+    """这场比赛的两队是否来自不同的国内联赛(欧战三项)。
+
+    用途:比赛详情页「数据 → 风格」的各模块默认把分布/窗口圈在**本场比赛
+    自己的 League_ID** 内。这个前提在欧战下不成立——欧冠联赛阶段每队只踢
+    8 场(主客各 4 场),同主客场样本**永远**到不了 `window.DEFAULT_MIN_N=5`,
+    该赛事内也凑不出 `percentile.MIN_LEAGUE_SAMPLE=5` 支够格球队,整个 tab
+    因此恒为空(2026-09-10 站长报告,生产实测欧冠够格球队 0 支)。
+
+    **按赛事判,不按参赛队判**——欧冠里的德甲内战同样返回 True。理由:
+    ① 没有可靠的 team→所属联赛映射(唯一可推的"出现最多的 League_ID"在
+       赛季初和升降级时会错,team_style_preview 有过降级队混入的真实事故);
+    ② 即使两队真同属德甲,分布池仍是欧冠那十几场完赛,门槛照样不过,走
+       联赛模式仍然是空白,判 True 不会比判 False 更差;
+    ③ 同一赛事内行为一致,可测、可解释。
+    """
+    return league_id in CROSS_LEAGUE_LEAGUE_IDS
 
 def accessible_league_ids(entitlements: frozenset | None = None) -> set[int]:
     """全部已收录联赛的 id 集合。

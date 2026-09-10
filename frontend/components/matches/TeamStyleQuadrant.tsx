@@ -340,6 +340,7 @@ export function TeamStyleQuadrant({
   homeTeamColor,
   awayTeamColor,
   windowNote,
+  crossLeague = false,
 }: {
   views: StyleView[];
   homeTeamId: number;
@@ -351,6 +352,9 @@ export function TeamStyleQuadrant({
   awayTeamColor?: TeamColorPair | null;
   /** 「近 5 场 · 2026-05-10 至 2026-08-09」——必须带真实日期区间(CLAUDE.md 措辞纪律) */
   windowNote: string;
+  /** 欧战等跨联赛赛事:本图画的是"该联赛全部球队",两队分处不同联赛时这个
+   * 概念本身不成立,不是数据没采够。只影响空态文案,不改绘图逻辑。 */
+  crossLeague?: boolean;
 }) {
   const available = useMemo(() => views.filter(usable), [views]);
   const [viewId, setViewId] = useState<string | null>(null);
@@ -451,7 +455,9 @@ export function TeamStyleQuadrant({
           球队风格定位
         </h2>
         <p className={pageStyles.emptyText}>
-          该联赛该赛季的球队指标不足以绘制象限图(有效球队少于 4 支)。
+          {crossLeague
+            ? "本图把同一联赛的球队放在同一把尺子上比较。欧战这类跨联赛赛事的参赛队来自不同联赛,没有共同的尺子,因此不绘制象限图——不是数据没采够。"
+            : "该联赛该赛季的球队指标不足以绘制象限图(有效球队少于 4 支)。"}
         </p>
       </section>
     );

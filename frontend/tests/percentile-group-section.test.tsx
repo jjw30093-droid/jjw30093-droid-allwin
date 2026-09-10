@@ -199,6 +199,88 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     expect(container.querySelectorAll('[class*="sampleNote"]').length).toBe(1);
   });
 
+  it("跨联赛模式:百分位轴/分位小注/联赛样本行全部不渲染,但差值胶囊还在", () => {
+    // 欧战比赛没有共同的参照人群,后端把两侧百分位置 null。画一根空轴、
+    // 每行印一遍「暂无分位」都只是噪声——但站长要的「多了多少」必须留着。
+    const rawMetric = metric({
+      unit: "球/场", home_value: 1.69, away_value: 1.22,
+      home_percentile: null, away_percentile: null, league_sample_size: 0,
+    });
+    const g = group({
+      metrics: [rawMetric], home_group_percentile: null, away_group_percentile: null,
+    });
+    const { container } = render(
+      <PercentileGroupSection
+        title="进攻数据" windowNote="窗口说明" homeName="维京" awayName="拜仁"
+        group={g} mode="cross_league_raw" showMethodNote
+      />,
+    );
+
+    expect(container.querySelector('[class*="axis"]')).toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByText(/第 \d+ 分位/)).toBeNull();
+    expect(screen.queryByText("暂无分位")).toBeNull();
+    expect(container.querySelector('[class*="sampleNote"]')).toBeNull();
+    expect(screen.queryByText("联赛中游")).toBeNull();
+
+    const chip = container.querySelector('[class*="deltaChip"]');
+    expect(chip?.textContent).toContain("维京");
+    expect(chip?.textContent).toContain("↑0.47球/场");
+    // 数值本身照常展示
+    expect(screen.getByText("1.69球/场")).toBeTruthy();
+  });
+
+  it("跨联赛模式不给领先方高亮——那层队色加粗读作「这队更好」", () => {
+    const g = group({
+      metrics: [metric({
+        home_value: 1.69, away_value: 1.22,
+        home_percentile: null, away_percentile: null, league_sample_size: 0,
+      })],
+      home_group_percentile: null, away_group_percentile: null,
+    });
+    const { container } = render(
+      <PercentileGroupSection
+        title="进攻数据" windowNote="窗口说明" homeName="维京" awayName="拜仁"
+        group={g} mode="cross_league_raw"
+      />,
+    );
+    const sides = [...container.querySelectorAll('[class*="side"][data-side]')];
+    expect(sides.length).toBe(2);
+    expect(sides.every((s) => s.getAttribute("data-leader") === null)).toBe(true);
+  });
+
+  it("跨联赛模式全卡片不出现强弱措辞,且不重复印免责说明", () => {
+    const g = group({
+      metrics: [metric({
+        key: "xga", name_zh: "让出预期进球(xGA)", direction: "lower_better",
+        home_value: 1.61, away_value: 1.21,
+        home_percentile: null, away_percentile: null, league_sample_size: 0,
+      })],
+      home_group_percentile: null, away_group_percentile: null,
+    });
+    const { container } = render(
+      <PercentileGroupSection
+        title="防守数据" windowNote="窗口说明" homeName="维京" awayName="拜仁"
+        group={g} mode="cross_league_raw" showMethodNote
+      />,
+    );
+    expect(container.textContent).not.toMatch(/更强|更弱|占优势/);
+    // 免责只在总览卡片说一次(scope_note),这里整行不出——三段各印一遍
+    // 在手机首屏就是三次重复(2026-09-10 站长复看)。
+    expect(container.querySelector('[class*="verdict"]')).toBeNull();
+    expect(container.textContent).not.toContain("不比强弱");
+  });
+
+  it("联赛模式完全不受影响:轴、分位、样本行照旧", () => {
+    const { container } = render(
+      <PercentileGroupSection
+        title="进攻百分位" windowNote="窗口说明" homeName="伯恩茅斯" awayName="布伦特福德" group={group()} />,
+    );
+    expect(container.querySelector('[class*="axis"]')).not.toBeNull();
+    expect(screen.getByText("第 87 分位")).toBeTruthy();
+    expect(container.querySelector('[class*="sampleNote"]')).not.toBeNull();
+  });
+
   it("口径说明只在被显式要求时渲染(全页只出现一次)", () => {
     const g = group();
     const { container: without } = render(
