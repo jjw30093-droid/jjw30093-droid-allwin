@@ -1,0 +1,22 @@
+.crestDot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  /* 跟 TeamBadge 自己的圆角一致(6px 圆角方形,不是圆形)——描边贴着队徽
+   * 真实形状走,不强行套一个和内容形状对不上的圆圈。 */
+  border-radius: 6px;
+  line-height: 0;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.crestDotHome {
+  z-index: 2;
+  outline: 2px solid var(--brand-teal);
+  outline-offset: -1px;
+}
+
+.crestDotAway {
+  z-index: 1;
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -1px;
+}

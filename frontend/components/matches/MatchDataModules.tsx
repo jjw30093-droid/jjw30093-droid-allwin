@@ -12,61 +12,53 @@
 import { useState } from "react";
 import styles from "./MatchDataModules.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
+import { buildBarSegments, colorOf, INLINE_LABEL_MIN_PCT, sourcesToMerge } from "./attackSourcePalette";
 import type { components } from "@/lib/api-types";
 
 /* ── 模块三 ─────────────────────────────────────────────── */
 
 type SourceRow = components["schemas"]["MatchPreviewAttackSourceDTO"];
 
-/** 色阶压深到 ≥3:1(非文本元素下限):浅 teal 在白底上几乎看不见。
- * 运动战原用 --brand-navy,但该 token 深色模式下改写成 #061923,和深色
- * 页面背景(#07161e)几乎同色,色块会糊到看不见——改用 --brand-blue,
- * 深浅两色都是明确可辨识的中亮度蓝(同 TeamStyleQuadrant.tsx 客队色的
- * 修复依据一致)。其余条目是固定中间调字面量色,深浅两色对比度本身已够,
- * 不需要改。
- *
- * 2026-08-23:改成用后端下发的稳定 Situation 枚举原文(r.key)当 key,
- * 不再用中文 label——此前用中文当 key 时,任何一次改中文措辞(比如
- * team_style_preview.py 的 _SITUATION_ZH)都会让配色静默掉回灰色兜底,
- * 不会报错也不会被测试抓到。 */
-const SOURCE_COLOR: Record<string, string> = {
-  RegularPlay: "var(--brand-blue)",
-  FastBreak: "var(--brand-teal)",
-  FromCorner: "#3f8781",
-  SetPiece: "#6b9e99",
-  IndividualPlay: "#4f6f79",
-  Penalty: "#2a5a63",
-  其他: "#8fa3a3",
-};
-
-const colorOf = (key: string) => SOURCE_COLOR[key] ?? "#8fa3a3";
-
 function Bar({
   rows,
   pick,
   incomplete,
+  mergeKeys,
 }: {
   rows: SourceRow[];
   pick: (r: SourceRow) => number | null | undefined;
   /** 有来源缺该字段时为 true——此时不把"已知来源"重新归一化成 100% 宽度
    * (那会把"已知部分"画成"全部"),整条替换成文字说明。 */
   incomplete: boolean;
+  /** 两条(射门/xG)共用同一份合并判定(见 attackSourcePalette.sourcesToMerge)
+   * ——不能各自独立判定,否则两条的分段集合可能对不上,"错位看质量"这个
+   * 模块的核心读法就废了。 */
+  mergeKeys: Set<string>;
 }) {
   if (incomplete) {
     return <span className={styles.barUnavailable}>部分来源缺失,占比条暂不展示</span>;
   }
-  const known = rows.filter((r) => pick(r) != null);
-  const total = known.reduce((s, r) => s + (pick(r) as number), 0) || 1;
+  const segments = buildBarSegments(rows, pick, mergeKeys);
+  const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
   return (
     <span className={styles.bar}>
-      {known.map((r) => (
-        <span
-          key={r.label}
-          className={styles.barSeg}
-          style={{ width: `${((pick(r) as number) / total) * 100}%`, background: colorOf(r.key) }}
-          title={`${r.label} ${(((pick(r) as number) / total) * 100).toFixed(1)}%`}
-        />
-      ))}
+      {segments.map((seg) => {
+        const pct = (seg.value / total) * 100;
+        const title =
+          seg.memberLabels.length > 1
+            ? `其他(${seg.memberLabels.join("、")}) ${pct.toFixed(1)}%`
+            : `${seg.label} ${pct.toFixed(1)}%`;
+        return (
+          <span
+            key={seg.key}
+            className={styles.barSeg}
+            style={{ width: `${pct}%`, background: colorOf(seg.key) }}
+            title={title}
+          >
+            {pct >= INLINE_LABEL_MIN_PCT && <span className={styles.barSegLabel}>{seg.label}</span>}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -94,6 +86,9 @@ export function AttackSourceCard({
       : xgKnownRows.length === 0
         ? "xG 部分来源数据缺失"
         : "xG 部分来源数据缺失(合计不完整)";
+  // 两条(射门/xG)共用同一份合并判定——见 attackSourcePalette.sourcesToMerge
+  // 的文档:必须同时低于阈值才合并,保证两条的分段集合一致。
+  const mergeKeys = sourcesToMerge(rows, { xgComplete });
   return (
     <div className={styles.card}>
       <div className={styles.cardHead}>
@@ -106,11 +101,11 @@ export function AttackSourceCard({
       <div className={styles.bars}>
         <div className={styles.barRow}>
           <span className={styles.barLabel}>射门</span>
-          <Bar rows={rows} pick={(r) => r.shots} incomplete={false} />
+          <Bar rows={rows} pick={(r) => r.shots} incomplete={false} mergeKeys={mergeKeys} />
         </div>
         <div className={styles.barRow}>
           <span className={styles.barLabel}>xG</span>
-          <Bar rows={rows} pick={(r) => r.xg} incomplete={!xgComplete && rows.length > 0} />
+          <Bar rows={rows} pick={(r) => r.xg} incomplete={!xgComplete && rows.length > 0} mergeKeys={mergeKeys} />
         </div>
       </div>
 

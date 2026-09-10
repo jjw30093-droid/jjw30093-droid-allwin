@@ -1,0 +1,224 @@
+/**
+ * 象限图详情面板本地样式(2026-09 移动端修复)——克隆自
+ * components/league/TeamQuadrantDetail.module.css 的类名和基础样式,
+ * 但改成本文件独立维护:比赛详情页要给对比表加"窄屏堆叠"断点,不能直接
+ * 改共享文件(那会连带影响联赛页 /league/[id]/team-stats 的同一张表,
+ * 与 tests/team-quadrant-*.test.ts 的既有断言无关但视觉行为会漂移)。
+ * 联赛页继续用它自己的 TeamQuadrantDetail.module.css,零改动。
+ */
+
+.panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  min-height: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel[data-empty="true"] {
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.team {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.teamName {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.quad {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.clear {
+  flex: none;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.clear:hover {
+  color: var(--ink);
+  border-color: var(--brand-teal);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 6px 6px;
+  text-align: right;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--ink-3);
+  font-weight: 600;
+  font-size: 12px;
+  border-top: none;
+}
+
+.table td:first-child,
+.table th:first-child {
+  text-align: left;
+  color: var(--ink-2);
+  white-space: normal;
+  min-width: 5.5em;
+}
+
+.value {
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank {
+  display: block;
+  color: var(--brand-teal);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.delta {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.deltaGood {
+  color: var(--win);
+}
+
+.deltaBad {
+  color: var(--loss);
+}
+
+.foot {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 520px) {
+  .panel {
+    padding: 10px 10px;
+  }
+}
+
+/* 2026-09 移动端修复:此前对比表在 375px 屏靠 overflow-x:auto 横滑
+   (tableWrap 实测 clientWidth 只有 ~291px),两队各一列都要横滑才能看完。
+   改成纵向堆叠:每行(控球率/快攻射门占比…)变成一个小节,列头(队名)
+   靠 data-label + ::before 转成每个数值前的标签,不需要横向滚动。 */
+@media (max-width: 480px) {
+  .table,
+  .table thead,
+  .table tbody,
+  .table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tr {
+    padding: 6px 0;
+  }
+
+  .table tr:first-child {
+    border-top: none;
+  }
+
+  .table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    border-top: none;
+    padding: 3px 0;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .table td:first-child {
+    display: block;
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 13.5px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+
+  .table tr:first-child td:first-child {
+    border-top: none;
+  }
+
+  /* 队名列头消失后,靠 JSX 显式传入的 data-label(队名)在数值前补回来。 */
+  .table td:not(:first-child)::before {
+    content: attr(data-label);
+    color: var(--ink-3);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+  }
+}

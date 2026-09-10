@@ -191,29 +191,38 @@ export function MatchupSection({
         高于同联赛同场景的基准均值时才标记,不是原始数字大小排的。
       </p>
       <div className={styles.card}>
-        <MatchupBlock
-          attackerName={homeName}
-          defenderName={awayName}
-          attackerMatches={home.matches}
-          defenderMatches={away.matches}
-          rows={homeAttack}
-          highlighted={highlighted}
-        />
-        <MatchupBlock
-          attackerName={awayName}
-          defenderName={homeName}
-          attackerMatches={away.matches}
-          defenderMatches={home.matches}
-          rows={awayAttack}
-          highlighted={highlighted}
-        />
+        {/* 2026-09 移动端修复:结论先行,8 行明细默认折叠——这张卡此前
+            ~1190px≈1.5 屏,「风格」子 tab 总高度目标 7.6 屏→4 屏靠这类
+            "结论常驻 + 明细收起"的折叠拿下最后一段。summary 已经把
+            关键对位讲清楚,明细是给想深挖的人看的,不是首屏必需信息。 */}
         <p className={styles.summary}>{summary}</p>
-        <p className={styles.footNote}>
-          「禁区内射门」的 xG 由本站从逐脚射门坐标聚合(标准禁区 16.5 米),
-          与数据源官方禁区内射门次数在约 2.6 万个队场样本上有 98% 完全一致;
-          射门次数与其余三类的 xG 均直接来自数据源。数据不足的项不代表实测为 0;
-          联赛基准样本不足时该类型不参与「关键对位」评选。
-        </p>
+        <details className={styles.detail}>
+          <summary className={styles.detailSummary}>
+            查看完整攻防对位({homeAttack.length + awayAttack.length} 项)
+          </summary>
+          <MatchupBlock
+            attackerName={homeName}
+            defenderName={awayName}
+            attackerMatches={home.matches}
+            defenderMatches={away.matches}
+            rows={homeAttack}
+            highlighted={highlighted}
+          />
+          <MatchupBlock
+            attackerName={awayName}
+            defenderName={homeName}
+            attackerMatches={away.matches}
+            defenderMatches={home.matches}
+            rows={awayAttack}
+            highlighted={highlighted}
+          />
+          <p className={styles.footNote}>
+            「禁区内射门」的 xG 由本站从逐脚射门坐标聚合(标准禁区 16.5 米),
+            与数据源官方禁区内射门次数在约 2.6 万个队场样本上有 98% 完全一致;
+            射门次数与其余三类的 xG 均直接来自数据源。数据不足的项不代表实测为 0;
+            联赛基准样本不足时该类型不参与「关键对位」评选。
+          </p>
+        </details>
       </div>
     </section>
   );

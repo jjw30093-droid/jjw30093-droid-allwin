@@ -77,6 +77,22 @@
    * surface/surface-soft/surface-2 三种底、深浅两套主题实测均 ≥4.4:1。 */
   --odds-up: #b3261e;
   --odds-down: #1b5e20;
+  /* 进攻来源分类色(2026-09,「进攻来源拆解」双轨成分条)——8 个 Situation
+   * 各一色,跨色相 + 跨明度设计(不是同一色系深浅调),用于区分堆叠条里
+   * 挤在一起的窄色块。此前 6 个值全部挤在 174–195° 青蓝同色相,实测
+   * 深色模式下运动战/反击对比度只有 1.04:1、浅色模式运动战/个人突破只有
+   * 1.05:1(几乎同色),且任意球和界外球战术共用同一个兜底灰——8 色都不能
+   * 落在红(§11.2 真实错误)与橙/金(--pending/--brand-gold 等待更新)的
+   * 色相区间,已用 frontend/components/charts/colorContrast.ts 的
+   * contrastRatioHex 逐个验证 ≥3:1(见 tests/attack-source-palette.test.ts)。 */
+  --source-regular-play: #236a8b;
+  --source-fast-break: #259374;
+  --source-from-corner: #4e1f7a;
+  --source-set-piece: #b42da4;
+  --source-free-kick: #4b7a1f;
+  --source-throw-in: #625c18;
+  --source-individual-play: #279b34;
+  --source-penalty: #1d2472;
   /* league qualification (real FotMob qual_color) */
   --q-ucl: #2ad572;
   --q-uel: #0046a7;
@@ -174,6 +190,16 @@ html[data-theme="dark"] {
    * up(珊瑚红)7.05 / down(浅绿)8.93。 */
   --odds-up: #ff8073;
   --odds-down: #6fcf7a;
+  /* 进攻来源分类色(深色变体;见 :root 处说明)——同一批色相,明度整体上提
+   * 以对深色卡片底(#0d2029)保持 ≥3:1,不是把浅色值直接搬过来。 */
+  --source-regular-play: #85bcd6;
+  --source-fast-break: #9cdecb;
+  --source-from-corner: #aa7dd4;
+  --source-set-piece: #e3abdc;
+  --source-free-kick: #9ccf6e;
+  --source-throw-in: #c7be57;
+  --source-individual-play: #85d68e;
+  --source-penalty: #9ca1de;
   --rate-elite: #45b9af;
   --rate-good: #39716f;
   --rate-mid: #173039;

@@ -1159,6 +1159,82 @@ class MatchPreviewStyleViewDTO(BaseModel):
     # 前端象限判定(quadOf)靠这个字段决定"y 高是不是好",不能假定越高越好——
     # 见 backend/queries/team_style_preview.py 的方向语义注释。
     y_lower_is_better: bool = False
+    # 2026-09 真实缺陷修复:卡片头此前写死"每队 5 场",与上方 windowNote
+    # (该队真实找到的场次,可能因样本不足而更少)矛盾。这里给的是"上限",
+    # 前端措辞须写"至多/最多",不能重新断言成"每队都恰好这么多场"。
+    window: int
+
+
+class MatchProfileMetricDTO(BaseModel):
+    """攻/守/控画像里的单个指标——两队各自的原始值 + 各自在联赛同 venue
+    分布里的百分位。`direction` 决定前端措辞:`lower_better` 的指标百分位
+    已经是"数值越低、百分位越高"归一化后的结果(见
+    backend/metrics/percentile.py),前端不需要再自己反转。"""
+
+    key: str
+    name_zh: str
+    unit: str
+    direction: str
+    semantic: str
+    home_value: Optional[float] = None
+    away_value: Optional[float] = None
+    home_percentile: Optional[int] = None
+    away_percentile: Optional[int] = None
+    home_complete: bool
+    away_complete: bool
+    league_sample_size: int
+
+
+class MatchProfilePeerDTO(BaseModel):
+    """对标球队(2026-09 第二轮):同场景(主场分布/客场分布,与本组百分位
+    同一套分布)组级百分位最接近的球队,回答"这队大概是联赛里什么水平/
+    接近哪个集团"——不是简单排序,是按 |Δ百分位| 最近的 2 支。"""
+
+    team_id: int
+    name: str
+    crest_url: Optional[str] = None
+    percentile: float
+
+
+class MatchProfileGroupDTO(BaseModel):
+    key: str
+    title_zh: str
+    metrics: list[MatchProfileMetricDTO]
+    # 组内至少 2 个指标都有百分位才汇总,否则 None(不用单指标冒充整组表现)。
+    home_group_percentile: Optional[float] = None
+    away_group_percentile: Optional[float] = None
+    # 主队对标来自联赛主场分布、客队对标来自联赛客场分布——不跨场景混着找
+    # "相似"。目标队自己没有组级百分位,或分布里够格的球队不足时可能为空
+    # 列表或少于 2 项,不补位、不编造。
+    home_peers: list[MatchProfilePeerDTO] = []
+    away_peers: list[MatchProfilePeerDTO] = []
+
+
+class MatchProfileHighlightDTO(BaseModel):
+    key: str
+    name_zh: str
+    home_percentile: int
+    away_percentile: int
+    gap: int
+    home_value: float
+    away_value: float
+
+
+class MatchDataProfileDTO(BaseModel):
+    """数据 tab「风格」子 tab 总览层:联赛百分位画像(2026-09 重构)。
+
+    主队对**联赛主场分布**取百分位,客队对**联赛客场分布**取百分位——两套
+    独立分布,不共用同一个原始联赛均值(主客场系统性差异 17~18%)。两队因此
+    不在同一条绝对数值尺上,但在各自的百分位尺上可比,前端文案必须讲清楚
+    这一点,不能暗示两队在比同一把绝对尺子。"""
+
+    home_matches: int
+    away_matches: int
+    home_available: bool
+    away_available: bool
+    groups: list[MatchProfileGroupDTO]
+    highlights: list[MatchProfileHighlightDTO]
+    unavailable_reason: Optional[str] = None
 
 
 class MatchPreviewAttackSourceDTO(BaseModel):
@@ -1175,70 +1251,6 @@ class MatchPreviewAttackSourceDTO(BaseModel):
 class MatchPreviewAttackSourcesDTO(BaseModel):
     home: list[MatchPreviewAttackSourceDTO]
     away: list[MatchPreviewAttackSourceDTO]
-
-
-class MatchPreviewChainMetricDTO(BaseModel):
-    value: Optional[float] = None
-    # False 表示窗口内至少有一场缺这个字段——前端不得把 value 当"完整合计"
-    # 展示,必须用 matches_with_data / complete 标注部分覆盖(同 Phase 0.2 教训)。
-    complete: bool = False
-    matches_with_data: int = 0
-
-
-class MatchPreviewAttackChainDTO(BaseModel):
-    tier: str
-    matches: int
-    label_zh: str
-    # 显式声明分组——前端不用自己猜哪个字段属于"进攻产量"还是"转化效率"。
-    volume_keys: list[str]
-    conversion_keys: list[str]
-    opp_half_pass_share: MatchPreviewChainMetricDTO
-    touches_opp_box: MatchPreviewChainMetricDTO
-    shots: MatchPreviewChainMetricDTO
-    shots_on_target: MatchPreviewChainMetricDTO
-    xg: MatchPreviewChainMetricDTO
-    xgot: MatchPreviewChainMetricDTO
-    # 转化效率:同场配对相除,零分母/无配对场次时 value=None(见
-    # backend/queries/attack_chain.py 模块 docstring)。
-    shots_per_100_box_touches: MatchPreviewChainMetricDTO
-    shot_on_target_rate: MatchPreviewChainMetricDTO
-    xg_per_shot: MatchPreviewChainMetricDTO
-    xgot_per_sot: MatchPreviewChainMetricDTO
-
-
-class MatchPreviewAttackChainsDTO(BaseModel):
-    home: MatchPreviewAttackChainDTO
-    away: MatchPreviewAttackChainDTO
-
-
-class MatchPreviewPossessionControlDTO(BaseModel):
-    tier: str
-    matches: int
-    label_zh: str
-    possession: MatchPreviewChainMetricDTO
-    pass_accuracy: MatchPreviewChainMetricDTO
-    opp_half_pass_share: MatchPreviewChainMetricDTO
-    touches_opp_box: MatchPreviewChainMetricDTO
-
-
-class MatchPreviewPossessionControlsDTO(BaseModel):
-    home: MatchPreviewPossessionControlDTO
-    away: MatchPreviewPossessionControlDTO
-
-
-class MatchPreviewDefensivePressureDTO(BaseModel):
-    tier: str
-    matches: int
-    label_zh: str
-    shots_faced: MatchPreviewChainMetricDTO
-    shots_on_target_faced: MatchPreviewChainMetricDTO
-    xga: MatchPreviewChainMetricDTO
-    box_shots_faced: MatchPreviewChainMetricDTO
-
-
-class MatchPreviewDefensivePressuresDTO(BaseModel):
-    home: MatchPreviewDefensivePressureDTO
-    away: MatchPreviewDefensivePressureDTO
 
 
 class MatchPreviewMatchupSituationDTO(BaseModel):
@@ -1343,9 +1355,7 @@ class MatchPreviewResponse(BaseModel):
     sidelined: MatchPreviewSidelinedDTO
     style_views: list[MatchPreviewStyleViewDTO]
     attack_sources: MatchPreviewAttackSourcesDTO
-    attack_chains: MatchPreviewAttackChainsDTO
-    possession_controls: MatchPreviewPossessionControlsDTO
-    defensive_pressures: MatchPreviewDefensivePressuresDTO
+    data_profile: MatchDataProfileDTO
     matchup_profiles: MatchPreviewMatchupProfilesDTO
     key_players: MatchPreviewKeyPlayersDTO
     keepers: MatchPreviewKeepersDTO

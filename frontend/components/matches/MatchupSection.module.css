@@ -16,6 +16,32 @@
   background: var(--surface);
 }
 
+/* 2026-09 移动端修复:结论(.summary)常驻,8 行明细收进 <details>——
+   同 ProjectedLineupSection.module.css 的 .bench/.benchSummary 折叠范式。 */
+.detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-soft);
+}
+
+.detailSummary {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  color: var(--brand-teal);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.detail[open] .detailSummary {
+  margin-bottom: 8px;
+}
+
+.block {
+  margin-top: 12px;
+}
+
 .block + .block {
   margin-top: 16px;
   padding-top: 14px;
@@ -116,7 +142,9 @@
 }
 
 .summary {
-  margin: 12px 0 0;
+  /* 2026-09 移动端修复:结论移到卡片顶部(此前在明细下方),margin-top
+     归零——卡片自身 padding 已经留了间距。 */
+  margin: 0;
   font-size: 14px;
   line-height: 1.6;
   color: var(--ink-3);

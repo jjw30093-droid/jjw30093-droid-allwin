@@ -41,7 +41,7 @@ import {
 } from "@/components/charts/crestQuadrantLayout";
 import { competitionRank } from "@/components/league/teamMetrics";
 import styles from "./MatchDataModules.module.css";
-import panelStyles from "@/components/league/TeamQuadrantDetail.module.css";
+import panelStyles from "./TeamStyleQuadrant.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import type { components } from "@/lib/api-types";
 
@@ -89,7 +89,18 @@ export type StyleQuadrantOpts = {
   grid?: Grid;
   /** 高亮的球队 id(0~2 个);缺省 = 本场主客 */
   selectedIds?: number[];
+  /** 2026-09 移动端修复:窄屏下非选中球队从队徽降级为小圆点(无队名),
+   * 避让压力立刻消失——375px 屏实测绘图区只有约 241×242px 要塞 20 个
+   * 队徽,人均可用空间 2916px² 但队徽视觉位置几乎完全由避让算法主导。
+   * 不改共享的 `crestQuadrantLayout.ts`(联赛页复用同一份布局数学),
+   * 避让偏移量仍按统一 crestSize 计算——降级后的圆点因此比严格必要的间距
+   * 更松,是刻意的保守选择,不产生重叠风险。 */
+  compactOthers?: boolean;
 };
+
+/** 窄屏降级圆点的固定尺寸与颜色——不复用 CREST 常量(那些是队徽尺寸),
+ * 这里要的是明显更小、明显"次要"的视觉权重。 */
+const COMPACT_DOT_SIZE = 8;
 
 /** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。 */
 export function buildOption(
@@ -118,10 +129,25 @@ export function buildOption(
   const colorOf = (side: "home" | "away" | null) =>
     side === "home" ? c.teal : side === "away" ? c.navy : c.grey;
 
+  const compactOthers = opts.compactOthers ?? false;
+
   const crestData = pts.map((p, i) => {
     const side = sideOf(p);
     const sel = isSelected(i);
     const opacity = sel ? 1 : CREST.DIM_OPACITY;
+    if (compactOthers && !sel) {
+      // 窄屏降级:非本场/非对比中的球队一律小圆点,不加载队徽图片,
+      // 也不区分主客配色(它们本来就不是主客队)。
+      return {
+        value: [p.x, p.y],
+        pt: p,
+        side,
+        symbol: "circle",
+        symbolSize: COMPACT_DOT_SIZE,
+        symbolOffset: offsetOf(i),
+        itemStyle: { color: c.grey, opacity: 0.7, borderColor: "transparent" },
+      };
+    }
     const base = {
       value: [p.x, p.y],
       pt: p,
@@ -151,7 +177,9 @@ export function buildOption(
         pts.map((p, i): LabelCandidate => {
           const [dx, dy] = offsetOf(i);
           const sel = isSelected(i);
-          const want = sel || !p.crest_url;
+          // compactOthers 时非选中一律不给名字——降级圆点本来就是"匿名背景",
+          // 给名字会把 20 支球队的名字全部挤上屏,违背降级的初衷。
+          const want = sel || (!compactOthers && !p.crest_url);
           return {
             cx: layout.base[i].px + dx,
             cy: layout.base[i].py + dy,
@@ -291,7 +319,17 @@ function rankIn(pts: PlottedPoint[], p: PlottedPoint, axis: "x" | "y", lowerIsBe
 
 /** 宽度变化小于这个像素数不重算布局 */
 const WIDTH_HYSTERESIS = 8;
-const CHART_HEIGHT = 320;
+const CHART_HEIGHT_DEFAULT = 320;
+/** 窄屏加高到这个值——绘图区纵向空间增加,配合 compactOthers 把非本场球队
+ * 降级为小圆点,人均可用空间从实测 2916px² 明显改善。 */
+const CHART_HEIGHT_NARROW = 380;
+/** 宽度低于此值视为"窄屏"——与 compactOthers 共用同一条判断线,不需要
+ * 两条不同的断点各自判断产生不一致。 */
+const NARROW_WIDTH = 400;
+
+function chartHeightFor(width: number | null): number {
+  return width != null && width < NARROW_WIDTH ? CHART_HEIGHT_NARROW : CHART_HEIGHT_DEFAULT;
+}
 
 export function TeamStyleQuadrant({
   views,
@@ -375,13 +413,16 @@ export function TeamStyleQuadrant({
     const my = mean(pts.map((p) => p.y));
     const xr = niceAxisRange(pts.map((p) => p.x), { pad: 0.14 });
     const yr = niceAxisRange(pts.map((p) => p.y), { pad: 0.16 });
-    const box: PlotBox | null = width ? { width, height: CHART_HEIGHT, grid: QUADRANT_GRID } : null;
+    const box: PlotBox | null = width ? { width, height: chartHeightFor(width), grid: QUADRANT_GRID } : null;
     const crestSize = box ? crestSizeFor(box, pts.length) : CREST.MIN + 4;
     const layout = box
       ? layoutCrests({ pts, box, xr, yr, yInverse: false, radius: crestSize / 2 + CREST.PAD })
       : null;
     return { mx, my, xr, yr, crestSize, layout };
   }, [view, pts, width]);
+
+  // compactOthers 与 box 用同一条 NARROW_WIDTH 判断线,窄屏才降级非本场球队。
+  const isNarrow = width != null && width < NARROW_WIDTH;
 
   const selected = useMemo(
     () => selectedIds.map((id) => pts.find((p) => p.team_id === id)).filter((p): p is PlottedPoint => !!p),
@@ -398,8 +439,9 @@ export function TeamStyleQuadrant({
       yr,
       grid: QUADRANT_GRID,
       selectedIds,
+      compactOthers: isNarrow,
     });
-  }, [view, derived, pts, homeTeamId, awayTeamId, effectiveColors, selectedIds]);
+  }, [view, derived, pts, homeTeamId, awayTeamId, effectiveColors, selectedIds, isNarrow]);
 
   if (!view || !derived || !option) {
     return (
@@ -484,7 +526,10 @@ export function TeamStyleQuadrant({
       <div className={styles.chartCard}>
         <div className={styles.chartHead}>
           <strong className={styles.chartTitle}>{view.title}</strong>
-          <span className={styles.chartSample}>{pts.length} 支 · 每队 5 场</span>
+          {/* 2026-09 真实缺陷修复:此前写死"每队 5 场",与上方 windowNote
+              (该队真实找到的场次,可能因样本不足而更少)矛盾——同一张卡里
+              两个互相矛盾的样本量。`view.window` 是上限,措辞改成"至多"。 */}
+          <span className={styles.chartSample}>{pts.length} 支 · 每队至多 {view.window} 场</span>
         </div>
         {/* 卡片自带摘要段落,关掉 EChart 内置摘要避免重复(a11y label 仍在) */}
         {/* 键盘路径走 Esc 与「恢复本场两队」,这个 div 的 onClick 只服务鼠标/触屏"点空白" */}
@@ -500,7 +545,7 @@ export function TeamStyleQuadrant({
         >
           <EChart
             option={option}
-            height={CHART_HEIGHT}
+            height={chartHeightFor(width)}
             ariaSummary={ariaSummary}
             showSummary={false}
             onEvents={{ click: handleChartClick }}
@@ -556,7 +601,7 @@ export function TeamStyleQuadrant({
                           const delta = p[axis] - m;
                           const good = axis === "y" && lowerY ? delta < 0 : delta > 0;
                           return (
-                            <td key={p.team_id}>
+                            <td key={p.team_id} data-label={p.name}>
                               <span className={panelStyles.value}>{fmt(p[axis])}</span>
                               <span className={panelStyles.rank}>
                                 第 {r.rank}/{r.total}

@@ -74,25 +74,32 @@ test("验收返工四:移动端字号真实 computed,不止查页面级 scrollWi
   await page.getByRole("tab", { name: "数据" }).click();
   await page.getByRole("tab", { name: "风格" }).click();
 
+  // 2026-09:原来这三条指向 stageLabel/stageValue,那是第一轮被删掉的
+  // AttackChainSection 那批组件的 class,全仓库已零命中——`toBeVisible()`
+  // 匹配不到会超时,是死断言。重指到接替它们的百分位模块
+  // (PercentileGroupSection 的 .label / .sideValue)。
+
   // 标签(如"射门""禁区触球")——正文/标签 ≥14px。
-  const label = page.locator('[class*="stageLabel"]').first();
+  const label = page.locator('[class*="label"]').first();
   await expect(label).toBeVisible();
   const labelSize = await label.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(labelSize).toBeGreaterThanOrEqual(14);
 
-  // 关键数值(条形右侧的具体数字)——≥18px。
-  const value = page.locator('[class*="stageValue"]').first();
+  // 关键数值(每队的场均值)——≥18px。
+  const value = page.locator('[class*="sideValue"]').first();
   await expect(value).toBeVisible();
   const valueSize = await value.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(valueSize).toBeGreaterThanOrEqual(18);
 
-  // 次要说明(脚注)——≥12px。
+  // 次要说明(脚注)——≥12px。口径说明默认折叠在 <details> 里,
+  // computed style 仍可读(display:none 的祖先不影响 fontSize 计算值)。
   const footNote = page.locator('[class*="footNote"]').first();
   const footNoteSize = await footNote.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(footNoteSize).toBeGreaterThanOrEqual(12);
 
   // 组件边界:关键数值不能因为字号增大而被自身容器截断/换行溢出。
-  const overflowingValues = await page.locator('[class*="stageValue"]').evaluateAll((els) =>
+  // (这正是本轮要修的问题——旧数值行在 375px 上把「16.7次/场」折成了两行。)
+  const overflowingValues = await page.locator('[class*="sideValue"]').evaluateAll((els) =>
     els.filter((el) => el.scrollWidth > el.clientWidth + 1).length,
   );
   expect(overflowingValues).toBe(0);

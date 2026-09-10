@@ -1,0 +1,106 @@
+.card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.teams {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.teamName {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.vs {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.groupBlock {
+  /* 2026-09:队徽当点(24px)比原来的纯色圆点(16px)大,块间距要跟着放大,
+   * 否则相邻两行的队徽会挤到一起。 */
+  margin-bottom: 16px;
+}
+
+.groupBlock:last-child {
+  margin-bottom: 0;
+}
+
+.groupRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.peerLine {
+  margin: 4px 0 0 38px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.groupLabel {
+  width: 28px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+
+.groupAxis {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  /* 队徽半径 12px,轴两端各留够空间,0%/100% 的队徽不会被卡片边界裁切。 */
+  margin: 0 14px;
+}
+
+.groupUnavailable {
+  font-size: 12px;
+  color: var(--ink-3);
+  flex: 1;
+}
+
+.highlights {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.highlightsTitle {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.highlightItem {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0 0 6px;
+}
+
+.highlightItem:last-child {
+  margin-bottom: 0;
+}
+
+.noHighlight {
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.footNote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}

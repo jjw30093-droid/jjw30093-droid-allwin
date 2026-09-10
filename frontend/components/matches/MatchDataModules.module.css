@@ -75,7 +75,8 @@
 .viewTab,
 .viewTabOn {
   flex: 1;
-  min-height: 34px;
+  /* 2026-09 真实缺陷修复:原 34px 低于 DESIGN.md 的 44px 触控下限。 */
+  min-height: 44px;
   padding: 0 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-pill);
@@ -177,7 +178,32 @@
 }
 
 .barSeg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 100%;
+  overflow: hidden;
+  /* 2026-09 真实缺陷修复:边界可见性不能只靠相邻两色的色差——加一条
+   * 固定描边,窄色块之间的分界始终看得见,即使两色恰好接近。 */
+  box-shadow: inset 1px 0 0 var(--surface), inset -1px 0 0 var(--surface);
+}
+
+.barSeg:first-child {
+  box-shadow: inset -1px 0 0 var(--surface);
+}
+
+.barSeg:last-child {
+  box-shadow: inset 1px 0 0 var(--surface);
+}
+
+.barSegLabel {
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  /* 分类色深浅不一,白字在部分浅色段上对比不够——用描边保证任何底色上
+   * 都能读出字形轮廓,不逐色单独判断文字颜色。 */
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.65), 0 0 2px rgba(0, 0, 0, 0.65);
 }
 
 .barUnavailable {

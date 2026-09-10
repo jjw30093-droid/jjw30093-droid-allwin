@@ -1,0 +1,116 @@
+/**
+ * 「数据 → 风格」子 tab 首屏总览层(2026-09 重构)。
+ *
+ * 回答站长提的三个问题:谁更强 / 强在哪 / 最大的几条差距——攻/守/控三组
+ * 各给一根组级百分位轴(组内 ≥2 个指标都有百分位才汇总,见
+ * `backend/metrics/percentile.py::group_percentile`,不用单指标冒充整组),
+ * 再列出 |Δ百分位| 最大的最多 3 条差距(后端 `top_gaps` 已按 15 分位门槛
+ * 过滤掉噪声级差距,不需要前端重新判断)。
+ *
+ * 两队分别来自**联赛主场分布**和**联赛客场分布**两套独立百分位,不在
+ * 同一把绝对数值尺上——文案里必须讲清楚这一点,不能暗示"直接比大小"。
+ */
+
+"use client";
+
+import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
+import { CrestDot } from "./CrestDot";
+import styles from "./MatchProfileOverview.module.css";
+import { highlightSentence, peerSentence, type DataProfile } from "./matchProfile";
+
+const GROUP_LABEL: Record<string, string> = { attack: "攻", defence: "守", control: "控" };
+
+export function MatchProfileOverview({
+  homeName,
+  awayName,
+  homeCrestUrl,
+  awayCrestUrl,
+  profile,
+}: {
+  homeName: string;
+  awayName: string;
+  homeCrestUrl?: string | null;
+  awayCrestUrl?: string | null;
+  profile: DataProfile;
+}) {
+  if (!profile.home_available && !profile.away_available) {
+    return (
+      <section className={pageStyles.section}>
+        <h2 className={pageStyles.sectionTitle}>
+          <span className={pageStyles.sectionBar} aria-hidden />
+          本场数据画像
+        </h2>
+        <p className={pageStyles.emptyText}>
+          {profile.unavailable_reason ?? "两队本赛季同主客场比赛都不足,暂无法给出联赛百分位画像。"}
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={pageStyles.section}>
+      <h2 className={pageStyles.sectionTitle}>
+        <span className={pageStyles.sectionBar} aria-hidden />
+        本场数据画像
+      </h2>
+      <div className={styles.card}>
+        <div className={styles.teams}>
+          <span className={styles.teamName}>{homeName}</span>
+          <span className={styles.vs}>联赛百分位对比</span>
+          <span className={styles.teamName}>{awayName}</span>
+        </div>
+
+        {profile.groups.map((g) => {
+          const homePeerLine = peerSentence(homeName, g.home_peers);
+          const awayPeerLine = peerSentence(awayName, g.away_peers);
+          return (
+            <div className={styles.groupBlock} key={g.key}>
+              <div className={styles.groupRow}>
+                <span className={styles.groupLabel}>{GROUP_LABEL[g.key] ?? g.key}</span>
+                {g.home_group_percentile != null && g.away_group_percentile != null ? (
+                  <div
+                    className={styles.groupAxis}
+                    role="img"
+                    aria-label={`${g.title_zh}:${homeName} 联赛第 ${Math.round(g.home_group_percentile)} 百分位,${awayName} 联赛第 ${Math.round(g.away_group_percentile)} 百分位。`}
+                  >
+                    <CrestDot pct={g.home_group_percentile} crestUrl={homeCrestUrl} teamName={homeName} side="home" />
+                    <CrestDot pct={g.away_group_percentile} crestUrl={awayCrestUrl} teamName={awayName} side="away" />
+                  </div>
+                ) : (
+                  <span className={styles.groupUnavailable}>样本口径不同或数据不足,暂不作整体比较。</span>
+                )}
+              </div>
+              {(homePeerLine || awayPeerLine) && (
+                <p className={styles.peerLine}>
+                  {[homePeerLine, awayPeerLine].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+          );
+        })}
+
+        <div className={styles.highlights}>
+          <h3 className={styles.highlightsTitle}>最大的差距</h3>
+          {profile.highlights.length === 0 ? (
+            <p className={styles.noHighlight}>两队在本联赛的位置接近,没有拉开明显差距的项。</p>
+          ) : (
+            profile.highlights.map((h) => {
+              const semantic =
+                profile.groups.flatMap((g) => g.metrics).find((m) => m.key === h.key)?.semantic ?? "performance";
+              return (
+                <p className={styles.highlightItem} key={h.key}>
+                  {highlightSentence(h, semantic, homeName, awayName)}
+                </p>
+              );
+            })
+          )}
+        </div>
+
+        <p className={styles.footNote}>
+          {homeName}对联赛主场分布取百分位,{awayName}对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子;
+          百分位是历史统计描述,不是本场预测。
+        </p>
+      </div>
+    </section>
+  );
+}

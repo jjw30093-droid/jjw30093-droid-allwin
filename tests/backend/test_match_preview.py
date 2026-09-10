@@ -161,6 +161,16 @@ class TestStyleAndAttackSources:
         home_point = next(p for p in pf["points"] if p["team_id"] == 1001)
         assert home_point["x"] == 60.0
 
+    def test_style_view_exposes_window_used(self, seeded_preview, client):
+        """2026-09 真实缺陷修复:卡片头此前写死"每队 5 场",与上方 windowNote
+        (真实找到的场次,可能因样本不足而更少)矛盾。DTO 必须原样透出调用
+        `league_style_views()` 时使用的 window 上限,不能让前端自己猜。"""
+        from backend.queries.team_style_preview import WINDOW
+
+        body = client.get("/api/v1/matches/9002/preview").json()
+        for view in body["style_views"]:
+            assert view["window"] == WINDOW
+
     def test_attack_sources_empty_without_shotmap(self, seeded_preview, client):
         """本 fixture 没造 fact_shotmap 行——诚实返回空列表,不是报错。"""
         body = client.get("/api/v1/matches/9002/preview").json()

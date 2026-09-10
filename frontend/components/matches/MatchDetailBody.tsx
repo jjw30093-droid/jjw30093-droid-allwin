@@ -49,9 +49,9 @@ import { MatchDataTabs } from "@/components/matches/MatchDataTabs";
 import { ChartWithSummary } from "@/components/matches/ChartWithSummary";
 import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSection";
 import { TeamStyleQuadrant } from "@/components/matches/TeamStyleQuadrant";
-import { AttackChainSection } from "@/components/matches/AttackChainSection";
-import { PossessionControlSection } from "@/components/matches/PossessionControlSection";
-import { DefensivePressureSection } from "@/components/matches/DefensivePressureSection";
+import { MatchProfileOverview } from "@/components/matches/MatchProfileOverview";
+import { PercentileGroupSection } from "@/components/matches/PercentileGroupSection";
+import { profileWindowNote } from "@/components/matches/matchProfile";
 import { MatchupSection } from "@/components/matches/MatchupSection";
 import {
   AttackSourceCard,
@@ -206,29 +206,33 @@ function DataGroup({
           }
           style={
             <>
+              <MatchProfileOverview
+                homeName={homeName}
+                awayName={awayName}
+                homeCrestUrl={m.home.crest_url}
+                awayCrestUrl={m.away.crest_url}
+                profile={preview.data_profile}
+              />
+              {preview.data_profile.groups.map((g, i) => (
+                <PercentileGroupSection
+                  key={g.key}
+                  title={`${g.title_zh === "攻" ? "进攻" : g.title_zh === "守" ? "防守" : "控球"}百分位`}
+                  windowNote={profileWindowNote(homeName, awayName, preview.data_profile)}
+                  homeName={homeName}
+                  awayName={awayName}
+                  homeCrestUrl={m.home.crest_url}
+                  awayCrestUrl={m.away.crest_url}
+                  group={g}
+                  // 口径说明只在最后一个百分位模块底部出现一次——三段几乎
+                  // 相同的说明原来每个模块各印一遍。
+                  showMethodNote={i === preview.data_profile.groups.length - 1}
+                />
+              ))}
               <MatchupSection
                 homeName={homeName}
                 awayName={awayName}
                 home={preview.matchup_profiles.home}
                 away={preview.matchup_profiles.away}
-              />
-              <AttackChainSection
-                homeName={homeName}
-                awayName={awayName}
-                home={preview.attack_chains.home}
-                away={preview.attack_chains.away}
-              />
-              <PossessionControlSection
-                homeName={homeName}
-                awayName={awayName}
-                home={preview.possession_controls.home}
-                away={preview.possession_controls.away}
-              />
-              <DefensivePressureSection
-                homeName={homeName}
-                awayName={awayName}
-                home={preview.defensive_pressures.home}
-                away={preview.defensive_pressures.away}
               />
               {homeTeamId != null && awayTeamId != null ? (
                 <TeamStyleQuadrant

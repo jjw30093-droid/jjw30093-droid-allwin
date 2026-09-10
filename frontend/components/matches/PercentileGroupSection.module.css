@@ -1,0 +1,230 @@
+/* 联赛百分位画像:攻/守/控三组共用样式(2026-09 重构,替换原
+   AttackChainSection/PossessionControlSection/DefensivePressureSection
+   三个"按 max(主,客) 归一化"的对比条——那种条长只编码两队比值,每行比例尺
+   不同,跨行无法扫读。这里改成所有行共用同一条 0~100 联赛百分位轴。
+   验收纪律同旧模块:正文/标签 ≥14px,关键数值 ≥18px,次要说明 ≥12px,
+   触控目标 ≥44px。 */
+
+.card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  margin-bottom: 12px;
+}
+
+.windowNote {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+/* 2026-09 第三轮:legend 已删除——队名不再靠图例映射颜色,每行数值旁边
+   直接是队徽(与轴上坐标点同一个视觉符号),差值胶囊也会直接点名领先方。
+   这是"一屏内队名重复 78 次"的主要来源之一。 */
+
+.row {
+  min-height: 44px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sampleNote {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.axis {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  /* 2026-09:队徽当点(24px)比原来的纯色圆点(14px)大,顶部/左右都要留够
+   * 空间,否则轴两端(0%/100%)的队徽会被行边界裁切。 */
+  margin: 18px 14px 4px;
+}
+
+/* 联赛均值刻度:固定在 50%,--ink-3 淡刻度线,不随数据变化位置。 */
+.meanTick {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 2px;
+  height: 12px;
+  background: var(--ink-3);
+  opacity: 0.5;
+  transform: translateX(-1px);
+}
+
+/* 2026-09:轴上原来是两个 14px 纯色点,只用颜色区分——站长反馈"分不清
+ * 哪个点是哪队"。换成队徽当点,样式由共用的 CrestDot.module.css 提供
+ * (见 CrestDot.tsx,MatchProfileOverview 的组级轴也用同一份)。 */
+
+.axisLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 2px 4px 8px;
+}
+
+/* 2026-09 第三轮:数值行从"队名+数值+百分位横排四元素 ×2"改成左右分置的
+   双层块——375px 实测原来 54px 高且已换行(「利物浦」被拆成「利物/浦」)。
+   排版照搬 MatchupSection 的 .rowSide 范式(18px 大数在上、12px 小注在下),
+   归属靠队徽不靠位置,队名不再逐行重复。 */
+.valuesRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: 6px;
+}
+
+.side {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.side[data-side="away"] {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.sideText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sideValue {
+  font-size: 18px;
+  font-weight: 700;
+  /* 落后侧默认弱化成 --ink-3,领先侧下面按 data-leader 换成队色——
+     站长反馈"两队同字号同粗同色,看不出谁领先"。 */
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.side[data-leader="true"][data-side="home"] .sideValue {
+  color: var(--brand-teal);
+}
+
+.side[data-leader="true"][data-side="away"] .sideValue {
+  color: var(--brand-blue);
+}
+
+.sidePct {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* 差值胶囊:队名(谁领先)+ 箭头(原始值更多/更少)+ 数字(差多少)三通道
+   冗余(CLAUDE.md §11.2)。方向走 data-side,颜色用领先方队色——这里的
+   语义是"哪一队",不是涨跌(--odds-*)也不是对错(--win/--loss)。 */
+.deltaChip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid currentColor;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.deltaChip[data-side="home"] {
+  color: var(--brand-teal);
+}
+
+.deltaChip[data-side="away"] {
+  color: var(--brand-blue);
+}
+
+.deltaNum {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.partial {
+  /* 2026-09:原 10px 低于 CLAUDE.md §11.2 的 12px 下限。 */
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-left: 1px;
+}
+
+.emptyRow {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+}
+
+.footNote {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.verdict {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* 折叠区:同 ProjectedLineupSection/.bench 与 MatchupSection 的既有范式,
+   原生 <details>,不引入额外状态。 */
+.moreDetail,
+.methodDetail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.moreSummary,
+.methodSummary {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  color: var(--brand-teal);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.methodSummary {
+  color: var(--ink-3);
+  font-weight: 600;
+  font-size: 12px;
+}

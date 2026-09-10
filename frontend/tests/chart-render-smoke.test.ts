@@ -326,6 +326,7 @@ describe("TeamStyleQuadrant.buildOption 渲染冒烟", () => {
     quadrants: ["攻强守强", "攻强守弱", "攻弱守强", "攻弱守弱"],
     points: [],
     y_lower_is_better: true,
+    window: 5,
   };
   const pts = [
     { team_id: 1, name: "主队", x: 1.8, y: 0.9 },
@@ -362,6 +363,21 @@ describe("TeamStyleQuadrant.buildOption 渲染冒烟", () => {
       );
       expect(r.images).toBe(3);
       expect(r.svg).toContain("第三队");
+    });
+
+    it("2026-09 窄屏 compactOthers:非选中球队(即使有队徽)一律降级成圆点,不再产出 <image>,也不再显示队名", () => {
+      const r = renderSvg(
+        buildQuadrantOption(view, crested, 1.35, 1.25, 1, 2, COLORS, {
+          crestSize: 22, layout, xr, yr, compactOthers: true,
+        }),
+        SIZE,
+      );
+      // 4 支球队里只有本场两队(1、2,均有队徽)保留 <image>;
+      // 团队 4 平时有队徽(默认模式会算进 3 张 <image> 里),compactOthers
+      // 下必须消失——这条断言正是锁死"降级不是只对无队徽的队生效"。
+      expect(r.images).toBe(2);
+      expect(r.svg).not.toContain("第三队");
+      expect(r.svg).not.toContain("第四队");
     });
 
     it("默认选中主客两队 → 有光环;换成对比第三队也不抛", () => {

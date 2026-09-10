@@ -325,4 +325,33 @@ describe("MatchupSection", () => {
     render(<MatchupSection homeName="主队" awayName="客队" home={empty} away={empty} />);
     expect(screen.getByText(/样本口径不同,暂不作高低判断/)).not.toBeNull();
   });
+
+  describe("2026-09 移动端修复:结论常驻 + 8 行明细默认折叠", () => {
+    it("<details> 默认收起,摘要标出真实项数", () => {
+      const home = profile();
+      const away = profile({ label_zh: "近 10 个客场" });
+      const { container } = render(
+        <MatchupSection homeName="主队" awayName="客队" home={home} away={away} />,
+      );
+      const details = container.querySelector("details");
+      expect(details).not.toBeNull();
+      expect(details?.open).toBe(false);
+      // profile() 每个方向 4 个 situation,两个方向共 8 项——不是写死的
+      // "8",断言必须随 fixture 的 situations 数量走,防止两边脱节。
+      const expectedCount = home.situations.length + away.situations.length;
+      expect(details?.querySelector("summary")?.textContent).toContain(`${expectedCount} 项`);
+    });
+
+    it("结论段落(summary 文案)在 <details> 之外,折叠状态下依然可读", () => {
+      const home = profile();
+      const away = profile({ label_zh: "近 10 个客场" });
+      const { container } = render(
+        <MatchupSection homeName="主队" awayName="客队" home={home} away={away} />,
+      );
+      const details = container.querySelector("details");
+      const conclusion = container.querySelector('[class*="summary"]');
+      expect(conclusion).not.toBeNull();
+      expect(details?.contains(conclusion)).toBe(false);
+    });
+  });
 });

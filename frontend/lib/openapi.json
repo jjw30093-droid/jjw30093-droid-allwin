@@ -9601,6 +9601,62 @@
     "title": "MarketLineCalibrationDTO",
     "description": "折叠区\"本市场各盘口线的历史回测\"一行:market.lines(该市场全部已标定\n线,不止默认线)中某一条的标定结果,与卡片顶层 line/signal_grade/\nhit_rate/lean(结论区,只看默认线,B6:不换线)完全独立的第二组数据,\n纯粹是\"我们对这条线做过什么离线回测\"的透明度展示。\n\nsignal_grade 为 None 时(该线从未标定过,或标定了但外样本不单调),\nhit_rate 与 sample_size 必须同为 None——由后端在这里就置空,不是前端\n选择性隐藏(B2:未定级的线禁止展示命中率数值)。"
    },
+   "MatchDataProfileDTO": {
+    "properties": {
+     "home_matches": {
+      "type": "integer",
+      "title": "Home Matches"
+     },
+     "away_matches": {
+      "type": "integer",
+      "title": "Away Matches"
+     },
+     "home_available": {
+      "type": "boolean",
+      "title": "Home Available"
+     },
+     "away_available": {
+      "type": "boolean",
+      "title": "Away Available"
+     },
+     "groups": {
+      "items": {
+       "$ref": "#/components/schemas/MatchProfileGroupDTO"
+      },
+      "type": "array",
+      "title": "Groups"
+     },
+     "highlights": {
+      "items": {
+       "$ref": "#/components/schemas/MatchProfileHighlightDTO"
+      },
+      "type": "array",
+      "title": "Highlights"
+     },
+     "unavailable_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unavailable Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "home_matches",
+     "away_matches",
+     "home_available",
+     "away_available",
+     "groups",
+     "highlights"
+    ],
+    "title": "MatchDataProfileDTO",
+    "description": "数据 tab「风格」子 tab 总览层:联赛百分位画像(2026-09 重构)。\n\n主队对**联赛主场分布**取百分位,客队对**联赛客场分布**取百分位——两套\n独立分布,不共用同一个原始联赛均值(主客场系统性差异 17~18%)。两队因此\n不在同一条绝对数值尺上,但在各自的百分位尺上可比,前端文案必须讲清楚\n这一点,不能暗示两队在比同一把绝对尺子。"
+   },
    "MatchDetailResponse": {
     "properties": {
      "match": {
@@ -10250,101 +10306,6 @@
     ],
     "title": "MatchOddsUnavailableDTO"
    },
-   "MatchPreviewAttackChainDTO": {
-    "properties": {
-     "tier": {
-      "type": "string",
-      "title": "Tier"
-     },
-     "matches": {
-      "type": "integer",
-      "title": "Matches"
-     },
-     "label_zh": {
-      "type": "string",
-      "title": "Label Zh"
-     },
-     "volume_keys": {
-      "items": {
-       "type": "string"
-      },
-      "type": "array",
-      "title": "Volume Keys"
-     },
-     "conversion_keys": {
-      "items": {
-       "type": "string"
-      },
-      "type": "array",
-      "title": "Conversion Keys"
-     },
-     "opp_half_pass_share": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "touches_opp_box": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "shots": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "shots_on_target": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "xg": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "xgot": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "shots_per_100_box_touches": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "shot_on_target_rate": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "xg_per_shot": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "xgot_per_sot": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     }
-    },
-    "type": "object",
-    "required": [
-     "tier",
-     "matches",
-     "label_zh",
-     "volume_keys",
-     "conversion_keys",
-     "opp_half_pass_share",
-     "touches_opp_box",
-     "shots",
-     "shots_on_target",
-     "xg",
-     "xgot",
-     "shots_per_100_box_touches",
-     "shot_on_target_rate",
-     "xg_per_shot",
-     "xgot_per_sot"
-    ],
-    "title": "MatchPreviewAttackChainDTO"
-   },
-   "MatchPreviewAttackChainsDTO": {
-    "properties": {
-     "home": {
-      "$ref": "#/components/schemas/MatchPreviewAttackChainDTO"
-     },
-     "away": {
-      "$ref": "#/components/schemas/MatchPreviewAttackChainDTO"
-     }
-    },
-    "type": "object",
-    "required": [
-     "home",
-     "away"
-    ],
-    "title": "MatchPreviewAttackChainsDTO"
-   },
    "MatchPreviewAttackSourceDTO": {
     "properties": {
      "key": {
@@ -10408,33 +10369,6 @@
     ],
     "title": "MatchPreviewAttackSourcesDTO"
    },
-   "MatchPreviewChainMetricDTO": {
-    "properties": {
-     "value": {
-      "anyOf": [
-       {
-        "type": "number"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Value"
-     },
-     "complete": {
-      "type": "boolean",
-      "title": "Complete",
-      "default": false
-     },
-     "matches_with_data": {
-      "type": "integer",
-      "title": "Matches With Data",
-      "default": 0
-     }
-    },
-    "type": "object",
-    "title": "MatchPreviewChainMetricDTO"
-   },
    "MatchPreviewCoachDTO": {
     "properties": {
      "id": {
@@ -10459,61 +10393,6 @@
     ],
     "title": "MatchPreviewCoachDTO",
     "description": "FotMob content.lineup.{home,away}Team.coach 的最小子集(只有 id/name)。\n2026-08-18 之前写入的快照 payload 没有这个键,读侧如实 None,不回填猜测值。"
-   },
-   "MatchPreviewDefensivePressureDTO": {
-    "properties": {
-     "tier": {
-      "type": "string",
-      "title": "Tier"
-     },
-     "matches": {
-      "type": "integer",
-      "title": "Matches"
-     },
-     "label_zh": {
-      "type": "string",
-      "title": "Label Zh"
-     },
-     "shots_faced": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "shots_on_target_faced": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "xga": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "box_shots_faced": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     }
-    },
-    "type": "object",
-    "required": [
-     "tier",
-     "matches",
-     "label_zh",
-     "shots_faced",
-     "shots_on_target_faced",
-     "xga",
-     "box_shots_faced"
-    ],
-    "title": "MatchPreviewDefensivePressureDTO"
-   },
-   "MatchPreviewDefensivePressuresDTO": {
-    "properties": {
-     "home": {
-      "$ref": "#/components/schemas/MatchPreviewDefensivePressureDTO"
-     },
-     "away": {
-      "$ref": "#/components/schemas/MatchPreviewDefensivePressureDTO"
-     }
-    },
-    "type": "object",
-    "required": [
-     "home",
-     "away"
-    ],
-    "title": "MatchPreviewDefensivePressuresDTO"
    },
    "MatchPreviewKeeperDTO": {
     "properties": {
@@ -11054,61 +10933,6 @@
     ],
     "title": "MatchPreviewPlayerShareRowDTO"
    },
-   "MatchPreviewPossessionControlDTO": {
-    "properties": {
-     "tier": {
-      "type": "string",
-      "title": "Tier"
-     },
-     "matches": {
-      "type": "integer",
-      "title": "Matches"
-     },
-     "label_zh": {
-      "type": "string",
-      "title": "Label Zh"
-     },
-     "possession": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "pass_accuracy": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "opp_half_pass_share": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     },
-     "touches_opp_box": {
-      "$ref": "#/components/schemas/MatchPreviewChainMetricDTO"
-     }
-    },
-    "type": "object",
-    "required": [
-     "tier",
-     "matches",
-     "label_zh",
-     "possession",
-     "pass_accuracy",
-     "opp_half_pass_share",
-     "touches_opp_box"
-    ],
-    "title": "MatchPreviewPossessionControlDTO"
-   },
-   "MatchPreviewPossessionControlsDTO": {
-    "properties": {
-     "home": {
-      "$ref": "#/components/schemas/MatchPreviewPossessionControlDTO"
-     },
-     "away": {
-      "$ref": "#/components/schemas/MatchPreviewPossessionControlDTO"
-     }
-    },
-    "type": "object",
-    "required": [
-     "home",
-     "away"
-    ],
-    "title": "MatchPreviewPossessionControlsDTO"
-   },
    "MatchPreviewResponse": {
     "properties": {
      "match_id": {
@@ -11155,14 +10979,8 @@
      "attack_sources": {
       "$ref": "#/components/schemas/MatchPreviewAttackSourcesDTO"
      },
-     "attack_chains": {
-      "$ref": "#/components/schemas/MatchPreviewAttackChainsDTO"
-     },
-     "possession_controls": {
-      "$ref": "#/components/schemas/MatchPreviewPossessionControlsDTO"
-     },
-     "defensive_pressures": {
-      "$ref": "#/components/schemas/MatchPreviewDefensivePressuresDTO"
+     "data_profile": {
+      "$ref": "#/components/schemas/MatchDataProfileDTO"
      },
      "matchup_profiles": {
       "$ref": "#/components/schemas/MatchPreviewMatchupProfilesDTO"
@@ -11182,9 +11000,7 @@
      "sidelined",
      "style_views",
      "attack_sources",
-     "attack_chains",
-     "possession_controls",
-     "defensive_pressures",
+     "data_profile",
      "matchup_profiles",
      "key_players",
      "keepers"
@@ -11350,6 +11166,10 @@
       "type": "boolean",
       "title": "Y Lower Is Better",
       "default": false
+     },
+     "window": {
+      "type": "integer",
+      "title": "Window"
      }
     },
     "type": "object",
@@ -11361,7 +11181,8 @@
      "y_label",
      "digits",
      "quadrants",
-     "points"
+     "points",
+     "window"
     ],
     "title": "MatchPreviewStyleViewDTO"
    },
@@ -11388,6 +11209,241 @@
     ],
     "title": "MatchPreviewWindowDTO",
     "description": "单支球队\"近 N 场\"的真实场次数与日期区间(CLAUDE.md §11.2 措辞纪律:\n不能只写\"近 5 场\"三个字了事)。主客队各自独立的窗口,不合并成一个——\n历史场次不同(如升班马)时合并会掩盖其中一队样本更少的事实。"
+   },
+   "MatchProfileGroupDTO": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "title_zh": {
+      "type": "string",
+      "title": "Title Zh"
+     },
+     "metrics": {
+      "items": {
+       "$ref": "#/components/schemas/MatchProfileMetricDTO"
+      },
+      "type": "array",
+      "title": "Metrics"
+     },
+     "home_group_percentile": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Group Percentile"
+     },
+     "away_group_percentile": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Group Percentile"
+     },
+     "home_peers": {
+      "items": {
+       "$ref": "#/components/schemas/MatchProfilePeerDTO"
+      },
+      "type": "array",
+      "title": "Home Peers",
+      "default": []
+     },
+     "away_peers": {
+      "items": {
+       "$ref": "#/components/schemas/MatchProfilePeerDTO"
+      },
+      "type": "array",
+      "title": "Away Peers",
+      "default": []
+     }
+    },
+    "type": "object",
+    "required": [
+     "key",
+     "title_zh",
+     "metrics"
+    ],
+    "title": "MatchProfileGroupDTO"
+   },
+   "MatchProfileHighlightDTO": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "name_zh": {
+      "type": "string",
+      "title": "Name Zh"
+     },
+     "home_percentile": {
+      "type": "integer",
+      "title": "Home Percentile"
+     },
+     "away_percentile": {
+      "type": "integer",
+      "title": "Away Percentile"
+     },
+     "gap": {
+      "type": "integer",
+      "title": "Gap"
+     },
+     "home_value": {
+      "type": "number",
+      "title": "Home Value"
+     },
+     "away_value": {
+      "type": "number",
+      "title": "Away Value"
+     }
+    },
+    "type": "object",
+    "required": [
+     "key",
+     "name_zh",
+     "home_percentile",
+     "away_percentile",
+     "gap",
+     "home_value",
+     "away_value"
+    ],
+    "title": "MatchProfileHighlightDTO"
+   },
+   "MatchProfileMetricDTO": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "name_zh": {
+      "type": "string",
+      "title": "Name Zh"
+     },
+     "unit": {
+      "type": "string",
+      "title": "Unit"
+     },
+     "direction": {
+      "type": "string",
+      "title": "Direction"
+     },
+     "semantic": {
+      "type": "string",
+      "title": "Semantic"
+     },
+     "home_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Value"
+     },
+     "away_value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Value"
+     },
+     "home_percentile": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Percentile"
+     },
+     "away_percentile": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Percentile"
+     },
+     "home_complete": {
+      "type": "boolean",
+      "title": "Home Complete"
+     },
+     "away_complete": {
+      "type": "boolean",
+      "title": "Away Complete"
+     },
+     "league_sample_size": {
+      "type": "integer",
+      "title": "League Sample Size"
+     }
+    },
+    "type": "object",
+    "required": [
+     "key",
+     "name_zh",
+     "unit",
+     "direction",
+     "semantic",
+     "home_complete",
+     "away_complete",
+     "league_sample_size"
+    ],
+    "title": "MatchProfileMetricDTO",
+    "description": "攻/守/控画像里的单个指标——两队各自的原始值 + 各自在联赛同 venue\n分布里的百分位。`direction` 决定前端措辞:`lower_better` 的指标百分位\n已经是\"数值越低、百分位越高\"归一化后的结果(见\nbackend/metrics/percentile.py),前端不需要再自己反转。"
+   },
+   "MatchProfilePeerDTO": {
+    "properties": {
+     "team_id": {
+      "type": "integer",
+      "title": "Team Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "crest_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Crest Url"
+     },
+     "percentile": {
+      "type": "number",
+      "title": "Percentile"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team_id",
+     "name",
+     "percentile"
+    ],
+    "title": "MatchProfilePeerDTO",
+    "description": "对标球队(2026-09 第二轮):同场景(主场分布/客场分布,与本组百分位\n同一套分布)组级百分位最接近的球队,回答\"这队大概是联赛里什么水平/\n接近哪个集团\"——不是简单排序,是按 |Δ百分位| 最近的 2 支。"
    },
    "MatchReportAvailableDTO": {
     "properties": {

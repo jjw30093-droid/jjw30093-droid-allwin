@@ -237,6 +237,11 @@ def league_style_views(
             "id": view["id"], "tab": view["tab"], "title": view["title"],
             "x_label": view["x_label"], "y_label": view["y_label"], "digits": view["digits"],
             "quadrants": view["quadrants"], "points": points,
+            # 2026-09 真实缺陷修复:卡片头曾经写死"每队 5 场",与卡片上方
+            # windowNote 的真实窗口(可能因为 team_window_bounds 样本不足而
+            # 少于 WINDOW)不一致,同一张卡里两个矛盾的样本量。原样透出调用
+            # 该函数时使用的 window 参数,前端不再自己猜。
+            "window": window,
             # 方向语义必须端到端传播到 DTO/前端(不能只在这个模块内部知道)——
             # 前端 quadOf() 靠这个字段判断"y 高是不是好",不能假定越高越好。
             "y_lower_is_better": view.get("y_lower_is_better", False),

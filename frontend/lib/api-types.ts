@@ -2423,6 +2423,31 @@ export interface components {
             /** Sample Size */
             sample_size?: number | null;
         };
+        /**
+         * MatchDataProfileDTO
+         * @description 数据 tab「风格」子 tab 总览层:联赛百分位画像(2026-09 重构)。
+         *
+         *     主队对**联赛主场分布**取百分位,客队对**联赛客场分布**取百分位——两套
+         *     独立分布,不共用同一个原始联赛均值(主客场系统性差异 17~18%)。两队因此
+         *     不在同一条绝对数值尺上,但在各自的百分位尺上可比,前端文案必须讲清楚
+         *     这一点,不能暗示两队在比同一把绝对尺子。
+         */
+        MatchDataProfileDTO: {
+            /** Home Matches */
+            home_matches: number;
+            /** Away Matches */
+            away_matches: number;
+            /** Home Available */
+            home_available: boolean;
+            /** Away Available */
+            away_available: boolean;
+            /** Groups */
+            groups: components["schemas"]["MatchProfileGroupDTO"][];
+            /** Highlights */
+            highlights: components["schemas"]["MatchProfileHighlightDTO"][];
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
+        };
         /** MatchDetailResponse */
         MatchDetailResponse: {
             match: components["schemas"]["MatchDetailSummary"];
@@ -2622,34 +2647,6 @@ export interface components {
             /** Reason */
             reason: string;
         };
-        /** MatchPreviewAttackChainDTO */
-        MatchPreviewAttackChainDTO: {
-            /** Tier */
-            tier: string;
-            /** Matches */
-            matches: number;
-            /** Label Zh */
-            label_zh: string;
-            /** Volume Keys */
-            volume_keys: string[];
-            /** Conversion Keys */
-            conversion_keys: string[];
-            opp_half_pass_share: components["schemas"]["MatchPreviewChainMetricDTO"];
-            touches_opp_box: components["schemas"]["MatchPreviewChainMetricDTO"];
-            shots: components["schemas"]["MatchPreviewChainMetricDTO"];
-            shots_on_target: components["schemas"]["MatchPreviewChainMetricDTO"];
-            xg: components["schemas"]["MatchPreviewChainMetricDTO"];
-            xgot: components["schemas"]["MatchPreviewChainMetricDTO"];
-            shots_per_100_box_touches: components["schemas"]["MatchPreviewChainMetricDTO"];
-            shot_on_target_rate: components["schemas"]["MatchPreviewChainMetricDTO"];
-            xg_per_shot: components["schemas"]["MatchPreviewChainMetricDTO"];
-            xgot_per_sot: components["schemas"]["MatchPreviewChainMetricDTO"];
-        };
-        /** MatchPreviewAttackChainsDTO */
-        MatchPreviewAttackChainsDTO: {
-            home: components["schemas"]["MatchPreviewAttackChainDTO"];
-            away: components["schemas"]["MatchPreviewAttackChainDTO"];
-        };
         /** MatchPreviewAttackSourceDTO */
         MatchPreviewAttackSourceDTO: {
             /** Key */
@@ -2670,21 +2667,6 @@ export interface components {
             /** Away */
             away: components["schemas"]["MatchPreviewAttackSourceDTO"][];
         };
-        /** MatchPreviewChainMetricDTO */
-        MatchPreviewChainMetricDTO: {
-            /** Value */
-            value?: number | null;
-            /**
-             * Complete
-             * @default false
-             */
-            complete: boolean;
-            /**
-             * Matches With Data
-             * @default 0
-             */
-            matches_with_data: number;
-        };
         /**
          * MatchPreviewCoachDTO
          * @description FotMob content.lineup.{home,away}Team.coach 的最小子集(只有 id/name)。
@@ -2695,24 +2677,6 @@ export interface components {
             id?: number | null;
             /** Name */
             name: string;
-        };
-        /** MatchPreviewDefensivePressureDTO */
-        MatchPreviewDefensivePressureDTO: {
-            /** Tier */
-            tier: string;
-            /** Matches */
-            matches: number;
-            /** Label Zh */
-            label_zh: string;
-            shots_faced: components["schemas"]["MatchPreviewChainMetricDTO"];
-            shots_on_target_faced: components["schemas"]["MatchPreviewChainMetricDTO"];
-            xga: components["schemas"]["MatchPreviewChainMetricDTO"];
-            box_shots_faced: components["schemas"]["MatchPreviewChainMetricDTO"];
-        };
-        /** MatchPreviewDefensivePressuresDTO */
-        MatchPreviewDefensivePressuresDTO: {
-            home: components["schemas"]["MatchPreviewDefensivePressureDTO"];
-            away: components["schemas"]["MatchPreviewDefensivePressureDTO"];
         };
         /** MatchPreviewKeeperDTO */
         MatchPreviewKeeperDTO: {
@@ -2880,24 +2844,6 @@ export interface components {
             /** Count */
             count: number;
         };
-        /** MatchPreviewPossessionControlDTO */
-        MatchPreviewPossessionControlDTO: {
-            /** Tier */
-            tier: string;
-            /** Matches */
-            matches: number;
-            /** Label Zh */
-            label_zh: string;
-            possession: components["schemas"]["MatchPreviewChainMetricDTO"];
-            pass_accuracy: components["schemas"]["MatchPreviewChainMetricDTO"];
-            opp_half_pass_share: components["schemas"]["MatchPreviewChainMetricDTO"];
-            touches_opp_box: components["schemas"]["MatchPreviewChainMetricDTO"];
-        };
-        /** MatchPreviewPossessionControlsDTO */
-        MatchPreviewPossessionControlsDTO: {
-            home: components["schemas"]["MatchPreviewPossessionControlDTO"];
-            away: components["schemas"]["MatchPreviewPossessionControlDTO"];
-        };
         /** MatchPreviewResponse */
         MatchPreviewResponse: {
             /** Match Id */
@@ -2911,9 +2857,7 @@ export interface components {
             /** Style Views */
             style_views: components["schemas"]["MatchPreviewStyleViewDTO"][];
             attack_sources: components["schemas"]["MatchPreviewAttackSourcesDTO"];
-            attack_chains: components["schemas"]["MatchPreviewAttackChainsDTO"];
-            possession_controls: components["schemas"]["MatchPreviewPossessionControlsDTO"];
-            defensive_pressures: components["schemas"]["MatchPreviewDefensivePressuresDTO"];
+            data_profile: components["schemas"]["MatchDataProfileDTO"];
             matchup_profiles: components["schemas"]["MatchPreviewMatchupProfilesDTO"];
             key_players: components["schemas"]["MatchPreviewKeyPlayersDTO"];
             keepers: components["schemas"]["MatchPreviewKeepersDTO"];
@@ -2972,6 +2916,8 @@ export interface components {
              * @default false
              */
             y_lower_is_better: boolean;
+            /** Window */
+            window: number;
         };
         /**
          * MatchPreviewWindowDTO
@@ -2986,6 +2932,95 @@ export interface components {
             from: string;
             /** To */
             to: string;
+        };
+        /** MatchProfileGroupDTO */
+        MatchProfileGroupDTO: {
+            /** Key */
+            key: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Metrics */
+            metrics: components["schemas"]["MatchProfileMetricDTO"][];
+            /** Home Group Percentile */
+            home_group_percentile?: number | null;
+            /** Away Group Percentile */
+            away_group_percentile?: number | null;
+            /**
+             * Home Peers
+             * @default []
+             */
+            home_peers: components["schemas"]["MatchProfilePeerDTO"][];
+            /**
+             * Away Peers
+             * @default []
+             */
+            away_peers: components["schemas"]["MatchProfilePeerDTO"][];
+        };
+        /** MatchProfileHighlightDTO */
+        MatchProfileHighlightDTO: {
+            /** Key */
+            key: string;
+            /** Name Zh */
+            name_zh: string;
+            /** Home Percentile */
+            home_percentile: number;
+            /** Away Percentile */
+            away_percentile: number;
+            /** Gap */
+            gap: number;
+            /** Home Value */
+            home_value: number;
+            /** Away Value */
+            away_value: number;
+        };
+        /**
+         * MatchProfileMetricDTO
+         * @description 攻/守/控画像里的单个指标——两队各自的原始值 + 各自在联赛同 venue
+         *     分布里的百分位。`direction` 决定前端措辞:`lower_better` 的指标百分位
+         *     已经是"数值越低、百分位越高"归一化后的结果(见
+         *     backend/metrics/percentile.py),前端不需要再自己反转。
+         */
+        MatchProfileMetricDTO: {
+            /** Key */
+            key: string;
+            /** Name Zh */
+            name_zh: string;
+            /** Unit */
+            unit: string;
+            /** Direction */
+            direction: string;
+            /** Semantic */
+            semantic: string;
+            /** Home Value */
+            home_value?: number | null;
+            /** Away Value */
+            away_value?: number | null;
+            /** Home Percentile */
+            home_percentile?: number | null;
+            /** Away Percentile */
+            away_percentile?: number | null;
+            /** Home Complete */
+            home_complete: boolean;
+            /** Away Complete */
+            away_complete: boolean;
+            /** League Sample Size */
+            league_sample_size: number;
+        };
+        /**
+         * MatchProfilePeerDTO
+         * @description 对标球队(2026-09 第二轮):同场景(主场分布/客场分布,与本组百分位
+         *     同一套分布)组级百分位最接近的球队,回答"这队大概是联赛里什么水平/
+         *     接近哪个集团"——不是简单排序,是按 |Δ百分位| 最近的 2 支。
+         */
+        MatchProfilePeerDTO: {
+            /** Team Id */
+            team_id: number;
+            /** Name */
+            name: string;
+            /** Crest Url */
+            crest_url?: string | null;
+            /** Percentile */
+            percentile: number;
         };
         /** MatchReportAvailableDTO */
         MatchReportAvailableDTO: {
