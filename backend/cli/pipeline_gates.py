@@ -26,6 +26,9 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
   G14 extra_json_unknown_key      球队统计 extra_json 出现白名单外新键 WARNING
   G15 fixture_round_gap           数字轮次出现整轮空缺(中途接入联赛的历史场次
                                    漏采,CLAUDE.md §6.3)                CRITICAL
+                                   已登记在 G15_ACCEPTED_GAPS 的已知缺口照常
+                                   算、照常在 accepted_gaps 里报,但不抬级别;
+                                   缺口超出基线仍 CRITICAL
 
 数据不足时(联赛未同步过、窗口内场次太少、尚无完赛样本)如实记 skipped,
 不猜、不误报——前身项目教训:季外联赛误报会让告警在两周内被当成噪音关掉。
@@ -101,6 +104,38 @@ G15_MIN_MAX_ROUND = 5
 # 已知例外(联赛真实存在结构性轮次缺口,不是数据丢失):今天为空,保留位置
 # 供将来发现真实赛制特例时登记,不要把这当成放宽阈值的入口。
 G15_EXEMPT: set[tuple[int, str]] = set()
+
+# 已知缺口(2026-09-10,站长拍板):检测判定完全正确、缺口真实存在,但**决定
+# 不回填**。与 G15_EXEMPT 语义不同,别混用——那个是"赛制本来就这样,不算
+# 缺口",这个是"确实缺了,我们知道,不修"。
+#
+# 缺口成因是 CLAUDE.md §6.3 记过的结构性问题:赛程同步只写"尚未完赛"的比赛,
+# 中途接入的联赛在接入那一刻已经踢完的场次永久缺失,没有任何定时任务会补,
+# 要补只能手动跑 backfill_fixtures.py。站长权衡后决定不补(网站只看当前采集),
+# 于是这两个 (联赛, 赛季) 会永远命中这道门。
+#
+# 为什么不直接像 G15_EXEMPT 那样 continue 跳过:一道永远红的门会把整套告警
+# 的可信度拖下水(本文件 G10 与本函数注释里两次记过"两周内被当噪音关掉"的
+# 教训);但**静默消失同样危险**——缺口还在,只是没人看得见了。折中是:值照常
+# 算、照常出现在返回值的 accepted_gaps 里(文本输出也会逐条打印),只是不再
+# 抬高这道门的级别。
+#
+# value 是**接受的缺口规模基线**(missing_count),不是布尔开关:实际缺口超过
+# 基线说明出了新问题(不只是当初那批历史场次),照常 CRITICAL 并标注
+# exceeds_accepted_baseline。这与 G12 season_label_drift 的"存量基线 + 只报
+# 新增漂移"是同一套路。基线取自 2026-09-10 生产实测。
+#
+# 想撤销这个决定就删掉对应行,然后跑
+#   python -m backend.cli.backfill_fixtures --league-id <id> --season <season> --commit
+# (§6.3 要求骨架和明细成对补,只补骨架会造出 status='Finish' 但比分为 NULL
+#  的行,比缺失更糟)。
+G15_ACCEPTED_GAPS: dict[tuple[int, str], int] = {
+    # 英冠:实存轮次仅 37-46(2026-03 中途接入),缺 1-36 共 36 轮 / 432 场
+    (48, "2025/2026"): 36,
+    # 巴甲:实存轮次 {4, 21, 23-38},缺 20 轮 / 215 场——就是 §6.3 点名的那次
+    # 事故本身,当时说好要补跑 backfill_fixtures,一直没跑,现在正式决定不补
+    (268, "2026"): 20,
+}
 
 
 def _parse_iso(ts: str) -> datetime:
@@ -641,6 +676,7 @@ def _gate_fixture_round_gap(conn_core) -> dict:
         by_key.setdefault((int(r["League_ID"]), r["Season"]), set()).add(int(r["Match_Round"]))
 
     violations = []
+    accepted = []
     for (lid, season), rounds in sorted(by_key.items()):
         if (lid, season) in G15_EXEMPT:
             continue
@@ -648,14 +684,24 @@ def _gate_fixture_round_gap(conn_core) -> dict:
         if max_round < G15_MIN_MAX_ROUND:
             continue
         missing = sorted(set(range(1, max_round + 1)) - rounds)
-        if missing:
-            violations.append({
-                "league_id": lid, "league": _league_name(lid), "season": season,
-                "max_round": max_round, "rows_present": len(rounds),
-                "missing_rounds": missing[:15], "missing_count": len(missing),
-            })
+        if not missing:
+            continue
+        entry = {
+            "league_id": lid, "league": _league_name(lid), "season": season,
+            "max_round": max_round, "rows_present": len(rounds),
+            "missing_rounds": missing[:15], "missing_count": len(missing),
+        }
+        baseline = G15_ACCEPTED_GAPS.get((lid, season))
+        if baseline is not None:
+            entry["accepted_baseline"] = baseline
+            # 缺口没超出已接受的规模 → 如实记录但不抬级别;超出说明是新问题
+            if len(missing) <= baseline:
+                accepted.append(entry)
+                continue
+            entry["exceeds_accepted_baseline"] = True
+        violations.append(entry)
     return {"gate": "fixture_round_gap", "level": CRITICAL if violations else OK,
-            "violations": violations}
+            "violations": violations, "accepted_gaps": accepted}
 
 
 # ── 汇总与告警 ───────────────────────────────────────────────────────
@@ -753,6 +799,11 @@ def main(argv=None) -> int:
         for g in report["gates"]:
             mark = "  " if g["level"] == OK else "! "
             print(f"{mark}{g['gate']}: {g['level']}")
+            # 已知缺口不抬级别,但必须看得见——静默消失比永远红更危险
+            for a in g.get("accepted_gaps", []):
+                print(f"    · 已知缺口(已决定不修,基线 {a['accepted_baseline']} 轮): "
+                      f"{a['league']} {a['season']} 缺 {a['missing_count']} 轮 / "
+                      f"实存 {a['rows_present']} 轮")
     return _RANK[report["level"]]
 
 

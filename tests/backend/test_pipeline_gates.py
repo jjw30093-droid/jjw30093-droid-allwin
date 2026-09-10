@@ -449,15 +449,62 @@ class TestFixtureRoundGap:
         conn_core.commit()
         conn_core.close()
         g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
-        assert g["level"] == "CRITICAL"
-        v = next(x for x in g["violations"] if x["league_id"] == 268)
+        # 2026-09-10 起 (268, "2026") 登记在 G15_ACCEPTED_GAPS(站长决定不回填),
+        # 所以它不再抬高门的级别 —— 但**检测本身必须照常发生**:下面这些断言
+        # 就是那次事故的回归防线,只是搬到了 accepted_gaps 里。检测逻辑一旦
+        # 退化,这条目会整个消失,断言照样炸。
+        v = next(x for x in g["accepted_gaps"] if x["league_id"] == 268)
         assert v["max_round"] == 38
         # missing_rounds 只保留前 15 个(门里 missing[:15]),所以 22 不在里面,
         # 用 missing_count 断言完整规模:1-3、5-20、22 共 20 轮缺失。
         assert v["missing_count"] == 20
         assert v["rows_present"] == 18
+        assert v["accepted_baseline"] == 20
+        assert "exceeds_accepted_baseline" not in v
         for expected_missing in (1, 2, 3, 5):
             assert expected_missing in v["missing_rounds"]
+        assert all(x["league_id"] != 268 for x in g["violations"])
+
+    def test_accepted_gap_other_season_still_critical(self, data_dir):
+        """已知缺口是按 (联赛, 赛季) 登记的:同一个联赛的**其它赛季**出现缺口
+        照样 CRITICAL —— 否则这个豁免就成了整个联赛的永久盲区。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        kickoff = "2025-08-12T12:00:00Z"
+        season = _derived_season(conn_core, 268, kickoff)
+        assert season != "2026", "本用例必须落在 2026 之外的赛季才有意义"
+        mid = 6300
+        for r in [4, 21] + list(range(23, 39)):
+            _seed_round(conn_core, mid, 268, season, str(r), kickoff=kickoff)
+            mid += 1
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "CRITICAL"
+        v = next(x for x in g["violations"] if x["league_id"] == 268)
+        assert v["season"] == season
+        assert g["accepted_gaps"] == []
+
+    def test_accepted_gap_growing_beyond_baseline_is_critical(self, data_dir):
+        """缺口**超出**已接受的基线 → 说明出了新问题(不只是当初那批历史场次),
+        照常 CRITICAL 并标注 exceeds_accepted_baseline。豁免的是"这么大的已知
+        缺口",不是"这个联赛以后怎么烂都不用管"。"""
+        conn_core = connect_rw("core")
+        seed_core_schema(conn_core)
+        season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
+        # 比生产形态再少一轮(去掉 21)→ missing_count 21 > 基线 20
+        mid = 6400
+        for r in [4] + list(range(23, 39)):
+            _seed_round(conn_core, mid, 268, season, str(r))
+            mid += 1
+        conn_core.commit()
+        conn_core.close()
+        g = _gate(pg.run(now_iso=NOW), "fixture_round_gap")
+        assert g["level"] == "CRITICAL"
+        v = next(x for x in g["violations"] if x["league_id"] == 268)
+        assert v["missing_count"] == 21
+        assert v["accepted_baseline"] == 20
+        assert v["exceeds_accepted_baseline"] is True
 
     def test_57_shape_critical_missing_first_round(self, data_dir):
         conn_core = connect_rw("core")
@@ -547,12 +594,17 @@ class TestFixtureRoundGap:
         assert all(v["league_id"] != 42 for v in g["violations"])
 
     def test_alert_row_written_and_job_not_failed(self, data_dir):
+        # 这条测的是告警链路(有 CRITICAL 就该落一行 pipeline_alerts),G15 只是
+        # 载体。2026-09-10 起 (268, "2026") 登记进 G15_ACCEPTED_GAPS 不再抬级别,
+        # 所以载体换成同联赛的未登记赛季 —— 测的东西一点没变。
         conn_core = connect_rw("core")
         seed_core_schema(conn_core)
-        season = _derived_season(conn_core, 268, "2026-08-12T12:00:00Z")
+        kickoff = "2025-08-12T12:00:00Z"
+        season = _derived_season(conn_core, 268, kickoff)
+        assert season != "2026", "载体赛季不能撞上已登记的已知缺口"
         mid = 6600
         for r in [4] + list(range(20, 39)):
-            _seed_round(conn_core, mid, 268, season, str(r))
+            _seed_round(conn_core, mid, 268, season, str(r), kickoff=kickoff)
             mid += 1
         conn_core.commit()
         conn_core.close()
