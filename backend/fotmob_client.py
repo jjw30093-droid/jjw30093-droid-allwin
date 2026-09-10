@@ -1331,8 +1331,13 @@ class FotMobClient:
                 # "physical_metrics_xxx" 这个下划线形式(与其它字段同构),
                 # 不是驼峰——直接查这个 key 才对。
                 #
-                # 覆盖率实测(2026-08-23):欧冠 100%(12/12 场抽样),英超约
-                # 50%(5/10 场抽样),其余 13 个已接入联赛 0%(未加采欧冠)。
+                # 覆盖率:2026-08-23 抽样估计是欧冠 100%(12/12 场)、英超约
+                # 50%(5/10 场)、其余 13 个已接入联赛 0%。**2026-09-10 对生产
+                # 库全量核对后修正**:按 2025-08-01 之后的球员行统计,只有
+                # 英超(47)7.5%(929/12,421)与欧冠(42)24.1%(91/378)有值,
+                # 其余联赛 0 —— 与 physical_stats_poll 的联赛白名单
+                # frozenset({47, 42}) 一致,但绝对量远低于当初的抽样估计
+                # (抽样落在了恰好有体能数据的那批场次上)。
                 # 前端按"有数据才渲染"处理,不是这里要解决的问题。
                 "physical_metrics_topspeed":          g("physical_metrics_topspeed"),
                 "physical_metrics_distance_covered":  g("physical_metrics_distance_covered"),
@@ -1638,6 +1643,90 @@ class FotMobClient:
                     "rank":        row.get("Rank"),
                     "value":       row.get("StatValue"),
                     "extra":       extra,
+                })
+
+        return records
+
+    def parse_season_team_stats(
+        self,
+        league_data: dict,
+        league_id: Union[int, str],
+        season: str,
+    ) -> List[dict]:
+        """
+        遍历 league_data.stats.teams[] 里的每个统计维度，用其 fetchAllUrl 抓取
+        全量球队榜单，提取 fact_season_team_stats 表所需字段。
+
+        与 parse_season_player_stats 同构：stats.teams[] 与 stats.players[] 的
+        顶层键完全一致(name / header / category / localizedTitleId / order /
+        fetchAllUrl / participant / topThree)，榜单 JSON 也是同一个 TopLists
+        结构。两处差异：
+
+        1. 身份键用 TeamId，**不能用 ParticiantId** —— 球队榜里该字段恒为 0
+           (2026-09-10 实测英超 30 个球队榜全部如此)，拿它当主键会把整个联赛
+           的球队压成一行。球队名在 ParticipantName 里，行内没有 TeamName 键。
+        2. extra 里额外并入该榜的元数据(stat_title/stat_format/stat_decimals/
+           category)。这是**渲染时判断"这个数字是场均值还是赛季总数、保留几位
+           小数"的唯一依据**：同一批榜里 poss_won_att_3rd_team 是场均
+           (StatFormat='fraction', header 'Possession won final 3rd per match')，
+           而 big_chance_team 是赛季总数(StatFormat='number')，靠中文标签或
+           字段名都区分不出来。
+
+        单个维度抓取失败不影响其它维度(记录 warning 并跳过)。
+        """
+        stat_defs = (league_data.get("stats") or {}).get("teams") or []
+
+        # TeamName 不在球队榜行里(球队名走 ParticipantName)，所以不列入。
+        mapped_keys = {"ParticipantName", "TeamId", "StatValue", "Rank"}
+
+        records = []
+        for stat_def in stat_defs:
+            url = stat_def.get("fetchAllUrl")
+            stat_name = stat_def.get("name")
+            if not url or not stat_name:
+                continue
+            try:
+                data = self.fetch_stat_leaderboard(url)
+            except Exception as exc:
+                exception_class = _safe_exception_class_name(exc)
+                log.warning(
+                    "[SeasonTeamStats] fetch_stat_leaderboard failed "
+                    "(%s); skipping dimension %s",
+                    exception_class, stat_name,
+                )
+                continue
+
+            top_lists = data.get("TopLists") or []
+            top = top_lists[0] if top_lists else {}
+            stat_list = top.get("StatList", [])
+            meta = {
+                "stat_title":    top.get("Title"),
+                "stat_format":   top.get("StatFormat"),
+                "stat_decimals": top.get("StatDecimals"),
+                "category":      top.get("Category"),
+            }
+
+            for row in stat_list:
+                team_id = row.get("TeamId")
+                if team_id is None:
+                    # 没有球队身份的行无法入库，也无法后续对齐 dim_team——
+                    # 静默丢弃会让"少了几支队"永远发现不了，如实记一条。
+                    log.warning(
+                        "[SeasonTeamStats] row without TeamId in %s; skipped",
+                        stat_name,
+                    )
+                    continue
+                extra = {k: v for k, v in row.items() if k not in mapped_keys}
+                extra.update(meta)
+                records.append({
+                    "League_ID": int(league_id),
+                    "Season":    season,
+                    "stat_name": stat_name,
+                    "Team_ID":   team_id,
+                    "Team_Name": row.get("ParticipantName"),
+                    "rank":      row.get("Rank"),
+                    "value":     row.get("StatValue"),
+                    "extra":     extra,
                 })
 
         return records

@@ -365,6 +365,13 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
                   expected_goals_on_target_faced, keeper_diving_save,
                   saves_inside_box, keeper_sweeper, punches, keeper_high_claim,
                   accurate_passes_total,
+                  expected_goals_on_target_variant, xg_and_xa,
+                  expected_goals_non_penalty, accurate_crosses,
+                  big_chance_created_team_title, big_chance_missed_title,
+                  shots_woodwork, missed_penalty, owngoal, errors_led_to_goal,
+                  penalties_won, conceded_penalties, headed_clearance,
+                  last_man_tackle, clearance_off_the_line,
+                  player_throws, saved_penalties,
                   physical_metrics_topspeed, physical_metrics_distance_covered,
                   physical_metrics_walking, physical_metrics_jogging,
                   physical_metrics_running, physical_metrics_sprinting,
@@ -427,6 +434,32 @@ def _player_stats(conn, match_id, home_team_id, ratings, i18n):
             "punches": _to_float(r["punches"]),
             "keeper_high_claim": _to_float(r["keeper_high_claim"]),
             "accurate_passes_total": _to_float(r["accurate_passes_total"]),
+            # 2026-09-10 第二批投影补全(对照 FotMob 官方安卓包 236.17398 的
+            # 球员卡:Top stats / Attack / Defense / Duels / Physical 五段)。
+            # 这些列早就采集入库,只是从未下发。低非空率**不是**数据缺失:
+            # FotMob 的 payload 只发非零项,所以"击中门框/送点/门线解围"这类
+            # 事件型字段天然只在真发生时才有值,前端按"有值才渲染"处理
+            # (本地库 2025-08 之后样本实测非空率:xg_and_xa 77.5% /
+            # 非点球 xG 45.9% / 成功传中 42.8% / 头球解围 38.3% /
+            # xGOT 21.3% / 创造绝佳机会 9.6% / 击中门框 1.6% /
+            # 失误导致丢球 1.1% / 门线解围 0.7%)。
+            "expected_goals_on_target": _round(r["expected_goals_on_target_variant"], 3),
+            "xg_and_xa": _round(r["xg_and_xa"], 3),
+            "expected_goals_non_penalty": _round(r["expected_goals_non_penalty"], 3),
+            "accurate_crosses": _to_float(r["accurate_crosses"]),
+            "big_chance_created": _to_float(r["big_chance_created_team_title"]),
+            "big_chance_missed": _to_float(r["big_chance_missed_title"]),
+            "shots_woodwork": _to_float(r["shots_woodwork"]),
+            "missed_penalty": _to_float(r["missed_penalty"]),
+            "own_goals": _to_float(r["owngoal"]),
+            "errors_led_to_goal": _to_float(r["errors_led_to_goal"]),
+            "penalties_won": _to_float(r["penalties_won"]),
+            "conceded_penalties": _to_float(r["conceded_penalties"]),
+            "headed_clearance": _to_float(r["headed_clearance"]),
+            "last_man_tackle": _to_float(r["last_man_tackle"]),
+            "clearance_off_the_line": _to_float(r["clearance_off_the_line"]),
+            "player_throws": _to_float(r["player_throws"]),
+            "saved_penalties": _to_float(r["saved_penalties"]),
             # 体能(阶段 6):payload 没有该球员这一组时全部为 None,前端
             # 按"至少一项非空才渲染体能行"处理(有则显示、无则不显示,
             # 与 FotMob 自己的行为一致)。覆盖率现实见 fotmob_client.py

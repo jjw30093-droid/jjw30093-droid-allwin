@@ -148,6 +148,52 @@ closed_flag/statusId/goingTime/score）+ `dup_ordinal` 的 UNIQUE 键，
   `exact` 精度 kickoff。历史五大联赛旧数据在补列前落库,仍为 `date_only`
   (如实,未回填)。
 
+### 1.1.1 赛季**球队**榜(`stats.teams[]`,2026-09-10 新增,真实网络已验证)
+
+与球员榜(`stats.players[]`)是同一份 `GET /api/data/leagues?id=&season=` 响应里的
+两个平行数组,顶层键完全相同(`name / header / category / localizedTitleId /
+order / fetchAllUrl / participant / topThree`),榜单 JSON 也是同一个
+`TopLists[0].StatList` 结构。
+
+- **英超 2025/2026 实测**:30 个球队维度;`fetchAllUrl` 形如
+  `https://data.fotmob.com/stats/47/season/27110/<stat_name>.json`,每份 20 行;
+- **行内身份键是 `TeamId`**,`ParticiantId` 恒为 0(球队榜专属陷阱,拿它当主键
+  会把整个联赛压成一行);球队名在 `ParticipantName`,行内**没有** `TeamName`;
+- **单位不能靠字段名或格式猜**:`StatFormat` 只决定小数位/单位符号,
+  `expected_goals_team` 是赛季总数却也是 `fraction`。唯一可靠信号是榜单标题里
+  有没有 " per match"(`poss_won_att_3rd_team` = "Possession won final 3rd per
+  match" 场均;`big_chance_team` = "Big chances" 赛季合计)。我们把
+  `Title/StatFormat/StatDecimals/Category` 一并存进
+  `fact_season_team_stats.extra_json`,由查询层派生"场均/赛季合计";
+- **「进攻三区赢得球权」只有这条路**:FotMob 的单场球队统计模型
+  (`com.fotmob.models.PeriodOptaStats`,APK 236.17398 反编译取证)72 个字段里
+  没有它,它只在赛季聚合模型 `Stats.possessionWonFinal3rd` 里,所以我们的
+  `fact_team_match_stats` 无论怎么聚合都得不到——必须采赛季榜;
+- **落库**:`fact_season_team_stats`(migration `core/0016`),按 `(League_ID,
+  Season)` 先删后插;接线在 `ingest_season_tables()`,由既有 `allwin-standings.timer`
+  覆盖。某联赛刷新一次的 `data.fotmob.com` 请求数因此从 ~42 变成 ~72。
+
+### 1.1.2 球员热图端点(`heatmapUrl`,2026-09-10 探明,**尚未接入**)
+
+比赛 SSR `pageProps.content.heatmapUrl` 给出
+`/api/data/heatmap/match/{matchId}/heatmaps?heatmapUrl=<urlencode(https://pub.fotmob.com/prod/db/api/heatmap/match/{matchId})>`;
+该 URL **可自行拼出,不必先读 SSR**(实测 8 场直接 200;`pub.fotmob.com` 裸路径
+直接请求返回 400,必须走 `www.fotmob.com` 这一层)。返回
+`{template: "<svg viewBox=\"0 0 105 68\">…{{circles__placeholder}}…</svg>",
+players: {"p<optaId>": "<circle cx=\"52.6\" cy=\"34.2\" r=\"7.5\"/>…"},
+lastModified}`。
+
+- **坐标**:真实球场米制(105×68);**两队球员都已归一化成"自家球门在 x=0、
+  进攻方向 x→105"**(实测两队门将平均 x 9.8 / 11.8),消费方不需要按主客镜像;
+- **key 是 Opta id**,不是 FotMob player id(实测 32/32 用 `optaId` 全部对上;
+  我们 `fact_player_match_stats.Player_Opta_ID` **生产库近一年 134,657/134,657
+  = 100% 非空**,2026-09-10 只读核对,对齐没有障碍);
+- **不是"触球"**:圆的个数略多于 `touches`(Bruno 71 vs 63),是位置事件,文案
+  不得写成"触球热图";
+- **历史覆盖(真实抽样)**:2026-01 之后 8/8 返回 200;2024-01～2026-01 抽样
+  16 场只有 3 场 200(且全是英超)。**老比赛不可回补**,加上我们不存原始
+  payload,热图一旦接入也只对"接线之后抓的比赛"有效。
+
 ### 1.2 数据管道重建 Phase 0 探测（2026-08-10,真实网络）
 
 产物:`runtime/research/pipeline-v2-probe/`(raw 原始字节 + summary.json)。7 个待接入联赛
@@ -568,5 +614,7 @@ market, company_id) 一条序列)、`bronze_fm_lineup_snap`、`bronze_fm_sidelin
 | kbisai AES-256-CBC+ZeroPadding 解密(`cryptography`) | **已验证**:与探测阶段 openssl 子进程解密结果逐字节一致；`allCompany` 真实注册表核对通过 |
 | kbisai matchAllOdds 完整变化序列 | **已验证(2026-08-04)**:320 条真实变化点(挪超7场+瑞典超2场)，AH/OU 盘口线 100% 非空，三目标公司(36\*/澳\*/平\*)覆盖率 100%，复跑幂等(inserted=0) |
 | kbisai↔FotMob 身份解析(独立实现,不复用 entity_resolution.py) | **已验证(2026-08-04)**:25 场真实目标 16 场成功(7 auto_ok + 9 needs_review)，9 场诚实 fail-closed(同刻多场缺别名/别名字面量不匹配，非 bug) |
+| FotMob 赛季**球队**榜 `stats.teams[]` 接入(2026-09-10) | **已验证(真实网络端到端)**:英超 2025/2026 落库 594 行 / 30 个 stat_name,`poss_won_att_3rd_team` 布莱顿 5.1 rank=1 与来源逐位一致;解析器另有离线 fixture 回归(`tests/fixtures/fotmob/season-team-stats-epl-2025-2026.json`)。**其余联赛/赛季未逐一采集,覆盖率 UNVERIFIED** |
+| FotMob 球员热图端点 `heatmapUrl`(2026-09-10) | **已探明未接入**:端点、返回结构、坐标系(105×68 米制、两队同向、Opta id 为 key)均已真实验证(8 场 200);历史覆盖抽样 2024-01～2026-01 仅 3/16 可用,**老比赛不可回补**。当前无任何代码采集它 |
 | kbisai market_phase 跨接口复用 `_STATUS_GROUPS` | **部分 UNVERIFIED**:该枚举在 protobuf 比分端点验证过，跨到 matchAllOdds 复用未独立验证；320 条真实数据全部落在 statusId=1(NOT_STARTED)分支，未覆盖 in_play/finished |
 | kbisai 英超第一轮目标公司覆盖(T-17~20d) | **诚实负结果**:比赛可发现(10/10)，但三目标公司均未发布赔率(其它公司已有真实数据)，需临近开球重新采集确认 |

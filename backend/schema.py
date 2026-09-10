@@ -327,6 +327,29 @@ SEASON_PLAYER_STATS_CORE_COLUMNS = [
     ("value", "REAL"),
 ]
 
+# ── fact_season_team_stats: parse_season_team_stats() 返回，赛季球队榜单 ──
+# 与球员榜同构，来自同一份联赛 API 的 stats.teams[].fetchAllUrl。
+# 自然键 (League_ID, Season, stat_name, Team_ID)，按 (League_ID, Season) 先删后插。
+#
+# 为什么必须单独采、不能从 fact_team_match_stats 聚合(2026-09-10 反编译
+# FotMob 安卓包 236.17398 + 公网 API 实测确认)：FotMob 的**单场**球队统计
+# 模型(com.fotmob.models.PeriodOptaStats)一共 72 个字段，里面没有任何
+# possession_won / final_third 语义的项——所以他们自己的单场技术统计页也
+# 没有"进攻三区赢得球权"这条。该指标只存在于赛季聚合模型
+# (com.fotmob.models.Stats.possessionWonFinal3rd)，对应榜单
+# stat_name='poss_won_att_3rd_team'，StatValue 已经是来源给的场均值。
+# 我们 fact_team_match_stats.extra_json 的 47 个 key 里也没有任何能推导它的
+# 字段，所以这不是"补个聚合"能解决的，只能按赛季榜采。
+SEASON_TEAM_STATS_CORE_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("stat_name", "TEXT"),
+    ("Team_ID", "INTEGER"),
+    ("Team_Name", "TEXT"),
+    ("rank", "INTEGER"),
+    ("value", "REAL"),
+]
+
 # ── dim_team_i18n / dim_player_i18n: 中文映射维度(CLAUDE.md §2) ──
 # 独立于 Bronze 原表，不改 dim_match/dim_player 的英文列。i18n 是数据层的
 # 派生维度，一旦建好，Silver 聚合和前端展示按 Team_ID/Player_ID 关联即可

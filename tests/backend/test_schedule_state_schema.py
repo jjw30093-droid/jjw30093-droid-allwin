@@ -123,9 +123,9 @@ def _staged_core_migrations(tmp_path: Path, names: tuple[str, ...]) -> Path:
 
 def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
     db_path = tmp_path / "fresh.db"
-    # 15 = 0001..0015(0015 新增 silver_build_state;这个数字随 core
+    # 16 = 0001..0016(0016 新增 fact_season_team_stats;这个数字随 core
     # migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 15
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 16
     assert schedule.apply_schedule_state_schema_v1(db_path) == 0
     conn = sqlite3.connect(db_path)
     try:
@@ -151,6 +151,7 @@ def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
             (13, "0013_physical_stats_poll_state.sql"),
             (14, "0014_standings_refresh_state.sql"),
             (15, "0015_silver_build_state.sql"),
+            (16, "0016_fact_season_team_stats.sql"),
         ]
     finally:
         conn.close()
@@ -189,8 +190,9 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
     # "存量只报不改"的行为验证)。0013(physical_stats_poll_state,新表,
     # 同样不碰 dim_match)使这个数字从 10 变为 11;0014
     # (standings_refresh_state,同样新表、不碰 dim_match)再使它变为 12;
-    # 0015(silver_build_state,同样新表、不碰 dim_match)再使它变为 13。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 13
+    # 0015(silver_build_state,同样新表、不碰 dim_match)再使它变为 13;
+    # 0016(fact_season_team_stats,同样新表、不碰 dim_match)再使它变为 14。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 14
     conn = sqlite3.connect(db_path)
     try:
         after_columns = conn.execute("PRAGMA table_info(dim_match)").fetchall()
@@ -231,8 +233,8 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
     conn.commit()
     conn.close()
 
-    # 14 = 0002..0015(0015 新增 silver_build_state,机械增长)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 14
+    # 15 = 0002..0016(0016 新增 fact_season_team_stats,机械增长)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 15
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -246,6 +248,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall() == [
             (1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,),
+            (16,),
         ]
     finally:
         conn.close()

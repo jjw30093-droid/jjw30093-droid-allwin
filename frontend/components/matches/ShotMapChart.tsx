@@ -67,7 +67,14 @@ const BODY_PARTS = ["LeftFoot", "RightFoot", "Header"];
  * 的球(FotMob 把"射门轨迹朝不朝门"与"是否被封堵"分开标记,实测同一脚
  * AttemptSaved 里被封堵的球 99.8% 仍标 is_on_target=true),必须
  * is_blocked=false 才算真正射正。未回填的场次(is_blocked 为 null)退回
- * 旧的 Outcome 口径(混入被封堵球,与官方统计对不上,但没有更好的数据)。 */
+ * 旧的 Outcome 口径(混入被封堵球,与官方统计对不上,但没有更好的数据)。
+ *
+ * 2026-09-10 生产实测这两档差多少(用于判断这个数字能不能当"数值"展示,
+ * 而不只是图上的形状):按(球员,比赛)对官方 ShotsOnTarget,精确档 30,889
+ * 例一致率 99.5%,退化档 175,040 例只有 61.1%;而全库 372,445 脚里
+ * Is_Blocked 只有 56,634 脚(15.2%)非空。结论:当形状/筛选用没问题,
+ * **不能拿它当一个报给用户看的射正数**(球员卡的射门摘要因此改用官方
+ * 球员统计,见 playerHighlights.ts::summarizePlayerShots)。 */
 function isOnTarget(s: Shot): boolean {
   if (s.outcome === "Goal") return true;
   if (s.outcome !== "AttemptSaved") return false;

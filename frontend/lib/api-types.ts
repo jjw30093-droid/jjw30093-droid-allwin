@@ -3269,6 +3269,40 @@ export interface components {
             keeper_high_claim?: number | null;
             /** Accurate Passes Total */
             accurate_passes_total?: number | null;
+            /** Expected Goals On Target */
+            expected_goals_on_target?: number | null;
+            /** Xg And Xa */
+            xg_and_xa?: number | null;
+            /** Expected Goals Non Penalty */
+            expected_goals_non_penalty?: number | null;
+            /** Accurate Crosses */
+            accurate_crosses?: number | null;
+            /** Big Chance Created */
+            big_chance_created?: number | null;
+            /** Big Chance Missed */
+            big_chance_missed?: number | null;
+            /** Shots Woodwork */
+            shots_woodwork?: number | null;
+            /** Missed Penalty */
+            missed_penalty?: number | null;
+            /** Own Goals */
+            own_goals?: number | null;
+            /** Errors Led To Goal */
+            errors_led_to_goal?: number | null;
+            /** Penalties Won */
+            penalties_won?: number | null;
+            /** Conceded Penalties */
+            conceded_penalties?: number | null;
+            /** Headed Clearance */
+            headed_clearance?: number | null;
+            /** Last Man Tackle */
+            last_man_tackle?: number | null;
+            /** Clearance Off The Line */
+            clearance_off_the_line?: number | null;
+            /** Player Throws */
+            player_throws?: number | null;
+            /** Saved Penalties */
+            saved_penalties?: number | null;
             /** Physical Metrics Topspeed */
             physical_metrics_topspeed?: number | null;
             /** Physical Metrics Distance Covered */
@@ -4754,6 +4788,38 @@ export interface components {
             /** Btts Pct */
             btts_pct?: number | null;
         };
+        /**
+         * TeamSourceBoard
+         * @description 来源方(FotMob)赛季球队榜的一个维度(fact_season_team_stats)。
+         *
+         *     与 rows(我们自己从单场聚合的 silver_team_season_stats)是两套口径,故意
+         *     只收 rows 里没有同义字段的维度,避免同一指标两个数字(见
+         *     backend/queries/league_stats.py::FREE_TEAM_BOARDS)。
+         */
+        TeamSourceBoard: {
+            /** Stat Name */
+            stat_name: string;
+            /** Label Zh */
+            label_zh: string;
+            /** Stat Title */
+            stat_title?: string | null;
+            /** Per Match */
+            per_match?: boolean | null;
+            /** Stat Format */
+            stat_format?: string | null;
+            /** Stat Decimals */
+            stat_decimals?: number | null;
+            /** Entries */
+            entries: components["schemas"]["TeamSourceBoardEntry"][];
+        };
+        /** TeamSourceBoardEntry */
+        TeamSourceBoardEntry: {
+            team: components["schemas"]["TeamRef"];
+            /** Rank */
+            rank?: number | null;
+            /** Value */
+            value?: number | null;
+        };
         /** TeamStatsResponse */
         TeamStatsResponse: {
             /** League Id */
@@ -4764,6 +4830,11 @@ export interface components {
             available_seasons: string[];
             /** Rows */
             rows: components["schemas"]["TeamSeasonStatRow"][];
+            /**
+             * Boards
+             * @default []
+             */
+            boards: components["schemas"]["TeamSourceBoard"][];
             /** Empty Reason */
             empty_reason?: string | null;
         };

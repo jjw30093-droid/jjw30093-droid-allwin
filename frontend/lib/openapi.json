@@ -12425,6 +12425,193 @@
       ],
       "title": "Accurate Passes Total"
      },
+     "expected_goals_on_target": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Goals On Target"
+     },
+     "xg_and_xa": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Xg And Xa"
+     },
+     "expected_goals_non_penalty": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Goals Non Penalty"
+     },
+     "accurate_crosses": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accurate Crosses"
+     },
+     "big_chance_created": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Big Chance Created"
+     },
+     "big_chance_missed": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Big Chance Missed"
+     },
+     "shots_woodwork": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shots Woodwork"
+     },
+     "missed_penalty": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Missed Penalty"
+     },
+     "own_goals": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Own Goals"
+     },
+     "errors_led_to_goal": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Errors Led To Goal"
+     },
+     "penalties_won": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Penalties Won"
+     },
+     "conceded_penalties": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Conceded Penalties"
+     },
+     "headed_clearance": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Headed Clearance"
+     },
+     "last_man_tackle": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Man Tackle"
+     },
+     "clearance_off_the_line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clearance Off The Line"
+     },
+     "player_throws": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Player Throws"
+     },
+     "saved_penalties": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Saved Penalties"
+     },
      "physical_metrics_topspeed": {
       "anyOf": [
        {
@@ -17175,6 +17362,111 @@
     "title": "TeamSeasonStatRow",
     "description": "silver_team_season_stats 全字段投影(2026-08-16 起,除\"每日精选\"外\n普通比赛内容全部免费——角球/红黄牌/零封/BTTS 与射门/xG 等字段同属免费\n内容,不再是付费深度报告字段)。"
    },
+   "TeamSourceBoard": {
+    "properties": {
+     "stat_name": {
+      "type": "string",
+      "title": "Stat Name"
+     },
+     "label_zh": {
+      "type": "string",
+      "title": "Label Zh"
+     },
+     "stat_title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stat Title"
+     },
+     "per_match": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Per Match"
+     },
+     "stat_format": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stat Format"
+     },
+     "stat_decimals": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stat Decimals"
+     },
+     "entries": {
+      "items": {
+       "$ref": "#/components/schemas/TeamSourceBoardEntry"
+      },
+      "type": "array",
+      "title": "Entries"
+     }
+    },
+    "type": "object",
+    "required": [
+     "stat_name",
+     "label_zh",
+     "entries"
+    ],
+    "title": "TeamSourceBoard",
+    "description": "来源方(FotMob)赛季球队榜的一个维度(fact_season_team_stats)。\n\n与 rows(我们自己从单场聚合的 silver_team_season_stats)是两套口径,故意\n只收 rows 里没有同义字段的维度,避免同一指标两个数字(见\nbackend/queries/league_stats.py::FREE_TEAM_BOARDS)。"
+   },
+   "TeamSourceBoardEntry": {
+    "properties": {
+     "team": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rank"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     }
+    },
+    "type": "object",
+    "required": [
+     "team"
+    ],
+    "title": "TeamSourceBoardEntry"
+   },
    "TeamStatsResponse": {
     "properties": {
      "league_id": {
@@ -17205,6 +17497,14 @@
       },
       "type": "array",
       "title": "Rows"
+     },
+     "boards": {
+      "items": {
+       "$ref": "#/components/schemas/TeamSourceBoard"
+      },
+      "type": "array",
+      "title": "Boards",
+      "default": []
      },
      "empty_reason": {
       "anyOf": [

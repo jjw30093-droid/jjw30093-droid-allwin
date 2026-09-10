@@ -4,6 +4,7 @@ import { leagueSectionMetadata } from "@/lib/league-metadata";
 import { leagueSectionPath, serverGetOptional, type TeamStatsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { TeamStatsBoards } from "@/components/league/TeamStatsBoards";
+import { TeamSourceBoards } from "@/components/league/TeamSourceBoards";
 import { TeamQuadrantChart } from "@/components/league/TeamQuadrantChart";
 import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
@@ -75,6 +76,7 @@ export default async function TeamStatsPage({
           {/* 象限图在前:一屏看到全部球队,补上 top10 榜里第 11–20 名的空白 */}
           <TeamQuadrantChart rows={data.rows} />
           <TeamStatsBoards rows={data.rows} />
+          <TeamSourceBoards boards={data.boards ?? []} />
         </>
       ) : (
         <MemberLeagueSection kind="team-stats" leagueId={id} season={seasonParam} />

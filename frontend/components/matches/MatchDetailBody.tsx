@@ -577,6 +577,8 @@ export function MatchDetailBody({
               teamStats={factReport.team_stats}
               teamStatsByHalf={factReport.team_stats_by_half}
               playerStats={factReport.player_stats}
+              lineups={factReport.lineups}
+              shots={factReport.shots}
               homeName={m.home.name}
               awayName={m.away.name}
             />

@@ -369,11 +369,36 @@ class TeamSeasonStatRow(BaseModel):
     btts_pct: Optional[float] = None
 
 
+class TeamSourceBoardEntry(BaseModel):
+    team: TeamRef
+    rank: Optional[int] = None
+    value: Optional[float] = None
+
+
+class TeamSourceBoard(BaseModel):
+    """来源方(FotMob)赛季球队榜的一个维度(fact_season_team_stats)。
+
+    与 rows(我们自己从单场聚合的 silver_team_season_stats)是两套口径,故意
+    只收 rows 里没有同义字段的维度,避免同一指标两个数字(见
+    backend/queries/league_stats.py::FREE_TEAM_BOARDS)。
+    """
+
+    stat_name: str                         # poss_won_att_3rd_team / interception_team / ...
+    label_zh: str
+    stat_title: Optional[str] = None       # 来源自报的英文标题,原样透出便于核对
+    # True=场均、False=赛季合计、None=来源没给标题,无法判断(前端不标单位)
+    per_match: Optional[bool] = None
+    stat_format: Optional[str] = None      # fraction / number / meter / percent
+    stat_decimals: Optional[int] = None
+    entries: list[TeamSourceBoardEntry]
+
+
 class TeamStatsResponse(BaseModel):
     league_id: int
     season: Optional[str] = None
     available_seasons: list[str]
     rows: list[TeamSeasonStatRow]
+    boards: list[TeamSourceBoard] = []
     empty_reason: Optional[str] = None
 
 
@@ -1017,6 +1042,26 @@ class MatchReportPlayerStat(BaseModel):
     # 传球成功的分母(尝试传球总数)——accurate_passes 单独一个数字看不出
     # 好坏,配上这个才是"37/40"。
     accurate_passes_total: Optional[float] = None
+    # 2026-09-10 第二批投影(对照 FotMob 安卓包 236.17398 的球员卡分段)。
+    # 事件型字段(击中门框/送点/门线解围/失误导致丢球…)天然稀疏——来源只发
+    # 非零项,所以 None 的含义是"没发生",前端按"有值才渲染"处理,不补 0。
+    expected_goals_on_target: Optional[float] = None   # xGOT(球员进攻侧)
+    xg_and_xa: Optional[float] = None
+    expected_goals_non_penalty: Optional[float] = None
+    accurate_crosses: Optional[float] = None
+    big_chance_created: Optional[float] = None
+    big_chance_missed: Optional[float] = None
+    shots_woodwork: Optional[float] = None
+    missed_penalty: Optional[float] = None
+    own_goals: Optional[float] = None
+    errors_led_to_goal: Optional[float] = None
+    penalties_won: Optional[float] = None
+    conceded_penalties: Optional[float] = None
+    headed_clearance: Optional[float] = None
+    last_man_tackle: Optional[float] = None
+    clearance_off_the_line: Optional[float] = None
+    player_throws: Optional[float] = None
+    saved_penalties: Optional[float] = None
     # 体能(阶段 6):有则显示、无则不显示,与 FotMob 自身行为一致。
     # 覆盖率现实见 backend/fotmob_client.py 里对应字段旁的实测注释。
     physical_metrics_topspeed: Optional[float] = None

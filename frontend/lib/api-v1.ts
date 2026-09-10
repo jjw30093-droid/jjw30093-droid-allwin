@@ -43,6 +43,7 @@ export type StandingRow = StandingsResponse["rows"][number];
 export type LeagueFixturesResponse = GetJson<"/api/v1/leagues/{league_id}/fixtures">;
 export type TeamStatsResponse = GetJson<"/api/v1/leagues/{league_id}/team-stats">;
 export type TeamSeasonStatRow = TeamStatsResponse["rows"][number];
+export type TeamSourceBoard = TeamStatsResponse["boards"][number];
 export type PlayersResponse = GetJson<"/api/v1/leagues/{league_id}/players">;
 export type MatchListResponse = GetJson<"/api/v1/matches">;
 export type MatchSummary = MatchListResponse["matches"][number];

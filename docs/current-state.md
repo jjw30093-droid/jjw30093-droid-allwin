@@ -7084,3 +7084,135 @@ URL 深链接 `?team=`;额外请求 `/standings`;面板堆全部 17 项;抖音 P
 唯一需要手动改的是 `tests/backend/test_team_style_preview.py` 里本节新增的
 `test_points_carry_crest_url_resolved_once_per_team`——它写于 `league_style_views`
 加 `season` 形参之前,调用签名需要补上 `SEASON` 实参。
+
+## 64. FotMob 安卓包反编译取证 + 球队赛季榜接入 + 球员单场数据卡(2026-09-10)
+
+起因:站长提供 FotMob 官方安卓包 `236.17398.20260827`(`com.mobilefootie.wc2010`),
+问三件事——(1) 已完赛比赛点球员名弹出的数据卡(含热图)是怎么做的;(2) 我们爬到的
+数据够不够做同款;(3) 联赛球队统计里那条「单场在进攻三区赢得的球权」在单场技术
+统计里没有,他们在数据字段上是怎么做的。
+
+### 64.1 取证方式(无 jadx/apktool,未安装任何工具)
+
+`.apkm` → `base.apk` → 5 个 dex 用一次性自写解析器提取 class/field/method 与
+`<clinit>` 常量串;`res/layout`、`resources.arsc` 走字符串提取。所有结论都另用
+**真实网络请求**对 `www.fotmob.com` / `data.fotmob.com` 交叉验证过(本机无 ThorData
+代理凭证,走直连)。
+
+### 64.2 「进攻三区赢得球权」的答案(问题 3)
+
+- 它**不在单场数据模型里**:`com.fotmob.models.PeriodOptaStats` 共 72 个字段,
+  没有任何 possession_won / final_third 语义项(最接近的 `FinalThirdEntries`、
+  `BallRecoveries` 都是别的指标)。所以 FotMob 自己的单场技术统计页也没有这条。
+- 它只存在于**赛季聚合模型** `com.fotmob.models.Stats.possessionWonFinal3rd`,
+  对外是联赛榜单 `stat_name='poss_won_att_3rd_team'`(header
+  "Possession won final 3rd per match",category "Defending",StatFormat
+  'fraction')。实测英超 2025/2026:布莱顿 `StatValue=5.1` rank=1,MatchesPlayed=38
+  —— **StatValue 就是来源给的场均值,不需要我们再除场次**。
+- 我们 `fact_team_match_stats.extra_json` 的 47 个 key 里没有任何能推导它的字段,
+  所以这不是"补个聚合"能解决的,只能按赛季榜采。
+
+### 64.3 球队赛季榜接入(代码实现 + 离线 fixture + 真实网络端到端,均已完成)
+
+- 新表 `fact_season_team_stats`(migration `core/0016`),与 `fact_season_player_stats`
+  完全同构,自然键 `(League_ID, Season, stat_name, Team_ID)`;
+- 新解析器 `FotMobClient.parse_season_team_stats()` 读同一份 `league_matches()`
+  响应的 `stats.teams[]`(30 个维度,每个带 `fetchAllUrl`)。两处与球员侧的差异:
+  身份键用 `TeamId`(球队榜里 `ParticiantId` 恒为 0),`extra_json` 额外并入榜单
+  元数据 `stat_title/stat_format/stat_decimals/category`;
+- 接线在 `ingest_season_tables()` 内,自动被既有 `allwin-standings.timer` 覆盖,
+  **未新增定时器、未改 §13 的 7 定时器不变量**。代价:某联赛刷新一次的
+  `data.fotmob.com` 请求数从 ~42 变成 ~72;
+- 手动回填 `backend/cli/backfill_season_tables.py` 新增 `--teams-for`(与
+  `--players-for` 同构,默认不跑);
+- 查询层 `FREE_TEAM_BOARDS` 只收 **`TeamSeasonStatRow` 里没有同义字段** 的 16 个
+  维度(排除控球/射门/射正/xG/角球/犯规/红黄牌/零封,避免同页同一指标两个数字);
+  另有意排除 `rating_team`(黑箱综合评分,文案口径需单独设计)、
+  `home_attendance_team`(非竞技指标)、`_xg_diff_team`(可由本页已有字段相减得出);
+- "场均"还是"赛季合计"**从来源自报的 `stat_title` 派生**(含 " per match" 与否),
+  不写死——同一批榜里 `poss_won_att_3rd_team` 是场均、`big_chance_team` 是赛季
+  合计,而两者的 `StatFormat` 都可能是 `fraction`,按字段名猜必错;
+- 真实端到端(临时库,未碰 `data/*.db`):英超 2025/2026 落库 594 行 / 30 个
+  stat_name;16 张榜全部渲染正确(前场反抢 布莱顿 5.1 场均 / 跑动距离 曼城
+  118.5 km 场均 / 创造绝佳机会 曼城 120 赛季合计)。
+
+### 64.4 球员单场数据卡(问题 1、2)
+
+- **字段对照**:拿真实完赛比赛 4813745 的 SSR payload 逐 key 比对,FotMob 卡片用到
+  的 58 个 stat key,我们 `fact_player_match_stats` 命中 56 个。缺 `total_shots`
+  (可由 on+off+blocked 派生,同场 15/15 球员实测相等)与 `line_breaking_passes`
+  (本次未采,是唯一的真实内容缺口);
+- **投影补全**:`_player_stats()` 新增 17 个"早已入库但从未下发"的字段
+  (xGOT/xG+xA/非点球 xG/成功传中/创造与错失绝佳机会/头球解围/手抛球/扑点/
+  击中门框/乌龙/射失点球/赢得点球/送点/门线解围/最后一人抢断/失误导致丢球)。
+  这批字段非空率低**不是数据缺失**:FotMob payload 只发非零项,事件型字段天然
+  只在真发生时才有值;
+- **亮点句**(`frontend/components/matches/playerHighlights.ts`):对照
+  `PlayerHighlight`(POSITIVE/NEGATIVE + priority + rankableCategory,文案有
+  独占/并列两个变体)复刻。排名类目要求池子≥6 人有值才算"全场最多";事件类
+  (来源只发非零项、池子永远凑不够)按"发生即播报"处理且不声称排名;
+- **射门摘要**与射门图同源(`report.shots` 按 `player_id` 过滤),缺失 xG 不当 0
+  累加而是如实标注分母;
+- **射正数的两次修正(过程本身值得留档)**:射门摘要最初用 `is_on_target` 列
+  判射正,本地快照该列 330,217 行 **100% 为 NULL**,页面真实显示成"射正 0"
+  (B·费尔南德斯那场明明进了球)。第一次改成全站唯一口径(`ShotMapChart` 的
+  `isOnTarget`:进球 + 未被封堵的 AttemptSaved),页面正确了。**但随后对生产库
+  全量核对推翻了这个方案**(§64.6):该口径依赖 `Is_Blocked`,生产 372,445 脚
+  射门里只有 56,634 脚(15.2%)有这一列;按(球员,比赛)对官方 `ShotsOnTarget`
+  校验,已回填的 30,889 例一致率 99.5%,**未回填的 175,040 例只有 61.1%**
+  (AttemptSaved 混入被后卫封堵的球,系统性高估,队级平均每队每场多算 3.37 脚)。
+  终版:射正改取**官方球员统计** `shots_on_target`(覆盖全部射手,实测
+  205,929 个样本中从未超过射门图的射门数,0.00%),官方值缺失就整项不显示;
+  射门数与 xG 合计仍取自射门图。**同一个数字当图上的形状/筛选没问题,当一个
+  报给用户看的数值不行** —— 这条差别是这次唯一靠"读生产库"才发现的。
+  相应地 `shotOnTarget.ts` 的抽出被撤销(playerHighlights 不再需要它,
+  ShotMapChart 是唯一消费方,§11.4 的理由不再成立)。
+- **热图(本次未实现,结论留档)**:Web 端热图是独立端点
+  `/api/data/heatmap/match/{id}/heatmaps?heatmapUrl=<urlencode(https://pub.fotmob.com/prod/db/api/heatmap/match/{id})>`
+  (URL 可自行拼出,实测 8 场直接 200),返回
+  `{template: <svg viewBox="0 0 105 68">…{{circles__placeholder}}…</svg>,
+  players: {"p<optaId>": "<circle cx cy r=7.5/>…"}}`。要点:坐标是真实球场米制;
+  **两队球员都已归一化成"自家球门在 x=0、进攻方向 x→105"**(实测两队门将平均 x
+  9.8 / 11.8),前端不需要按主客镜像;key 是 **Opta id** 不是 FotMob player id
+  (实测 32/32 用 `optaId` 全部对上,我们 `Player_Opta_ID` 本地 400,247/400,247
+  非空);圆的个数略多于 `touches`(Bruno 71 vs 63),是"位置事件"不是"触球",
+  文案不能写成"触球热图";视觉效果全在 template 的 SVG filter 链
+  (radialGradient 叠加 → feGaussianBlur 1.5 → feColorMatrix 把累积 alpha 转灰度
+  → feComponentTransfer 256 级 tableValues 色表 LUT → feFuncA 砍掉最低档 alpha)。
+  **历史不可回补**:老比赛该端点大多 404(2024-01~2026-01 抽样 16 场只有 3 场
+  200,且全是英超;2026-01 之后抽样 8/8 全 200),加上我们不存原始 payload、
+  `parse_player_stats_records()` 没有 extra 兜底,热图只能"从接线那天起对新抓的
+  比赛生效"。
+
+### 64.5 验证矩阵
+
+| 项 | 状态 |
+|---|---|
+| APK 反编译结论 | 已完成(dex + resources 双向取证) |
+| FotMob 公网 API(SSR payload / heatmap 端点 / `stats.teams[]` / 全量榜) | **真实网络已验证**(直连,未走生产代理) |
+| `parse_season_team_stats` | 离线 fixture(`tests/fixtures/fotmob/season-team-stats-epl-2025-2026.json`,真实抓取裁剪) |
+| 采集 → 落库 → 查询层 → 页面 | 真实网络端到端(临时库 + 本地 dev 服务),英超 2025/2026 |
+| 球员卡 | 本地 dev 服务真实数据双形状验证(有射门图的英超 4813745 / 无射门图的澳超 4965682) |
+| 生产库状态 | **已核对**(2026-09-10 通过 `vip-lightsail` 只读读取 `/opt/allwin`,见 §64.6) |
+
+### 64.6 生产库只读核对(2026-09-10,`ssh vip-lightsail`,`sqlite3 -readonly`)
+
+`/opt/allwin`:`current -> releases/1232f4c90c07`,`source` 干净且与本地 HEAD
+同为 `1232f4c`(这轮生产**没有**领先本地)。`shared/data/allwin.db` 746MB,
+`schema_migrations` 最大 **15**(本次新增的 0016 尚未部署),31 张表,
+`fact_season_team_stats` 不存在(符合预期)。
+
+| 项 | 生产实测 |
+|---|---|
+| `dim_match` | 18,470 行,最新日期 2027-06-06 |
+| `fact_player_match_stats` | 449,922 行 |
+| `fact_shotmap` | 372,445 行,`xG` 非空 371,280 |
+| **`Is_On_Target` / `Is_Blocked` / `Shot_ID`** | 各 **56,634(15.2%)** 非空;2025-08 之后 43,548/112,660(38.7%) |
+| `Player_Opta_ID`(热图 join 键) | 近一年 **134,657 / 134,657 = 100%** 非空 —— 热图真要接入,对齐没有障碍 |
+| 本次新投影的 17 个字段(近一年 134,657 行) | xG+xA 77.5% / 非点球 xG 46.2% / 成功传中 42.7% / 头球解围 38.2% / xGOT 21.5% / 创造绝佳机会 9.7% / 错失绝佳机会 8.1%;事件型:手抛球 8,747、击中门框 2,140、失误导致丢球 1,554、最后一人抢断 1,324、送点 1,217、门线解围 898、赢得点球 881、乌龙 363、射失点球 271、扑点 189 —— 与本地测得的比例一致,亮点句的事件类目在生产会真的触发 |
+| `accurate_passes_total`(“37/40”的分母) | 近一年只有 **10,590(7.9%)**,所以大多数球员仍只显示裸数字 |
+| `physical_metrics_*` | **只有英超 7.5%(929/12,421)与欧冠 24.1%(91/378)**,其余联赛 0 —— 与 `physical_stats_poll` 的白名单 `{47, 42}` 一致,但**远低于**代码里 2026-08-23 抽样估计的"欧冠 100%、英超约 50%"。已就地修正 `fotmob_client.py` 与 `MatchStatsSection.tsx` 两处注释 |
+| 射正口径校验(按球员×比赛对官方 `ShotsOnTarget`) | 精确档(`Is_Blocked` 已回填)30,889 例 **99.5%** 一致;退化档 175,040 例仅 **61.1%**;队级退化档平均偏差 **+3.37 脚/队/场**。据此把球员卡的射正改成官方值(§64.4) |
+| `silver_team_season_stats` 哨兵污染 | 生产 **0 行**(`avg_corners=777.7` 那批只存在于本地 `data/allwin.db`,是本地某次测试写进去的,生产干净) |
+| `fact_season_player_stats` | 270,882 行 / **15 个联赛**(本地快照只有 10);`poss_won_att_3rd` 6,893 行 |
+| `attacking_zone_*`(2026-08-25 新解析) | 生产 1,854 行有值(本地快照 0 行,是本地库过期,不是解析没生效) |

@@ -42,6 +42,12 @@ def seed_core_schema(conn):
             Team_ID INTEGER, Team_Name TEXT, rank INTEGER, value REAL, extra_json TEXT)"""
     )
     conn.execute(
+        """CREATE TABLE IF NOT EXISTS fact_season_team_stats (
+            League_ID INTEGER, Season TEXT, stat_name TEXT,
+            Team_ID INTEGER, Team_Name TEXT, rank INTEGER, value REAL,
+            extra_json TEXT)"""
+    )
+    conn.execute(
         """CREATE TABLE IF NOT EXISTS dim_player_i18n (
             Player_ID TEXT, name_en TEXT, name_zh TEXT, name_zh_short TEXT,
             source TEXT, model TEXT, confidence REAL, needs_review INTEGER, updated_at TEXT)"""
@@ -283,6 +289,25 @@ def seed_basic_core(data_dir):
     conn.execute(
         "INSERT INTO dim_player_i18n (Player_ID, name_en, name_zh, name_zh_short)"
         " VALUES ('p100','Test Striker','测试前锋全名','测试前锋')"
+    )
+    # 来源方球队榜:只给 47 造,87 故意没有 —— 前端"没有榜单就整块不渲染"
+    # 这条路径必须有布景才测得到。两条榜刻意选了不同口径:
+    # poss_won_att_3rd_team 是场均(标题含 per match),big_chance_team 是
+    # 赛季合计,用来验证单位是从 stat_title 派生而不是写死的。
+    conn.execute(
+        "INSERT INTO fact_season_team_stats (League_ID, Season, stat_name, Team_ID,"
+        " Team_Name, rank, value, extra_json)"
+        " VALUES (47,'2025/2026','poss_won_att_3rd_team',1001,'Arsenal',1,5.1,"
+        " '{\"stat_title\": \"Possession won final 3rd per match\","
+        " \"stat_format\": \"fraction\", \"stat_decimals\": 1,"
+        " \"category\": \"Defending\", \"MatchesPlayed\": 38}')"
+    )
+    conn.execute(
+        "INSERT INTO fact_season_team_stats (League_ID, Season, stat_name, Team_ID,"
+        " Team_Name, rank, value, extra_json)"
+        " VALUES (47,'2025/2026','big_chance_team',1001,'Arsenal',1,120.0,"
+        " '{\"stat_title\": \"Big chances\", \"stat_format\": \"number\","
+        " \"stat_decimals\": 0, \"category\": \"Attacking\"}')"
     )
     conn.commit()
     conn.close()

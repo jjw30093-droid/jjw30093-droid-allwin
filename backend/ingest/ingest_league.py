@@ -51,7 +51,11 @@ from fotmob_client import FotMobClient, derive_match_status
 from ingest_match import ingest_match, _insert_many, _rows_with_extra_json
 from ingest_future_fixtures import upsert_fixture_row
 from season_identity import verify_season_echo
-from schema import LEAGUE_TABLE_CORE_COLUMNS, SEASON_PLAYER_STATS_CORE_COLUMNS
+from schema import (
+    LEAGUE_TABLE_CORE_COLUMNS,
+    SEASON_PLAYER_STATS_CORE_COLUMNS,
+    SEASON_TEAM_STATS_CORE_COLUMNS,
+)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -244,7 +248,8 @@ def _utc_to_date(utc):
 
 
 def ingest_season_tables(client: FotMobClient, league_id: int, season: str) -> None:
-    """用同一份 league_matches() 响应回填 fact_league_table / fact_season_player_stats。
+    """用同一份 league_matches() 响应回填 fact_league_table /
+    fact_season_player_stats / fact_season_team_stats。
 
     2026-08-25 起带赛季回声校验(CLAUDE.md §6.3):这条路径此前是全仓最大的
     无校验缺口——同一个 --season 字符串既当请求参数又当存储标签,来源静默
@@ -257,6 +262,10 @@ def ingest_season_tables(client: FotMobClient, league_id: int, season: str) -> N
 
     table_rows = client.parse_league_table(data, league_id, season)
     player_rows = client.parse_season_player_stats(data, league_id, season)
+    # 2026-09-10:同一份响应里 stats.teams[] 是球队榜(30 个维度),此前完全没采。
+    # 「进攻三区赢得球权」(poss_won_att_3rd_team)这类指标只存在于赛季榜,
+    # 单场统计里根本没有对应字段,聚合不出来(见 migrations/core/0016 头注释)。
+    team_rows = client.parse_season_team_stats(data, league_id, season)
 
     conn = get_connection()
     try:
@@ -281,12 +290,24 @@ def ingest_season_tables(client: FotMobClient, league_id: int, season: str) -> N
             SEASON_PLAYER_STATS_CORE_COLUMNS + [("extra_json", "TEXT")],
             _rows_with_extra_json(player_rows),
         )
+
+        conn.execute(
+            "DELETE FROM fact_season_team_stats WHERE League_ID=? AND Season=?",
+            (league_id, season),
+        )
+        _insert_many(
+            conn,
+            "fact_season_team_stats",
+            SEASON_TEAM_STATS_CORE_COLUMNS + [("extra_json", "TEXT")],
+            _rows_with_extra_json(team_rows),
+        )
         conn.commit()
     finally:
         conn.close()
 
     print(f"季级新表落库完成: fact_league_table={len(table_rows)}, "
-          f"fact_season_player_stats={len(player_rows)}")
+          f"fact_season_player_stats={len(player_rows)}, "
+          f"fact_season_team_stats={len(team_rows)}")
 
 
 def ingest_matches_sequential(

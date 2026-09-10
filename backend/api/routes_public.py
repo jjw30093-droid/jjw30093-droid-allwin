@@ -193,7 +193,7 @@ def league_team_stats(
     _require_known_league(league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     data = q_league_stats.team_season_stats(conn, league_id, season)
-    if not data["rows"]:
+    if not data["rows"] and not data["boards"]:
         data["empty_reason"] = "该联赛暂无球队赛季统计数据"
     return {"league_id": league_id, **data}
 

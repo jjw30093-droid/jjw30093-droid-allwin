@@ -233,3 +233,74 @@
   color: var(--ink-3);
   background: var(--surface);
 }
+
+/* ── 球员展开面板:身份行 / 亮点句 / 射门摘要(2026-09-10)────────────
+ * 对照 FotMob 安卓包 236.17398 的球员卡信息层级:身份 → 亮点 → 分组数据。
+ * 亮点句用左侧色条区分正负,**不只靠颜色**——句子本身("失误导致丢球"
+ * vs "全场触球最多")已经带方向,色条只是加速扫读(§11.2 色盲冗余)。 */
+
+.detailIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detailIdentityText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detailIdentityName {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.detailMotm {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--gold-100);
+  color: var(--gold-900);
+}
+
+.detailIdentityMeta {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.highlightList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.highlightPositive,
+.highlightNegative {
+  font-size: 13px;
+  line-height: 1.5;
+  padding-left: 10px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--ink-2);
+}
+
+.highlightPositive {
+  border-left-color: var(--win);
+}
+
+.highlightNegative {
+  border-left-color: var(--loss);
+}
+
+.detailShots {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}

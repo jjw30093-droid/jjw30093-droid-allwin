@@ -5,3 +5,22 @@
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
+
+/* 来源方赛季榜分区(球队数据榜页,2026-09-10) */
+.sourceSection {
+  margin-top: 28px;
+}
+
+.sourceHeader {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sourceNote {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}

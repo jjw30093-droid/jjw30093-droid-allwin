@@ -1,4 +1,5 @@
-"""按联赛+赛季回填季级表(fact_league_table / fact_season_player_stats)。
+"""按联赛+赛季回填季级表(fact_league_table / fact_season_player_stats /
+fact_season_team_stats)。
 
 背景:季级表此前只在英超(47)的整季 ingest 里落过库;五大联赛其余四家
 (53/54/55/87)的逐场比赛数据早已在 dim_match/fact_*,但积分榜与球员榜
@@ -10,7 +11,8 @@
         --seasons 2020/2021,2021/2022 --players-for 2025/2026
 
 - 每个赛季恰好 1 次 league_matches() 请求(积分榜随响应返回,解析零请求);
-- 球员榜维度抓取(~37 次/赛季)开销大,只对 --players-for 显式列出的赛季执行;
+- 球员榜维度抓取(~42 次/赛季)与球队榜维度抓取(~30 次/赛季)开销大,
+  分别只对 --players-for / --teams-for 显式列出的赛季执行;
 - 写入沿用 ingest_season_tables 的 DELETE+INSERT 幂等风格,但加了 fail-loud
   保护:解析结果为空时不执行 DELETE(不能用一次坏响应清掉已有数据);
 - 响应身份校验:details.id 必须等于请求的 league_id,selectedSeason 必须等于
@@ -38,6 +40,7 @@ from backend.fotmob_client import FotMobClient  # noqa: E402
 from backend.schema import (  # noqa: E402
     LEAGUE_TABLE_CORE_COLUMNS,
     SEASON_PLAYER_STATS_CORE_COLUMNS,
+    SEASON_TEAM_STATS_CORE_COLUMNS,
 )
 
 
@@ -71,9 +74,11 @@ def backfill_one_season(
     league_id: int,
     season: str,
     with_players: bool,
+    with_teams: bool = False,
 ) -> dict:
     result = {"league_id": league_id, "season": season, "requests": 0,
-              "table_rows": 0, "player_rows": 0, "status": "FAILED", "reason": None}
+              "table_rows": 0, "player_rows": 0, "team_rows": 0,
+              "status": "FAILED", "reason": None}
 
     data = _league_matches_with_retry(client, league_id, quote(season, safe=""))
     result["requests"] += 1
@@ -122,6 +127,26 @@ def backfill_one_season(
         else:
             result["reason"] = "球员榜解析 0 行(积分榜已正常落库)"
 
+    if with_teams:
+        # 与球员榜同构:parse_season_team_stats 内部逐维度 fetchAllUrl(~30 次)
+        stat_defs = (data.get("stats") or {}).get("teams") or []
+        team_rows = client.parse_season_team_stats(data, league_id, season)
+        result["requests"] += len(stat_defs)
+        if team_rows:
+            conn.execute(
+                "DELETE FROM fact_season_team_stats WHERE League_ID=? AND Season=?",
+                (league_id, season),
+            )
+            _insert_many(
+                conn,
+                "fact_season_team_stats",
+                SEASON_TEAM_STATS_CORE_COLUMNS + [("extra_json", "TEXT")],
+                _rows_with_extra_json(team_rows),
+            )
+            result["team_rows"] = len(team_rows)
+        else:
+            result["reason"] = "球队榜解析 0 行(积分榜已正常落库)"
+
     conn.commit()
     result["status"] = "OK"
     return result
@@ -133,7 +158,9 @@ def main() -> int:
     ap.add_argument("--seasons", type=str, default=None,
                     help="逗号分隔;缺省=该联赛在 dim_match 里出现过的全部赛季")
     ap.add_argument("--players-for", type=str, default="",
-                    help="逗号分隔;只有列出的赛季才回填球员榜(每季约 37 次额外请求)")
+                    help="逗号分隔;只有列出的赛季才回填球员榜(每季约 42 次额外请求)")
+    ap.add_argument("--teams-for", type=str, default="",
+                    help="逗号分隔;只有列出的赛季才回填球队榜(每季约 30 次额外请求)")
     ap.add_argument("--sleep", type=float, default=0.5, help="赛季之间的间隔秒数")
     args = ap.parse_args()
 
@@ -145,6 +172,7 @@ def main() -> int:
             else _dim_match_seasons(conn, args.league_id)
         )
         players_for = {s.strip() for s in args.players_for.split(",") if s.strip()}
+        teams_for = {s.strip() for s in args.teams_for.split(",") if s.strip()}
         if not seasons:
             print(f"league_id={args.league_id} 在 dim_match 无任何赛季,无事可做")
             return 1
@@ -153,12 +181,14 @@ def main() -> int:
         results = []
         for i, season in enumerate(seasons):
             r = backfill_one_season(
-                client, conn, args.league_id, season, with_players=season in players_for
+                client, conn, args.league_id, season,
+                with_players=season in players_for,
+                with_teams=season in teams_for,
             )
             results.append(r)
             print(f"[{r['status']}] L{r['league_id']} {r['season']}: "
                   f"table={r['table_rows']} players={r['player_rows']} "
-                  f"requests={r['requests']}"
+                  f"teams={r['team_rows']} requests={r['requests']}"
                   + (f" reason={r['reason']}" if r["reason"] else ""))
             if i < len(seasons) - 1:
                 time.sleep(args.sleep)

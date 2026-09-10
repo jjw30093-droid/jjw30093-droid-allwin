@@ -19,6 +19,7 @@ try:
         MATCH_LINEUP_CORE_COLUMNS,
         MOMENTUM_COLUMNS,
         SEASON_PLAYER_STATS_CORE_COLUMNS,
+        SEASON_TEAM_STATS_CORE_COLUMNS,
         DIM_TEAM_I18N_COLUMNS,
         DIM_PLAYER_I18N_COLUMNS,
         SILVER_TEAM_SEASON_STATS_COLUMNS,
@@ -43,6 +44,7 @@ except ImportError:  # direct ``python backend/init_db.py`` compatibility
         MATCH_LINEUP_CORE_COLUMNS,
         MOMENTUM_COLUMNS,
         SEASON_PLAYER_STATS_CORE_COLUMNS,
+        SEASON_TEAM_STATS_CORE_COLUMNS,
         DIM_TEAM_I18N_COLUMNS,
         DIM_PLAYER_I18N_COLUMNS,
         SILVER_TEAM_SEASON_STATS_COLUMNS,
@@ -141,6 +143,17 @@ def init_db(db_file: Path | str | None = None, *, quiet: bool = False) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_fact_season_player_stats_season "
             "ON fact_season_player_stats (League_ID, Season, stat_name)"
+        )
+
+        _create_table(
+            conn,
+            "fact_season_team_stats",
+            SEASON_TEAM_STATS_CORE_COLUMNS,
+            extra_sql="extra_json TEXT",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fact_season_team_stats_season "
+            "ON fact_season_team_stats (League_ID, Season, stat_name)"
         )
 
         _create_table(conn, "dim_team_i18n", DIM_TEAM_I18N_COLUMNS)

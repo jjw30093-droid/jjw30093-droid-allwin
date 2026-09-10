@@ -1,0 +1,147 @@
+{
+  "_source": "www.fotmob.com/api/data/leagues?id=47&season=2025/2026 与 data.fotmob.com/stats/47/season/27110/*.json,2026-09-10 实抓,仅裁剪行数",
+  "league_payload": {
+    "stats": {
+      "teams": [
+        {
+          "header": "Possession won final 3rd per match",
+          "fetchAllUrl": "https://data.fotmob.com/stats/47/season/27110/poss_won_att_3rd_team.json",
+          "order": 66,
+          "name": "poss_won_att_3rd_team",
+          "localizedTitleId": "poss_won_att_3rd_title",
+          "category": "Defending"
+        },
+        {
+          "header": "Big chances",
+          "fetchAllUrl": "https://data.fotmob.com/stats/47/season/27110/big_chance_team.json",
+          "order": 53,
+          "name": "big_chance_team",
+          "localizedTitleId": "big_chance",
+          "category": "Attacking"
+        }
+      ]
+    }
+  },
+  "leaderboards": {
+    "https://data.fotmob.com/stats/47/season/27110/poss_won_att_3rd_team.json": {
+      "TopLists": [
+        {
+          "StatName": "poss_won_att_3rd_team",
+          "Title": "Possession won final 3rd per match",
+          "Subtitle": "Possession won midfield",
+          "LocalizedTitleId": "poss_won_att_3rd_title",
+          "LocalizedSubtitleId": "poss_won_att_3rd_team_subtitle",
+          "StatFormat": "fraction",
+          "SubstatFormat": "number",
+          "StatDecimals": 1,
+          "SubstatDecimals": 0,
+          "Order": 66,
+          "Category": "Defending",
+          "LocalizedCategoryId": "defense",
+          "StatList": [
+            {
+              "ParticipantName": "Brighton & Hove Albion",
+              "ParticiantId": 0,
+              "TeamId": 10204,
+              "TeamColor": "#0850A0",
+              "StatValue": 5.1,
+              "SubStatValue": 780.0,
+              "MinutesPlayed": 0,
+              "MatchesPlayed": 38,
+              "StatValueCount": 37,
+              "Rank": 1,
+              "ParticipantCountryCode": "ENG"
+            },
+            {
+              "ParticipantName": "Arsenal",
+              "ParticiantId": 0,
+              "TeamId": 9825,
+              "TeamColor": "#bd0510",
+              "StatValue": 4.7,
+              "SubStatValue": 729.0,
+              "MinutesPlayed": 0,
+              "MatchesPlayed": 38,
+              "StatValueCount": 38,
+              "Rank": 2,
+              "ParticipantCountryCode": "ENG"
+            },
+            {
+              "ParticipantName": "AFC Bournemouth",
+              "ParticiantId": 0,
+              "TeamId": 8678,
+              "TeamColor": "#D71921",
+              "StatValue": 4.6,
+              "SubStatValue": 752.0,
+              "MinutesPlayed": 0,
+              "MatchesPlayed": 38,
+              "StatValueCount": 37,
+              "Rank": 3,
+              "ParticipantCountryCode": "ENG"
+            }
+          ]
+        }
+      ],
+      "LeagueName": "Premier League"
+    },
+    "https://data.fotmob.com/stats/47/season/27110/big_chance_team.json": {
+      "TopLists": [
+        {
+          "StatName": "big_chance_team",
+          "Title": "Big chances",
+          "Subtitle": "Total goals",
+          "LocalizedTitleId": "big_chance",
+          "LocalizedSubtitleId": "goals_team_match_subtitle",
+          "StatFormat": "number",
+          "SubstatFormat": "number",
+          "StatDecimals": 0,
+          "SubstatDecimals": 0,
+          "Order": 53,
+          "Category": "Attacking",
+          "LocalizedCategoryId": "attack",
+          "StatList": [
+            {
+              "ParticipantName": "Manchester City",
+              "ParticiantId": 0,
+              "TeamId": 8456,
+              "TeamColor": "#69A8D8",
+              "StatValue": 120.0,
+              "SubStatValue": 77.0,
+              "MinutesPlayed": 0,
+              "MatchesPlayed": 38,
+              "StatValueCount": 1,
+              "Rank": 1,
+              "ParticipantCountryCode": "ENG"
+            },
+            {
+              "ParticipantName": "Arsenal",
+              "ParticiantId": 0,
+              "TeamId": 9825,
+              "TeamColor": "#bd0510",
+              "StatValue": 116.0,
+              "SubStatValue": 71.0,
+              "MinutesPlayed": 0,
+              "MatchesPlayed": 38,
+              "StatValueCount": 1,
+              "Rank": 2,
+              "ParticipantCountryCode": "ENG"
+            },
+            {
+              "ParticipantName": "Brentford",
+              "ParticiantId": 0,
+              "TeamId": 9937,
+              "TeamColor": "#C00808",
+              "StatValue": 114.0,
+              "SubStatValue": 55.0,
+              "MinutesPlayed": 0,
+              "MatchesPlayed": 38,
+              "StatValueCount": 1,
+              "Rank": 3,
+              "ParticipantCountryCode": "ENG"
+            }
+          ]
+        }
+      ],
+      "LeagueName": "Premier League"
+    }
+  }
+}

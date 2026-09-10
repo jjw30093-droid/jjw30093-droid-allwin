@@ -9,6 +9,7 @@
 本身;请求的 season 不在列表时回退最新赛季(响应如实返回实际使用的赛季)。
 """
 
+import json
 import sqlite3
 
 from backend.queries.matches import _team_ref
@@ -57,6 +58,108 @@ FREE_PLAYER_BOARDS: list[tuple[str, str]] = [
 ]
 
 _BOARD_TOP_N = 10
+
+
+# ── 来源方赛季球队榜(fact_season_team_stats,2026-09-10 新增)────────────
+#
+# 与上面的球员榜同构,但**只收 TeamSeasonStatRow 里没有同义字段的维度**——
+# 那张 DTO 是我们自己从单场数据聚合出来的(silver_team_season_stats),来源
+# 榜单是 FotMob 自己算的,两者口径不可能逐位相等。同一个指标在同一页出现
+# 两个不同的数字比少一个榜糟糕得多,所以控球/射门/射正/xG/角球/犯规/红黄牌/
+# 零封这些已经在 DTO 里的维度一律不收(来源侧对应的是
+# possession_percentage_team / ontarget_scoring_att_team / expected_goals_team /
+# expected_goals_conceded_team / corner_taken_team / fk_foul_lost_team /
+# total_yel_card_team / total_red_card_team / clean_sheet_team)。
+#
+# 另外三个有意排除、不是遗漏的:
+# - rating_team(FotMob 球队综合评分):来源方黑箱算法,没有可解释口径,
+#   与站点"把不确定性讲清楚"的定位需要单独设计文案,不顺手塞进榜单墙;
+# - home_attendance_team(上座人数):不是竞技指标,这一页是球队数据榜;
+# - _xg_diff_team(xG 差):可由本页已展示的 xG 与被创造 xG 直接相减得出,
+#   不占一张卡。
+#
+# 下划线前缀的 _set_piece_goals_* 这里**收**,与球员榜整体排除下划线指标的
+# 判断不同:球员侧排除的理由是那 4 个复合/派生指标语义未经核实
+# (_goals_and_goal_assist 之类),而"定位球进球/失球"语义明确、无歧义。
+#
+# 单位(场均 vs 赛季合计)不在这张表里写死,由 extra_json 里来源自报的
+# stat_title 派生(见 _team_source_boards)——同一批榜里 poss_won_att_3rd_team
+# 是场均、big_chance_team 是赛季总数,而 StatFormat 两者都可能是 'fraction',
+# 靠字段名或中文标签猜必错。
+FREE_TEAM_BOARDS: list[tuple[str, str]] = [
+    ("poss_won_att_3rd_team", "前场反抢"),
+    ("interception_team", "拦截"),
+    ("total_tackle_team", "抢断"),
+    ("effective_clearance_team", "解围"),
+    ("accurate_pass_team", "传球成功"),
+    ("accurate_long_balls_team", "长传成功"),
+    ("accurate_cross_team", "传中成功"),
+    ("touches_in_opp_box_team", "对方禁区触球"),
+    ("big_chance_team", "创造绝佳机会"),
+    ("big_chance_missed_team", "错失绝佳机会"),
+    ("_set_piece_goals_team", "定位球进球"),
+    ("_set_piece_goals_conceded_team", "定位球失球"),
+    ("penalty_won_team", "赢得点球"),
+    ("penalty_conceded_team", "送点"),
+    ("saves_team", "扑救"),
+    ("phys_tdc_team", "跑动距离"),
+]
+
+
+def _team_source_boards(
+    conn: sqlite3.Connection, league_id: int, season: str | None
+) -> list[dict]:
+    """来源方球队榜(top 10/维度)。空维度整条不返回,不制造空卡片墙。
+
+    season 由调用方传入**已解析好的赛季**(与本页 rows 同一个),不自己再解析
+    一次——两处各自解析会让同一个页面上半部分和下半部分显示不同赛季。
+    """
+    if season is None:
+        return []
+    display = team_display_map(conn)
+    boards: list[dict] = []
+    for stat_name, label_zh in FREE_TEAM_BOARDS:
+        try:
+            rows = conn.execute(
+                """SELECT Team_ID, Team_Name, rank, value, extra_json
+                   FROM fact_season_team_stats
+                   WHERE League_ID=? AND Season=? AND stat_name=?
+                   ORDER BY rank LIMIT ?""",
+                (league_id, season, stat_name, _BOARD_TOP_N),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # 表尚未建立(未跑 0016 的库)——整块降级为空,不让联赛页 500。
+            return []
+        if not rows:
+            continue
+        try:
+            meta = json.loads(rows[0]["extra_json"] or "{}")
+        except (TypeError, ValueError):
+            meta = {}
+        title = meta.get("stat_title")
+        boards.append(
+            {
+                "stat_name": stat_name,
+                "label_zh": label_zh,
+                "stat_title": title if isinstance(title, str) else None,
+                # "每场" 还是 "赛季合计":唯一可靠信号是来源自报的标题里有没有
+                # "per match"。拿不到标题就是 None —— 宁可不标单位,不猜。
+                "per_match": (
+                    " per match" in title.lower() if isinstance(title, str) else None
+                ),
+                "stat_format": meta.get("stat_format"),
+                "stat_decimals": meta.get("stat_decimals"),
+                "entries": [
+                    {
+                        "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
+                        "rank": r["rank"],
+                        "value": r["value"],
+                    }
+                    for r in rows
+                ],
+            }
+        )
+    return boards
 
 
 def _seasons_of(conn: sqlite3.Connection, table: str, league_id: int) -> list[str]:
@@ -123,7 +226,12 @@ def team_season_stats(
 ) -> dict:
     seasons = _seasons_of(conn, "silver_team_season_stats", league_id)
     if not seasons:
-        return {"season": season, "available_seasons": [], "rows": []}
+        return {
+            "season": season,
+            "available_seasons": [],
+            "rows": [],
+            "boards": _team_source_boards(conn, league_id, season),
+        }
     season = _resolve_season(
         seasons,
         season,
@@ -163,6 +271,7 @@ def team_season_stats(
     return {
         "season": season,
         "available_seasons": seasons,
+        "boards": _team_source_boards(conn, league_id, season),
         "rows": [
             {
                 "team": _team_ref(r["Team_ID"], None, display),
