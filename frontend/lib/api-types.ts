@@ -3669,6 +3669,7 @@ export interface components {
             rank?: number | null;
             /** Value */
             value?: number | null;
+            team_color?: components["schemas"]["TeamBrandColor"] | null;
         };
         /** PlayersResponse */
         PlayersResponse: {
@@ -4699,6 +4700,21 @@ export interface components {
             profile_id: string;
         };
         /**
+         * TeamBrandColor
+         * @description 榜单里用来给球队上色的一组代表色(浅色/深色模式各一个)。
+         *
+         *     与 TeamColorPair 形状相同但语义不同,别混用:那个是**某一场比赛**里
+         *     按对手撞色规避后的配对级结果;这个是"这支队在本赛季的一个代表色",
+         *     取自该队最近一场有颜色的比赛(见 queries/teams.py::team_brand_color_map)。
+         *     缺失时为 null,前端回退品牌色,不得编造。
+         */
+        TeamBrandColor: {
+            /** Light */
+            light: string;
+            /** Dark */
+            dark: string;
+        };
+        /**
          * TeamColorPair
          * @description 某一场比赛里某一方的图表配色(浅色/深色模式各一个十六进制值)。
          *
@@ -4753,6 +4769,7 @@ export interface components {
          */
         TeamSeasonStatRow: {
             team: components["schemas"]["TeamRef"];
+            team_color?: components["schemas"]["TeamBrandColor"] | null;
             /** Matches Played */
             matches_played?: number | null;
             /** Avg Total Shots */
@@ -4819,6 +4836,7 @@ export interface components {
             rank?: number | null;
             /** Value */
             value?: number | null;
+            team_color?: components["schemas"]["TeamBrandColor"] | null;
         };
         /** TeamStatsResponse */
         TeamStatsResponse: {

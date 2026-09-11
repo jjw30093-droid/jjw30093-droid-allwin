@@ -49,6 +49,6 @@ describe("PlayerBoards 头像", () => {
   it("姓名与队名(subtitle)照常渲染", () => {
     render(<PlayerBoards boards={boards()} />);
     expect(screen.getByText("测试球员")).not.toBeNull();
-    expect(screen.getByText("阿森纳")).not.toBeNull();
+    expect(screen.getByText(/阿森纳/)).not.toBeNull();
   });
 });

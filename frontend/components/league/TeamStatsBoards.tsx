@@ -8,7 +8,8 @@ import type { TeamSeasonStatRow } from "@/lib/api-v1";
 import styles from "./boards.module.css";
 
 const METRICS: {
-  key: keyof Omit<TeamSeasonStatRow, "team" | "matches_played">;
+  // team_color 不是可排行的数值列,和 team/matches_played 一样排除在外
+  key: keyof Omit<TeamSeasonStatRow, "team" | "matches_played" | "team_color">;
   title: string;
   format: (v: number) => string;
 }[] = [
@@ -36,6 +37,7 @@ function topRows(
       name: t.team.name,
       value: metric.format(t[metric.key] as number),
       avatar: { kind: "team" as const, crestUrl: t.team.crest_url },
+      teamColor: t.team_color,
     }));
 }
 

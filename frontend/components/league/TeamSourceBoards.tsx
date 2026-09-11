@@ -56,6 +56,7 @@ function toRows(board: TeamSourceBoard): LeaderboardRow[] {
       name: e.team.name,
       value,
       avatar: { kind: "team", crestUrl: e.team.crest_url },
+      teamColor: e.team_color,
     });
   });
   return rows;

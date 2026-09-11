@@ -5,53 +5,72 @@
   padding: 16px 18px;
 }
 
+/* 原生 <details> 的默认三角要去掉,箭头由 .chevron 自己画 */
+.summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .title {
   font-weight: 700;
   color: var(--gold-300);
   font-size: 14.5px;
-  margin-bottom: 10px;
 }
 
-/* 横向可滑动轨道(2026-09-11,对照 FotMob 官方安卓包联赛 Stats tab)。
- * 机制借鉴首页 HomeMatchExperienceLive 的 secondaryViewport(单份 DOM +
- * grid-auto-flow:column + scroll-snap + 隐藏滚动条,站长已认可的交互取向:
- * "纵向列表不如横滑,2026-08-23 改回横向滚动")，但不整段照抄——首页那份
- * 耦合了"≥640px 切网格""隐藏第 6/7 张"等首页专属逻辑,这里固定 10 张卡，
- * 全断点统一横滑，不做宽屏切网格(桌面宽度一行也只能放 10 张出头，网格化
- * 收益很小，见 commit message)。 */
-.rail {
-  display: grid;
-  grid-auto-columns: 104px;
-  grid-auto-flow: column;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 1px 1px 4px;
-  scroll-padding-inline: 1px;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  overscroll-behavior-inline: contain;
-  -webkit-overflow-scrolling: touch;
+/* 右上角展开箭头:收起时指右,展开后转 90° 指下 */
+.chevron {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
 }
 
-.rail::-webkit-scrollbar {
+.card[open] .chevron {
+  transform: rotate(45deg);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 折叠区必须自己显式隐藏,不能指望 <details> 的默认行为:上面 .list 给了
+ * display:flex,作者样式优先级高于 UA 样式,折叠态下这段内容仍会占布局
+ * (2026-09-11 真机实测:卡片自身高 192px,被折叠的那个 ol 仍报 298px 高度)。
+ * jsdom 不跑 CSS,单测抓不到这一类问题,只能靠真实浏览器验证。 */
+.card:not([open]) .foldedList {
   display: none;
 }
 
-.rowCard {
-  scroll-snap-align: start;
+.row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card-sm);
-  background: var(--surface);
-  text-align: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.avatarSlot {
-  margin-bottom: 2px;
+.row:last-child {
+  border-bottom: none;
 }
 
 .rank {
@@ -59,29 +78,30 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 12.5px;
+  width: 16px;
+  flex: 0 0 auto;
+  text-align: center;
 }
 
-.rankTop3 {
-  color: var(--gold-300);
+.avatarSlot {
+  flex: 0 0 auto;
+  display: inline-flex;
 }
 
 .name {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .subtitle {
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .value {
@@ -89,7 +109,33 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--ink);
-  font-size: 15px;
+  flex: 0 0 auto;
+  font-size: 13.5px;
+}
+
+/* 第 1 名的数值胶囊。默认配色沿用 RatingChip.elite 的既有做法:底色用
+ * --gold-300、前景用 --bg —— 这个 token 在浅色主题是深青、深色主题是亮青,
+ * 明暗方向相反,拿 --bg 当前景两套主题下都天然高对比,零新增 token。
+ *
+ * 有球队代表色时,组件在这个 span 上内联下发 --pill-bg/--pill-ink(浅色)
+ * 与 --pill-bg-dark/--pill-ink-dark(深色)四个变量,由下面的选择器决定哪
+ * 一套生效。为什么不在 JS 里直接算好一个颜色:LeaderboardCard 是服务端
+ * 组件,渲染时不知道用户选的是哪套主题;主题在本站纯由 html[data-theme]
+ * 驱动(globals.css 没有 prefers-color-scheme 分支),所以这里也只需要一条
+ * [data-theme="dark"] 覆盖。两套变量的对比度都已在 leaderboardPillColor.ts
+ * 里对各自的卡片底色算过,任一套不达标则四个变量都不下发、整体回退品牌色。 */
+.valueTop {
+  min-width: 34px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  text-align: center;
+  background: var(--pill-bg, var(--gold-300));
+  color: var(--pill-ink, var(--bg));
+}
+
+:global(html[data-theme="dark"]) .valueTop {
+  background: var(--pill-bg-dark, var(--gold-300));
+  color: var(--pill-ink-dark, var(--bg));
 }
 
 .empty {

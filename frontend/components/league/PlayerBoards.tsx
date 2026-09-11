@@ -24,6 +24,8 @@ export function PlayerBoards({ boards }: { boards: PlayersResponse["boards"] }) 
           subtitle: e.team.name,
           value: formatValue(board.stat_name, e.value),
           avatar: { kind: "player", playerId: e.player_id },
+          // 球员榜的榜首胶囊用他所属球队的队色(FotMob 同款)
+          teamColor: e.team_color,
         }));
         return (
           <LeaderboardCard key={board.stat_name} title={board.label_zh} rows={rows} />

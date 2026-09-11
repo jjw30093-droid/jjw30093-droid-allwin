@@ -13,7 +13,7 @@ import json
 import sqlite3
 
 from backend.queries.matches import _team_ref
-from backend.queries.teams import team_display_map
+from backend.queries.teams import team_brand_color_map, team_display_map
 
 # 球员榜维度(2026-08-16 起全字段免费投影)。原来只暴露 5 个"免费"维度
 # (进球/助攻/xG/xGOT/评分),其余 fact_season_player_stats 里真实存在、
@@ -117,6 +117,7 @@ def _team_source_boards(
     if season is None:
         return []
     display = team_display_map(conn)
+    colors = team_brand_color_map(conn, league_id, season)
     boards: list[dict] = []
     for stat_name, label_zh in FREE_TEAM_BOARDS:
         try:
@@ -154,6 +155,9 @@ def _team_source_boards(
                         "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
                         "rank": r["rank"],
                         "value": r["value"],
+                        "team_color": colors.get(int(r["Team_ID"]))
+                        if r["Team_ID"] is not None
+                        else None,
                     }
                     for r in rows
                 ],
@@ -240,6 +244,7 @@ def team_season_stats(
         ),
     )
     display = team_display_map(conn)
+    colors = team_brand_color_map(conn, league_id, season)
     # xG 拆解(运动战/定位球/非点球)与总 xG 同源同口径。
     #
     # 被创造 xG 走 fact_league_table 的 xg 档:该表已随 standings 的 table_type=xg
@@ -275,6 +280,9 @@ def team_season_stats(
         "rows": [
             {
                 "team": _team_ref(r["Team_ID"], None, display),
+                "team_color": colors.get(int(r["Team_ID"]))
+                if r["Team_ID"] is not None
+                else None,
                 "matches_played": r["matches_played"],
                 "avg_total_shots": r["avg_total_shots"],
                 "avg_shots_on_target": r["avg_shots_on_target"],
@@ -316,6 +324,7 @@ def player_leaderboards(
         return {"season": season, "available_seasons": [], "boards": []}
     season = _resolve_season(seasons, season)
     display = team_display_map(conn)
+    colors = team_brand_color_map(conn, league_id, season)
     player_zh = _player_i18n_map(conn)
 
     boards = []
@@ -340,6 +349,9 @@ def player_leaderboards(
                     "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
                     "rank": r["rank"],
                     "value": r["value"],
+                    "team_color": colors.get(int(r["Team_ID"]))
+                    if r["Team_ID"] is not None
+                    else None,
                 }
             )
         boards.append({"stat_name": stat_name, "label_zh": label_zh, "entries": entries})

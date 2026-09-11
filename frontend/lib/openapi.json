@@ -14092,6 +14092,16 @@
        }
       ],
       "title": "Value"
+     },
+     "team_color": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamBrandColor"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",
@@ -17036,6 +17046,25 @@
     "title": "StudioExportServerDTO",
     "description": "txt/json/srt:服务端生成可下载文件。"
    },
+   "TeamBrandColor": {
+    "properties": {
+     "light": {
+      "type": "string",
+      "title": "Light"
+     },
+     "dark": {
+      "type": "string",
+      "title": "Dark"
+     }
+    },
+    "type": "object",
+    "required": [
+     "light",
+     "dark"
+    ],
+    "title": "TeamBrandColor",
+    "description": "榜单里用来给球队上色的一组代表色(浅色/深色模式各一个)。\n\n与 TeamColorPair 形状相同但语义不同,别混用:那个是**某一场比赛**里\n按对手撞色规避后的配对级结果;这个是\"这支队在本赛季的一个代表色\",\n取自该队最近一场有颜色的比赛(见 queries/teams.py::team_brand_color_map)。\n缺失时为 null,前端回退品牌色,不得编造。"
+   },
    "TeamColorPair": {
     "properties": {
      "light": {
@@ -17166,6 +17195,16 @@
     "properties": {
      "team": {
       "$ref": "#/components/schemas/TeamRef"
+     },
+     "team_color": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamBrandColor"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "matches_played": {
       "anyOf": [
@@ -17459,6 +17498,16 @@
        }
       ],
       "title": "Value"
+     },
+     "team_color": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamBrandColor"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",

@@ -62,6 +62,18 @@ class TeamColorPair(BaseModel):
     dark: Optional[str] = None
 
 
+class TeamBrandColor(BaseModel):
+    """榜单里用来给球队上色的一组代表色(浅色/深色模式各一个)。
+
+    与 TeamColorPair 形状相同但语义不同,别混用:那个是**某一场比赛**里
+    按对手撞色规避后的配对级结果;这个是"这支队在本赛季的一个代表色",
+    取自该队最近一场有颜色的比赛(见 queries/teams.py::team_brand_color_map)。
+    缺失时为 null,前端回退品牌色,不得编造。"""
+
+    light: str
+    dark: str
+
+
 class WinProbabilityDTO(BaseModel):
     """Bet365 1x2 赔率去水后的胜平负概率(backend/queries/odds.py::latest_1x2_by_match)。
 
@@ -345,6 +357,8 @@ class TeamSeasonStatRow(BaseModel):
     内容,不再是付费深度报告字段)。"""
 
     team: TeamRef
+    # 榜首数值胶囊的底色;该队没有可用队色时为 null,前端回退品牌色
+    team_color: Optional[TeamBrandColor] = None
     matches_played: Optional[int] = None
     avg_total_shots: Optional[float] = None
     avg_shots_on_target: Optional[float] = None
@@ -373,6 +387,8 @@ class TeamSourceBoardEntry(BaseModel):
     team: TeamRef
     rank: Optional[int] = None
     value: Optional[float] = None
+    # 榜首数值胶囊的底色;该队没有可用队色时为 null,前端回退品牌色
+    team_color: Optional[TeamBrandColor] = None
 
 
 class TeamSourceBoard(BaseModel):
@@ -459,6 +475,8 @@ class PlayerBoardEntry(BaseModel):
     team: TeamRef
     rank: Optional[int] = None
     value: Optional[float] = None
+    # 所属球队的代表色(榜首胶囊底色);缺失为 null,前端回退品牌色
+    team_color: Optional[TeamBrandColor] = None
 
 
 class PlayerBoard(BaseModel):

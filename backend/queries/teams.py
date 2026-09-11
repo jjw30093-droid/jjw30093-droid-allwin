@@ -66,6 +66,70 @@ def team_display_map(conn: sqlite3.Connection) -> dict[int, dict[str, str | None
     return display
 
 
+_HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def team_brand_color_map(
+    conn: sqlite3.Connection, league_id: int, season: str | None
+) -> dict[int, dict[str, str]]:
+    """该联赛该赛季每支球队的一组代表色(浅色/深色各一个十六进制值)。
+
+    数据源是 dim_match 的 {Home,Away}_Team_Color_{Light,Dark}(migration 0008
+    起写入)。**这不是"官方固定队色"**:FotMob 给的是按对手做过撞色规避的
+    **配对级**结果,同一支队换个对手这两个值可能不同(见 schemas.TeamColorPair
+    的说明)。榜单胶囊只需要一个"看得出是哪支队"的代表色,所以这里取该队在本
+    赛季**最近一场**有颜色的比赛的取值,保证同一请求内确定、不随机跳动。
+
+    只认深浅两个变体都齐的球队。刻意不拿 fact_season_*_stats.extra_json 的
+    TeamColor 兜底——那个字段只有浅色变体(实测 = FotMob 的 lightMode 值),
+    在深色卡片上用浅色变体正是 CLAUDE.md §11.3 记过的"白压白隐形"同一类
+    错误;宁可这支队没有颜色、前端回退品牌色,也不跨主题借用。
+
+    2026-09-11 生产实测:当前赛季 13/14 个在营联赛球队覆盖率 100%(欧冠 36/36、
+    英超 20/20 等),只有澳超(113)当前赛季为 0(其比赛早于队色列上线),该联赛
+    与历史赛季会整体回退品牌色。
+    """
+    if season is None:
+        return {}
+    colors: dict[int, dict[str, str]] = {}
+    try:
+        rows = conn.execute(
+            """SELECT Team_ID, light, dark FROM (
+                   SELECT Home_Team_ID AS Team_ID,
+                          Home_Team_Color_Light AS light,
+                          Home_Team_Color_Dark AS dark,
+                          COALESCE(kickoff_at_utc, Date) AS ts
+                     FROM dim_match
+                    WHERE League_ID=? AND Season=?
+                      AND Home_Team_Color_Light IS NOT NULL
+                      AND Home_Team_Color_Dark IS NOT NULL
+                   UNION ALL
+                   SELECT Away_Team_ID,
+                          Away_Team_Color_Light,
+                          Away_Team_Color_Dark,
+                          COALESCE(kickoff_at_utc, Date)
+                     FROM dim_match
+                    WHERE League_ID=? AND Season=?
+                      AND Away_Team_Color_Light IS NOT NULL
+                      AND Away_Team_Color_Dark IS NOT NULL
+               ) ORDER BY ts ASC""",
+            (league_id, season, league_id, season),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # 老库还没跑 0008(队色列不存在)——整体回退品牌色,不让榜单页 500
+        return {}
+    for row in rows:
+        team_id = row["Team_ID"]
+        light, dark = row["light"], row["dark"]
+        if team_id is None or not isinstance(light, str) or not isinstance(dark, str):
+            continue
+        if not _HEX_RE.fullmatch(light.strip()) or not _HEX_RE.fullmatch(dark.strip()):
+            continue
+        # ORDER BY ts ASC + 直接覆盖 = 最终留下最近一场的取值
+        colors[int(team_id)] = {"light": light.strip(), "dark": dark.strip()}
+    return colors
+
+
 def team_display_for(
     conn: sqlite3.Connection, team_ids: set[int]
 ) -> dict[int, dict[str, str | None]]:
