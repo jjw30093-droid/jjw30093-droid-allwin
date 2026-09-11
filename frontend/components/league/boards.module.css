@@ -6,21 +6,21 @@
   gap: 16px;
 }
 
-/* 来源方赛季榜分区(球队数据榜页,2026-09-10) */
-.sourceSection {
-  margin-top: 28px;
+/* 语义分区(重点数据 / 进攻 / 防守 / 纪律),2026-09-11 取代按数据出处分的
+ * 「更多球队数据」分区。分区标题贴着 FotMob 的做法:不加卡片底、不加说明
+ * 文字,就是一行贴在卡片组上方的小标题——出处差异是实现细节,读者不需要
+ * 每段都读一遍免责声明。 */
+.section {
+  margin-top: 26px;
 }
 
-.sourceHeader {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 600;
+.section:first-of-type {
+  margin-top: 16px;
+}
+
+.sectionHeader {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 700;
   color: var(--ink);
-}
-
-.sourceNote {
-  margin: 0 0 14px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink-3);
 }

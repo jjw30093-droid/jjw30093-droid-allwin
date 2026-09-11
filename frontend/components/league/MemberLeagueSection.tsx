@@ -29,7 +29,7 @@ import { FixtureRounds } from "./FixtureRounds";
 import { PlayerBoards } from "./PlayerBoards";
 import { SeasonSwitcher } from "./SeasonSwitcher";
 import { StandingsTable } from "./StandingsTable";
-import { TeamStatsBoards } from "./TeamStatsBoards";
+import { TeamStatsSections } from "./TeamStatsSections";
 import { TeamQuadrantChart } from "./TeamQuadrantChart";
 import styles from "./MemberLeagueSection.module.css";
 
@@ -160,7 +160,7 @@ export function MemberLeagueSection({
           {switcher}
           {/* 会员加载路径必须和服务端渲染路径同构,否则登录后反而少一张图 */}
           <TeamQuadrantChart rows={data.body.rows} />
-          <TeamStatsBoards rows={data.body.rows} />
+          <TeamStatsSections rows={data.body.rows} boards={data.body.boards ?? []} />
         </>
       );
     case "players":

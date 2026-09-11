@@ -406,6 +406,11 @@ class TeamSourceBoard(BaseModel):
     per_match: Optional[bool] = None
     stat_format: Optional[str] = None      # fraction / number / meter / percent
     stat_decimals: Optional[int] = None
+    # 来源自报的分组:"Top Stat" / "Attacking" / "Defending" / "Discipline"。
+    # 前端按这个字段分区渲染,**不在前端维护一份指标→分组的映射**——那等于
+    # 把 FotMob 的分类决策抄一遍,来源改了我们不会知道。来源没给就是 None,
+    # 前端归入兜底分区,不猜。
+    category: Optional[str] = None
     entries: list[TeamSourceBoardEntry]
 
 

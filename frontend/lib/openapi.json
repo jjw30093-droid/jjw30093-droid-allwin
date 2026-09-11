@@ -17455,6 +17455,17 @@
       ],
       "title": "Stat Decimals"
      },
+     "category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Category"
+     },
      "entries": {
       "items": {
        "$ref": "#/components/schemas/TeamSourceBoardEntry"

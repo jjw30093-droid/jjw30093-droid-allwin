@@ -4826,6 +4826,8 @@ export interface components {
             stat_format?: string | null;
             /** Stat Decimals */
             stat_decimals?: number | null;
+            /** Category */
+            category?: string | null;
             /** Entries */
             entries: components["schemas"]["TeamSourceBoardEntry"][];
         };

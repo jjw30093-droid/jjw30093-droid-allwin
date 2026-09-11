@@ -71,6 +71,12 @@ _BOARD_TOP_N = 10
 # expected_goals_conceded_team / corner_taken_team / fk_foul_lost_team /
 # total_yel_card_team / total_red_card_team / clean_sheet_team)。
 #
+# goals_team_match / goals_conceded_team_match(场均进球/场均失球)2026-09-11
+# 补收:它们是 FotMob「重点数据」分区的第 2、3 张卡,而 TeamSeasonStatRow 里
+# **没有**任何进球/失球字段(那张 DTO 只有射门/xG/角球/牌/零封这类),所以
+# 不存在撞车。此前既不在这张表里、也不在下面的"有意排除"清单里,是纯遗漏
+# ——整页看不到进球和失球两个最基本的指标。
+#
 # 另外三个有意排除、不是遗漏的:
 # - rating_team(FotMob 球队综合评分):来源方黑箱算法,没有可解释口径,
 #   与站点"把不确定性讲清楚"的定位需要单独设计文案,不顺手塞进榜单墙;
@@ -87,6 +93,8 @@ _BOARD_TOP_N = 10
 # 是场均、big_chance_team 是赛季总数,而 StatFormat 两者都可能是 'fraction',
 # 靠字段名或中文标签猜必错。
 FREE_TEAM_BOARDS: list[tuple[str, str]] = [
+    ("goals_team_match", "场均进球"),
+    ("goals_conceded_team_match", "场均失球"),
     ("poss_won_att_3rd_team", "前场反抢"),
     ("interception_team", "拦截"),
     ("total_tackle_team", "抢断"),
@@ -150,6 +158,10 @@ def _team_source_boards(
                 ),
                 "stat_format": meta.get("stat_format"),
                 "stat_decimals": meta.get("stat_decimals"),
+                # 分组直接透传来源自报值,不在我们这边维护一份映射表
+                "category": meta.get("category")
+                if isinstance(meta.get("category"), str)
+                else None,
                 "entries": [
                     {
                         "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
