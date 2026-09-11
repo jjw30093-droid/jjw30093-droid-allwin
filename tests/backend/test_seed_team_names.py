@@ -13,7 +13,13 @@ import json
 import pytest
 
 from backend.db.connections import connect_rw
-from backend.i18n.seed_team_names import SeedGateError, main, validate
+from backend.i18n.seed_team_names import (
+    DOUBLE_VERIFIED_METHODS,
+    DOUBLE_VERIFIED_SOURCES,
+    SeedGateError,
+    main,
+    validate,
+)
 
 from .coreseed import seed_core_schema
 
@@ -52,11 +58,24 @@ class TestFailClosedGates:
                      in_scope_ids={100}, existing_name_zh={})
 
     def test_all_whitelisted_methods_accepted(self):
-        for method in ("qwen_websearch_agree", "websearch_override",
-                      "websearch_confirmed_upgrade", "no_established_name_own_judgment"):
+        for method in DOUBLE_VERIFIED_METHODS:
             rows = [_row(100, "Team A", "队伍甲", method=method)]
             validate(rows, source="qwen_max_websearch_verified",
                      in_scope_ids={100}, existing_name_zh={})  # 不抛错
+
+    def test_every_double_verified_source_enforces_whitelist(self):
+        """换一个 source 名不能绕过 method 白名单。
+
+        2026-09-11 收口:门禁原本写死只在 source == "qwen_max_websearch_verified"
+        时检查 method,新增一种验证流程时最省事的做法恰好是换个 source 名整条
+        绕过白名单。这条测试对 DOUBLE_VERIFIED_SOURCES 里的**每一个**标签都
+        断言一遍,将来再加 source 时会自动被覆盖,不会漏。
+        """
+        assert len(DOUBLE_VERIFIED_SOURCES) >= 2  # 否则这条测试退化成上一条
+        for source in DOUBLE_VERIFIED_SOURCES:
+            rows = [_row(100, "Team A", "队伍甲", method="just_one_pass_no_verification")]
+            with pytest.raises(SeedGateError, match="白名单"):
+                validate(rows, source=source, in_scope_ids={100}, existing_name_zh={})
 
     def test_empty_name_zh_rejected(self):
         rows = [_row(100, "Team A", "")]

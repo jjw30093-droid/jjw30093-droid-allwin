@@ -21,10 +21,12 @@ artifact 格式:JSON 数组,每行 `{team_id, name_en, name_zh, method, reasonin
 (与 `runtime/research/team-i18n-jka/final-results.json` 同 schema)。
 
 fail-closed 门禁(任一不满足,整批拒绝写入,不部分写入):
-1. `--source qwen_max_websearch_verified` 时,artifact 每一行的 `method`
-   必须在 `DOUBLE_VERIFIED_METHODS` 白名单内(qwen 翻译 + 独立 WebSearch
-   交叉核对达成一致,或 WebSearch 纠正 qwen 的结果)——不接受"只跑了 qwen
-   没有独立验证"的行冒充这个 source 标签。
+1. `--source` 属于 `DOUBLE_VERIFIED_SOURCES`(声称"双重验证"等级)时,
+   artifact 每一行的 `method` 必须在 `DOUBLE_VERIFIED_METHODS` 白名单内
+   (第一遍机器翻译 + 独立 WebSearch 交叉核对达成一致,或 WebSearch 纠正了
+   第一遍的结果)——不接受"只跑了一遍翻译、没有独立验证"的行冒充这个等级。
+   注意这里按集合判断而不是只认死一个字符串:否则新增一种验证流程时,
+   换个 source 名就能整条绕过白名单。
 2. `workflow_verified` 永远不可写(那是 `seed_curated.py` 三票工作流专用的
    更高等级,本模块不生产这个等级的证据)。
 3. `name_zh` 必须非空、含至少一个 CJK 字符、且 != `name_en`
@@ -49,10 +51,27 @@ from backend.db.util import utc_now_iso
 
 DOUBLE_VERIFIED_METHODS = frozenset({
     "qwen_websearch_agree",
+    "claude_websearch_agree",  # 2026-09-11:与 qwen_websearch_agree 同构,只是
+                               # 第一遍译名由 Claude 给出、再经独立 WebSearch
+                               # 交叉核对一致。单列一个标签是因为**没跑过的
+                               # 流程不能借用别人的标签**——这正是本模块存在
+                               # 的理由(见文件头 seed_allsvenskan_teams 的教训)
     "websearch_override",
     "websearch_confirmed_upgrade",
     "no_established_name_own_judgment",  # 双重核验后确认"确实没有通用译名",
                                           # 仍然是核验过的结论,不是跳过核验
+})
+
+# 需要接受 method 白名单检查的 source 标签。
+#
+# 2026-09-11 收口:此前门禁一写死只在 source == "qwen_max_websearch_verified"
+# 时检查 method,于是**换一个 source 字符串就能整条绕过白名单**——新增一种
+# 验证流程时,最省事的做法恰好是绕过门禁而不是扩展它,这个洞迟早会被走。
+# 现在改成按集合判断:凡是声称"双重验证"等级的 source 都必须过白名单;真正
+# 低一等的 source(如单遍翻译未核验)应当用自己的标签,并且不进这个集合。
+DOUBLE_VERIFIED_SOURCES = frozenset({
+    "qwen_max_websearch_verified",
+    "claude_websearch_verified",
 })
 
 _CJK_RE = re.compile(r"[一-鿿]")
@@ -127,11 +146,11 @@ def validate(rows: list[dict], *, source: str, in_scope_ids: set[int],
                 f"team_id={team_id} 的 name_zh 与 name_en 相同(翻译退化成原文),拒绝写入"
             )
 
-        if source == "qwen_max_websearch_verified" and method not in DOUBLE_VERIFIED_METHODS:
+        if source in DOUBLE_VERIFIED_SOURCES and method not in DOUBLE_VERIFIED_METHODS:
             raise SeedGateError(
                 f"team_id={team_id} 的 method={method!r} 不在双重验证白名单 "
                 f"{sorted(DOUBLE_VERIFIED_METHODS)} 内,不得冒用 "
-                "qwen_max_websearch_verified 这个 source 标签"
+                f"{source} 这个 source 标签"
             )
 
         if name_zh in seen_names:
