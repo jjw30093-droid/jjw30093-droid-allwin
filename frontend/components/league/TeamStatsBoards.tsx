@@ -35,6 +35,7 @@ function topRows(
       rank: i + 1,
       name: t.team.name,
       value: metric.format(t[metric.key] as number),
+      avatar: { kind: "team" as const, crestUrl: t.team.crest_url },
     }));
 }
 

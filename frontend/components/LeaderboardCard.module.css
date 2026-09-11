@@ -12,25 +12,46 @@
   margin-bottom: 10px;
 }
 
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* 横向可滑动轨道(2026-09-11,对照 FotMob 官方安卓包联赛 Stats tab)。
+ * 机制借鉴首页 HomeMatchExperienceLive 的 secondaryViewport(单份 DOM +
+ * grid-auto-flow:column + scroll-snap + 隐藏滚动条,站长已认可的交互取向:
+ * "纵向列表不如横滑,2026-08-23 改回横向滚动")，但不整段照抄——首页那份
+ * 耦合了"≥640px 切网格""隐藏第 6/7 张"等首页专属逻辑,这里固定 10 张卡，
+ * 全断点统一横滑，不做宽屏切网格(桌面宽度一行也只能放 10 张出头，网格化
+ * 收益很小，见 commit message)。 */
+.rail {
+  display: grid;
+  grid-auto-columns: 104px;
+  grid-auto-flow: column;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 1px 1px 4px;
+  scroll-padding-inline: 1px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rowCard {
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.row {
-  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card-sm);
+  background: var(--surface);
+  text-align: center;
 }
 
-.row:last-child {
-  border-bottom: none;
+.avatarSlot {
+  margin-bottom: 2px;
 }
 
 .rank {
@@ -38,23 +59,29 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--ink-3);
-  width: 18px;
-  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.rankTop3 {
+  color: var(--gold-300);
 }
 
 .name {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .subtitle {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .value {
@@ -62,7 +89,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--ink);
-  flex: 0 0 auto;
+  font-size: 15px;
 }
 
 .empty {

@@ -23,6 +23,7 @@ export function PlayerBoards({ boards }: { boards: PlayersResponse["boards"] }) 
           name: e.name,
           subtitle: e.team.name,
           value: formatValue(board.stat_name, e.value),
+          avatar: { kind: "player", playerId: e.player_id },
         }));
         return (
           <LeaderboardCard key={board.stat_name} title={board.label_zh} rows={rows} />

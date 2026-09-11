@@ -51,7 +51,12 @@ function toRows(board: TeamSourceBoard): LeaderboardRow[] {
     const value = formatBoardValue(e.value, board.stat_format, board.stat_decimals);
     // 没有数值的行不占位:排名榜里显示一个空值等于骗人说"这队排第 N"
     if (value == null) return;
-    rows.push({ rank: e.rank ?? i + 1, name: e.team.name, value });
+    rows.push({
+      rank: e.rank ?? i + 1,
+      name: e.team.name,
+      value,
+      avatar: { kind: "team", crestUrl: e.team.crest_url },
+    });
   });
   return rows;
 }
