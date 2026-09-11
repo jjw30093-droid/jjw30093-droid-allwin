@@ -42,6 +42,17 @@
   --border-strong: #b8c6c6;
   /* 首页锁定对照卡底色(= --surface-soft,起独立别名避免组件里写死具体色值) */
   --lock-band: #eef2f2;
+  /* 联赛百分位轴的"轨道"专用底色(2026-09-11,CLAUDE.md §11.3)。此前轨道
+   * 直接用 --surface-soft(#eef2f2)压在卡片底色 --surface(#ffffff)上,
+   * 合成对比度只有 1.13:1——两个颜色几乎相同,轨道在生产上肉眼完全消失,
+   * 只剩两个队徽点飘在空白处(站长真机报告 /matches/5107601)。
+   * --surface-soft/--surface-2/--border/--border-strong 这一整族"柔和
+   * 分隔色"全部是为表头底色、行 hover 这类"故意做到几乎看不出"的场景
+   * 设计的,没有一个够到 3:1——不能从这族里选,得单独给一个"要让人看清楚
+   * 这是一条轨道"的颜色。取 --ink-3(#5a6b73)与 --surface 按 78% 混合,
+   * 对卡片白底 3.48:1(留出安全余量,不贴着阈值走),视觉上仍是细灰蓝线,
+   * 不会重成一条实心深色条。 */
+  --axis-track: #7e8c92;
   /* 射门落点图专用中性球场(2026-08-24,FotMob 安卓包 res/drawable/
    * ic_shotmap_pitch.xml 解包实测的真实颜色值)——不用品牌绿草坪:射门点要用
    * 半透明/描边表达进球/非进球语义色,压在高饱和绿色上天然低对比(实测合成
@@ -166,6 +177,9 @@ html[data-theme="dark"] {
   --border: #203842;
   --border-strong: #35515b;
   --lock-band: #0b1d26;
+  /* 同上(浅色模式那条注释),深色变体:--ink-3(#82969d)与 --surface
+   * (#0d2029)按 78% 混合,对卡片底色 3.83:1。 */
+  --axis-track: #687c83;
   /* 射门落点中性球场深色变体(FotMob drawable-night-v8/ic_shotmap_pitch.xml
    * 解包实测的真实颜色值)。 */
   --pitch-neutral-bg: #333333;

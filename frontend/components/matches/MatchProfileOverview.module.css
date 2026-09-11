@@ -59,7 +59,11 @@
   flex: 1;
   height: 6px;
   border-radius: 999px;
-  background: var(--surface-soft);
+  /* 2026-09-11:原来是 --surface-soft,压在卡片白底上合成对比度只有
+   * 1.13:1,轨道肉眼不可见,只剩两个队徽点飘着(见 --axis-track 定义处的
+   * 事故记录,globals.css)。这个组级轴没有 meanTick 撑场面,比下面
+   * PercentileGroupSection 的逐指标轴更依赖轨道本身可见。 */
+  background: var(--axis-track);
   /* 队徽半径 12px,轴两端各留够空间,0%/100% 的队徽不会被卡片边界裁切。 */
   margin: 0 14px;
 }

@@ -56,7 +56,12 @@
   position: relative;
   height: 6px;
   border-radius: 999px;
-  background: var(--surface-soft);
+  /* 2026-09-11:原来是 --surface-soft,压在卡片白底上合成对比度只有
+   * 1.13:1,轨道在生产上肉眼不可见(见 --axis-track 定义处的事故记录)。
+   * meanTick 比轨道高(12px vs 6px),两端各有 3px 会露在轨道外、直接
+   * 贴着卡片白底,不受这次改色影响;CrestDot 自带 2px --surface 光晕
+   * 把队徽跟轨道隔开,同样不受影响——只有轨道本身需要换色。 */
+  background: var(--axis-track);
   /* 2026-09:队徽当点(24px)比原来的纯色圆点(14px)大,顶部/左右都要留够
    * 空间,否则轴两端(0%/100%)的队徽会被行边界裁切。 */
   margin: 18px 14px 4px;

@@ -9,6 +9,15 @@
  * 还能测的对象。描边色值(teal/blue)没有变,只是角色从"实心填充"变成
  * "2px 描边",这里的数值断言因此保持不变,只是措辞从"点"改成"描边"。
  *
+ * 2026-09-11 第三轮(真机事故,站长真机报告 /matches/5107601 页面"看不到
+ * 条,只有两个队徽"):这份文件当时只测了"描边 vs 轨道底色",从没测过
+ * "**轨道底色本身 vs 卡片底色**"——而生产上真正隐形的正是轨道本身:
+ * 原轨道色 --surface-soft(#eef2f2)压在卡片白底 --surface(#ffffff)上
+ * 合成对比度只有 1.13:1,两个颜色几乎相同,肉眼看不出有一条轨道,只剩
+ * CrestDot 的队徽图标飘在空白处。轨道换成专用的 --axis-track 后补上这条
+ * 当时漏掉的断言,不能只测"描边在轨道上看不看得见"却不测"轨道本身看不
+ * 看得见"。
+ *
  * 十六进制值从 frontend/app/globals.css 抄进来(与 team-quadrant-contrast.test.ts
  * 同一做法),颜色变化时人必须回来同步这份 fixture,这是有意的摩擦。
  */
@@ -21,6 +30,7 @@ const THEMES = [
     label: "浅色模式",
     surface: hexToRgb("#ffffff"),
     surfaceSoft: hexToRgb("#eef2f2"),
+    axisTrack: hexToRgb("#7e8c92"),
     teal: hexToRgb("#087e78"),
     blue: hexToRgb("#1d6f8b"),
   },
@@ -28,10 +38,17 @@ const THEMES = [
     label: "深色模式",
     surface: hexToRgb("#0d2029"),
     surfaceSoft: hexToRgb("#0b1d26"),
+    axisTrack: hexToRgb("#687c83"),
     teal: hexToRgb("#45b9af"),
     blue: hexToRgb("#69b6ce"),
   },
 ];
+
+describe("轴轨道(--axis-track)vs 卡片底色(--surface)合成对比度", () => {
+  it.each(THEMES)("$label:轨道本身 ≥ 3:1(2026-09-11 事故:原 --surface-soft 只有 1.13:1)", ({ surface, axisTrack }) => {
+    expect(contrastRatio(axisTrack, surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  });
+});
 
 describe("队徽描边 vs 卡片底色(--surface)合成对比度", () => {
   it.each(THEMES)("$label:主队描边(teal)≥ 3:1", ({ surface, teal }) => {
@@ -68,5 +85,11 @@ describe("回归护栏:两队描边互相贴近时也不能只靠颜色区分(�
     const gold = hexToRgb("#e9c037");
     const surfaceSoft = hexToRgb("#eef2f2");
     expect(contrastRatio(gold, surfaceSoft)).toBeLessThan(MIN_CONTRAST);
+  });
+
+  it("旧轨道色(--surface-soft 压 --surface)确实测不过 3:1,证明这条回归有真实反例(2026-09-11 事故本身)", () => {
+    const oldTrack = hexToRgb("#eef2f2");
+    const surface = hexToRgb("#ffffff");
+    expect(contrastRatio(oldTrack, surface)).toBeLessThan(MIN_CONTRAST);
   });
 });
