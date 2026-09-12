@@ -10,9 +10,14 @@
  * 与原版的两处刻意偏离(均经站长批准,不是遗漏):
  * 1. FotMob 那个 20dp 槽位放的是**国家旗**(组头按国家分组),我们不按国家分组、
  *    直接平铺联赛,所以这里放**联赛 logo**;
- * 2. 行尾 `button_follow`(关注星标)本轮不做——`favorites` 表与 favorites.ts
- *    都只有 match_id、零处 league,做它要新表+新端点+新 client 模块,属于账号
- *    功能而不是视觉改造。空出来的右槽改放当前赛季(这页唯一还有真实值的元数据)。
+ * 2. 行尾的关注星标本轮不做——`favorites` 表与 favorites.ts 都只有 match_id、
+ *    零处 league,做它要新表+新端点+新 client 模块,属于账号功能而不是视觉改造。
+ *
+ * 行尾是一个指右的 shevron(2026-09-13 站长按真机观感拍板:右侧不放赛季,
+ * 就一个箭头)。用 CSS 画而不是 ➡️ emoji:emoji 在不同平台字形、基线、颜色
+ * 都不一样(Android 会渲染成彩色方块),而这里要的是一个跟着 --ink-3 走、
+ * 深浅主题都自动对的细箭头。画法与 LeaderboardCard.module.css 的 .chevron
+ * 同一套,不另起一种。
  */
 
 import Link from "next/link";
@@ -33,11 +38,7 @@ export function LeagueRow({ league }: { league: LeagueInfo }) {
           只有反面(尚未同步)才值得占位。橙色 = 等待更新(CLAUDE.md §11.2),
           **不能用红**——红在本站锁死给"真实错误或不可用"。 */}
       {!synced && <span className={styles.pending}>未同步</span>}
-      {/* current_season 是从 dim_match/fact_league_table 真算出来的,为空就
-          整个不渲染,不写"待同步"这种占位。 */}
-      {league.current_season && (
-        <span className={`${styles.season} num`}>{league.current_season}</span>
-      )}
+      <span className={styles.chevron} aria-hidden />
     </Link>
   );
 }

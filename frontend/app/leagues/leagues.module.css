@@ -79,10 +79,17 @@
   font-size: 14px;
 }
 
-.season {
+/* 行尾指右箭头。CSS 画法与 LeaderboardCard.module.css 的 .chevron 同一套:
+ * 一个正方形只留右、下两条边,再转 -45° 就是一个细箭头——不用 emoji,也不用
+ * 额外的图标资源,颜色跟着 --ink-3 走,深浅主题自动对。 */
+.chevron {
   flex: 0 0 auto;
-  color: var(--ink-3);
-  font-size: 12px;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: rotate(-45deg);
 }
 
 /* 橙 = 等待更新(§11.2);这里**不能用红**,红锁死给"真实错误或不可用" */

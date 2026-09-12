@@ -90,6 +90,19 @@ describe("/leagues", () => {
     expect(screen.queryByText("已有真实数据")).toBeNull();
   });
 
+  it("行尾不写赛季,只有一个箭头(2026-09-13 站长按 FotMob 真机拍板)", async () => {
+    mockLeaguesFetch();
+    const { container } = render(await LeaguesPage());
+    // 赛季文本(2025/2026、2026)不得再出现在行里
+    expect(screen.queryByText("2025/2026")).toBeNull();
+    expect(screen.queryByText("2026")).toBeNull();
+    // 每行一个箭头元素(CSS 画的,aria-hidden,所以按 class 找而不是按文本)
+    const rows = container.querySelectorAll("a[href^='/league/']");
+    for (const row of rows) {
+      expect(row.querySelector("[class*='chevron']")).not.toBeNull();
+    }
+  });
+
   it("不出现'登录后免费查看'/'需要登录'/'当前可访问'这类访问权限区分文案", async () => {
     mockLeaguesFetch();
     const jsx = await LeaguesPage();
