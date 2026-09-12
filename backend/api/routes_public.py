@@ -23,7 +23,12 @@ from backend.queries import match_preview as q_preview
 from backend.queries import match_report as q_report
 from backend.queries import matches as q_matches
 from backend.queries import odds as q_odds
-from backend.queries.leagues import LEAGUE_META, anonymous_cacheable_league_ids, league_data_profiles
+from backend.queries.leagues import (
+    LEAGUE_META,
+    anonymous_cacheable_league_ids,
+    display_rank,
+    league_data_profiles,
+)
 
 from .cache_policy import PUBLIC_CACHE, PUBLIC_CACHE_SHORT
 from .deps import NO_STORE, AuthContext, core_ro, get_auth_context, odds_ro, platform_ro
@@ -111,7 +116,10 @@ def list_leagues(
                 else profiles[lid]["data_updated_at"]
             ),
         )
-        for lid, m in LEAGUE_META.items()
+        # 按 /leagues 列表页的展示顺序返回(热度序,见 LEAGUE_DISPLAY_ORDER)。
+        # 排序放在这里而不是前端:前端按名字重排过一次,结果 17 个联赛全是
+        # AVAILABLE 时排序塌缩成拼音序,把五大联赛埋到澳超/巴甲后面。
+        for lid, m in sorted(LEAGUE_META.items(), key=lambda kv: display_rank(kv[0]))
     ]
 
 

@@ -117,3 +117,39 @@ def test_content_pipeline_registry_does_not_drift():
     assert ids <= set(LEAGUE_META) | {130}, f"content_pipeline 出现未登记联赛: {ids - set(LEAGUE_META) - {130}}"
 
 
+
+
+def test_display_order_covers_every_league_exactly_once():
+    """LEAGUE_DISPLAY_ORDER 必须与 LEAGUE_META 一一对应。
+
+    这条是"展示顺序单独一份有序清单"这个设计的代价所在:新增联赛只改
+    LEAGUE_META、忘了登记到这里,页面上那个联赛就会掉到列表末尾(不是消失——
+    display_rank 有兜底),但顺序不是作者想要的。让它在这里红,而不是等站长
+    在页面上发现。
+    """
+    from backend.queries.leagues import LEAGUE_DISPLAY_ORDER
+
+    assert len(LEAGUE_DISPLAY_ORDER) == len(set(LEAGUE_DISPLAY_ORDER)), "顺序表里有重复 id"
+    assert set(LEAGUE_DISPLAY_ORDER) == set(LEAGUE_META), (
+        f"顺序表与 LEAGUE_META 不一致:"
+        f"多出 {set(LEAGUE_DISPLAY_ORDER) - set(LEAGUE_META)}、"
+        f"缺少 {set(LEAGUE_META) - set(LEAGUE_DISPLAY_ORDER)}"
+    )
+
+
+def test_display_order_starts_with_the_big_five_in_the_owner_specified_order():
+    """站长 2026-09-13 指定:英超→西甲→德甲→意甲→法甲(德甲在意甲之前)。
+
+    这不是我们自己排的顺序,钉死它,免得以后有人"顺手"按别的标准重排。
+    """
+    from backend.queries.leagues import LEAGUE_DISPLAY_ORDER
+
+    assert LEAGUE_DISPLAY_ORDER[:5] == (47, 87, 54, 55, 53)
+
+
+def test_unregistered_league_sorts_last_instead_of_disappearing():
+    """未登记的 id 排到末尾,不能丢条目——静默少一个联赛比顺序不对严重得多。"""
+    from backend.queries.leagues import LEAGUE_DISPLAY_ORDER, display_rank
+
+    assert display_rank(999999) == len(LEAGUE_DISPLAY_ORDER)
+    assert display_rank(999999) > max(display_rank(lid) for lid in LEAGUE_META)

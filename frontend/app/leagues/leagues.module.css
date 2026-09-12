@@ -1,5 +1,6 @@
 .page {
-  max-width: 1140px;
+  /* 48px 单行列表在 1140px 下会拖一条几百像素的空白尾巴,收到 720px */
+  max-width: 720px;
   margin: 0 auto;
   padding: 34px 20px 72px;
 }
@@ -16,123 +17,82 @@
   align-items: end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .header h1 {
-  margin: 2px 0 6px;
-  font-size: clamp(28px, 4vw, 42px);
+  margin: 0 0 6px;
+  font-size: clamp(24px, 4vw, 34px);
 }
 
 .header p {
   margin: 0;
   color: var(--ink-2);
-}
-
-.eyebrow {
-  color: var(--brand-teal) !important;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  font-size: 13.5px;
 }
 
 .matchLink {
-  color: var(--gold-300);
+  /* 青绿 = 主要操作(CLAUDE.md §11.2);原来这里写的是 --gold-300,那个 token
+   * 在当前品牌体系里已经被重映射成青绿,语义上本就该直接写 --brand-teal。 */
+  color: var(--brand-teal);
   text-decoration: none;
   white-space: nowrap;
+  font-size: 13.5px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.card {
-  min-width: 0;
-  padding: 20px;
+.list {
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   background: var(--surface);
+  overflow: hidden;
 }
 
-.cardHead {
+/* 尺寸 1:1 对齐 FotMob res/layout/league_line.xml 的实测值:
+ * minHeight=48dp / paddingStart=8dp / paddingEnd=8dp / gravity=center_vertical。
+ * 48px 同时也正好是触控目标下限,比改造前那三个 padding:6px 12px 的小胶囊好按。 */
+.row {
   display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 14px;
-}
-
-.cardHead h2,
-.cardHead p {
-  margin: 0;
-}
-
-.cardHead h2 {
-  font-size: 21px;
-}
-
-.cardHead p {
-  color: var(--ink-3);
-  font-size: 13px;
-}
-
-.status {
-  flex: 0 0 auto;
-  padding: 4px 9px;
-  border-radius: var(--r-pill);
-  color: var(--ink-3);
-  background: var(--surface-2);
-  font-size: 11px;
-}
-
-.status[data-status="available"] {
-  color: var(--win);
-}
-
-.meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 20px 0;
-}
-
-.meta div {
-  min-width: 0;
-}
-
-.meta dt {
-  color: var(--ink-3);
-  font-size: 11px;
-}
-
-.meta dd {
-  margin: 3px 0 0;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 48px;
+  padding: 0 var(--sp-2);
   color: var(--ink);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-}
-
-.actions a {
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  color: var(--gold-300);
   text-decoration: none;
-  font-size: 13px;
+  border-bottom: 1px solid var(--border);
 }
 
-.actions span {
+.row:last-child {
+  border-bottom: none;
+}
+
+.row:hover {
+  background: var(--surface-soft);
+}
+
+/* textView_name: width=0dp + weight=1 —— 名称占满剩余宽度,把右侧元数据推到行尾 */
+.name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.season {
+  flex: 0 0 auto;
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: 12px;
+}
+
+/* 橙 = 等待更新(§11.2);这里**不能用红**,红锁死给"真实错误或不可用" */
+.pending {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  color: var(--pending);
+  background: var(--surface-2);
+  font-size: 11.5px;
 }
 
 .errorBox {
@@ -153,9 +113,6 @@
   .header {
     align-items: start;
     flex-direction: column;
-  }
-
-  .grid {
-    grid-template-columns: 1fr;
+    gap: 10px;
   }
 }

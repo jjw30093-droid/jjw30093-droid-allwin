@@ -22,8 +22,10 @@ export const SITE_URL = (
 export const PUBLIC_LEAGUES: ReadonlyArray<{ id: number; nameZh: string }> = [
   { id: 47, nameZh: "英超" },
   { id: 87, nameZh: "西甲" },
-  { id: 55, nameZh: "意甲" },
+  // 顺序与后端 LEAGUE_DISPLAY_ORDER 对齐(德甲在意甲前,站长 2026-09-13 拍板),
+  // 否则 /matches 的联赛筛选 pill 会和 /leagues 列表顺序不一致。
   { id: 54, nameZh: "德甲" },
+  { id: 55, nameZh: "意甲" },
   { id: 53, nameZh: "法甲" },
   { id: 67, nameZh: "瑞典超" },
   { id: 59, nameZh: "挪威超" },

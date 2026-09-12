@@ -59,6 +59,34 @@ LEAGUE_META = {
     10216: {"code": "uecl", "name_zh": "欧协联", "name_en": "Conference League", "entitlement": "league:european_cup", "season_kind": "cross_year"},
 }
 
+# 联赛列表页 /leagues 的展示顺序(按中文用户热度,站长 2026-09-13 拍板:
+# 英超→西甲→德甲→意甲→法甲,其余按热度)。
+#
+# 刻意**不直接重排 LEAGUE_META 的字典顺序**:那里的条目是按接入批次分组的,
+# 每批上面挂着成段的接入说明注释("2026-08-07 接入:J1/K1/澳超…"、
+# "2026-08-10 数据管道重建接入…"),打散条目会让注释和它解释的条目对不上。
+# 展示顺序是纯表现层关注点,单独一份有序清单表达更诚实。
+#
+# 与 LEAGUE_META 的一致性由 tests/backend/test_league_scope.py 的集合相等断言
+# 保证:新增联赛忘了登记到这里会红,而不是从页面上静默消失(消费方
+# routes_public.list_leagues 对未登记 id 也做了排到末尾的兜底,双保险)。
+LEAGUE_DISPLAY_ORDER: tuple[int, ...] = (
+    47, 87, 54, 55, 53,        # 五大联赛(站长指定顺序)
+    42, 73, 10216,             # 欧战三项
+    48, 57, 61,                # 英冠 / 荷甲 / 葡超
+    223, 9080, 268,            # 日职联 / 韩K联 / 巴甲
+    67, 59, 113,               # 瑞典超 / 挪威超 / 澳超
+)
+
+
+def display_rank(league_id: int) -> int:
+    """联赛在 /leagues 列表里的排序键。未登记的排到末尾,不丢条目。"""
+    try:
+        return LEAGUE_DISPLAY_ORDER.index(league_id)
+    except ValueError:
+        return len(LEAGUE_DISPLAY_ORDER)
+
+
 # 参赛队来自不同国内联赛的赛事。`entitlement == "league:european_cup"` 是本库
 # **唯一**能区分杯赛与联赛的信号:schema 里没有 is_cup/competition_type 列,
 # 没有 dim_team 表,也没有任何 team→所属联赛的映射。
