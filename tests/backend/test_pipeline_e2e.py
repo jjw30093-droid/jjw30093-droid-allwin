@@ -1,9 +1,11 @@
 """收口 P0-1:离线端到端数据链路测试(临时三库 + 固定 fixture,不碰真实 data/*.db)。
 
 链路:core 精确 kickoff → NowGoal --due 轮询(日程发现→xref→hash-diff 快照×2 且字段变化)
-→ FotMob 阵容/伤停快照×2 且变化 → silver_odds_moves / silver_event_moves
-→ gold_move_cooccurrence → API 赔率时间轴 + 同期事件 → analysis_bundle。
+→ FotMob 阵容/伤停快照×2 且变化 → API 赔率时间轴 → analysis_bundle。
 重跑幂等;窗口节流(15/5 分钟)持久化于 poll_state。
+（2026-09-13:「关键变化」时间共现功能整体下架,silver_odds_moves/
+silver_event_moves/gold_move_cooccurrence 三张表连同相关代码一并移除,
+本测试相应删去那一段验证,其余链路不变。）
 真实 NowGoal/FotMob 端点 UNVERIFIED —— 此处验证的是同一条代码链路的离线走法。
 """
 
@@ -13,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.cli.build_odds_silver import run as run_odds_silver
 from backend.cli.poll_fotmob_snapshots import run_snapshot_poll
 from backend.cli.poll_nowgoal import run_due_poll
 from backend.db.connections import connect_ro, connect_rw
@@ -458,36 +459,13 @@ class TestOfflinePipelineE2E:
         ).fetchone()
         assert tuple(runs) == (1, 1)
 
-        # ── Silver / Gold ───────────────────────────────────────
-        r1 = run_odds_silver()
-        assert r1["odds_moves_inserted"] >= 1       # home 2.05→1.95
-        assert r1["event_moves_inserted"] >= 2      # lineup_change + sideline_change
-        assert r1["cooccurrence_inserted"] >= 1     # 变化同发生于 T1,delta=0 ≤ 900s
-
-        # 重跑幂等
-        r2 = run_odds_silver()
-        assert r2 == {"odds_moves_inserted": 0, "event_moves_inserted": 0,
-                      "cooccurrence_inserted": 0}
-
         # ── 第三轮 FotMob(T2):只改主教练,阵型/首发/伤停均与第二轮完全相同
-        # (C2 test_coach_change_emits_a_described_lineup_change 的链路镜像:
-        # 单元测试直接调 _lineup_change_summary,这里走完整 bronze→silver 链路)
         f3 = run_snapshot_poll(
             now_iso=T2,
             offline_payloads={str(MATCH_ID): _fm_payload("4-2-3-1", ["Saka"], home_coach_id=502)},
         )
         assert f3["snapshots_inserted"] == 1     # 只有 lineup 变了(教练);两队伤停 hash 不变
         assert f3["snapshots_skipped"] == 2
-        r3 = run_odds_silver()
-        assert r3["event_moves_inserted"] == 1   # 只有一条新 lineup_change(教练变化)
-        lineup_move_3 = conn_odds.execute(
-            "SELECT detail_json FROM silver_event_moves"
-            " WHERE event_type='lineup_change' AND fotmob_match_id=?"
-            " ORDER BY id DESC LIMIT 1",
-            (MATCH_ID,),
-        ).fetchone()
-        detail3 = json.loads(lineup_move_3["detail_json"])
-        assert detail3 == {"home": {"coach": {"prev": "Coach 501", "new": "Coach 502"}}}
 
         # FINAL:kickoff 前最后一条 pre_match 快照 = v2(需完整 provenance 三元组)
         fin = final_pre_match_snapshot(
@@ -508,7 +486,7 @@ class TestOfflinePipelineE2E:
             conn_odds, TITAN, "1x2", "8", KICKOFF_ISO, "exact", None
         ) is None
 
-        # ── API:赔率时间轴 + 同期事件(premium) ─────────────────
+        # ── API:赔率时间轴(premium) ─────────────────
         client = TestClient(app)
         wechat_scan_login(client, ip=fresh_ip)
         me = client.get("/api/v1/me").json()
@@ -519,10 +497,6 @@ class TestOfflinePipelineE2E:
         assert odds_resp["available"] is True
         assert odds_resp["tier"] == "full"
         assert len(odds_resp["snapshots"]) >= 2     # v1 + v2 完整时间线
-
-        cooc = client.get(f"/api/v1/matches/{MATCH_ID}/cooccurrence").json()
-        assert cooc["count"] >= 1
-        assert cooc["items"] and cooc["items"][0]["event_type"] in ("lineup_change", "sideline_change")
 
         # ── analysis_bundle(详情页与 Studio 共用 builder) ───────
         conn_core_ro = connect_ro("core")
@@ -535,6 +509,5 @@ class TestOfflinePipelineE2E:
             conn_odds.close()
         assert bundle is not None
         assert bundle["odds_timeline"], "bundle 应包含赔率时间轴"
-        assert bundle["cooccurring_events"], "bundle 应包含同期事件"
         # 有精确 kickoff → 不再出现开球精度不确定性提示
         assert not any(u["kind"] == "kickoff_precision" for u in bundle["uncertainty"])

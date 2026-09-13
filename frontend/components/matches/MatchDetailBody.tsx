@@ -27,7 +27,6 @@ import type {
 } from "@/lib/api-v1";
 import { RecordVisit } from "@/components/matches/RecordVisit";
 import { OddsTimeline } from "@/components/matches/OddsTimeline";
-import { CooccurrenceSection } from "@/components/matches/CooccurrenceSection";
 import { MarketCardsSection } from "@/components/matches/MarketCardsSection";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { MatchHeaderPre } from "@/components/matches/MatchHeaderPre";
@@ -305,9 +304,6 @@ function OddsGroup({
         <SectionTitle>赔率快照</SectionTitle>
         <OddsTimeline matchId={idNum} />
       </section>
-
-      {/* 关键变化(时间共现,不声称因果)标题由组件自带,无内容时整体不渲染。 */}
-      <CooccurrenceSection matchId={idNum} />
 
       <section className={styles.section}>
         <details className={styles.metaDetails}>

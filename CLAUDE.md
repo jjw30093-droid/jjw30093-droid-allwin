@@ -11,8 +11,7 @@ all-win 是面向中文足球用户的专业数据分析订阅平台，同时也
 核心体验是：
 
 1. 用中文把一场比赛的数据、模型概率和不确定性讲清楚。
-2. 将 FotMob 比赛事件与 NowGoal 赔率快照放在同一时间轴上，展示“同一时段观察到了什么”，不声称因果。
-3. 同一份分析数据同时驱动网站页面、竖屏图卡、视频文案与字幕。
+2. 同一份分析数据同时驱动网站页面、竖屏图卡、视频文案与字幕。
 
 ## 2. 工作原则
 
@@ -153,7 +152,6 @@ all-win/
 - provider 实体映射；
 - NowGoal 赔率原始快照；
 - 阵容和伤停变化快照；
-- 赔率变化、事件变化与时间共现派生表；
 - 采集运行和数据质量结果。
 
 SQLite 文件必须位于 EC2 本地 EBS，不放在 EFS、S3 或其他网络文件系统上。
@@ -330,14 +328,6 @@ poll_windows.py` 的代码注释同样把这三条标注为下限）：
   比分的行，等于把这次的故障模式产品化；正确的收口是"接入流程末尾补跑一次
   `backfill_fixtures`"，不是改写常规同步的语义。
 
-### 6.4 时间共现
-
-- `silver_odds_moves`：盘口/赔率变化点；
-- `silver_event_moves`：阵容、伤停和可观察事件变化点；
-- `gold_move_cooccurrence`：固定时间窗内的同期事件。
-
-模块可以内部使用 `attribution` 作为技术名称，但表字段和用户文案不得使用 `cause`、`reason_for_move` 或其他因果名称。
-
 ## 7. 认证与账户
 
 ### 7.1 核心原则
@@ -467,7 +457,7 @@ studio/page.tsx` 页面注释同样写明"analyst/admin 专用"）。这一次�
 
 普通比赛内容（首页比赛卡片、比赛详情、胜平负概率、MODEL/MARKET_BASELINE
 概率、积分榜、近期及赛季数据、数据可视化、射门图、xG/xGA、阵容和伤停、
-赔率当前值和时间线、比赛分析要点、同期事件、联赛和球队资料）**对匿名和
+赔率当前值和时间线、比赛分析要点、联赛和球队资料）**对匿名和
 登录用户返回完全相同的响应字段**——没有 `requires_login`、`tier`、
 `free_outcome`、`locked_outcomes`、`is_premium` 这类裁剪字段，也没有
 "登录才能看完整概率/完整赔率时间线/完整联赛列表"这类分支。
@@ -536,7 +526,6 @@ GET  /api/v1/leagues/{id}/fixtures
 GET  /api/v1/matches
 GET  /api/v1/matches/{id}
 GET  /api/v1/matches/{id}/odds
-GET  /api/v1/matches/{id}/cooccurrence
 GET  /api/v1/products
 
 POST /api/v1/auth/wechat/device
@@ -597,8 +586,7 @@ GET  /api/v1/admin/...
 3. 支持证据与反向证据；
 4. xG、射门、近期表现等可视化；
 5. 赔率时间轴；
-6. 同期事件；
-7. 模型版本、cutoff、局限和赛后记录。
+6. 模型版本、cutoff、局限和赛后记录。
 
 ### 11.2 设计纪律
 
@@ -905,8 +893,7 @@ failed/locked 时非零：
   定时器的成败，发现问题只通过告警表达，不通过任务失败表达）；
 - `allwin-postmatch`（每 30 分钟，任务组）→ `fotmob_incremental_multi` →
   `core_silver_build` → `reco_auto_settle`；
-- `allwin-derive`（每 30 分钟，任务组）→ `odds_silver_build` →
-  `analysis_bundle_build`；
+- `allwin-derive`（每 30 分钟，任务组）→ `analysis_bundle_build`；
 - `allwin-maintenance`（每天 04:00 Asia/Shanghai，任务组）→
   `entity_resolution`。
 
@@ -970,7 +957,6 @@ schedule_sync_multi
 → fotmob_snapshot
 → entity_resolution
 → core_silver_build
-→ odds_silver_build
 → analysis_bundle_build
 → reco_auto_settle
 → pipeline_gates
@@ -984,7 +970,6 @@ schedule_sync_multi
 - NowGoal 快照；
 - FotMob 阵容和伤停快照；
 - 实体解析；
-- 赔率/事件变化点与时间共现构建；
 - analysis bundle 构建。
 
 外部凭证缺失时任务可以诚实记录 `skipped` 或 `failed` 及原因，但对应代码路径、离线 fixture 测试和 Worker 注册必须真实存在。默认任务因“候选模块不存在”跳过时，不得声称核心链路已经完成。
@@ -1063,8 +1048,7 @@ schedule_sync_multi
 
 ### 核心链路验收
 
-- 使用临时数据库和固定 fixture 跑通 xref → Bronze → Silver → Gold → API → analysis bundle；
-- fixture 必须包含至少两次赔率快照和两次阵容/伤停快照，证明变化点及时间共现实际产生；
+- 使用临时数据库和固定 fixture 跑通 xref → Bronze → Silver → API → analysis bundle；
 - 同一链路重跑必须幂等；
 - 真实外部访问与离线 fixture 验证必须分别汇报。
 
@@ -1121,6 +1105,6 @@ schedule_sync_multi
 5. 文档描述与真实代码一致；
 6. 所有无法验证的外部能力明确标记 `UNVERIFIED`；
 7. 最终汇报列出真实命令、退出码、失败项和未完成项，以及仍需用户提供的外部凭证。
-8. 默认 Worker 中的核心采集、实体解析、赔率 Silver/Gold 和 analysis bundle 任务不是模块缺失占位；
+8. 默认 Worker 中的核心采集、实体解析和 analysis bundle 任务不是模块缺失占位；
 9. 生产浏览器 API 地址、认证启用和关闭两种模式、业务 API 冒烟已经通过自动化验证；
 10. “代码实现”“离线 fixture 验证”“真实外部服务验证”分别汇报，任一核心能力仅为 `UNVERIFIED` 时不得笼统声称生产验证完成。

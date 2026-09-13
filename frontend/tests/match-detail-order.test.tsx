@@ -15,9 +15,6 @@ import type { MatchDetailResponse, MatchReportResponse } from "@/lib/api-v1";
 vi.mock("@/components/matches/OddsTimeline", () => ({
   OddsTimeline: () => <div data-testid="mock-odds-timeline" />,
 }));
-vi.mock("@/components/matches/CooccurrenceSection", () => ({
-  CooccurrenceSection: () => <div data-testid="mock-cooccurrence" />,
-}));
 vi.mock("@/components/matches/MarketCardsSection", () => ({
   MarketCardsSection: () => <div data-testid="mock-market-cards" />,
 }));

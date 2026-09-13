@@ -78,8 +78,7 @@
 
 /* 区块标题:15px/900/--ink,左侧 3px×16px --brand-teal 竖条(2026-08-14
  * 重设计,取代原来的 border-left+padding-left——效果类似但高度可控,
- * 不随标题文字的 line-height 拉伸)。CooccurrenceSection 组件自带同款
- * 独立副本(便于"无内容时整体隐藏"),两处保持视觉一致。 */
+ * 不随标题文字的 line-height 拉伸)。 */
 .sectionTitle {
   display: flex;
   align-items: center;

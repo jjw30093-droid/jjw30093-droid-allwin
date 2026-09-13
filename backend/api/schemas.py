@@ -553,17 +553,6 @@ class BundleOddsPoint(BaseModel):
     payload: dict
 
 
-class BundleCoocEvent(BaseModel):
-    delta_seconds: int
-    market: str
-    field: str
-    prev_value: Optional[str] = None
-    new_value: Optional[str] = None
-    moved_at: str
-    event_type: str
-    detail_json: str
-
-
 class BundleChartSpec(BaseModel):
     id: str
     type: str
@@ -589,7 +578,7 @@ class BundleSourceNote(BaseModel):
 
 
 class AnalysisBundleDTO(BaseModel):
-    """GET /matches/{id}/analysis:公开投影(无 subtitle_cues,带 cooccurrence_count)。"""
+    """GET /matches/{id}/analysis:公开投影(无 subtitle_cues)。"""
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -611,12 +600,10 @@ class AnalysisBundleDTO(BaseModel):
     odds_coverage_tier: Literal["full_timeline", "open_close_only", "none"] = "none"
     # 两点摘要(无时间戳,绝不混入 odds_timeline);None 仅表示该场没有两点摘要数据
     odds_summary_points: Optional[list[LegacyOddsPointItem]] = None
-    cooccurring_events: list[BundleCoocEvent]    # 恒完整返回(2026-08-16 起不再按权限投影)
     chart_specs: list[BundleChartSpec]
     script_sections: list[BundleScriptSection]
     source_notes: list[BundleSourceNote]
     bundle_hash: str
-    cooccurrence_count: int
 
 
 class StudioBundleDTO(BaseModel):
@@ -638,7 +625,6 @@ class StudioBundleDTO(BaseModel):
     odds_timeline: list[BundleOddsPoint]
     odds_coverage_tier: Literal["full_timeline", "open_close_only", "none"] = "none"
     odds_summary_points: Optional[list[LegacyOddsPointItem]] = None
-    cooccurring_events: list[BundleCoocEvent]
     chart_specs: list[BundleChartSpec]
     script_sections: list[BundleScriptSection]
     subtitle_cues: list[BundleSubtitleCue]
@@ -738,7 +724,7 @@ class MatchMarketCardsResponse(BaseModel):
     cards: list[MarketCardDTO]
 
 
-# ── 赔率与同期事件 ─────────────────────────────────────────
+# ── 赔率 ─────────────────────────────────────────────────
 
 class OddsSnapshotItem(BaseModel):
     market: str
@@ -775,31 +761,6 @@ class MatchOddsUnavailableDTO(BaseModel):
 
 
 MatchOddsResponse = Union[MatchOddsAvailableDTO, MatchOddsUnavailableDTO]
-
-
-class CooccurrenceItem(BaseModel):
-    window_seconds: int
-    delta_seconds: int
-    computed_at: str
-    market: str
-    company_id: str
-    field: str
-    prev_value: Optional[str] = None
-    new_value: Optional[str] = None
-    odds_moved_at: str
-    event_type: str                        # lineup_change / sideline_change
-    detail_json: str
-    event_moved_at: str
-
-
-class CooccurrenceResponse(BaseModel):
-    """同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
-    免费(仅计数)/付费(明细)两套 DTO。"""
-
-    match_id: int
-    count: int
-    items: list[CooccurrenceItem]
-    note: Optional[str] = None
 
 
 # ── 单场完赛事实报告(/matches/{id}/report,详情页 阵容/统计/事件 tab) ──

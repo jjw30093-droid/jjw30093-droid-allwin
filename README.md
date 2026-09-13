@@ -1,8 +1,7 @@
 # all-win(欧赢)
 
 面向中文足球用户的专业数据分析订阅平台,同时是站长制作视频/长图/口播稿的内容工作台。
-核心:用中文讲清一场比赛的数据、模型概率与不确定性;把 FotMob 事件与 NowGoal 赔率
-快照放在同一时间轴上展示"同期事件"(不声称因果);公开、连续、不可选择性删除的
+核心:用中文讲清一场比赛的数据、模型概率与不确定性;公开、连续、不可选择性删除的
 预测登记与赛后评估。
 
 - 长期架构与工程纪律:[CLAUDE.md](CLAUDE.md)(锁定条款,偏离需用户批准)
@@ -27,7 +26,7 @@ all-win/
 │   ├── migrations/     # core / platform / odds 三库 SQL 迁移
 │   ├── ingest/         # FotMob 采集脚本、实体解析、odds 快照落库
 │   ├── providers/      # NowGoal / FotMob 快照 Provider Adapter
-│   ├── silver/         # Silver 聚合与 odds 变化点/时间共现
+│   ├── silver/         # Silver 聚合(FINAL 赛前快照判定等)
 │   ├── models/         # 特征构建 + DC baseline + 未来赛程预测
 │   ├── eval/           # 评估指标纯函数
 │   ├── studio/         # analysis_bundle 与内容导出
@@ -128,7 +127,6 @@ python -m backend.cli.poll_nowgoal --due --offline-fixture f.json --now 2026-08-
 python -m backend.cli.poll_fotmob_snapshots --due              # FotMob 阵容/伤停快照(需 THORDATA_PROXY)
 python -m backend.cli.poll_fotmob_snapshots --match-id 5795363 # 指定单场
 python -m backend.cli.resolve_entities                         # 实体解析:别名种子 + xref 状态
-python -m backend.cli.build_odds_silver                        # odds 变化点 + 时间共现(幂等)
 python -m backend.cli.export_openapi                           # 导出 OpenAPI → frontend/lib/openapi.json
 ```
 

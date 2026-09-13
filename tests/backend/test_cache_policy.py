@@ -247,54 +247,6 @@ class TestEntitlementMatrixOdds:
         assert member == anon
 
 
-class TestEntitlementMatrixCooccurrence:
-    """A.6:2026-08-16 起同期事件明细恒完整返回,不再区分免费(计数)/
-    付费(明细)——匿名与登录用户拿到逐字段一致的内容。"""
-
-    @pytest.fixture
-    def seeded(self, data_dir):
-        seed_basic_core(data_dir)
-        conn = connect_rw("odds")
-        _insert_xref(conn, "700003", 9001)
-        conn.execute(
-            "INSERT INTO silver_odds_moves (fotmob_match_id, provider, company_id, market, field,"
-            " prev_value, new_value, to_snapshot_id, moved_at, created_at)"
-            " VALUES (9001,'nowgoal','8','1x2','home','2.05','1.95',1,'2026-07-19T10:30:00Z','2026-07-19T10:30:00Z')"
-        )
-        conn.execute(
-            "INSERT INTO silver_event_moves (fotmob_match_id, event_type, detail_json, to_snapshot_id,"
-            " moved_at, created_at)"
-            " VALUES (9001,'lineup_change','{\"sentinel\":\"COOC_DETAIL_SENTINEL\"}',1,'2026-07-19T10:40:00Z','2026-07-19T10:40:00Z')"
-        )
-        conn.execute(
-            "INSERT INTO gold_move_cooccurrence (fotmob_match_id, odds_move_id, event_move_id,"
-            " window_seconds, delta_seconds, computed_at) VALUES (9001,1,1,3600,600,'2026-07-19T10:40:00Z')"
-        )
-        conn.commit()
-        conn.close()
-        return data_dir
-
-    def test_anonymous_gets_full_detail(self, app, seeded):
-        """这条断言正是要推翻的旧规则(此前匿名 items 恒为 null,只有计数)。"""
-        r = TestClient(app).get("/api/v1/matches/9001/cooccurrence")
-        body = r.json()
-        assert body["count"] == 1
-        assert body["items"] is not None
-        assert body["items"][0]["detail_json"] and "COOC_DETAIL_SENTINEL" in body["items"][0]["detail_json"]
-        assert r.headers["cache-control"] == STRICT_NO_STORE
-
-    def test_member_gets_identical_detail_to_anonymous(self, app, seeded, fresh_ip):
-        anon = TestClient(app).get("/api/v1/matches/9001/cooccurrence").json()
-        c = _member_client(app, fresh_ip)
-        member = c.get("/api/v1/matches/9001/cooccurrence").json()
-        assert member == anon
-
-    def test_admin_login_gets_detail(self, app, seeded, fresh_ip):
-        admin = _admin_free_client(app, fresh_ip)
-        body = admin.get("/api/v1/matches/9001/cooccurrence").json()
-        assert body["items"] is not None
-
-
 class TestEntitlementMatrixSubscriptionState:
     """A.7:只有 active 且未到期的订阅计数;expired/revoked/future-start 不计入;
     多条有效订阅取 rank 最高的 plan;Role 与 Entitlement 正交。"""
@@ -410,7 +362,6 @@ class TestCacheMatrixEntitlementVaryingAlwaysPrivate:
     @pytest.mark.parametrize("path", [
         "/api/v1/matches/9001/analysis",
         "/api/v1/matches/9001/odds",
-        "/api/v1/matches/9001/cooccurrence",
     ])
     def test_all_tiers_get_no_store(self, app, seeded, fresh_ip, path):
         clients = [

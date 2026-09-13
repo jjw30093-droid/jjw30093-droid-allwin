@@ -1,10 +1,9 @@
 """把 NowGoal 历史赔率回填产物(JSONL,`runtime/research/` 下,不进 git)灌入
-`data/odds.db`:`dim_match_xref` / `bronze_ng_odds_snap` / `silver_odds_moves`。
+`data/odds.db`:`dim_match_xref` / `bronze_ng_odds_snap`。
 
-不写 `gold_move_cooccurrence`——这张表要求同一场比赛同时有 `silver_event_moves`
-(阵容/伤停变化),而这批历史回填只抓了赔率(archive 端点没有历史阵容/伤停,
-只有 2020-2023 这些旧赛季的比赛;阵容/伤停快照只对当前/未来比赛的 live 轮询
-链路可用)。留空是诚实的,不是遗漏。
+（2026-09-13:「关键变化」时间共现功能整体下架后,本脚本不再计算/写入
+silver_odds_moves——那张表连同 gold_move_cooccurrence 一起被移除,见
+backend/migrations/odds/0012_drop_cooccurrence_tables.sql。）
 
 AH/OU 的 u/g/d 槽位语义(2026-08-06 用 6 场真实悬殊比分离线核对,覆盖主队
 大胜和客队大胜两种方向,12 组公司观测全部一致,零反例):
@@ -257,69 +256,6 @@ def ingest_bronze(
     return inserted, skipped_bad_payload
 
 
-def compute_silver_moves(conn: sqlite3.Connection, titan_ids: set[str]) -> int:
-    if not titan_ids:
-        return 0
-    now = _utc_now()
-    inserted = 0
-    placeholders = ",".join("?" for _ in titan_ids)
-    series_keys = conn.execute(
-        f"""
-        SELECT DISTINCT provider_match_id, market, company_id
-        FROM bronze_ng_odds_snap
-        WHERE provider_match_id IN ({placeholders})
-        """,
-        tuple(titan_ids),
-    ).fetchall()
-    for provider_match_id, market, company_id in series_keys:
-        xref = conn.execute(
-            "SELECT fotmob_match_id FROM dim_match_xref WHERE provider='nowgoal' AND provider_match_id=?",
-            (provider_match_id,),
-        ).fetchone()
-        if xref is None:
-            continue
-        fotmob_match_id = xref[0]
-        snaps = conn.execute(
-            """
-            SELECT id, payload_json, observed_at FROM bronze_ng_odds_snap
-            WHERE provider_match_id=? AND market=? AND company_id=?
-            ORDER BY observed_at ASC, id ASC
-            """,
-            (provider_match_id, market, company_id),
-        ).fetchall()
-        prev_id, prev_payload = None, None
-        for snap_id, payload_json, observed_at in snaps:
-            payload = json.loads(payload_json)
-            if prev_payload is not None:
-                for field, new_value in payload.items():
-                    prev_value = prev_payload.get(field)
-                    if prev_value != new_value:
-                        cur = conn.execute(
-                            """
-                            INSERT OR IGNORE INTO silver_odds_moves
-                                (fotmob_match_id, provider, company_id, market, field,
-                                 prev_value, new_value, from_snapshot_id, to_snapshot_id,
-                                 moved_at, created_at)
-                            VALUES (?, 'nowgoal', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                fotmob_match_id,
-                                company_id,
-                                market,
-                                field,
-                                str(prev_value),
-                                str(new_value),
-                                prev_id,
-                                snap_id,
-                                observed_at,
-                                now,
-                            ),
-                        )
-                        inserted += cur.rowcount
-            prev_id, prev_payload = snap_id, payload
-    return inserted
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -335,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": "no shards found", "root": str(BACKFILL_ROOT)}))
         return 1
 
-    total_xref = total_bronze = total_bad_payload = total_silver = 0
+    total_xref = total_bronze = total_bad_payload = 0
     per_shard: list[dict[str, Any]] = []
 
     if args.dry_run:
@@ -386,7 +322,6 @@ def main(argv: list[str] | None = None) -> int:
                 bronze_n, bad_n = ingest_bronze(
                     conn, shard_name, shard_dir / "normalized" / "odds-history.jsonl", inverted_by_titan_id
                 )
-                silver_n = compute_silver_moves(conn, completed)
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
@@ -394,14 +329,12 @@ def main(argv: list[str] | None = None) -> int:
             total_xref += xref_n
             total_bronze += bronze_n
             total_bad_payload += bad_n
-            total_silver += silver_n
             per_shard.append(
                 {
                     "shard": shard_name,
                     "xref_upserted": xref_n,
                     "bronze_inserted": bronze_n,
                     "bad_payload_skipped": bad_n,
-                    "silver_moves_inserted": silver_n,
                 }
             )
             print(json.dumps({"event": "shard_done", **per_shard[-1]}), flush=True)
@@ -415,7 +348,6 @@ def main(argv: list[str] | None = None) -> int:
         "total_xref_upserted": total_xref,
         "total_bronze_inserted": total_bronze,
         "total_bad_payload_skipped": total_bad_payload,
-        "total_silver_moves_inserted": total_silver,
     }
     print(json.dumps(summary, indent=2))
     return 0

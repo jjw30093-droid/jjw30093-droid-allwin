@@ -22,7 +22,6 @@ PLATFORM_TABLES = {
 ODDS_TABLES = {
     "dim_team_xref", "dim_team_alias", "dim_match_xref",
     "bronze_ng_odds_snap", "bronze_fm_lineup_snap", "bronze_fm_sideline_snap",
-    "silver_odds_moves", "silver_event_moves", "gold_move_cooccurrence",
     "source_health", "schema_migrations", "fixture_sync_ledger", "poll_attempt_log",
 }
 

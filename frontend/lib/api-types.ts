@@ -336,27 +336,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/matches/{match_id}/cooccurrence": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Match Cooccurrence
-         * @description 同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
-         *     免费(计数)/付费(明细)。
-         */
-        get: operations["match_cooccurrence_api_v1_matches__match_id__cooccurrence_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/matches/{match_id}/report": {
         parameters: {
             query?: never;
@@ -1613,7 +1592,7 @@ export interface components {
         };
         /**
          * AnalysisBundleDTO
-         * @description GET /matches/{id}/analysis:公开投影(无 subtitle_cues,带 cooccurrence_count)。
+         * @description GET /matches/{id}/analysis:公开投影(无 subtitle_cues)。
          */
         AnalysisBundleDTO: {
             /** Bundle Version */
@@ -1648,8 +1627,6 @@ export interface components {
             odds_coverage_tier: "full_timeline" | "open_close_only" | "none";
             /** Odds Summary Points */
             odds_summary_points?: components["schemas"]["LegacyOddsPointItem"][] | null;
-            /** Cooccurring Events */
-            cooccurring_events: components["schemas"]["BundleCoocEvent"][];
             /** Chart Specs */
             chart_specs: components["schemas"]["BundleChartSpec"][];
             /** Script Sections */
@@ -1658,8 +1635,6 @@ export interface components {
             source_notes: components["schemas"]["BundleSourceNote"][];
             /** Bundle Hash */
             bundle_hash: string;
-            /** Cooccurrence Count */
-            cooccurrence_count: number;
         };
         /** AnalyticsEventBody */
         AnalyticsEventBody: {
@@ -1728,25 +1703,6 @@ export interface components {
             data: {
                 [key: string]: unknown;
             };
-        };
-        /** BundleCoocEvent */
-        BundleCoocEvent: {
-            /** Delta Seconds */
-            delta_seconds: number;
-            /** Market */
-            market: string;
-            /** Field */
-            field: string;
-            /** Prev Value */
-            prev_value?: string | null;
-            /** New Value */
-            new_value?: string | null;
-            /** Moved At */
-            moved_at: string;
-            /** Event Type */
-            event_type: string;
-            /** Detail Json */
-            detail_json: string;
         };
         /** BundleEvidenceItem */
         BundleEvidenceItem: {
@@ -1828,48 +1784,6 @@ export interface components {
             kind: string;
             /** Text */
             text: string;
-        };
-        /** CooccurrenceItem */
-        CooccurrenceItem: {
-            /** Window Seconds */
-            window_seconds: number;
-            /** Delta Seconds */
-            delta_seconds: number;
-            /** Computed At */
-            computed_at: string;
-            /** Market */
-            market: string;
-            /** Company Id */
-            company_id: string;
-            /** Field */
-            field: string;
-            /** Prev Value */
-            prev_value?: string | null;
-            /** New Value */
-            new_value?: string | null;
-            /** Odds Moved At */
-            odds_moved_at: string;
-            /** Event Type */
-            event_type: string;
-            /** Detail Json */
-            detail_json: string;
-            /** Event Moved At */
-            event_moved_at: string;
-        };
-        /**
-         * CooccurrenceResponse
-         * @description 同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
-         *     免费(仅计数)/付费(明细)两套 DTO。
-         */
-        CooccurrenceResponse: {
-            /** Match Id */
-            match_id: number;
-            /** Count */
-            count: number;
-            /** Items */
-            items: components["schemas"]["CooccurrenceItem"][];
-            /** Note */
-            note?: string | null;
         };
         /** CreateDraftBody */
         CreateDraftBody: {
@@ -4655,8 +4569,6 @@ export interface components {
             odds_coverage_tier: "full_timeline" | "open_close_only" | "none";
             /** Odds Summary Points */
             odds_summary_points?: components["schemas"]["LegacyOddsPointItem"][] | null;
-            /** Cooccurring Events */
-            cooccurring_events: components["schemas"]["BundleCoocEvent"][];
             /** Chart Specs */
             chart_specs: components["schemas"]["BundleChartSpec"][];
             /** Script Sections */
@@ -6215,55 +6127,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatchOddsAvailableDTO"] | components["schemas"]["MatchOddsUnavailableDTO"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorDTO"];
-                };
-            };
-        };
-    };
-    match_cooccurrence_api_v1_matches__match_id__cooccurrence_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                match_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CooccurrenceResponse"];
                 };
             };
             /** @description Bad Request */

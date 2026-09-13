@@ -200,7 +200,11 @@ as-of 2026-07-30T17:31Z（已落后现实 5 天，不代表当前状态）：59 
 ## 4. 结构性阻塞清单（有代码但跑不通，写清阻塞原因）
 
 1. **挪超/瑞超历史比赛级 fact 表全 0**：`ingest_future_fixtures.py` 只写非 Finish 行，没有任何工具会在这些未来赛程"变成"已完赛后自动跑 `ingest_match`。需要挂到 `scheduler.step1_ingest_newly_finished`，但该函数目前硬编码 `(47, '2026/2027')`。
-2. **`gold_move_cooccurrence` 结构性为 0**：见 §3（本轮已推进一步：bronze 层不再是 0，阻塞点收窄到 `silver_event_moves` 从未构建过）。
+2. ~~`gold_move_cooccurrence` 结构性为 0~~：「关键变化」(时间共现)功能已于
+   2026-09-13 整体下架，`silver_odds_moves`/`silver_event_moves`/
+   `gold_move_cooccurrence` 三张表连同读写它们的全部代码一并移除
+   （`backend/migrations/odds/0012_drop_cooccurrence_tables.sql`），不再是
+   待解阻塞项。
 3. **11115 条历史 Finish 行没有精确 kickoff**：`ingest_future_fixtures.py` 显式跳过 Finish 行是真的；但 **`ingest_match.py` 会写 kickoff 三列这句话是本轮核实后发现的错误说法**——`fotmob_client.py::parse_match_dim` 本来就会从 `match_details()` 响应里解析并返回
    `kickoff_at_utc`/`kickoff_precision`/`kickoff_source`（`git show` 历史确认非本轮新增），`ingest_match.py::_upsert` 会把这三列写进 `dim_match`。也就是说**工具确实存在**：对历史 Finish 比赛重跑 `ingest_match.py`（每场 1 次 `match_details` 请求）就能回填精确 kickoff。真正的阻塞是**成本**（11115 场 ≈ 11115 次 FotMob 请求，需要住宅代理与较长时间）和**没有对应的批量入口脚本**，不是"没有任何工具能做这件事"。这行错误说法的历史来源未查明，本轮已订正。
 4. **`_resolve_schedule_rows` 对 NowGoal 当日全量日程做跨联赛解析**：不按目标联赛过滤候选比赛，理论上一条无关比赛可能抢占 `UNIQUE(provider, fotmob_match_id)` 槽位并冻结（`needs_review` 永不重新评估）。本轮新增了 5 个联赛的真实比赛（87/55/54/53/67），此风险不再是"当前窗口内为零"，需要重新评估；本轮未修复，只更新风险等级。
@@ -217,7 +221,7 @@ as-of 2026-07-30T17:31Z（已落后现实 5 天，不代表当前状态）：59 
 2. ~~新赔率源只读能力探测~~ **[已完成，走向生产接入]**：kbisai 已验证支持真正的完整变化时间序列（matchAllOdds，非"初盘/最新"两槽模型）+ 历史回填（验证到 2016 年，早期比赛粒度稀疏）。本轮已完成协议层（AES 解密 + Protobuf 复用）、schema（`odds/0003`）、身份解析、采集 CLI 四块并对 25 场真实目标比赛跑通。
 3. ~~五大联赛下赛季赛程 + 精确kickoff回填~~ **[已完成]**：47(上一轮)/87/55/54/53(本轮) 全部 380/380/380/306/306 exact；59/67 2026 赛季 118/121 exact。
 4. **扩大 kbisai↔FotMob 身份解析的可解析覆盖率**：本轮 25 场目标只解析出 16 场（见 §7），两类真实缺口——(a) `dim_team_alias` 每支球队目前只有 1 个中文别名，kbisai 有时用全称(如"曼彻斯特联")而非常见简称("曼联")，3 场英超因此判为歧义；(b) 瑞典超本周末有 3 对同一时刻开球的比赛，没有别名数据无法消歧。两者都不应该靠放宽匹配阈值/猜测名字解决，需要真实补充别名数据源（同一球队的多个真实中文名，非合成变体）。
-5. `gold_move_cooccurrence` 解阻塞：`bronze_fm_lineup_snap`/`bronze_fm_sideline_snap` 本轮已有真实数据（7/14 行），下一步是真实跑通 `silver/build_event_moves` 并首次产出 `silver_odds_moves`/`silver_event_moves`。
+5. ~~`gold_move_cooccurrence` 解阻塞~~：功能已下架（见 §4-2），不再需要推进。
 6. 五大联赛历史赛季(2020/21–2024/25)球员榜回填（4 联赛 × 约 185 请求/联赛 ≈ 740 请求）。
 7. 五大联赛西甲/意甲/法甲/德甲中文队名/球员名映射（目前 0 覆盖，本轮 kbisai 身份解析的英超命中率之所以能到 auto_ok 正是因为英超有这份数据——扩大到其它四个联赛能直接提高未来的 kbisai 匹配成功率）。
 8. kbisai 接入 worker 自动链路：目前 `poll_kbisai_odds.py`/身份解析都是手动 CLI，未注册进 `backend/worker/runner.py` 或 systemd timer（见 §4-6）。

@@ -259,7 +259,6 @@ def build_analysis_bundle(
 
     odds_timeline: list[dict] = []
     odds_summary_points: list[dict] = []
-    cooccurring_events: list[dict] = []
     if conn_odds is not None:
         try:
             # provider='nowgoal':下游 bronze_ng_odds_snap 是 nowgoal 形状的表,
@@ -280,16 +279,6 @@ def build_analysis_bundle(
                         {"market": r["market"], "company": r["company_name"],
                          "observed_at": r["observed_at"], "payload": json.loads(r["payload_json"])}
                     )
-                for r in conn_odds.execute(
-                    """SELECT c.delta_seconds, om.market, om.field, om.prev_value, om.new_value,
-                              om.moved_at, em.event_type, em.detail_json
-                       FROM gold_move_cooccurrence c
-                       JOIN silver_odds_moves om ON om.id=c.odds_move_id
-                       JOIN silver_event_moves em ON em.id=c.event_move_id
-                       WHERE c.fotmob_match_id=? ORDER BY om.moved_at""",
-                    (match_id,),
-                ):
-                    cooccurring_events.append(dict(r))
         except sqlite3.OperationalError:
             pass
         if not odds_timeline:
@@ -383,7 +372,6 @@ def build_analysis_bundle(
         "odds_timeline": odds_timeline,
         "odds_coverage_tier": odds_coverage_tier,
         "odds_summary_points": odds_summary_points or None,
-        "cooccurring_events": cooccurring_events,
         "chart_specs": chart_specs,
         "script_sections": script_sections,
         "subtitle_cues": subtitle_cues,

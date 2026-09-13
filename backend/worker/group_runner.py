@@ -41,7 +41,6 @@ JOB_GROUPS: dict[str, tuple[str, ...]] = {
         "reco_auto_settle",
     ),
     "derive": (
-        "odds_silver_build",
         "analysis_bundle_build",
     ),
     "maintenance": (

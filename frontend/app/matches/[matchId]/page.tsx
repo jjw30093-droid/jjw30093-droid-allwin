@@ -18,7 +18,7 @@ import styles from "./match-detail.module.css";
 
 /**
  * 比赛详情页(宪法 §11.1 固定顺序,主体见 components/matches/MatchDetailBody):
- * 1 头部 → 2 概率卡 → 3 证据/反向证据 → 4 可视化 → 5 赔率时间轴 → 6 同期事件 → 7 模型与登记信息。
+ * 1 头部 → 2 概率卡 → 3 证据/反向证据 → 4 可视化 → 5 赔率时间轴 → 6 模型与登记信息。
  *
  * 2026-08-16 权限口径修正:本站比赛内容对任何人(含匿名)恒完整,不再有
  * entitlement 分层投影。本 server component 请求 serverGetOptional,拿不到

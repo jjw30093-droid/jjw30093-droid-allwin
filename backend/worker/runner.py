@@ -231,39 +231,6 @@ def _watermark_core_silver_build() -> dict:
     return {"finished_matches": int(n)}
 
 
-def _watermark_odds_silver_build() -> dict:
-    """odds_silver_build 每次全量重扫三张 odds Bronze 表,并且
-    build_odds_moves()(backend/silver/odds_moves.py)额外要求
-    dim_match_xref.review_status IN ('auto_ok','confirmed')
-    (_ACTIVE_XREF_STATUSES)才为该场比赛产出行——这是第二个独立输入,
-    2026-08-17 真实发现:已落库的 Bronze 快照,若当时 xref 还是
-    needs_review,之后管理员经 /api/v1/admin/xref/{id}/confirm 把它转成
-    auto_ok/confirmed 时不产生任何新 Bronze 行,只看三张 Bronze 表
-    MAX(id) 的水位对此完全不可见,会让本来已经能产出的历史快照悄悄卡在
-    Silver 之外。加入活跃 xref 集合的 MAX(updated_at)(confirm/reject 接口
-    真实更新这一列)作为第二个水位分量,覆盖这条独立路径。"""
-    from backend.db.connections import connect_ro
-
-    conn = connect_ro("odds")
-    try:
-        odds_max = conn.execute("SELECT COALESCE(MAX(id),0) FROM bronze_ng_odds_snap").fetchone()[0]
-        lineup_max = conn.execute("SELECT COALESCE(MAX(id),0) FROM bronze_fm_lineup_snap").fetchone()[0]
-        sideline_max = conn.execute(
-            "SELECT COALESCE(MAX(id),0) FROM bronze_fm_sideline_snap").fetchone()[0]
-        xref_updated_at = conn.execute(
-            "SELECT COALESCE(MAX(updated_at),'') FROM dim_match_xref"
-            " WHERE provider='nowgoal' AND review_status IN ('auto_ok','confirmed')"
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    return {
-        "bronze_ng_odds_snap_max_id": int(odds_max),
-        "bronze_fm_lineup_snap_max_id": int(lineup_max),
-        "bronze_fm_sideline_snap_max_id": int(sideline_max),
-        "active_xref_max_updated_at": str(xref_updated_at),
-    }
-
-
 def _alert_job_failure(conn, run_id, job_name, error_summary,
                        source: str = "pipeline_step_failure") -> None:
     """任务失败 → CRITICAL 告警(调用点保证已先 _finish_run 落 job_runs)。
@@ -399,16 +366,6 @@ REGISTRY: dict[str, dict] = {
         "watermark_fn": _watermark_core_silver_build,
         "description": "core Bronze → Silver 聚合(按联赛+赛季 DELETE+INSERT,幂等;水位守卫:无新完赛则跳过)",
     },
-    "odds_silver_build": {
-        "kind": "subprocess",
-        "argv": [sys.executable, "-m", "backend.cli.build_odds_silver"],
-        "cwd": str(PROJECT_ROOT),
-        "max_attempts": 1,
-        "timeout_seconds": 900,
-        "backoff_seconds": 0,
-        "watermark_fn": _watermark_odds_silver_build,
-        "description": "odds Bronze → 变化点/时间共现(UNIQUE 幂等,needs_review 映射不产出;水位守卫:无新 Bronze 行则跳过)",
-    },
     "analysis_bundle_build": {
         "kind": "fn",
         "fn": _job_analysis_bundle_build,
@@ -481,7 +438,6 @@ DEFAULT_CHAIN = [
     "fotmob_snapshot",
     "entity_resolution",
     "core_silver_build",
-    "odds_silver_build",
     "analysis_bundle_build",
     "reco_auto_settle",
     # 必须排最后:质量门"发现问题"通过告警表达,不通过任务失败表达——

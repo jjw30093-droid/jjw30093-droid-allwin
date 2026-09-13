@@ -61,13 +61,7 @@ export const MARKET_FIELDS: Record<string, { key: string; label: string; isLine?
   ],
 };
 
-export const EVENT_TYPE_ZH: Record<string, string> = {
-  lineup_change: "阵容变化",
-  sideline_change: "伤停名单变化",
-};
-
 /* ── 完赛事实报告(/matches/{id}/report 四 tab)词表 ────────────────────
- * 与上面的 EVENT_TYPE_ZH(赛前阵容/伤停"同期事件")是两套不同概念,不合并。
  * 全部枚举值来自真实库 DISTINCT 核对(2026-08);来源新增值兜底显示原文。 */
 
 export const POSITION_ZH: Record<string, string> = {

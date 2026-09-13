@@ -30,7 +30,7 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 | `api/deps.py` | 请求级依赖 | 三库 ro/rw 连接依赖、`AuthContext`(user/role/plan/entitlements)、`require_user/require_admin/require_entitlement/require_csrf`、Origin allowlist、限流键 |
 | `api/schemas.py` | Pydantic DTO(单一真源) | `PredictionFreeDTO`(只有 top_outcome/top_probability)与 `PredictionFullDTO` 物理分离;OpenAPI → 前端 TS 类型生成 |
 | `api/routes_auth.py` | `/api/v1/auth/*`、`/api/v1/me` | 微信 OAuth start/callback、Device Login、密码登录(admin)、logout |
-| `api/routes_public.py` | `/api/v1` 公开数据 | leagues/standings/fixtures/matches/prediction/analysis/odds/cooccurrence/track-record/model/metrics/products |
+| `api/routes_public.py` | `/api/v1` 公开数据 | leagues/standings/fixtures/matches/prediction/analysis/odds/track-record/model/metrics/products |
 | `api/routes_member.py` | `/api/v1` 会员 | redeem、favorites、account、sessions/revoke |
 | `api/routes_admin.py` | `/api/v1/admin/*` | users、grant/revoke 订阅、redeem-codes、predictions publish/lock/retract/publish-upcoming、audit-logs |
 | `api/routes_admin_odds.py` | `/api/v1/admin/xref` | dim_match_xref 人工审核(confirm/reject) |
@@ -49,7 +49,7 @@ SQLite 三库位于本地 EBS(data/ 或 ALLWIN_DATA_DIR)
 | `ingest/odds_snapshots.py` | odds.db 快照落库 | hash-diff(payload 不变不落库)、source_health append-only |
 | `providers/nowgoal.py` | NowGoal Provider Adapter | 日程/赔率解析(纯函数)、主客反转归一、WAF 检测、网络获取分离 |
 | `providers/fotmob_snapshots.py` | FotMob 阵容/伤停/主教练快照 | `extract_*` 纯函数离线可测;`fetch_match_payload` 延迟 import fotmob_client |
-| `silver/odds_moves.py` | odds.db 派生 | 变化点(silver_odds_moves/silver_event_moves)+ 时间共现(gold_move_cooccurrence),幂等 |
+| `silver/odds_moves.py` | odds.db 派生 | `final_pre_match_snapshot`:精确 kickoff 前最后一条有效 pre_match 快照(FINAL) |
 | `models/` | 模型 | `features/build_match_features.py`(int_match_features)、`build_wdl_baseline.py`(DC+isotonic 训练)、`predict_wdl_future.py`(固定参数出未来预测) |
 | `eval/metrics.py` | 评估指标纯函数 | Accuracy/Brier/LogLoss/RPS/Calibration,离线运行 |
 | `studio/bundle.py` | analysis_bundle | 同一份 bundle 驱动比赛详情页与 Studio;含导出渲染(txt/srt) |
@@ -106,7 +106,7 @@ frontend/
 |---|---|---|---|
 | core | `data/allwin.db` | FotMob Bronze(dim_match/dim_player/fact_*)、i18n、int_match_features、Silver 五表、gold_wdl_predictions；离线验证但尚未真实迁移的 schedule identity/state/observation/current/rest-lineage v1 | `core/0001`～`0003`；现有表不破坏性重建，0003 尚未应用真实库 |
 | platform | `data/platform.db` | users/auth_identities/auth_sessions/oauth_states/device_login_requests/account_links;roles/plans/plan_entitlements/products/subscriptions/redeem_codes;预测登记簿六表;favorites/content_drafts/export_jobs;job_runs/audit_logs/analytics_events | `platform/0001_init.sql`(含锁定触发器)+ `0002_seed.sql` |
-| odds | `data/odds.db` | dim_team_xref/dim_team_alias/dim_match_xref;bronze_ng_odds_snap/bronze_fm_lineup_snap/bronze_fm_sideline_snap;silver_odds_moves/silver_event_moves/gold_move_cooccurrence;source_health;poll_state | `odds/0001_init.sql`～`0002_poll_state.sql` |
+| odds | `data/odds.db` | dim_team_xref/dim_team_alias/dim_match_xref;bronze_ng_odds_snap/bronze_fm_lineup_snap/bronze_fm_sideline_snap;source_health;poll_state | `odds/0001_init.sql`～`0012_drop_cooccurrence_tables.sql` |
 
 连接纪律(`backend/db/connections.py`,CLAUDE.md §5.3):
 
@@ -129,7 +129,7 @@ odds.db bronze_fm_*_snap                                           ├─▶ mod
 NowGoal ──providers/nowgoal + cli/poll_nowgoal──▶ odds.db bronze_ng_odds_snap
    │        (ingest/entity_resolution 建 dim_match_xref/dim_team_alias)
    ▼
-silver/odds_moves ─▶ silver_odds_moves / silver_event_moves ─▶ gold_move_cooccurrence
+（赔率快照到此为止;不再派生变化点/时间共现表)
 
 gold_wdl_predictions ──cli/import_gold_predictions──▶ platform.db 预测登记簿
    (draft/legacy_unverified → 管理员 publish/lock → official → 赛后 settle → 评估/manifest)
@@ -141,7 +141,6 @@ gold_wdl_predictions ──cli/import_gold_predictions──▶ platform.db 预�
 
 - 实体身份(xref)与中文显示(i18n)分离:`dim_team_xref`/`dim_match_xref` 管跨源对齐,`dim_team_i18n` 只管显示(CLAUDE.md §6.1)。
 - `gold_wdl_predictions` 是模型当前产物(整季 DELETE+INSERT 可重写);公开账本是 platform.db 登记簿,锁定后不可改(见 `docs/prediction-integrity.md`)。
-- 时间共现只表达"固定时间窗内同期发生",表名与文案不用因果词(CLAUDE.md §6.4)。
 
 ## 6. Worker 任务链与调度拓扑
 
@@ -167,7 +166,7 @@ gold_wdl_predictions ──cli/import_gold_predictions──▶ platform.db 预�
 | `allwin-fixtures` | 每 30 分钟 | `runner --job` 直调 | `schedule_sync_multi` |
 | `allwin-gates` | 每 30 分钟 | `runner --job` 直调 | `pipeline_gates` |
 | `allwin-postmatch` | 每 30 分钟 | `group_runner --group postmatch` | `fotmob_incremental_multi → core_silver_build → model_predict → prediction_register → postmatch_settle → reco_auto_settle` |
-| `allwin-derive` | 每 30 分钟 | `group_runner --group derive` | `odds_silver_build → analysis_bundle_build` |
+| `allwin-derive` | 每 30 分钟 | `group_runner --group derive` | `analysis_bundle_build` |
 | `allwin-maintenance` | 每天 04:00 Asia/Shanghai | `group_runner --group maintenance` | `entity_resolution → metrics_rebuild` |
 
 四个单任务定时器直接 `python -m backend.worker.runner --job <name>`;三个
@@ -190,7 +189,7 @@ failed/locked 后续步骤记 skipped(依赖检查)、`--from <step>` 支持从�
 ```text
 schedule_sync_multi → fotmob_incremental_multi → nowgoal_snapshot
 → fotmob_snapshot → entity_resolution → core_silver_build
-→ odds_silver_build → model_predict → prediction_register
+→ model_predict → prediction_register
 → analysis_bundle_build → postmatch_settle → reco_auto_settle
 → metrics_rebuild → pipeline_gates
 ```
@@ -203,7 +202,6 @@ schedule_sync_multi → fotmob_incremental_multi → nowgoal_snapshot
 - `nowgoal_snapshot` = `python -m backend.cli.poll_nowgoal --due`;
 - `fotmob_snapshot` = `python -m backend.cli.poll_fotmob_snapshots --due`(需 THORDATA_PROXY);
 - `entity_resolution` = `python -m backend.cli.resolve_entities`(全联赛别名种子 + xref 状态);
-- `odds_silver_build` = `python -m backend.cli.build_odds_silver`(moves + 时间共现,幂等);
 - `analysis_bundle_build` = 包内函数,对窗口内 NotStarted 场次逐场构建
   (与详情页 /Studio 共用同一 `backend/studio/bundle.py`)。
 外部凭证缺失时任务如实记 failed + 原因,不以"模块不存在"跳过。

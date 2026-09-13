@@ -12,10 +12,6 @@ def _idx(name: str) -> int:
 
 
 class TestChainOrder:
-    def test_schedule_before_entity_resolution_before_odds_silver(self):
-        """写在读之前:赛程先落库,实体解析才有候选;xref 先解析,odds silver 才有产出。"""
-        assert _idx("schedule_sync_multi") < _idx("entity_resolution") < _idx("odds_silver_build")
-
     def test_schedule_before_nowgoal_snapshot(self):
         assert _idx("schedule_sync_multi") < _idx("nowgoal_snapshot")
 

@@ -5,7 +5,7 @@
 端点不再有任何 entitlement 门禁或按登录状态投影的字段裁剪。
 
 缓存边界(CLAUDE.md §10.2):匿名数据响应给 s-maxage;prediction/analysis/
-odds/cooccurrence 端点内容会随时间更新(预测发布/赔率刷新),一律
+odds 端点内容会随时间更新(预测发布/赔率刷新),一律
 private, no-store,不进共享缓存(与登录状态无关)。
 """
 
@@ -35,7 +35,6 @@ from .cache_policy import PUBLIC_CACHE, PUBLIC_CACHE_SHORT
 from .deps import NO_STORE, AuthContext, core_ro, get_auth_context, odds_ro, platform_ro
 from .schemas import (
     AnalysisBundleDTO,
-    CooccurrenceResponse,
     FreshnessResponse,
     LeagueFixturesResponse,
     LeagueInfo,
@@ -491,12 +490,11 @@ def match_analysis(
         raise HTTPException(status_code=404, detail="比赛不存在")
     _require_known_league(m["league_id"])
     bundle = build_analysis_bundle(conn_core, conn_platform, conn_odds, match_id)
-    bundle["cooccurrence_count"] = len(bundle["cooccurring_events"])
     bundle.pop("subtitle_cues", None)   # 页面用不到,字幕留给 Studio(与权限无关)
     return bundle
 
 
-# ── 赔率与同期事件 ─────────────────────────────────────────
+# ── 赔率 ─────────────────────────────────────────────────
 
 @router.get("/matches/{match_id}/odds", response_model=MatchOddsResponse)
 def match_odds(
@@ -587,41 +585,6 @@ def _legacy_odds_fallback(conn_odds, match_id: int,
         "snapshots": [],
         "summary_points": rows,
         "note": "本场为历史存档赔率,仅有初盘与临场两个观测点,无完整走势时间线。",
-    }
-
-
-@router.get("/matches/{match_id}/cooccurrence", response_model=CooccurrenceResponse)
-def match_cooccurrence(
-    match_id: int,
-    response: Response,
-    conn_core=Depends(core_ro),
-    conn_odds=Depends(odds_ro),
-):
-    """同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分
-    免费(计数)/付费(明细)。"""
-    response.headers["Cache-Control"] = NO_STORE
-    m = q_matches.match_by_id(conn_core, match_id)
-    if m is None:
-        raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
-    total = conn_odds.execute(
-        "SELECT COUNT(*) FROM gold_move_cooccurrence WHERE fotmob_match_id=?", (match_id,)
-    ).fetchone()[0]
-    rows = conn_odds.execute(
-        """SELECT c.window_seconds, c.delta_seconds, c.computed_at,
-                  om.market, om.company_id, om.field, om.prev_value, om.new_value, om.moved_at AS odds_moved_at,
-                  em.event_type, em.detail_json, em.moved_at AS event_moved_at
-           FROM gold_move_cooccurrence c
-           JOIN silver_odds_moves om ON om.id = c.odds_move_id
-           JOIN silver_event_moves em ON em.id = c.event_move_id
-           WHERE c.fotmob_match_id=? ORDER BY om.moved_at""",
-        (match_id,),
-    ).fetchall()
-    return {
-        "match_id": match_id,
-        "count": total,
-        "items": [dict(r) for r in rows],
-        "note": None if total else "暂无同期事件",
     }
 
 

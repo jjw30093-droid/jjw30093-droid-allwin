@@ -56,12 +56,6 @@ export type OddsResponse =
     })
   | Extract<OddsResponseRaw, { available: false }>;
 
-/* ── GET /api/v1/matches/{id}/cooccurrence ─────────────────── */
-
-export type CooccurrenceItem = Schemas["CooccurrenceItem"];
-/** 2026-08-16 起恒含完整 items 明细,不再区分身份/权益(count/items 一致返回)。 */
-export type CooccurrenceResponse = GetJson<"/api/v1/matches/{match_id}/cooccurrence">;
-
 /* ── GET /api/v1/products ──────────────────────────────────── */
 
 export type ProductsResponse = GetJson<"/api/v1/products">;

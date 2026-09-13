@@ -9,7 +9,6 @@ import pytest
 from backend.cli.ingest_nowgoal_historical_odds import (
     _canonical_payload,
     _payload_hash,
-    compute_silver_moves,
     discover_shards,
     ingest_bronze,
     upsert_xref,
@@ -115,7 +114,7 @@ def odds_db(tmp_path: Path) -> Path:
     return db_path
 
 
-def test_ingest_bronze_and_silver_end_to_end(odds_db: Path) -> None:
+def test_ingest_bronze_end_to_end(odds_db: Path) -> None:
     conn = sqlite3.connect(str(odds_db))
     conn.execute("PRAGMA foreign_keys = ON")
 
@@ -170,19 +169,6 @@ def test_ingest_bronze_and_silver_end_to_end(odds_db: Path) -> None:
 
     phases = [r[0] for r in conn.execute("SELECT market_phase FROM bronze_ng_odds_snap").fetchall()]
     assert phases == ["pre_match", "pre_match"]
-
-    silver_n = compute_silver_moves(conn, {"9001"})
-    # 两次快照之间 home(u:0.95->1.00) 和 away(d:0.95->0.90) 都变了,line 没变
-    fields_changed = {
-        r[0] for r in conn.execute("SELECT field FROM silver_odds_moves").fetchall()
-    }
-    assert fields_changed == {"home", "away"}
-    assert silver_n == 2
-
-    fotmob_id = conn.execute(
-        "SELECT fotmob_match_id FROM silver_odds_moves LIMIT 1"
-    ).fetchone()[0]
-    assert fotmob_id == 555
 
     conn.close()
 

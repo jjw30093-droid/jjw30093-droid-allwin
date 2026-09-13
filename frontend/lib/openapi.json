@@ -1788,69 +1788,6 @@
     }
    }
   },
-  "/api/v1/matches/{match_id}/cooccurrence": {
-   "get": {
-    "tags": [
-     "public"
-    ],
-    "summary": "Match Cooccurrence",
-    "description": "同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分\n免费(计数)/付费(明细)。",
-    "operationId": "match_cooccurrence_api_v1_matches__match_id__cooccurrence_get",
-    "parameters": [
-     {
-      "name": "match_id",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "integer",
-       "title": "Match Id"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Successful Response",
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/CooccurrenceResponse"
-        }
-       }
-      }
-     },
-     "400": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Bad Request"
-     },
-     "404": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Not Found"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ApiErrorDTO"
-        }
-       }
-      },
-      "description": "Unprocessable Content"
-     }
-    }
-   }
-  },
   "/api/v1/matches/{match_id}/report": {
    "get": {
     "tags": [
@@ -7128,13 +7065,6 @@
       ],
       "title": "Odds Summary Points"
      },
-     "cooccurring_events": {
-      "items": {
-       "$ref": "#/components/schemas/BundleCoocEvent"
-      },
-      "type": "array",
-      "title": "Cooccurring Events"
-     },
      "chart_specs": {
       "items": {
        "$ref": "#/components/schemas/BundleChartSpec"
@@ -7159,10 +7089,6 @@
      "bundle_hash": {
       "type": "string",
       "title": "Bundle Hash"
-     },
-     "cooccurrence_count": {
-      "type": "integer",
-      "title": "Cooccurrence Count"
      }
     },
     "type": "object",
@@ -7175,15 +7101,13 @@
      "counter_evidence",
      "uncertainty",
      "odds_timeline",
-     "cooccurring_events",
      "chart_specs",
      "script_sections",
      "source_notes",
-     "bundle_hash",
-     "cooccurrence_count"
+     "bundle_hash"
     ],
     "title": "AnalysisBundleDTO",
-    "description": "GET /matches/{id}/analysis:公开投影(无 subtitle_cues,带 cooccurrence_count)。"
+    "description": "GET /matches/{id}/analysis:公开投影(无 subtitle_cues)。"
    },
    "AnalyticsEventBody": {
     "properties": {
@@ -7393,66 +7317,6 @@
      "data"
     ],
     "title": "BundleChartSpec"
-   },
-   "BundleCoocEvent": {
-    "properties": {
-     "delta_seconds": {
-      "type": "integer",
-      "title": "Delta Seconds"
-     },
-     "market": {
-      "type": "string",
-      "title": "Market"
-     },
-     "field": {
-      "type": "string",
-      "title": "Field"
-     },
-     "prev_value": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Prev Value"
-     },
-     "new_value": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "New Value"
-     },
-     "moved_at": {
-      "type": "string",
-      "title": "Moved At"
-     },
-     "event_type": {
-      "type": "string",
-      "title": "Event Type"
-     },
-     "detail_json": {
-      "type": "string",
-      "title": "Detail Json"
-     }
-    },
-    "type": "object",
-    "required": [
-     "delta_seconds",
-     "market",
-     "field",
-     "moved_at",
-     "event_type",
-     "detail_json"
-    ],
-    "title": "BundleCoocEvent"
    },
    "BundleEvidenceItem": {
     "properties": {
@@ -7665,124 +7529,6 @@
      "text"
     ],
     "title": "BundleUncertaintyItem"
-   },
-   "CooccurrenceItem": {
-    "properties": {
-     "window_seconds": {
-      "type": "integer",
-      "title": "Window Seconds"
-     },
-     "delta_seconds": {
-      "type": "integer",
-      "title": "Delta Seconds"
-     },
-     "computed_at": {
-      "type": "string",
-      "title": "Computed At"
-     },
-     "market": {
-      "type": "string",
-      "title": "Market"
-     },
-     "company_id": {
-      "type": "string",
-      "title": "Company Id"
-     },
-     "field": {
-      "type": "string",
-      "title": "Field"
-     },
-     "prev_value": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Prev Value"
-     },
-     "new_value": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "New Value"
-     },
-     "odds_moved_at": {
-      "type": "string",
-      "title": "Odds Moved At"
-     },
-     "event_type": {
-      "type": "string",
-      "title": "Event Type"
-     },
-     "detail_json": {
-      "type": "string",
-      "title": "Detail Json"
-     },
-     "event_moved_at": {
-      "type": "string",
-      "title": "Event Moved At"
-     }
-    },
-    "type": "object",
-    "required": [
-     "window_seconds",
-     "delta_seconds",
-     "computed_at",
-     "market",
-     "company_id",
-     "field",
-     "odds_moved_at",
-     "event_type",
-     "detail_json",
-     "event_moved_at"
-    ],
-    "title": "CooccurrenceItem"
-   },
-   "CooccurrenceResponse": {
-    "properties": {
-     "match_id": {
-      "type": "integer",
-      "title": "Match Id"
-     },
-     "count": {
-      "type": "integer",
-      "title": "Count"
-     },
-     "items": {
-      "items": {
-       "$ref": "#/components/schemas/CooccurrenceItem"
-      },
-      "type": "array",
-      "title": "Items"
-     },
-     "note": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Note"
-     }
-    },
-    "type": "object",
-    "required": [
-     "match_id",
-     "count",
-     "items"
-    ],
-    "title": "CooccurrenceResponse",
-    "description": "同期事件(时间共现,不声称因果)。2026-08-16 起恒含明细,不再区分\n免费(仅计数)/付费(明细)两套 DTO。"
    },
    "CreateDraftBody": {
     "properties": {
@@ -16878,13 +16624,6 @@
       ],
       "title": "Odds Summary Points"
      },
-     "cooccurring_events": {
-      "items": {
-       "$ref": "#/components/schemas/BundleCoocEvent"
-      },
-      "type": "array",
-      "title": "Cooccurring Events"
-     },
      "chart_specs": {
       "items": {
        "$ref": "#/components/schemas/BundleChartSpec"
@@ -16948,7 +16687,6 @@
      "counter_evidence",
      "uncertainty",
      "odds_timeline",
-     "cooccurring_events",
      "chart_specs",
      "script_sections",
      "subtitle_cues",
