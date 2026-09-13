@@ -43,6 +43,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from backend.queries.leagues import LEAGUE_META
+
 MAX_LOOKBACK_DAYS = 730
 # DEFAULT_MAX_N=10 不是拍脑袋:backend/scripts/validate_window_length.py 做过
 # 一次按时间切分的样本外回测(CUTOFF=2025-01-01,验证目标只取 CUTOFF 之后、
@@ -58,11 +60,17 @@ DEFAULT_MIN_N = 5
 
 Tier = Literal["venue_full", "venue_partial", "mixed", "unavailable"]
 
+# `{league}` 是联赛中文名(如"英超"),由 WindowResult.league_zh 填。窗口默认圈在
+# 单个 League_ID 内,欧战和国内杯赛全部被排除——不写出来,界面就会把"近 10 场
+# 英超主场"说成"近 10 个主场",与下面 label_zh 里"不限赛事·"前缀防的是同一类
+# 错误陈述(2026-09-13 先在百分位模块修过一次,这里补齐同一条纪律)。
+# `{league}` 留空时这四条模板产出的字符串与加这个占位符之前**逐字节相同**,
+# 这是跨赛事路径(没有联赛可写)零回归的落点。
 _TIER_LABEL_ZH = {
-    "venue_full": "近 {n} 个{venue}",
-    "venue_partial": "近 {n} 个{venue}(样本不足 {max_n},已如实展示实际场次)",
-    "mixed": "近 {n} 场(主客场样本均不足,已合并主客场——不能与纯主场/客场窗口直接比较)",
-    "unavailable": "暂无可比较的历史比赛",
+    "venue_full": "近 {n} 个{league}{venue}",
+    "venue_partial": "近 {n} 个{league}{venue}(样本不足 {max_n},已如实展示实际场次)",
+    "mixed": "近 {n} 场{league}(主客场样本均不足,已合并主客场——不能与纯主场/客场窗口直接比较)",
+    "unavailable": "暂无可比较的{league}历史比赛",
 }
 
 
@@ -76,6 +84,9 @@ class WindowResult:
     from_date: str | None
     to_date: str | None
     cross_league: bool = False
+    # 这个窗口圈在哪个联赛里(如"英超")。跨赛事窗口(league_id=None)恒为 None
+    # ——那时没有联赛可写,"不限赛事·"前缀已经把口径说清楚了。
+    league_zh: str | None = None
 
     @property
     def mixed_venues(self) -> bool:
@@ -87,7 +98,9 @@ class WindowResult:
     def label_zh(self) -> str:
         venue = "主场" if self.is_home else "客场"
         tpl = _TIER_LABEL_ZH[self.tier]
-        label = tpl.format(n=self.matches, venue=venue, max_n=DEFAULT_MAX_N)
+        label = tpl.format(
+            n=self.matches, venue=venue, max_n=DEFAULT_MAX_N, league=self.league_zh or "",
+        )
         # 跨赛事窗口的 tier 仍然是 venue_full,光看档位读不出"这 10 场不在
         # 同一个联赛里"。少了这个前缀,界面就会写"近 10 个主场"却隐瞒了它
         # 混了欧冠和国内联赛——那是错误陈述,不是省略。
@@ -163,6 +176,9 @@ def venue_window(
     (与 team_style_preview.py / player_form.py 现有函数同一套边界口径)。
     """
     cross_league = league_id is None
+    # 未登记的 League_ID 拿不到译名 → None → label 回落到不带联赛名的旧措辞,
+    # 不硬凑一个名字出来。
+    league_zh = None if cross_league else LEAGUE_META.get(league_id, {}).get("name_zh")
     floor_ = _lookback_floor(before_boundary)
     venue = "home" if is_home else "away"
     rows = _match_ids(conn, team_id, league_id, before_boundary, venue=venue, max_n=max_n, lookback_floor=floor_)
@@ -180,11 +196,11 @@ def venue_window(
     if not rows:
         return WindowResult(team_id=team_id, is_home=is_home, tier="unavailable",
                              match_ids=[], matches=0, from_date=None, to_date=None,
-                             cross_league=cross_league)
+                             cross_league=cross_league, league_zh=league_zh)
     dates = [r["Date"] for r in rows]
     return WindowResult(
         team_id=team_id, is_home=is_home, tier=tier,
         match_ids=[r["Match_ID"] for r in rows],
         matches=len(rows), from_date=min(dates), to_date=max(dates),
-        cross_league=cross_league,
+        cross_league=cross_league, league_zh=league_zh,
     )
