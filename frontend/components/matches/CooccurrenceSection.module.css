@@ -40,13 +40,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.detail {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--ink-3);
-  word-break: break-all;
-}
-
 /* 区块外壳(与 match-detail.module.css 的 .section/.sectionTitle 同款,
    由本组件自带以便"无内容时整体隐藏") */
 .section {

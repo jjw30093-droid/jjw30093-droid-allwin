@@ -52,6 +52,26 @@ describe("CooccurrenceSection 给定完整数据时必须完整渲染(不再只�
     expect(screen.queryByText(/免费登录/)).toBeNull();
   });
 
+  it("detail_json 是内部消费方(如 backend/studio/bundle.py)用的原始 diff,不得原样甩到页面上(站长 2026-09-13 反馈)", async () => {
+    const itemWithDetail = {
+      ...ITEM,
+      detail_json: JSON.stringify({
+        away: { formation: { new: "4-2-3-1", prev: null }, starters_added: [{ id: "1", name: "João Marcelo" }] },
+      }),
+    };
+    mockCooccurrenceResponse({ match_id: 1, count: 1, items: [itemWithDetail], note: null });
+    render(<CooccurrenceSection matchId={1} />);
+
+    await waitFor(() => expect(screen.queryByText(/组变化撞在同一个时间段里/)).not.toBeNull());
+    // 人话描述行仍要在(这两行是产品设计的一部分,不受影响)
+    expect(screen.getByText(/赔率动了/)).not.toBeNull();
+    expect(screen.getByText(/同时段检测到/)).not.toBeNull();
+    // 原始 JSON 不应该以任何形式出现在渲染文本里
+    expect(screen.queryByText(/formation/)).toBeNull();
+    expect(screen.queryByText(/João Marcelo/)).toBeNull();
+    expect(screen.queryByText(/starters_added/)).toBeNull();
+  });
+
   it("items 为空数组时(真实无同期事件)不渲染区块", async () => {
     mockCooccurrenceResponse({ match_id: 1, count: 0, items: [], note: null });
     render(<CooccurrenceSection matchId={1} />);

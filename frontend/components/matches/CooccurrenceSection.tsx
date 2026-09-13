@@ -23,19 +23,11 @@ function describeOddsMove(item: CooccurrenceItem): string {
   return `${market} ${item.field}:${prev} → ${next}`;
 }
 
-function eventDetail(item: CooccurrenceItem): string | null {
-  if (!item.detail_json) return null;
-  try {
-    const parsed: unknown = JSON.parse(item.detail_json);
-    if (parsed && typeof parsed === "object") {
-      const text = JSON.stringify(parsed);
-      return text === "{}" ? null : text;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+// item.detail_json 是阵容/伤停差异的原始 JSON(球员 id、formation 前后值等),
+// 供 backend/studio/bundle.py 之类的内部消费方拿去二次加工用,不是给用户读的
+// 文案——之前这里直接 JSON.stringify 整段甩到页面上,站长反馈"这部分不要在
+// 前端显示"(2026-09-13)。上面两行 describeOddsMove/EVENT_TYPE_ZH 已经把这条
+// 变化翻译成人话,detail_json 不需要再兜底展示一遍原始数据。
 
 export function CooccurrenceSection({ matchId }: { matchId: number }) {
   const [resp, setResp] = useState<CooccurrenceResponse | null>(null);
@@ -80,31 +72,27 @@ export function CooccurrenceSection({ matchId }: { matchId: number }) {
       </h2>
       {countLine}
       <ul className={styles.list}>
-        {resp.items.map((item, i) => {
-          const detail = eventDetail(item);
-          return (
-            <li key={`${item.odds_moved_at}-${i}`} className={styles.item}>
-              <div className={styles.itemLine}>
-                <span className={styles.itemTime}>
-                  <LocalTime iso={item.odds_moved_at} />
-                </span>
-                <span>赔率动了：{describeOddsMove(item)}</span>
-              </div>
-              <div className={styles.itemLine}>
-                <span className={styles.itemTime}>
-                  <LocalTime iso={item.event_moved_at} />
-                </span>
-                <span>
-                  同时段检测到:
-                  {EVENT_TYPE_ZH[item.event_type] ?? item.event_type}
-                  (相差 <span className="num">{Math.abs(item.delta_seconds)}</span>{" "}
-                  秒,时间窗 <span className="num">{item.window_seconds}</span> 秒)
-                </span>
-              </div>
-              {detail && <div className={styles.detail}>{detail}</div>}
-            </li>
-          );
-        })}
+        {resp.items.map((item, i) => (
+          <li key={`${item.odds_moved_at}-${i}`} className={styles.item}>
+            <div className={styles.itemLine}>
+              <span className={styles.itemTime}>
+                <LocalTime iso={item.odds_moved_at} />
+              </span>
+              <span>赔率动了：{describeOddsMove(item)}</span>
+            </div>
+            <div className={styles.itemLine}>
+              <span className={styles.itemTime}>
+                <LocalTime iso={item.event_moved_at} />
+              </span>
+              <span>
+                同时段检测到:
+                {EVENT_TYPE_ZH[item.event_type] ?? item.event_type}
+                (相差 <span className="num">{Math.abs(item.delta_seconds)}</span>{" "}
+                秒,时间窗 <span className="num">{item.window_seconds}</span> 秒)
+              </span>
+            </div>
+          </li>
+        ))}
       </ul>
     </section>
   );
