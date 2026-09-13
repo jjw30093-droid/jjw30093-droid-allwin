@@ -101,8 +101,14 @@ export function profileWindowNote(homeName: string, awayName: string, profile: D
   // `?? "same_venue"` 兜底:既有的 DataProfile 字面量(测试 fixture、
   // 部署切换瞬间的旧缓存响应)不带这个字段,缺省必须落回今天的口径。
   const venue = profile.venue_mode ?? "same_venue";
+  // 窗口是 m.League_ID=? 的硬谓词,欧战和国内杯赛全部排除在外,所以这里取的是
+  // "近 3 个**英超**主场"而不是"近 3 个主场"。不写联赛名就是把"近 3 场英超"
+  // 说成"近 3 场"——切到「全部」后的"近 10 场"歧义更大,读起来就是"最近 10 场
+  // 比赛"。后端没给(跨赛事模式本就没圈联赛;或部署切换瞬间的旧缓存响应)时
+  // 留空 ⇒ 措辞与加这个字段之前逐字节相同。
+  const league = profile.scope_league_zh ?? "";
   const scope = (side: "home" | "away") =>
-    venue === "all" ? " 场·不分主客" : side === "home" ? " 个主场" : " 个客场";
+    venue === "all" ? ` 场${league}·不分主客` : ` 个${league}${side === "home" ? "主场" : "客场"}`;
   const home = profile.home_available ? `${homeName}(近 ${profile.home_matches}${scope("home")}${suffix})` : `${homeName}(样本不足)`;
   const away = profile.away_available ? `${awayName}(近 ${profile.away_matches}${scope("away")}${suffix})` : `${awayName}(样本不足)`;
   return `${home} · ${away}`;

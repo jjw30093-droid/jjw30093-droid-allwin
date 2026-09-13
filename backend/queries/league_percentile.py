@@ -54,6 +54,7 @@ from backend.metrics.percentile import (
     top_gaps,
 )
 from backend.metrics.registry import Direction, MetricDef, get_metric
+from backend.queries.leagues import LEAGUE_META
 from backend.queries.teams import display_name_for_team, team_display_for
 from backend.queries.window import DEFAULT_MAX_N, DEFAULT_MIN_N, _lookback_floor
 
@@ -427,6 +428,15 @@ class MatchDataProfileDTO:
     # 向后要了几场(窗口长度上限)。实际用到几场看 home_matches/away_matches,
     # 可能更少——这个字段只说请求口径,不说实际样本。
     window_n: int = DEFAULT_MAX_N
+    # 这份画像实际圈在哪个联赛里(如 "英超")。前端的窗口说明要写"近 3 个英超
+    # 主场"而不是"近 3 个主场"——后者把"近 3 场英超"说成"近 3 场",是同
+    # window.py:91-93 那条纪律的同一类错误陈述(切到「全部」后的"近 10 场"
+    # 更像"最近 10 场比赛",歧义更大)。窗口是 m.League_ID=? 的硬谓词,欧战和
+    # 国内杯赛全部被排除在外,这件事必须写在脸上。
+    # 由后端给而不是前端自己找:后端才知道 SQL 真的圈了哪个 League_ID。
+    # 跨赛事模式(cross_league)恒为 None——那条路径本来就没圈联赛,
+    # "不限赛事"后缀已经把这件事说清楚了。
+    scope_league_zh: str | None = None
 
 
 def _team_window_matches(dist: dict[int, dict[str, TeamMetricValue]], team_id: int) -> int:
@@ -641,6 +651,9 @@ def match_data_profile(
     home_available = home_id in home_dist
     away_available = away_id in away_dist
     scope_note = _scope_note_for(venue_mode, cross_league=False)
+    # 未登记的 League_ID 拿不到译名 → None → 前端回落到不带联赛名的旧措辞。
+    # 端点层的 _require_known_league 已经把未登记联赛 404 掉了,这里只是不假设。
+    scope_league_zh = LEAGUE_META.get(league_id, {}).get("name_zh")
 
     if not home_available and not away_available:
         return MatchDataProfileDTO(
@@ -648,6 +661,7 @@ def match_data_profile(
             home_available=False, away_available=False, groups=[], highlights=[],
             unavailable_reason=_UNAVAILABLE_BY_VENUE[venue_mode],
             scope_note=scope_note, venue_mode=venue_mode, window_n=max_n,
+            scope_league_zh=scope_league_zh,
         )
 
     # 两遍循环:第一遍算每组的指标百分位 + 全联赛组级百分位(用来找对标队),
@@ -744,4 +758,5 @@ def match_data_profile(
         groups=groups, highlights=top_gaps(highlight_rows),
         unavailable_reason=None,
         scope_note=scope_note, venue_mode=venue_mode, window_n=max_n,
+        scope_league_zh=scope_league_zh,
     )

@@ -9763,6 +9763,17 @@
       "type": "integer",
       "title": "Window N",
       "default": 10
+     },
+     "scope_league_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scope League Zh"
      }
     },
     "type": "object",

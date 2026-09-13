@@ -455,3 +455,49 @@ describe("highlightSentence · venue_mode", () => {
     expect(s).toContain("联赛第 88 百分位");
   });
 });
+
+describe("profileWindowNote · scope_league_zh", () => {
+  const base = {
+    home_matches: 3, away_matches: 3, home_available: true, away_available: true,
+    groups: [], highlights: [], unavailable_reason: null,
+    comparison_mode: "league_percentile" as const, scope_note: null, window_n: 3,
+  };
+
+  it("相同主客场:写出联赛名——窗口是 League_ID 硬谓词,不写就是把「近3场英超」说成「近3场」", () => {
+    const note = profileWindowNote("曼城", "曼联", {
+      ...base, venue_mode: "same_venue", scope_league_zh: "英超",
+    });
+    expect(note).toBe("曼城(近 3 个英超主场) · 曼联(近 3 个英超客场)");
+  });
+
+  it("「全部」:联赛名照写,且仍然不得出现「主场」「客场」", () => {
+    const note = profileWindowNote("曼城", "曼联", {
+      ...base, home_matches: 10, away_matches: 10, window_n: 10,
+      venue_mode: "all", scope_league_zh: "英超",
+    });
+    expect(note).toBe("曼城(近 10 场英超·不分主客) · 曼联(近 10 场英超·不分主客)");
+    // 加联赛名不能把「全部口径下不许写主客场」这条守卫破坏掉
+    expect(note).not.toContain("主场");
+    expect(note).not.toContain("客场");
+  });
+
+  it("字段缺失(跨赛事,或部署切换瞬间的旧缓存响应)→ 措辞与加这个字段之前逐字节相同", () => {
+    const withField = { ...base, venue_mode: "same_venue" as const, scope_league_zh: null };
+    const withoutField: Record<string, unknown> = { ...withField };
+    delete withoutField.scope_league_zh;
+    expect(profileWindowNote("主队", "客队", withoutField as unknown as DataProfile)).toBe(
+      "主队(近 3 个主场) · 客队(近 3 个客场)",
+    );
+    expect(profileWindowNote("主队", "客队", withField as DataProfile)).toBe(
+      "主队(近 3 个主场) · 客队(近 3 个客场)",
+    );
+  });
+
+  it("样本不足的一侧不受影响——那一侧根本不写窗口", () => {
+    const note = profileWindowNote("阿森纳", "考文垂", {
+      ...base, home_matches: 10, away_matches: 0, away_available: false,
+      window_n: 10, venue_mode: "same_venue", scope_league_zh: "英超",
+    });
+    expect(note).toBe("阿森纳(近 10 个英超主场) · 考文垂(样本不足)");
+  });
+});

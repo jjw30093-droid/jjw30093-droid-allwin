@@ -630,3 +630,32 @@ class TestVenueModeAndWindowSwitchers:
         assert merged.home_matches == 5    # 主+客
         # 两句口径说明都要在:跨赛事与分不分主客场是两件独立的事,漏一句就是隐瞒
         assert "不限赛事" in merged.scope_note and "不分主客场" in merged.scope_note
+
+    def test_scope_league_name_is_reported_for_league_mode(self, data_dir):
+        """窗口是 m.League_ID=? 的硬谓词,欧战/杯赛全被排除——前端要据此写
+        "近 N 个英超主场"而不是"近 N 个主场"。名字必须后端给:只有后端知道
+        SQL 真的圈了哪个 League_ID。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3101, 3102
+        self._seed_short_league(conn, per_team=5, teams={
+            3103: 1.0, 3104: 1.2, 3105: 1.3, 3106: 1.4, 3107: 1.5,
+            home_id: 6.0, away_id: 0.5,
+        })
+        conn.commit()
+
+        assert match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id).scope_league_zh == "英超"
+        # 两侧都不够格的早退分支同样要带上,不是只在完整产出时才给
+        assert match_data_profile(conn, LEAGUE, BEFORE, 9001, 9002).scope_league_zh == "英超"
+        # 「全部」口径只是不分主客场,仍然圈在本联赛内 —— 名字照给
+        assert match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id,
+                                  venue_mode="all").scope_league_zh == "英超"
+
+    def test_cross_league_reports_no_scope_league(self, data_dir):
+        """跨赛事路径本来就没圈联赛,写任何一个联赛名都是假的;
+        那条路径的"不限赛事"后缀已经把口径说清楚了。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        conn.commit()
+        p = match_data_profile(conn, None, BEFORE, 3901, 3902, cross_league=True)
+        assert p.scope_league_zh is None

@@ -2503,6 +2503,8 @@ export interface components {
              * @default 10
              */
             window_n: number;
+            /** Scope League Zh */
+            scope_league_zh?: string | null;
         };
         /**
          * MatchDataProfileResponse

@@ -1323,6 +1323,12 @@ class MatchDataProfileDTO(BaseModel):
     venue_mode: Literal["same_venue", "all"] = "same_venue"
     # 向后要了几场;实际用到几场看 home_matches/away_matches(可能更少)。
     window_n: int = 10
+    # 这份画像圈在哪个联赛里(如 "英超")。窗口是 m.League_ID=? 的硬谓词,欧战和
+    # 国内杯赛全部排除——窗口说明必须写"近 3 个英超主场"而不是"近 3 个主场",
+    # 后者把"近 3 场英超"说成"近 3 场"。跨赛事模式恒为 None(那条路径没圈联赛,
+    # "不限赛事"后缀已说清)。可空且默认 None ⇒ 生成的 TS 是可选字段,旧响应
+    # (部署切换瞬间)不带它时前端回落到不带联赛名的旧措辞。
+    scope_league_zh: Optional[str] = None
 
 
 class MatchPreviewAttackSourceDTO(BaseModel):
