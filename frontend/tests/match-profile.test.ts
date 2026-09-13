@@ -18,6 +18,8 @@ import {
   isStyleMetric,
   metricGap,
   peerSentence,
+  profileMethodNote,
+  profileOverviewFootNote,
   profileWindowNote,
   sortMetricsByGap,
   splitMetricsByGap,
@@ -295,6 +297,7 @@ describe("跨联赛模式(欧战):没有百分位,只并排原始值", () => {
       home_matches: 8, away_matches: 10, home_available: true, away_available: true,
       groups: [], highlights: [], unavailable_reason: null,
       comparison_mode: "cross_league_raw", scope_note: "说明",
+      venue_mode: "same_venue", window_n: 10,
     };
     const note = profileWindowNote("维京", "拜仁", profile);
     expect(note).toContain("不限赛事");
@@ -306,6 +309,7 @@ describe("跨联赛模式(欧战):没有百分位,只并排原始值", () => {
       home_matches: 10, away_matches: 10, home_available: true, away_available: true,
       groups: [], highlights: [], unavailable_reason: null,
       comparison_mode: "league_percentile", scope_note: null,
+      venue_mode: "same_venue", window_n: 10,
     };
     expect(profileWindowNote("主队", "客队", profile)).not.toContain("不限赛事");
   });
@@ -353,15 +357,101 @@ describe("groupVerdict", () => {
   });
 });
 
+describe("profileWindowNote · venue_mode", () => {
+  const base = {
+    home_matches: 6, away_matches: 6, home_available: true, away_available: true,
+    groups: [], highlights: [], unavailable_reason: null,
+    comparison_mode: "league_percentile" as const,
+  };
+
+  it("「全部」口径下绝不能出现「主场」「客场」——那是错误陈述,不是省略", () => {
+    // 同 backend/queries/window.py:91-96 的纪律:窗口混了主客场却仍写
+    // "近 N 个主场",是在隐瞒这批比赛的实际构成。
+    const profile: DataProfile = { ...base, scope_note: "说明", venue_mode: "all", window_n: 5 };
+    const note = profileWindowNote("主队", "客队", profile);
+    expect(note).toContain("不分主客");
+    expect(note).not.toContain("主场");
+    expect(note).not.toContain("客场");
+  });
+
+  it("「全部」+ 跨联赛:两句免责都要在,漏一句就是隐瞒一个维度", () => {
+    const profile: DataProfile = {
+      ...base, comparison_mode: "cross_league_raw", scope_note: "说明",
+      venue_mode: "all", window_n: 10,
+    };
+    const note = profileWindowNote("维京", "拜仁", profile);
+    expect(note).toContain("不分主客");
+    expect(note).toContain("不限赛事");
+  });
+
+  it("venue_mode 缺失(部署切换瞬间的旧缓存响应)必须落回今天的口径,逐字相同", () => {
+    // 生成类型把带默认值的字段标成必填,但运行期真的可能收到不带它的旧 payload
+    // ——`?? "same_venue"` 兜的正是这一段时间窗,这里显式钉死。
+    const withField: DataProfile = { ...base, scope_note: null, venue_mode: "same_venue", window_n: 10 };
+    const withoutField: Record<string, unknown> = { ...withField };
+    delete withoutField.venue_mode;
+    expect(profileWindowNote("主队", "客队", withoutField as unknown as DataProfile)).toBe(
+      profileWindowNote("主队", "客队", withField),
+    );
+  });
+});
+
+describe("profileMethodNote / profileOverviewFootNote", () => {
+  it("「相同主客场」的口径说明与改动前逐字节相同(零回归锚)", () => {
+    expect(profileMethodNote()).toBe(
+      "横轴是本联赛同场景分布里的百分位,不是两队互相比较的比值。主队对联赛主场分布取百分位," +
+      "客队对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子。" +
+      "带 * 的数值表示该场景窗口内有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。",
+    );
+  });
+
+  it("「全部」口径下不得再说「两套独立分布」——那时两队恰恰共用同一套", () => {
+    const note = profileMethodNote("league_percentile", "all");
+    expect(note).not.toContain("两套独立分布");
+    expect(note).toContain("同一套");
+  });
+
+  it("总览脚注同样跟着口径走,不写死", () => {
+    const base = {
+      home_matches: 6, away_matches: 6, home_available: true, away_available: true,
+      groups: [], highlights: [], unavailable_reason: null,
+      comparison_mode: "league_percentile" as const, scope_note: null, window_n: 10,
+    };
+    const same = profileOverviewFootNote("主队", "客队", { ...base, venue_mode: "same_venue" });
+    const all = profileOverviewFootNote("主队", "客队", { ...base, venue_mode: "all" });
+    expect(same).toContain("两套独立分布");
+    expect(all).not.toContain("两套独立分布");
+    expect(all).toContain("同一把尺子");
+  });
+});
+
 describe("profileWindowNote", () => {
   it("reports honest 样本不足 per side instead of a fabricated match count", () => {
     const profile: DataProfile = {
       home_matches: 10, away_matches: 2, home_available: true, away_available: false,
       groups: [], highlights: [], unavailable_reason: null,
       comparison_mode: "league_percentile", scope_note: null,
+      venue_mode: "same_venue", window_n: 10,
     };
     const note = profileWindowNote("主队", "客队", profile);
     expect(note).toContain("主队(近 10 个主场)");
     expect(note).toContain("客队(样本不足)");
+  });
+});
+
+describe("highlightSentence · venue_mode", () => {
+  const h = {
+    key: "xg", name_zh: "预期进球(xG)", home_percentile: 88, away_percentile: 21,
+    gap: 67, home_value: 1.9, away_value: 0.9,
+  };
+
+  it("默认口径逐字不变(零回归锚)", () => {
+    expect(highlightSentence(h, "performance", "主队", "客队")).toContain("联赛同场景第 88 百分位");
+  });
+
+  it("「全部」口径下不得再说「同场景」——那时分布压根没按主客场切分", () => {
+    const s = highlightSentence(h, "performance", "主队", "客队", "all");
+    expect(s).not.toContain("同场景");
+    expect(s).toContain("联赛第 88 百分位");
   });
 });

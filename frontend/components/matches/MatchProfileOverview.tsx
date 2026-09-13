@@ -13,10 +13,16 @@
 
 "use client";
 
+import type { ReactNode } from "react";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import { CrestDot } from "./CrestDot";
 import styles from "./MatchProfileOverview.module.css";
-import { highlightSentence, peerSentence, type DataProfile } from "./matchProfile";
+import {
+  highlightSentence,
+  peerSentence,
+  profileOverviewFootNote,
+  type DataProfile,
+} from "./matchProfile";
 
 const GROUP_LABEL: Record<string, string> = { attack: "攻", defence: "守", control: "控" };
 
@@ -26,12 +32,16 @@ export function MatchProfileOverview({
   homeCrestUrl,
   awayCrestUrl,
   profile,
+  scopeSwitcher,
 }: {
   homeName: string;
   awayName: string;
   homeCrestUrl?: string | null;
   awayCrestUrl?: string | null;
   profile: DataProfile;
+  /** 「全部/相同主客场」×「近 3/5/10 场」两个切换器。由
+   * `MatchProfilePanel` 注入——状态必须只有一个持有者,这里只负责摆放。 */
+  scopeSwitcher?: ReactNode;
 }) {
   if (!profile.home_available && !profile.away_available) {
     return (
@@ -40,8 +50,13 @@ export function MatchProfileOverview({
           <span className={pageStyles.sectionBar} aria-hidden />
           本场数据画像
         </h2>
+        {/* 空态下切换器**必须照样渲染**:某个口径组合恰好取不到数据时,
+            如果切换器被空态一起吞掉,用户就被锁死在一张白页上出不来了。 */}
+        {scopeSwitcher}
         <p className={pageStyles.emptyText}>
-          {profile.unavailable_reason ?? "两队本赛季同主客场比赛都不足,暂无法给出联赛百分位画像。"}
+          {/* 兜底文案保持 venue 中性:后端在这条分支上恒会给 unavailable_reason
+              (已按口径分支),前端不该复述一个可能不成立的原因。 */}
+          {profile.unavailable_reason ?? "暂无法给出联赛百分位画像。"}
         </p>
       </section>
     );
@@ -59,6 +74,7 @@ export function MatchProfileOverview({
         <span className={pageStyles.sectionBar} aria-hidden />
         本场数据画像
       </h2>
+      {scopeSwitcher}
       <div className={styles.card}>
         <div className={styles.teams}>
           <span className={styles.teamName}>{homeName}</span>
@@ -107,7 +123,7 @@ export function MatchProfileOverview({
                   profile.groups.flatMap((g) => g.metrics).find((m) => m.key === h.key)?.semantic ?? "performance";
                 return (
                   <p className={styles.highlightItem} key={h.key}>
-                    {highlightSentence(h, semantic, homeName, awayName)}
+                    {highlightSentence(h, semantic, homeName, awayName, profile.venue_mode ?? "same_venue")}
                   </p>
                 );
               })
@@ -115,16 +131,10 @@ export function MatchProfileOverview({
           </div>
         )}
 
-        <p className={styles.footNote}>
-          {crossLeague ? (
-            profile.scope_note
-          ) : (
-            <>
-              {homeName}对联赛主场分布取百分位,{awayName}对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子;
-              百分位是历史统计描述,不是本场预测。
-            </>
-          )}
-        </p>
+        {/* 这句话原来写死在 JSX 里,而"两套独立分布"在「全部」口径下恰好
+            说反了(那时两队共用同一套分布)——措辞必须跟着实际取数口径走,
+            所以收进 matchProfile.ts 按维度分支。 */}
+        <p className={styles.footNote}>{profileOverviewFootNote(homeName, awayName, profile)}</p>
       </div>
     </section>
   );

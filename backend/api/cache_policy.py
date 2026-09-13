@@ -67,6 +67,9 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # 赛前预览(阵容/伤停快照 + 风格象限 + 进攻来源 + 关键球员 + 门将):
         # 与 /report、/markets 同级,全部历史聚合与已采集快照,不区分付费档位。
         ("GET", "/api/v1/matches/{match_id}/preview"),
+        # /preview 里那份 data_profile 的可切换口径版本,同性质同门禁:
+        # 纯历史聚合,不含模型输出/赔率方法论,不随身份变化。
+        ("GET", "/api/v1/matches/{match_id}/data-profile"),
         ("GET", "/api/v1/media/team-crests/{provider}/{provider_team_id}.png"),
         # 每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
         # 响应不随身份变化——与 /api/v1/products 同一性质。带 Cookie 的请求

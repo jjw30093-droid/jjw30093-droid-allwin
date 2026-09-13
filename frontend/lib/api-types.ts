@@ -407,6 +407,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/matches/{match_id}/data-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Match Data Profile
+         * @description 「数据 → 风格」子 tab 百分位画像的**可切换口径**版本(2026-09-13)。
+         *
+         *     `/preview` 里内嵌的 `data_profile` 恒为默认口径(same_venue / n=10),
+         *     用户不动切换器时本端点一次都不会被请求。拆成独立子资源是性能决策:
+         *     `/preview` 整条是 493 次 core SELECT(生产实测 0.55s / 26KB),而本端点
+         *     只跑 `match_data_profile()` 一个函数(热态 ~133ms / 10 次 SELECT)。把
+         *     这两个参数加到 `/preview` 上,等于为了 10 条 SELECT 的数据重算全部模块,
+         *     还要把 CDN 缓存键打散 6 倍。
+         *
+         *     `venue="all"` = 不分主客场、**仍限本联赛**。与 `comparison_mode` 的
+         *     `cross_league_raw`(欧战,不限赛事)是正交的两个维度,不要混淆。
+         *
+         *     参数用 `Literal` 而不是正则白名单:`Literal` 在 OpenAPI 里生成 enum,
+         *     `npm run gen:api` 直接产出 TS 联合类型,前端的按钮列表与后端的白名单
+         *     共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端
+         *     被重抄一遍。非法值由 FastAPI 统一 422。
+         *
+         *     门禁与 `/preview` 同级:只有"联赛是否已登记"这一条。
+         */
+        get: operations["match_data_profile_api_v1_matches__match_id__data_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/matches/{match_id}/markets": {
         parameters: {
             query?: never;
@@ -2455,6 +2492,29 @@ export interface components {
             comparison_mode: "league_percentile" | "cross_league_raw";
             /** Scope Note */
             scope_note?: string | null;
+            /**
+             * Venue Mode
+             * @default same_venue
+             * @enum {string}
+             */
+            venue_mode: "same_venue" | "all";
+            /**
+             * Window N
+             * @default 10
+             */
+            window_n: number;
+        };
+        /**
+         * MatchDataProfileResponse
+         * @description `GET /matches/{id}/data-profile` —— 百分位画像的可切换口径版本。
+         *
+         *     `venue_mode`/`window_n` 刻意**不**在这一层重复:它们在 `profile` 里面,
+         *     只有一处,不可能与实际取数口径不一致。
+         */
+        MatchDataProfileResponse: {
+            /** Match Id */
+            match_id: number;
+            profile: components["schemas"]["MatchDataProfileDTO"];
         };
         /** MatchDetailResponse */
         MatchDetailResponse: {
@@ -3710,6 +3770,18 @@ export interface components {
             /** Products */
             products: components["schemas"]["ProductDTO"][];
         };
+        /**
+         * ProfileWindowN
+         * @description 百分位画像窗口长度的白名单(`/matches/{id}/data-profile?n=`)。
+         *
+         *     用 IntEnum 而不是 `Literal[3,5,10]`:query 参数是字符串,`Literal[int]`
+         *     在 pydantic v2 下不做字符串→整数的强制转换,`?n=3` 会直接 422(实测)。
+         *     IntEnum 两者兼得——`?n=3` 正常、`?n=7` 仍是 422,而且在 OpenAPI 里生成
+         *     真正的 enum schema,`npm run gen:api` 直接产出 TS 联合类型 `3|5|10`,
+         *     前端的按钮列表与后端白名单共用同一真源(§10.3),不用手抄一遍。
+         * @enum {integer}
+         */
+        ProfileWindowN: 3 | 5 | 10;
         /**
          * ReadyzProblemsDTO
          * @description /readyz 503 时的诚实故障说明。
@@ -6288,6 +6360,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatchPreviewResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    match_data_profile_api_v1_matches__match_id__data_profile_get: {
+        parameters: {
+            query?: {
+                venue?: "same_venue" | "all";
+                n?: components["schemas"]["ProfileWindowN"];
+            };
+            header?: never;
+            path: {
+                match_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchDataProfileResponse"];
                 };
             };
             /** @description Bad Request */

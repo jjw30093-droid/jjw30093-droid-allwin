@@ -202,3 +202,49 @@ class TestGateAndCache:
         r = client.get("/api/v1/matches/9002/preview")
         assert r.status_code == 200
         assert r.headers["Cache-Control"] == "private, no-store"
+
+
+class TestMatchDataProfileEndpoint:
+    """`/api/v1/matches/{id}/data-profile`:百分位画像的可切换口径版本。"""
+
+    def test_default_matches_preview_field_byte_for_byte(self, seeded_preview, client):
+        """★ 不带参数的本端点 == /preview 内嵌的那份。
+
+        同时钉死"组装逻辑收口":cross_league 判定、scoped_league_id、窗口
+        边界如果在两处各写一遍,迟早会在某类比赛上静默分叉,而页面上看不出来。
+        """
+        embedded = client.get("/api/v1/matches/9002/preview").json()["data_profile"]
+        standalone = client.get("/api/v1/matches/9002/data-profile").json()["profile"]
+        assert standalone == embedded
+
+    def test_preview_still_reports_default_scope(self, seeded_preview, client):
+        """/preview 不带参数、也不该带——它恒为默认口径。"""
+        p = client.get("/api/v1/matches/9002/preview").json()["data_profile"]
+        assert p["venue_mode"] == "same_venue"
+        assert p["window_n"] == 10
+
+    def test_chosen_scope_is_echoed_back(self, seeded_preview, client):
+        r = client.get("/api/v1/matches/9002/data-profile?venue=all&n=3")
+        assert r.status_code == 200, str(r.json())[:600]
+        body = r.json()
+        assert body["match_id"] == 9002
+        assert body["profile"]["venue_mode"] == "all"
+        assert body["profile"]["window_n"] == 3
+
+    @pytest.mark.parametrize("qs", ["venue=foo", "n=7", "n=0", "venue=", "n=ten"])
+    def test_out_of_whitelist_values_are_422(self, seeded_preview, client, qs):
+        assert client.get(f"/api/v1/matches/9002/data-profile?{qs}").status_code == 422
+
+    def test_unknown_match_404(self, seeded_preview, client):
+        assert client.get("/api/v1/matches/424242/data-profile").status_code == 404
+
+    def test_anonymous_epl_gets_public_cache(self, seeded_preview, client):
+        r = client.get("/api/v1/matches/9002/data-profile")
+        assert "public" in r.headers["Cache-Control"]
+        assert "s-maxage" in r.headers["Cache-Control"]
+
+    def test_cookie_request_forced_no_store(self, seeded_preview, client, fresh_ip):
+        wechat_scan_login(client, ip=fresh_ip)
+        r = client.get("/api/v1/matches/9002/data-profile")
+        assert r.status_code == 200
+        assert r.headers["Cache-Control"] == "private, no-store"

@@ -6,6 +6,7 @@
 二选一的 free/full 两套 DTO。
 """
 
+from enum import IntEnum
 from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -1311,6 +1312,17 @@ class MatchDataProfileDTO(BaseModel):
     # 跨联赛模式下为什么没有百分位、这些数字是什么口径。后端出文案,保证与
     # 实际取数逻辑同源。
     scope_note: Optional[str] = None
+    # ↓ 2026-09-13「全部 / 相同主客场」×「近 3/5/10 场」两个切换器的生效口径。
+    # 与 comparison_mode **正交**,不并进同一个枚举:前者答"分布怎么圈",
+    # 后者答"有没有共同参照人群"。两个字段各自分支。
+    # "all" = 不分主客场、**仍限本联赛**;不是"不限赛事"(那是 cross_league_raw)。
+    #
+    # 两个字段都给默认值 ⇒ Pydantic 不放进 required ⇒ openapi-typescript 生成
+    # 可选字段 ⇒ 前端既有的 DataProfile 字面量(测试 fixture、旧缓存响应)
+    # 不带这两个键也照样编译通过,措辞函数用 `?? "same_venue"` 兜底。
+    venue_mode: Literal["same_venue", "all"] = "same_venue"
+    # 向后要了几场;实际用到几场看 home_matches/away_matches(可能更少)。
+    window_n: int = 10
 
 
 class MatchPreviewAttackSourceDTO(BaseModel):
@@ -1420,6 +1432,32 @@ class MatchPreviewKeeperDTO(BaseModel):
 class MatchPreviewKeepersDTO(BaseModel):
     home: list[MatchPreviewKeeperDTO]
     away: list[MatchPreviewKeeperDTO]
+
+
+class ProfileWindowN(IntEnum):
+    """百分位画像窗口长度的白名单(`/matches/{id}/data-profile?n=`)。
+
+    用 IntEnum 而不是 `Literal[3,5,10]`:query 参数是字符串,`Literal[int]`
+    在 pydantic v2 下不做字符串→整数的强制转换,`?n=3` 会直接 422(实测)。
+    IntEnum 两者兼得——`?n=3` 正常、`?n=7` 仍是 422,而且在 OpenAPI 里生成
+    真正的 enum schema,`npm run gen:api` 直接产出 TS 联合类型 `3|5|10`,
+    前端的按钮列表与后端白名单共用同一真源(§10.3),不用手抄一遍。
+    """
+
+    N3 = 3
+    N5 = 5
+    N10 = 10
+
+
+class MatchDataProfileResponse(BaseModel):
+    """`GET /matches/{id}/data-profile` —— 百分位画像的可切换口径版本。
+
+    `venue_mode`/`window_n` 刻意**不**在这一层重复:它们在 `profile` 里面,
+    只有一处,不可能与实际取数口径不一致。
+    """
+
+    match_id: int
+    profile: MatchDataProfileDTO
 
 
 class MatchPreviewResponse(BaseModel):

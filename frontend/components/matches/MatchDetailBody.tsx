@@ -49,9 +49,7 @@ import { MatchDataTabs } from "@/components/matches/MatchDataTabs";
 import { ChartWithSummary } from "@/components/matches/ChartWithSummary";
 import { ProjectedLineupSection } from "@/components/matches/ProjectedLineupSection";
 import { TeamStyleQuadrant } from "@/components/matches/TeamStyleQuadrant";
-import { MatchProfileOverview } from "@/components/matches/MatchProfileOverview";
-import { PercentileGroupSection } from "@/components/matches/PercentileGroupSection";
-import { groupSectionTitle, profileWindowNote } from "@/components/matches/matchProfile";
+import { MatchProfilePanel } from "@/components/matches/MatchProfilePanel";
 import { MatchupSection } from "@/components/matches/MatchupSection";
 import {
   AttackSourceCard,
@@ -206,32 +204,19 @@ function DataGroup({
           }
           style={
             <>
-              <MatchProfileOverview
+              {/* 本场数据画像 + 进攻/防守/控球百分位共用同一份 data_profile,
+                  由 MatchProfilePanel(client)统一持有两个口径切换器的状态。
+                  下面的 MatchupSection/TeamStyleQuadrant/AttackSourceSection
+                  是另外几套数据,不在切换范围内,原样不动。
+                  ⚠️ 本文件**不得**加 "use client"(§11.4 整页白屏事故) */}
+              <MatchProfilePanel
+                matchId={m.match_id}
                 homeName={homeName}
                 awayName={awayName}
                 homeCrestUrl={m.home.crest_url}
                 awayCrestUrl={m.away.crest_url}
-                profile={preview.data_profile}
+                initialProfile={preview.data_profile}
               />
-              {preview.data_profile.groups.map((g, i) => (
-                <PercentileGroupSection
-                  key={g.key}
-                  title={groupSectionTitle(
-                    g.title_zh === "攻" ? "进攻" : g.title_zh === "守" ? "防守" : "控球",
-                    preview.data_profile.comparison_mode,
-                  )}
-                  windowNote={profileWindowNote(homeName, awayName, preview.data_profile)}
-                  homeName={homeName}
-                  awayName={awayName}
-                  homeCrestUrl={m.home.crest_url}
-                  awayCrestUrl={m.away.crest_url}
-                  group={g}
-                  // 口径说明只在最后一个百分位模块底部出现一次——三段几乎
-                  // 相同的说明原来每个模块各印一遍。
-                  showMethodNote={i === preview.data_profile.groups.length - 1}
-                  mode={preview.data_profile.comparison_mode}
-                />
-              ))}
               <MatchupSection
                 homeName={homeName}
                 awayName={awayName}

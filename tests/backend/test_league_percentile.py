@@ -46,7 +46,7 @@ class TestLeagueWindowMatches:
         conn.commit()
 
         before = "2025-02-01T00:00:00Z"
-        batch = league_window_matches(conn, LEAGUE, before, is_home=True, max_n=DEFAULT_MAX_N)
+        batch = league_window_matches(conn, LEAGUE, before, venue="home", max_n=DEFAULT_MAX_N)
         expected = venue_window(conn, team, LEAGUE, before, is_home=True, max_n=DEFAULT_MAX_N, min_n=DEFAULT_MIN_N)
 
         assert sorted(batch[team]) == sorted(expected.match_ids)
@@ -67,7 +67,7 @@ class TestLeagueMetricDistribution:
             _seed_home_match(conn, 6100 + i, team_b, 9100 + i, day=i + 1, expected_goals=9.0)
         conn.commit()
 
-        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
+        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", venue="home")
         assert team_a in dist
         assert dist[team_a]["xg"].value == 3.5
         assert dist[team_a]["xg"].matches_with_data == 6
@@ -83,7 +83,7 @@ class TestLeagueMetricDistribution:
             _seed_home_match(conn, 6200 + i, team, 9200 + i, day=i + 1, **fields)
         conn.commit()
 
-        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
+        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", venue="home")
         row = dist[team]["xg"]
         # 5 场里 1 场缺 xg,均值只用 4 场有值的场次算,不把缺失当 0 拉低均值。
         assert row.matches_with_data == 4
@@ -105,7 +105,7 @@ class TestLeagueMetricDistribution:
             _stats(conn, mid, opp, total_shots=9.0)   # 对手射门 -> 这才是 shots_faced
         conn.commit()
 
-        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
+        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", venue="home")
         assert dist[team]["shots_faced"].value == 9.0
 
     def test_ratio_field_pairs_same_match_and_skips_zero_denominator(self, data_dir):
@@ -125,7 +125,7 @@ class TestLeagueMetricDistribution:
                 _stats(conn, mid, team, accurate_passes=8, passes=10)  # 每场 80%
         conn.commit()
 
-        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
+        dist = league_metric_distribution(conn, LEAGUE, "2025-02-01T00:00:00Z", venue="home")
         row = dist[team]["pass_completion"]
         assert row.value == 80.0
         assert row.matches_with_data == 4  # 4 场有效配对,分母为 0 那场被排除
@@ -380,7 +380,7 @@ class TestCrossLeagueProfile:
         self._seed(conn, 3901, 3902)
         conn.commit()
 
-        batch = league_window_matches(conn, None, BEFORE, is_home=True, team_ids=(3901,))
+        batch = league_window_matches(conn, None, BEFORE, venue="home", team_ids=(3901,))
         expected = venue_window(conn, 3901, None, BEFORE, is_home=True)
         assert sorted(batch[3901]) == sorted(expected.match_ids)
         assert self.cup_home_mid in expected.match_ids
@@ -392,7 +392,7 @@ class TestCrossLeagueProfile:
         self._seed(conn, 3901, 3902)
         conn.commit()
 
-        batch = league_window_matches(conn, None, BEFORE, is_home=True, team_ids=(3901,))
+        batch = league_window_matches(conn, None, BEFORE, venue="home", team_ids=(3901,))
         assert set(batch) == {3901}
 
     def test_no_history_at_all_is_reported_honestly(self, data_dir):
@@ -432,3 +432,201 @@ class TestCrossLeagueProfile:
         conn.commit()
         with pytest.raises(ValueError):
             match_data_profile(conn, None, BEFORE, 3901, 3902)
+
+
+class TestVenueModeAndWindowSwitchers:
+    """2026-09-13 站长要的两个切换器:「全部 / 相同主客场」×「近 3/5/10 场」。"""
+
+    def _seed_short_league(self, conn, *, per_team: int, teams: dict[int, float]):
+        """给每支球队各造 `per_team` 场**主场**比赛(客场同理另造)。"""
+        mid = 9000
+        for tid, v in teams.items():
+            for j in range(per_team):
+                _seed_home_match(conn, mid, tid, 9700 + mid, day=j + 1, expected_goals=v)
+                mid += 1
+
+    def test_short_window_must_not_blank_the_whole_module(self, data_dir):
+        """★ 本次最重要的一条回归:切到「近 3 场」不能让攻/守/控三块整块消失。
+
+        实测过的故障形态:max_n=3 配写死的 min_n=5 → 全联赛够格球队 0 支 →
+        两侧 available 双 False → 三块整块空,而且 unavailable_reason 把
+        "后端门槛写死"说成"两队比赛不足",是错误陈述。
+        """
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3401, 3402
+        # 每队只有 3 场主场:够 max_n=3,不够写死的 min_n=5
+        self._seed_short_league(conn, per_team=3, teams={
+            3403: 1.0, 3404: 1.2, 3405: 1.3, 3406: 1.4, 3407: 1.5,
+            home_id: 6.0, away_id: 0.5,
+        })
+        conn.commit()
+
+        p = match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id, max_n=3)
+        assert p.home_available, "近 3 场口径下主队必须够格"
+        assert p.unavailable_reason is None
+        assert len(p.groups) == 3, "攻/守/控三段必须都在"
+        assert any(m.home_percentile is not None for g in p.groups for m in g.metrics)
+
+    def test_min_n_coupling_is_what_saves_it(self, data_dir):
+        """反证:同样的数据 + 显式写死 min_n=5,必然整块空。
+
+        没有这一条,上面那条测试只能证明"结果是绿的",证明不了绿是 min_n
+        联动带来的——数据稍微多种一场就会假绿。
+        """
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3401, 3402
+        self._seed_short_league(conn, per_team=3, teams={
+            3403: 1.0, 3404: 1.2, 3405: 1.3, 3406: 1.4, 3407: 1.5,
+            home_id: 6.0, away_id: 0.5,
+        })
+        conn.commit()
+
+        blocked = match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id, max_n=3, min_n=5)
+        assert not blocked.home_available and not blocked.away_available
+        assert blocked.groups == []
+
+    def test_default_window_keeps_min_n_five(self, data_dir):
+        """N=10 时有效 min_n 仍是 5 —— 联动引入前后逐字节等价,零回归。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id = 3501
+        # 每队 4 场:min_n=5 下没人够格(不管 max_n 是 10 还是 5)
+        self._seed_short_league(conn, per_team=4, teams={
+            3503: 1.0, 3504: 1.2, 3505: 1.3, 3506: 1.4, home_id: 6.0,
+        })
+        conn.commit()
+
+        for max_n in (10, 5):
+            p = match_data_profile(conn, LEAGUE, BEFORE, home_id, 3503, max_n=max_n)
+            assert not p.home_available, f"max_n={max_n} 的有效 min_n 应为 5,4 场不够格"
+
+    def test_all_venue_merges_home_and_away_into_one_window(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        team = 3601
+        mid = 9500
+        for j in range(3):  # 3 场主场
+            _seed_home_match(conn, mid, team, 9800 + mid, day=j + 1, expected_goals=2.0)
+            mid += 1
+        for j in range(3):  # 3 场客场
+            insert_match(conn, mid, league_id=LEAGUE, date=f"2025-01-{j+10:02d}",
+                         home_id=9800 + mid, away_id=team, home="路人", away=f"队{team}",
+                         status="Finish", home_score=0, away_score=1,
+                         kickoff_at_utc=f"2025-01-{j+10:02d}T12:00:00Z")
+            _stats(conn, mid, team, expected_goals=2.0)
+            mid += 1
+        conn.commit()
+
+        same = league_metric_distribution(conn, LEAGUE, BEFORE, venue="home", max_n=10, min_n=1)
+        merged = league_metric_distribution(conn, LEAGUE, BEFORE, venue="any", max_n=10, min_n=1)
+        assert same[team]["xg"].window_matches == 3
+        assert merged[team]["xg"].window_matches == 6
+
+    def test_all_venue_puts_both_teams_on_one_distribution(self, data_dir):
+        """「全部」口径的真实优点:两队 draw 自**同一套**分布,回到同一把尺子上。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3701, 3702
+        self._seed_short_league(conn, per_team=5, teams={
+            3703: 1.0, 3704: 1.2, 3705: 1.3, 3706: 1.4, 3707: 1.5,
+            home_id: 6.0, away_id: 0.5,
+        })
+        conn.commit()
+
+        p = match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id, venue_mode="all")
+        xg = next(m for g in p.groups if g.key == "attack" for m in g.metrics if m.key == "xg")
+        # 同一套分布 ⇒ 两侧的参照人群大小相同(各自把自己排除后同样大)
+        assert xg.home_percentile is not None and xg.away_percentile is not None
+        assert xg.home_percentile == 100 and xg.away_percentile == 0
+
+    def test_all_venue_halves_the_query_count(self, data_dir):
+        """「全部」只算一次分布,不是算两次各取各的——防止将来被"顺手"改回去。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3801, 3802
+        self._seed_short_league(conn, per_team=5, teams={
+            3803: 1.0, 3804: 1.2, 3805: 1.3, 3806: 1.4, 3807: 1.5,
+            home_id: 6.0, away_id: 0.5,
+        })
+        conn.commit()
+
+        counts: dict[str, int] = {}
+        for mode in ("same_venue", "all"):
+            n = 0
+
+            def _count(_sql, _n=None):
+                nonlocal n
+                n += 1
+
+            conn.set_trace_callback(_count)
+            match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id, venue_mode=mode)
+            conn.set_trace_callback(None)
+            counts[mode] = n
+        assert counts["all"] < counts["same_venue"], counts
+
+    def test_unavailable_reason_follows_the_chosen_venue(self, data_dir):
+        """用户选了"不分主客场",页面却说"同主客场比赛不足"——那是错误陈述。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        conn.commit()
+
+        same = match_data_profile(conn, LEAGUE, BEFORE, 3901, 3902)
+        merged = match_data_profile(conn, LEAGUE, BEFORE, 3901, 3902, venue_mode="all")
+        assert "同主客场" in same.unavailable_reason
+        assert "同主客场" not in merged.unavailable_reason
+
+    def test_scope_note_only_for_all_venue(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        home_id, away_id = 3101, 3102
+        self._seed_short_league(conn, per_team=5, teams={
+            3103: 1.0, 3104: 1.2, 3105: 1.3, 3106: 1.4, 3107: 1.5,
+            home_id: 6.0, away_id: 0.5,
+        })
+        conn.commit()
+
+        assert match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id).scope_note is None
+        note = match_data_profile(conn, LEAGUE, BEFORE, home_id, away_id, venue_mode="all").scope_note
+        assert note is not None and "不分主客场" in note
+
+    def test_chosen_scope_is_echoed_back(self, data_dir):
+        """请求什么口径就回什么——前端的措辞完全依赖这两个字段。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        conn.commit()
+
+        p = match_data_profile(conn, LEAGUE, BEFORE, 3901, 3902, max_n=3, venue_mode="all")
+        assert p.venue_mode == "all" and p.window_n == 3
+        d = match_data_profile(conn, LEAGUE, BEFORE, 3901, 3902)
+        assert d.venue_mode == "same_venue" and d.window_n == DEFAULT_MAX_N
+
+    def test_cross_league_honours_the_switchers_too(self, data_dir):
+        """欧战比赛同样给切换器——不给的话前端就得让它们凭空消失。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        team = 3901
+        mid = 9900
+        for j in range(3):
+            insert_match(conn, mid, league_id=CUP, date=f"2025-01-{j+1:02d}",
+                         home_id=team, away_id=9990 + mid, home=f"队{team}", away="路人",
+                         status="Finish", home_score=1, away_score=0,
+                         kickoff_at_utc=f"2025-01-{j+1:02d}T12:00:00Z")
+            _stats(conn, mid, team, expected_goals=2.0)
+            mid += 1
+        for j in range(2):
+            insert_match(conn, mid, league_id=CUP, date=f"2025-01-{j+10:02d}",
+                         home_id=9990 + mid, away_id=team, home="路人", away=f"队{team}",
+                         status="Finish", home_score=0, away_score=1,
+                         kickoff_at_utc=f"2025-01-{j+10:02d}T12:00:00Z")
+            _stats(conn, mid, team, expected_goals=2.0)
+            mid += 1
+        conn.commit()
+
+        same = match_data_profile(conn, None, BEFORE, team, 3902, cross_league=True)
+        merged = match_data_profile(conn, None, BEFORE, team, 3902, cross_league=True, venue_mode="all")
+        assert same.home_matches == 3      # 只主场
+        assert merged.home_matches == 5    # 主+客
+        # 两句口径说明都要在:跨赛事与分不分主客场是两件独立的事,漏一句就是隐瞒
+        assert "不限赛事" in merged.scope_note and "不分主客场" in merged.scope_note

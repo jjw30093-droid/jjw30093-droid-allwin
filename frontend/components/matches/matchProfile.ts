@@ -73,13 +73,20 @@ export function styleGapWording(gap: number): string {
   return STYLE_GAP_WORDING.find((w) => gap >= w.min)!.label;
 }
 
-export function highlightSentence(h: Highlight, semantic: string, homeName: string, awayName: string): string {
+export function highlightSentence(
+  h: Highlight, semantic: string, homeName: string, awayName: string,
+  // 可选末位 + 默认值:默认口径的调用点与既有测试逐字不变。
+  venue: VenueMode = "same_venue",
+): string {
   const leader = h.home_percentile >= h.away_percentile ? homeName : awayName;
   const leaderPct = Math.max(h.home_percentile, h.away_percentile);
   const otherPct = Math.min(h.home_percentile, h.away_percentile);
   const wording = isStyleMetric(semantic) ? styleGapWording(h.gap) : gapWording(h.gap);
   const verb = isStyleMetric(semantic) ? "" : "，";
-  return `「${h.name_zh}」${leader}${verb}${wording}：联赛同场景第 ${leaderPct} 百分位对第 ${otherPct} 百分位。`;
+  // 「全部」口径下分布没有按主客场切分,"同场景"三个字就没有所指——与
+  // profileWindowNote 同一条纪律,措辞必须跟着实际取数口径走。
+  const scope = venue === "all" ? "联赛" : "联赛同场景";
+  return `「${h.name_zh}」${leader}${verb}${wording}：${scope}第 ${leaderPct} 百分位对第 ${otherPct} 百分位。`;
 }
 
 /** 组级"谁更强"结论——tier 不兼容(某侧样本不足)时不下结论,只给口径说明。 */
@@ -89,9 +96,99 @@ export function profileWindowNote(homeName: string, awayName: string, profile: D
   // 跨联赛模式的窗口跨了赛事,只写"近 N 个主场"会隐瞒这批比赛不在同一个
   // 联赛里——那是错误陈述,不是省略(同 window.py 里 label_zh 的同一条纪律)。
   const suffix = profile.comparison_mode === "cross_league_raw" ? "·不限赛事" : "";
-  const home = profile.home_available ? `${homeName}(近 ${profile.home_matches} 个主场${suffix})` : `${homeName}(样本不足)`;
-  const away = profile.away_available ? `${awayName}(近 ${profile.away_matches} 个客场${suffix})` : `${awayName}(样本不足)`;
+  // 「全部」口径下这批比赛**混了主客场**,再写"个主场/个客场"就是同一类
+  // 错误陈述。这里不是省略三个字,是必须换一句真话。
+  // `?? "same_venue"` 兜底:既有的 DataProfile 字面量(测试 fixture、
+  // 部署切换瞬间的旧缓存响应)不带这个字段,缺省必须落回今天的口径。
+  const venue = profile.venue_mode ?? "same_venue";
+  const scope = (side: "home" | "away") =>
+    venue === "all" ? " 场·不分主客" : side === "home" ? " 个主场" : " 个客场";
+  const home = profile.home_available ? `${homeName}(近 ${profile.home_matches}${scope("home")}${suffix})` : `${homeName}(样本不足)`;
+  const away = profile.away_available ? `${awayName}(近 ${profile.away_matches}${scope("away")}${suffix})` : `${awayName}(样本不足)`;
   return `${home} · ${away}`;
+}
+
+/* ── 2026-09-13 站长要的两个切换器 ──────────────────────────────
+ * 类型/常量/措辞全部留在本文件(无 `"use client"`)——§11.4 的红线:
+ * 服务端组件仍可能 import 它们,放进 client 组件会在生产运行期抛
+ * "Attempted to call X from the server",`next build` 抓不到。 */
+
+/** 分布怎么圈。与 `comparison_mode`(有没有共同参照人群)**正交**:
+ * `"all"` 是"不分主客场、仍限本联赛",不是"不限赛事"。 */
+export type VenueMode = NonNullable<DataProfile["venue_mode"]>;
+/** 窗口长度白名单,由后端 `ProfileWindowN` 经 OpenAPI 生成,前端不另抄一份。 */
+export type WindowN = components["schemas"]["ProfileWindowN"];
+
+export const DEFAULT_VENUE_MODE: VenueMode = "same_venue";
+export const DEFAULT_WINDOW_N: WindowN = 10;
+
+export const VENUE_OPTIONS: { key: VenueMode; label: string }[] = [
+  { key: "same_venue", label: "相同主客场" },
+  { key: "all", label: "全部" },
+];
+
+/** ⚠️ 措辞不得暗示"场次越少越准"。`backend/queries/window.py:46-57` 记录的
+ * 样本外回测结论是 N=10 在四大联赛都**不弱于** N=5;「近 3 场」的定位是
+ * 看**近期状态**,不是看水平。 */
+export const WINDOW_OPTIONS: { key: WindowN; label: string }[] = [
+  { key: 3, label: "近 3 场" },
+  { key: 5, label: "近 5 场" },
+  { key: 10, label: "近 10 场" },
+];
+
+/** 后端 DTO 里的 `window_n` 是裸 `int`(它陈述的是"向后要了几场",不是一个
+ * 受白名单约束的选项),而切换器只认 3/5/10。这里把它收窄回白名单,不在
+ * 白名单里的一律落回默认——不认识的值不该让某个按钮"看起来都没选中"。 */
+export function asWindowN(n: number | null | undefined): WindowN {
+  return WINDOW_OPTIONS.some((o) => o.key === n) ? (n as WindowN) : DEFAULT_WINDOW_N;
+}
+
+/** 已取回口径的缓存键——切回看过的组合时零请求、零闪烁。 */
+export function profileScopeKey(venue: VenueMode, n: WindowN): string {
+  return `${venue}:${n}`;
+}
+
+/** 总览卡片底部那一行口径脚注。与 `profileMethodNote` 同一个毛病:原来写死
+ * 在 JSX 里,而"两套独立分布,不是同一把绝对尺子"在 `venue_mode="all"` 下
+ * 恰好说反了(那时两队共用同一套分布,正是同一把尺子)。 */
+export function profileOverviewFootNote(
+  homeName: string,
+  awayName: string,
+  profile: DataProfile,
+): string {
+  if (profile.comparison_mode === "cross_league_raw") return profile.scope_note ?? "";
+  const tail = "百分位是历史统计描述,不是本场预测。";
+  if ((profile.venue_mode ?? DEFAULT_VENUE_MODE) === "all") {
+    return `两队都对本联赛全部比赛的分布取百分位(不分主客场)——同一把尺子,可直接比;代价是主客场差异被抹平在均值里。${tail}`;
+  }
+  return `${homeName}对联赛主场分布取百分位,${awayName}对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子;${tail}`;
+}
+
+/** 「口径说明」折叠区的正文。原来写死在 `PercentileGroupSection.tsx` 的 JSX
+ * 里,那句"两套独立分布,不是同一把绝对尺子"在 `venue_mode="all"` 下直接
+ * 变成**错误陈述**(那时两队恰恰共用同一套分布)——文案必须跟着实际取数
+ * 口径走,所以提到这里按两个维度分支。 */
+export function profileMethodNote(
+  mode: ProfileMode = DEFAULT_MODE,
+  venue: VenueMode = DEFAULT_VENUE_MODE,
+): string {
+  const starNote = "带 * 的数值表示该窗口内有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。";
+  if (mode === "cross_league_raw") {
+    // scope_note 已经在总览卡片里说过一次,这里不重复,只解释 * 标记。
+    return starNote;
+  }
+  if (venue === "all") {
+    return (
+      "横轴是本联赛分布里的百分位,不是两队互相比较的比值。这个口径下两队对同一套联赛分布" +
+      "(不分主客场)取百分位,是同一把尺子;代价是主客场的系统性差异被抹平在均值里。" +
+      starNote
+    );
+  }
+  return (
+    "横轴是本联赛同场景分布里的百分位,不是两队互相比较的比值。主队对联赛主场分布取百分位," +
+    "客队对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子。" +
+    "带 * 的数值表示该场景窗口内有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。"
+  );
 }
 
 /** 三段的标题:联赛模式叫「进攻百分位」,跨联赛模式没有百分位可言,

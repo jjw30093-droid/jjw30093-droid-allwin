@@ -11,6 +11,7 @@ private, no-store,不进共享缓存(与登录状态无关)。
 
 import json
 import sqlite3
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -39,6 +40,7 @@ from .schemas import (
     LeagueFixturesResponse,
     LeagueInfo,
     LeagueSeasonProfileResponse,
+    MatchDataProfileResponse,
     MatchDetailResponse,
     MatchListResponse,
     MatchMarketCardsResponse,
@@ -46,6 +48,7 @@ from .schemas import (
     MatchPreviewResponse,
     MatchReportResponse,
     PlayersResponse,
+    ProfileWindowN,
     ProductsResponse,
     StandingsResponse,
     TeamStatsResponse,
@@ -671,6 +674,46 @@ def match_preview(
         PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
     )
     return q_preview.build_match_preview(conn_core, conn_odds, m)
+
+
+@router.get("/matches/{match_id}/data-profile", response_model=MatchDataProfileResponse)
+def match_data_profile(
+    match_id: int,
+    response: Response,
+    venue: Literal["same_venue", "all"] = "same_venue",
+    n: ProfileWindowN = ProfileWindowN.N10,
+    conn=Depends(core_ro),
+):
+    """「数据 → 风格」子 tab 百分位画像的**可切换口径**版本(2026-09-13)。
+
+    `/preview` 里内嵌的 `data_profile` 恒为默认口径(same_venue / n=10),
+    用户不动切换器时本端点一次都不会被请求。拆成独立子资源是性能决策:
+    `/preview` 整条是 493 次 core SELECT(生产实测 0.55s / 26KB),而本端点
+    只跑 `match_data_profile()` 一个函数(热态 ~133ms / 10 次 SELECT)。把
+    这两个参数加到 `/preview` 上,等于为了 10 条 SELECT 的数据重算全部模块,
+    还要把 CDN 缓存键打散 6 倍。
+
+    `venue="all"` = 不分主客场、**仍限本联赛**。与 `comparison_mode` 的
+    `cross_league_raw`(欧战,不限赛事)是正交的两个维度,不要混淆。
+
+    参数用 `Literal` 而不是正则白名单:`Literal` 在 OpenAPI 里生成 enum,
+    `npm run gen:api` 直接产出 TS 联合类型,前端的按钮列表与后端的白名单
+    共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端
+    被重抄一遍。非法值由 FastAPI 统一 422。
+
+    门禁与 `/preview` 同级:只有"联赛是否已登记"这一条。
+    """
+    m = q_matches.match_by_id(conn, match_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="比赛不存在")
+    _require_known_league(m["league_id"])
+    response.headers["Cache-Control"] = (
+        PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
+    )
+    return {
+        "match_id": match_id,
+        "profile": q_preview.match_data_profile_for(conn, m, max_n=int(n), venue_mode=venue),
+    }
 
 
 @router.get("/matches/{match_id}/markets", response_model=MatchMarketCardsResponse)

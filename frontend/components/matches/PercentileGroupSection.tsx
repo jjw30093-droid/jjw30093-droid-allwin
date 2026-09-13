@@ -43,13 +43,16 @@ import {
   DEFAULT_MODE,
   decimalsFor,
   formatMetricValue,
+  DEFAULT_VENUE_MODE,
   groupVerdict,
   metricGap,
+  profileMethodNote,
   splitMetricsByGap,
   valueDelta,
   type GroupProfile,
   type MetricProfile,
   type ProfileMode,
+  type VenueMode,
   type ValueDelta,
 } from "./matchProfile";
 
@@ -221,6 +224,7 @@ export function PercentileGroupSection({
    * 原来每个模块各印一遍(「两套独立分布…」全页出现 4 次)。 */
   showMethodNote = false,
   mode = DEFAULT_MODE,
+  venueMode = DEFAULT_VENUE_MODE,
 }: {
   title: string;
   windowNote: string;
@@ -231,6 +235,9 @@ export function PercentileGroupSection({
   group: GroupProfile;
   showMethodNote?: boolean;
   mode?: ProfileMode;
+  /** 可选末位参数 + 默认值:常规调用点和既有测试逐字不变(matchProfile.ts:19-26
+   * 的既有约定)。只影响「口径说明」那段文案,不影响任何数值。 */
+  venueMode?: VenueMode;
 }) {
   const semantic = group.metrics[0]?.semantic ?? "performance";
   const { ordered, visibleCount } = splitMetricsByGap(group.metrics, mode);
@@ -277,20 +284,10 @@ export function PercentileGroupSection({
         {showMethodNote && (
           <details className={styles.methodDetail}>
             <summary className={styles.methodSummary}>口径说明</summary>
-            <p className={styles.footNote}>
-              {mode === "cross_league_raw" ? (
-                // scopeNote 已经在总览卡片里说过一次,这里不重复,只解释 * 标记。
-                <>
-                  带 * 的数值表示该窗口内有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。
-                </>
-              ) : (
-                <>
-                  横轴是本联赛同场景分布里的百分位,不是两队互相比较的比值。主队对联赛主场分布取百分位,
-                  客队对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子。带 * 的数值表示该场景窗口内
-                  有场次缺该字段,均值只计入有数据的场次,不是全部窗口的合计。
-                </>
-              )}
-            </p>
+            {/* 原来这段是写死在 JSX 里的两个分支,其中"两套独立分布,不是同一把
+                绝对尺子"在 venueMode="all" 下是**错误陈述**(那时两队恰恰共用
+                同一套分布)。文案随取数口径走,收进 matchProfile.ts 的纯函数。 */}
+            <p className={styles.footNote}>{profileMethodNote(mode, venueMode)}</p>
           </details>
         )}
       </div>

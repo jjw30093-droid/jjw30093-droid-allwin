@@ -1,0 +1,100 @@
+/* 「数据 → 风格」百分位模块的口径切换器(2026-09-13)。
+   观感取自 AttackingZonesChart.module.css 的 .periodSegmented(连体 segmented,
+   同一类"在同一份数据上换个看法"的控件),但有两处**刻意不照抄**: */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap; /* 窄屏两组各占一行,不挤成不可读的一排 */
+  gap: 10px 16px;
+  margin: 0 0 14px;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 两组并排时必须各自有标题,否则两排胶囊挨在一起认不出哪组管什么 */
+.groupLabel {
+  flex: none;
+  font-size: 12px; /* §11.2 用户可见文字下限 */
+  color: var(--ink-2);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.on,
+.off {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  /* ① 触控目标 44px,不照抄 .periodSegmented 的 32px —— 那个值低于
+     DESIGN.md/§11.2 的触控下限(MatchDataModules.module.css 的 .viewTab
+     已经为同一条纪律从 34px 修上来过一次)。不复制一个已知不达标的数值。 */
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.on {
+  background: var(--brand-teal); /* §11.2:青绿 = 主要操作/选中 */
+  /* ② 文字用 --surface 而不是写死 #fff。浅色下 --surface=#ffffff 压
+     #087e78 是 4.9:1;深色下 --surface=#0d2029 压 #45b9af 是 7.6:1,两套
+     都达标。写死 #fff 的话深色模式是 #fff 压 #45b9af ≈ 2.2:1,远低于
+     4.5:1 —— 那正是 .periodOn/.viewTabOn 今天的状况(全站零测试覆盖)。
+     合成对比度断言见 frontend/tests/percentile-contrast.test.ts。 */
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.on + .on,
+.on + .off,
+.off + .on,
+.off + .off {
+  border-left: 1px solid var(--border-strong);
+}
+
+/* 取数中:旧内容继续可见,只压一层半透明遮罩。直接卸载会让这四块(实测
+   ~1000px 高)瞬间塌成空白、页面剧烈跳动,而请求本身只有 ~130ms,不值得
+   付这个代价。遮罩写法同 AttackingZonesChart.module.css 的 .loading。 */
+.body {
+  position: relative;
+}
+
+.pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  pointer-events: none;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.retry {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+}

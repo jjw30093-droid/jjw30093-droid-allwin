@@ -1985,6 +1985,92 @@
     }
    }
   },
+  "/api/v1/matches/{match_id}/data-profile": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "Match Data Profile",
+    "description": "「数据 → 风格」子 tab 百分位画像的**可切换口径**版本(2026-09-13)。\n\n`/preview` 里内嵌的 `data_profile` 恒为默认口径(same_venue / n=10),\n用户不动切换器时本端点一次都不会被请求。拆成独立子资源是性能决策:\n`/preview` 整条是 493 次 core SELECT(生产实测 0.55s / 26KB),而本端点\n只跑 `match_data_profile()` 一个函数(热态 ~133ms / 10 次 SELECT)。把\n这两个参数加到 `/preview` 上,等于为了 10 条 SELECT 的数据重算全部模块,\n还要把 CDN 缓存键打散 6 倍。\n\n`venue=\"all\"` = 不分主客场、**仍限本联赛**。与 `comparison_mode` 的\n`cross_league_raw`(欧战,不限赛事)是正交的两个维度,不要混淆。\n\n参数用 `Literal` 而不是正则白名单:`Literal` 在 OpenAPI 里生成 enum,\n`npm run gen:api` 直接产出 TS 联合类型,前端的按钮列表与后端的白名单\n共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端\n被重抄一遍。非法值由 FastAPI 统一 422。\n\n门禁与 `/preview` 同级:只有\"联赛是否已登记\"这一条。",
+    "operationId": "match_data_profile_api_v1_matches__match_id__data_profile_get",
+    "parameters": [
+     {
+      "name": "match_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Match Id"
+      }
+     },
+     {
+      "name": "venue",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "same_venue",
+        "all"
+       ],
+       "type": "string",
+       "default": "same_venue",
+       "title": "Venue"
+      }
+     },
+     {
+      "name": "n",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/ProfileWindowN",
+       "default": 10
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MatchDataProfileResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
   "/api/v1/matches/{match_id}/markets": {
    "get": {
     "tags": [
@@ -9663,6 +9749,20 @@
        }
       ],
       "title": "Scope Note"
+     },
+     "venue_mode": {
+      "type": "string",
+      "enum": [
+       "same_venue",
+       "all"
+      ],
+      "title": "Venue Mode",
+      "default": "same_venue"
+     },
+     "window_n": {
+      "type": "integer",
+      "title": "Window N",
+      "default": 10
      }
     },
     "type": "object",
@@ -9676,6 +9776,24 @@
     ],
     "title": "MatchDataProfileDTO",
     "description": "数据 tab「风格」子 tab 总览层:联赛百分位画像(2026-09 重构)。\n\n主队对**联赛主场分布**取百分位,客队对**联赛客场分布**取百分位——两套\n独立分布,不共用同一个原始联赛均值(主客场系统性差异 17~18%)。两队因此\n不在同一条绝对数值尺上,但在各自的百分位尺上可比,前端文案必须讲清楚\n这一点,不能暗示两队在比同一把绝对尺子。"
+   },
+   "MatchDataProfileResponse": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "profile": {
+      "$ref": "#/components/schemas/MatchDataProfileDTO"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "profile"
+    ],
+    "title": "MatchDataProfileResponse",
+    "description": "`GET /matches/{id}/data-profile` —— 百分位画像的可切换口径版本。\n\n`venue_mode`/`window_n` 刻意**不**在这一层重复:它们在 `profile` 里面,\n只有一处,不可能与实际取数口径不一致。"
    },
    "MatchDetailResponse": {
     "properties": {
@@ -14234,6 +14352,16 @@
      "products"
     ],
     "title": "ProductsResponse"
+   },
+   "ProfileWindowN": {
+    "type": "integer",
+    "enum": [
+     3,
+     5,
+     10
+    ],
+    "title": "ProfileWindowN",
+    "description": "百分位画像窗口长度的白名单(`/matches/{id}/data-profile?n=`)。\n\n用 IntEnum 而不是 `Literal[3,5,10]`:query 参数是字符串,`Literal[int]`\n在 pydantic v2 下不做字符串→整数的强制转换,`?n=3` 会直接 422(实测)。\nIntEnum 两者兼得——`?n=3` 正常、`?n=7` 仍是 422,而且在 OpenAPI 里生成\n真正的 enum schema,`npm run gen:api` 直接产出 TS 联合类型 `3|5|10`,\n前端的按钮列表与后端白名单共用同一真源(§10.3),不用手抄一遍。"
    },
    "ReadyzProblemsDTO": {
     "properties": {

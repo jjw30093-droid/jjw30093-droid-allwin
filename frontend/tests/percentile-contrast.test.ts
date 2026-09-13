@@ -93,3 +93,22 @@ describe("回归护栏:两队描边互相贴近时也不能只靠颜色区分(�
     expect(contrastRatio(oldTrack, surface)).toBeLessThan(MIN_CONTRAST);
   });
 });
+
+/* 口径切换器(MatchProfileScope.module.css 的 .on)的选中态:文字压在
+   --brand-teal 上,这是**文字**不是图形,门槛是 WCAG 的 4.5:1,不是 3:1。
+   `color: var(--surface)` 是刻意的——写死 #fff 在深色模式下是白字压
+   #45b9af ≈ 2.2:1,远不达标(.periodOn/.viewTabOn 今天正是这个状况,
+   全站零测试覆盖;新控件不复制一个已知缺陷)。 */
+const MIN_TEXT_CONTRAST = 4.5;
+
+describe("口径切换器选中态:文字(--surface)vs 底色(--brand-teal)", () => {
+  it.each(THEMES)("$label:选中项文字 ≥ 4.5:1", ({ surface, teal }) => {
+    expect(contrastRatio(surface, teal)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+  });
+
+  it("反例:写死 #fff 在深色模式下确实不达标——这条断言证明用 --surface 不是多此一举", () => {
+    const white = hexToRgb("#ffffff");
+    const darkTeal = hexToRgb("#45b9af"); // 深色模式的 --brand-teal
+    expect(contrastRatio(white, darkTeal)).toBeLessThan(MIN_TEXT_CONTRAST);
+  });
+});

@@ -37,6 +37,36 @@ from backend.queries import (
     player_form,
     team_style_preview,
 )
+from backend.queries.window import DEFAULT_MAX_N
+
+
+def match_data_profile_for(
+    conn_core: sqlite3.Connection, match: dict, *,
+    max_n: int = DEFAULT_MAX_N, venue_mode: str = "same_venue",
+) -> dict[str, Any]:
+    """`/preview` 内嵌的 `data_profile` 与 `/matches/{id}/data-profile` 端点的
+    **同一份**组装逻辑。
+
+    cross_league 判定、scoped_league_id、窗口边界这三件事只能有一处真源:
+    两条路径各抄一遍的话,会在某一类比赛上静默分叉——首屏(默认口径,走
+    /preview)和用户切换之后(走新端点)对同一场比赛用了不同的联赛范围或
+    不同的时间边界,而页面上完全看不出来。默认参数下产出与拆出本函数之前
+    逐字节相同。
+    """
+    before_date = match.get("kickoff_at_utc") or match["date_utc"]
+    cross_league = leagues.is_cross_league_competition(match["league_id"])
+    return dataclasses.asdict(
+        league_percentile.match_data_profile(
+            conn_core,
+            None if cross_league else match["league_id"],
+            before_date,
+            match["home"]["team_id"],
+            match["away"]["team_id"],
+            max_n=max_n,
+            cross_league=cross_league,
+            venue_mode=venue_mode,  # type: ignore[arg-type]
+        )
+    )
 
 
 def build_match_preview(
@@ -85,11 +115,10 @@ def build_match_preview(
             "home": team_style_preview.team_attack_sources(conn_core, home_id, scoped_league_id, scoped_season, before_date),
             "away": team_style_preview.team_attack_sources(conn_core, away_id, scoped_league_id, scoped_season, before_date),
         },
-        "data_profile": dataclasses.asdict(
-            league_percentile.match_data_profile(
-                conn_core, scoped_league_id, before_date, home_id, away_id, cross_league=cross_league
-            )
-        ),
+        # 默认口径(相同主客场 / 近 10 场)。用户动了切换器之后走的是
+        # /matches/{id}/data-profile 端点,不重算整条 preview(实测 493 次
+        # core SELECT vs 这一个函数的 10 次),两者共用 match_data_profile_for()。
+        "data_profile": match_data_profile_for(conn_core, match),
         "matchup_profiles": {
             "home": matchup.team_matchup_profile(conn_core, home_id, scoped_league_id, before_date, is_home=True),
             "away": matchup.team_matchup_profile(conn_core, away_id, scoped_league_id, before_date, is_home=False),
