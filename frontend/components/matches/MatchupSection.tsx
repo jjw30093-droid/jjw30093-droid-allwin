@@ -193,7 +193,15 @@ export function MatchupSection({
         本场攻防对位
       </h2>
       <p className={styles.windowNote}>
-        {homeName}({home.label_zh}) · {awayName}({away.label_zh})——箭头左边是进攻方的场均产出,
+        {/* label_zh 自己就可能以一个括号子句结尾(venue_partial 的"(样本不足 10…)"、
+            mixed 的"(主客场样本均不足…)")。这里再给它套一层括号就会渲染出
+            "罗森博格(近 8 个挪威超主场(样本不足 10,…))" 这种嵌套括号。venue_full /
+            unavailable 两档没有内层括号,所以这个 bug 一直只在四档里的两档上现形。
+            修法是该改展示层:label_zh 是后端窗口口径的单一真源(还有 4 个后端模块
+            透出它),不为了迁就一个页面的括号套括号去改模板措辞。队名与窗口用
+            ":"相连,两队之间用";"而不是"·"——跨赛事窗口的 label_zh 本身就带
+            "不限赛事·"前缀,再拿"·"当队伍分隔符会两层撞在一起。 */}
+        {homeName}:{home.label_zh};{awayName}:{away.label_zh}——箭头左边是进攻方的场均产出,
         右边是防守方在同类型场均让出的量。
         {/* 跨联赛时这里不再补一句免责:结论行(summary)已经说了"不在同一联赛、
             不评选关键对位",窗口标签也已带"不限赛事",再写一遍就是手机首屏上的

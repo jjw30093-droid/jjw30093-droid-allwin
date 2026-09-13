@@ -385,4 +385,56 @@ describe("MatchupSection", () => {
       expect(container.textContent).not.toContain("跨联赛赛事没有共同的基准");
     });
   });
+
+  describe("窗口说明行不得出现嵌套括号", () => {
+    // 真实 bug(比赛 5104979 罗森博格 vs 维京,挪威超):venue_partial / mixed 两档的
+    // label_zh 自己就以括号子句结尾,组件若再给它套一层括号就变成
+    // "罗森博格(近 8 个挪威超主场(样本不足 10,已如实展示实际场次))"。
+    // 下面四条 label 是 backend/queries/window.py::_TIER_LABEL_ZH 四档模板的
+    // 真实产物(联赛名已填),不是缩短的占位字符串。
+    const REAL_LABELS: Array<[string, string, string]> = [
+      ["venue_full", "近 10 个日职联主场", "近 10 个日职联客场"],
+      [
+        "venue_partial",
+        "近 8 个挪威超主场(样本不足 10,已如实展示实际场次)",
+        "近 9 个挪威超客场(样本不足 10,已如实展示实际场次)",
+      ],
+      [
+        "mixed",
+        "近 3 场英超(主客场样本均不足,已合并主客场——不能与纯主场/客场窗口直接比较)",
+        "近 3 场英超(主客场样本均不足,已合并主客场——不能与纯主场/客场窗口直接比较)",
+      ],
+      ["unavailable", "暂无可比较的巴甲历史比赛", "暂无可比较的巴甲历史比赛"],
+    ];
+
+    /** 返回文本里括号的最大嵌套深度。 */
+    function maxParenDepth(text: string): number {
+      let depth = 0;
+      let max = 0;
+      for (const ch of text) {
+        if (ch === "(") max = Math.max(max, ++depth);
+        else if (ch === ")") depth = Math.max(0, depth - 1);
+      }
+      return max;
+    }
+
+    for (const [tier, homeLabel, awayLabel] of REAL_LABELS) {
+      it(`${tier} 档的窗口说明无嵌套括号,且两条 label 原文都在`, () => {
+        const home = profile({ label_zh: homeLabel });
+        const away = profile({ label_zh: awayLabel });
+        const { container } = render(
+          <MatchupSection homeName="罗森博格" awayName="维京" home={home} away={away} />,
+        );
+        const note = container.querySelector('[class*="windowNote"]');
+        expect(note).not.toBeNull();
+        const text = note!.textContent ?? "";
+        expect(maxParenDepth(text)).toBe(tier === "venue_full" || tier === "unavailable" ? 0 : 1);
+        // 后端 label 原文不得被展示层改写/截断
+        expect(text).toContain(homeLabel);
+        expect(text).toContain(awayLabel);
+        expect(text).toContain(`罗森博格:${homeLabel}`);
+        expect(text).toContain(`维京:${awayLabel}`);
+      });
+    }
+  });
 });
