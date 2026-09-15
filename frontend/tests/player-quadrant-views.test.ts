@@ -35,10 +35,22 @@ function row(pid: string, x: number | null, y: number | null, over: Partial<Play
 }
 
 describe("PLAYER_VIEWS 注册表约束", () => {
-  it("5 个视角,id 唯一", () => {
-    expect(PLAYER_VIEWS).toHaveLength(5);
+  it("6 个视角,id 唯一", () => {
+    expect(PLAYER_VIEWS).toHaveLength(6);
     const ids = PLAYER_VIEWS.map((v) => v.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("每个视角的 positions 非空,且门将视角与非门将视角互不相交(2026-09-16 真实反馈:" +
+    "门将不该出现在防守贡献/持球推进这类视角里,哪怕数据凑够了 4 人样本)", () => {
+    for (const v of PLAYER_VIEWS) {
+      expect(v.positions.length).toBeGreaterThan(0);
+    }
+    const gkViews = PLAYER_VIEWS.filter((v) => v.positions.includes(0));
+    const nonGkViews = PLAYER_VIEWS.filter((v) => !v.positions.includes(0));
+    expect(gkViews.map((v) => v.id)).toEqual(["player-goalkeeping", "player-goalkeeper-distribution"]);
+    for (const v of gkViews) expect(v.positions).toEqual([0]);
+    for (const v of nonGkViews) expect(v.positions).toEqual([1, 2, 3]);
   });
 
   it("四象限名非空且互不相同", () => {

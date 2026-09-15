@@ -14431,6 +14431,26 @@
         "type": "null"
        }
       ]
+     },
+     "pass_completion_rate": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "long_ball_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",

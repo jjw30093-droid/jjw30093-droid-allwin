@@ -70,6 +70,8 @@ RATIO_METRIC_KEYS = (
     "progression_rate",
     "xgot_faced_per90",
     "goals_prevented_per90",
+    "pass_completion_rate",
+    "long_ball_share",
 )
 
 

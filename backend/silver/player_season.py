@@ -24,11 +24,27 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Callable, Literal
 
 from backend.schema import _quote
+from backend.silver.ratio_metrics import season_start_year
 
 Denominator = Literal["minutes"] | tuple[str, ...]
+
+# accurate_passes_total(传球尝试总数,算传球成功率/长传占比必须要有的分母)
+# 2026-09-16 生产实测:2020/2021~2025/2026 五大联赛门将行几乎 0% 覆盖
+# (历史上这个字段等同不存在),2026/2027 赛季陡然跳到 75%~100%——不是逐步
+# 变好,是这个新赛季 FotMob 才开始可靠下发这个字段,全部位置(不只门将)
+# 同一时间点生效。与 touches_opp_box 同一种"数据源在某个时间点后才可信"
+# 的模式,但分界点不同(这次是"这个新赛季"而不是某个历史年份),复用同一套
+# season_start_year 判定式,门槛先设 2026——等未来真的出现 2027/2028 等
+# 赛季且实测同样可信时,这个判定式不需要改代码就能自动覆盖。
+PASS_COMPLETION_ELIGIBLE_FROM_YEAR = 2026
+
+
+def pass_completion_eligible(season: str) -> bool:
+    year = season_start_year(season)
+    return year is not None and year >= PASS_COMPLETION_ELIGIBLE_FROM_YEAR
 
 
 @dataclass(frozen=True)
@@ -40,6 +56,11 @@ class PlayerMetricSpec:
     numerator_minus: tuple[str, ...] = field(default_factory=tuple)
     methodology_version: str = "v1"
     min_minutes_played_only: bool = False  # 目前未使用,占位对齐团队侧命名习惯
+    # None = 所有赛季都算;给定判定函数则只在返回 True 的赛季计算,其它赛季
+    # 这个 spec 完全不产出行——与 backend/silver/ratio_metrics.py::RatioSpec
+    # 同一套设计取舍(可调用对象而不是固定 frozenset,避免清单式配置随新赛季
+    # 持续过期)。
+    eligible_seasons: Callable[[str], bool] | None = None
 
 
 PLAYER_METRIC_SPECS: list[PlayerMetricSpec] = [
@@ -102,6 +123,23 @@ PLAYER_METRIC_SPECS: list[PlayerMetricSpec] = [
         metric_key="goals_prevented_per90",
         numerator=("goals_prevented",),
         denominator="minutes",
+    ),
+    # 门将出球:x 轴——传球成功率。仅 2026/2027 起可信(accurate_passes_total
+    # 历史上五大联赛门将行几乎 0% 覆盖,这个新赛季陡然跳到 75%~100%)。
+    PlayerMetricSpec(
+        metric_key="pass_completion_rate",
+        numerator=("accurate_passes",),
+        denominator=("accurate_passes_total",),
+        eligible_seasons=pass_completion_eligible,
+    ),
+    # 门将出球:y 轴——长传占全部传球的比例。与 x 轴共用同一个分母
+    # (accurate_passes_total),不会出现"两种口径打架"的问题;已实测
+    # long_balls_accurate 从不超过 accurate_passes_total。
+    PlayerMetricSpec(
+        metric_key="long_ball_share",
+        numerator=("long_balls_accurate",),
+        denominator=("accurate_passes_total",),
+        eligible_seasons=pass_completion_eligible,
     ),
 ]
 
@@ -201,6 +239,8 @@ def build_player_season_ratios(conn: sqlite3.Connection, league_id: int, season:
     (需要跨表扣点球,单独处理)逐个指标聚合。"""
     out: list[dict] = []
     for spec in PLAYER_METRIC_SPECS:
+        if spec.eligible_seasons is not None and not spec.eligible_seasons(season):
+            continue  # 该赛季数据源本身不可信(如 accurate_passes_total 历史几乎全无),完全不产出行
         for player_id, numerator_sum, denominator_sum, paired_matches in _rows_for_spec(
             conn, league_id, season, spec
         ):

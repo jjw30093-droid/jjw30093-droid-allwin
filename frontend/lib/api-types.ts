@@ -3775,6 +3775,8 @@ export interface components {
             progression_rate?: components["schemas"]["PlayerRatioValue"] | null;
             xgot_faced_per90?: components["schemas"]["PlayerRatioValue"] | null;
             goals_prevented_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            pass_completion_rate?: components["schemas"]["PlayerRatioValue"] | null;
+            long_ball_share?: components["schemas"]["PlayerRatioValue"] | null;
         };
         /** PlayersResponse */
         PlayersResponse: {

@@ -73,15 +73,25 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
     [rows, position],
   );
 
+  // 视角是否"在这个位置下有产品意义"是硬性限定,不是数据门槛——门将不
+  // 该看"防守贡献"/"持球推进"这类视角,哪怕门将偶尔有触球/回收球数据凑够
+  // 了 4 人的样本门槛(真实反馈,见 playerQuadrantViews.ts 头注释)。这里先
+  // 按位置筛出"可能出现在 tab 上的视角",再在这批里按数据门槛决定哪些真的
+  // 可选——position-inapplicable 的视角连 tab 都不出现,不是灰的选不了。
+  const viewsForPosition = useMemo(
+    () => PLAYER_VIEWS.filter((v) => v.positions.includes(position)),
+    [position],
+  );
+
   // 每个视角各自算一次全量点集与隐藏名单——均值/达标判定基于"当前选中位置
   // 内的全部达标球员",不是画出来的那 10 个(见文件头注释)。
   const fullPlots = useMemo(
-    () => new Map(PLAYER_VIEWS.map((v) => [v.id, playerPlotSet(positionRows, v)] as const)),
-    [positionRows],
+    () => new Map(viewsForPosition.map((v) => [v.id, playerPlotSet(positionRows, v)] as const)),
+    [positionRows, viewsForPosition],
   );
   const available = useMemo(
-    () => PLAYER_VIEWS.filter((v) => (fullPlots.get(v.id)?.pts.length ?? 0) >= 4),
-    [fullPlots],
+    () => viewsForPosition.filter((v) => (fullPlots.get(v.id)?.pts.length ?? 0) >= 4),
+    [fullPlots, viewsForPosition],
   );
   const view = available.find((v) => v.id === viewId) ?? available[0];
 
@@ -207,7 +217,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
   const hiddenText = playerHiddenNote(hidden);
   const truncationText = quadrantTruncationNote(totalByQuadrant);
 
-  const disabledViews = PLAYER_VIEWS.filter((v) => !available.some((a) => a.id === v.id)).reduce(
+  const disabledViews = viewsForPosition.filter((v) => !available.some((a) => a.id === v.id)).reduce(
     (acc, v) => {
       const p = fullPlots.get(v.id)!;
       const belowThreshold = p.hidden.filter((h) => h.reason === "below_threshold").length;
@@ -262,7 +272,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
         </div>
 
         <div className={styles.tabs} role="tablist" aria-label="球员象限图视角">
-          {PLAYER_VIEWS.map((v) => {
+          {viewsForPosition.map((v) => {
             const usable = available.some((a) => a.id === v.id);
             return (
               <button

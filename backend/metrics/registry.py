@@ -680,6 +680,30 @@ PLAYER_QUADRANT_RATIOS: dict[str, MetricDef] = {
         source_field="fact_player_match_stats.goals_prevented",
         methodology_version="v1", display_scale=90.0,
     ),
+    "pass_completion_rate": MetricDef(
+        canonical_key="pass_completion_rate", name_zh="传球成功率",
+        explanation_zh="成功传球 ÷ 传球尝试总数——只对 2026/2027 起的赛季开放,更早赛季 accurate_passes_total(传球尝试总数)历史上几乎不下发。",
+        numerator="accurate_passes", denominator="accurate_passes_total",
+        unit="%", direction="higher_better", semantic="performance", min_sample=0,  # 球员象限图门槛走 minutes_share(前端 40% 出场占比),不是这里的"最少场次"语义,占位不使用
+        missing_policy="分子分母各自 SUM 后相除,SUM 天然跳过缺失场次;accurate_passes_total 该赛季不可信时整个指标不产出行",
+        eligible_positions=None, venue_sensitive="not_applicable",
+        opponent_adjustment_policy="none",
+        coverage_note="仅 2026/2027 起的赛季开放(accurate_passes_total 2020/2021~2025/2026 五大联赛门将行几乎 0% 覆盖,2026/2027 陡然跳到 75%~100%,见 backend/silver/player_season.py::pass_completion_eligible)",
+        source_field="fact_player_match_stats.{accurate_passes,accurate_passes_total}",
+        methodology_version="v1",
+    ),
+    "long_ball_share": MetricDef(
+        canonical_key="long_ball_share", name_zh="长传占比",
+        explanation_zh="成功长传 ÷ 传球尝试总数——反映出球风格是偏向长传解围还是短传出球,不是强弱评价。与「传球成功率」共用同一个分母,不会出现两种口径打架。",
+        numerator="long_balls_accurate", denominator="accurate_passes_total",
+        unit="%", direction="style_only", semantic="style", min_sample=0,  # 球员象限图门槛走 minutes_share(前端 40% 出场占比),不是这里的"最少场次"语义,占位不使用
+        missing_policy="分子分母各自 SUM 后相除,SUM 天然跳过缺失场次;accurate_passes_total 该赛季不可信时整个指标不产出行",
+        eligible_positions=None, venue_sensitive="not_applicable",
+        opponent_adjustment_policy="none",
+        coverage_note="仅 2026/2027 起的赛季开放(理由同 pass_completion_rate);long_balls_accurate 实测从不超过 accurate_passes_total",
+        source_field="fact_player_match_stats.{long_balls_accurate,accurate_passes_total}",
+        methodology_version="v1",
+    ),
 }
 
 

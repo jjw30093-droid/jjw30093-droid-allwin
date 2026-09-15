@@ -500,6 +500,8 @@ class PlayerSeasonRatios(BaseModel):
     progression_rate: Optional[PlayerRatioValue] = None
     xgot_faced_per90: Optional[PlayerRatioValue] = None
     goals_prevented_per90: Optional[PlayerRatioValue] = None
+    pass_completion_rate: Optional[PlayerRatioValue] = None
+    long_ball_share: Optional[PlayerRatioValue] = None
 
 
 class PlayerRef(BaseModel):

@@ -156,6 +156,24 @@ export const PLAYER_METRICS = {
     caliber: "每90分钟(面对射正预期进球 − 实际失球)。正值代表扑救的比预期要多,但这是短期窗口的结果记录,不是稳定的门将能力评价,不代表未来表现。",
     value: (r) => num(r.ratios?.goals_prevented_per90?.value),
   },
+  passCompletionRate: {
+    id: "pass_completion_rate",
+    label: "传球成功率",
+    unit: "%",
+    digits: 1,
+    semantic: "performance",
+    caliber: "赛季累计成功传球 ÷ 赛季累计传球尝试总数。仅 2026/2027 起的赛季有数据(更早赛季这个分母字段历史上几乎不下发)。",
+    value: (r) => num(r.ratios?.pass_completion_rate?.value),
+  },
+  longBallShare: {
+    id: "long_ball_share",
+    label: "长传占比",
+    unit: "%",
+    digits: 1,
+    semantic: "style",
+    caliber: "赛季累计成功长传 ÷ 赛季累计传球尝试总数,与「传球成功率」共用同一个分母,不是两种口径。仅 2026/2027 起的赛季有数据。",
+    value: (r) => num(r.ratios?.long_ball_share?.value),
+  },
 } as const satisfies Record<string, PlayerMetricDef>;
 
 export function formatMetric(v: number | null, m: PlayerMetricDef): string {

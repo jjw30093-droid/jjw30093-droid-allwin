@@ -16,6 +16,7 @@ from tests.backend.coreseed import insert_match, seed_core_schema
 from backend.silver.player_season import (
     build_player_season_ratios,
     build_player_season_stats,
+    pass_completion_eligible,
     PLAYER_METRIC_SPECS,
 )
 
@@ -192,3 +193,79 @@ class TestBuildPlayerSeasonRatios:
             assert metric.display_scale in (90.0, 100.0)
         # finishing_delta_per90 单独处理,不在 PLAYER_METRIC_SPECS 里,但同样要登记
         get_metric("finishing_delta_per90")
+
+
+class TestPassCompletionEligiblePredicate:
+    @pytest.mark.parametrize("season", ["2026", "2026/2027", "2027", "2027/2028"])
+    def test_eligible_from_2026_onward(self, season):
+        assert pass_completion_eligible(season) is True
+
+    @pytest.mark.parametrize("season", ["2024/2025", "2025/2026", "2020/2021"])
+    def test_ineligible_before_2026(self, season):
+        assert pass_completion_eligible(season) is False
+
+
+class TestPassCompletionEligibleSeasons:
+    """传球成功率/长传占比(2026-09-16,门将出球视角):仅 2026/2027 起的赛季
+    产出行——accurate_passes_total 历史赛季五大联赛门将行几乎 0% 覆盖,这个
+    新赛季才陡然跳到 75%~100%,与 touches_opp_box 同一种"数据源在某个时间点
+    后才可信"模式,但用赛季起始年份判定,不是写死的赛季字符串清单。"""
+
+    def test_no_rows_for_ineligible_season(self, core_conn):
+        ineligible_season = "2025/2026"
+        insert_match(
+            core_conn, 9000, league_id=LEAGUE, season=ineligible_season, date="2025-09-10",
+            home_id=1001, away_id=1002, status="Finish", home_score=1, away_score=0,
+        )
+        _stats(
+            core_conn, 9000, "p1", 1001, minutes_played=90,
+            accurate_passes=20, accurate_passes_total=25, long_balls_accurate=3,
+        )
+        core_conn.commit()
+
+        rows = build_player_season_ratios(core_conn, LEAGUE, ineligible_season)
+        keys = {r["metric_key"] for r in rows}
+        assert "pass_completion_rate" not in keys
+        assert "long_ball_share" not in keys
+
+    def test_rows_produced_for_eligible_season(self, core_conn):
+        eligible_season = "2026/2027"
+        insert_match(
+            core_conn, 9001, league_id=LEAGUE, season=eligible_season, date="2026-09-10",
+            home_id=1001, away_id=1002, status="Finish", home_score=1, away_score=0,
+        )
+        _stats(
+            core_conn, 9001, "p1", 1001, minutes_played=90,
+            accurate_passes=20, accurate_passes_total=25, long_balls_accurate=3,
+        )
+        core_conn.commit()
+
+        rows = build_player_season_ratios(core_conn, LEAGUE, eligible_season)
+        by_key = {r["metric_key"]: r for r in rows}
+        pcr = by_key["pass_completion_rate"]
+        assert pcr["numerator_sum"] == 20
+        assert pcr["denominator_sum"] == 25
+        lbs = by_key["long_ball_share"]
+        assert lbs["numerator_sum"] == 3
+        assert lbs["denominator_sum"] == 25
+
+    def test_long_ball_never_exceeds_total_passes_is_a_data_assumption_not_enforced(self, core_conn):
+        """代码本身不校验 long_balls_accurate <= accurate_passes_total(那是
+        生产数据的实测性质,不是本站能保证的约束)——这里只验证比率计算
+        对这批正常数据的行为符合预期,不做防御性校验。"""
+        eligible_season = "2026/2027"
+        insert_match(
+            core_conn, 9002, league_id=LEAGUE, season=eligible_season, date="2026-09-11",
+            home_id=1001, away_id=1002, status="Finish", home_score=0, away_score=0,
+        )
+        _stats(
+            core_conn, 9002, "p2", 1001, minutes_played=90,
+            accurate_passes=10, accurate_passes_total=0, long_balls_accurate=2,
+        )
+        core_conn.commit()
+
+        rows = build_player_season_ratios(core_conn, LEAGUE, eligible_season)
+        by_key = {(r["Player_ID"], r["metric_key"]) for r in rows}
+        # 分母为 0 的行必须被 HAVING 排除,不产出 x/0 的比率
+        assert ("p2", "pass_completion_rate") not in by_key
+        assert ("p2", "long_ball_share") not in by_key

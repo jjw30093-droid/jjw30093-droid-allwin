@@ -103,6 +103,7 @@ def seed_core_schema(conn):
             goals REAL, assists REAL, expected_goals REAL, expected_assists REAL,
             expected_goals_non_penalty REAL,
             ShotsOnTarget REAL, ShotsOffTarget REAL, accurate_passes REAL,
+            accurate_passes_total REAL, long_balls_accurate REAL,
             chances_created REAL, passes_into_final_third REAL,
             touches REAL, touches_opp_box REAL,
             dribbles_succeeded REAL, "matchstats.headers.tackles" REAL,

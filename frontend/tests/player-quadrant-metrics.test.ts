@@ -114,7 +114,23 @@ describe("PLAYER_METRICS 取值口径", () => {
     expect(PLAYER_METRICS.goalsPreventedPer90.semantic).toBe("outcome_variance");
   });
 
-  it("10 个指标全部有非空的 caliber 口径说明", () => {
+  it("门将出球两个指标(passCompletionRate/longBallShare)都能正确取值", () => {
+    const r = row({
+      ratios: {
+        pass_completion_rate: { value: 78.5, numerator: 20, denominator: 25, paired_matches: 10 },
+        long_ball_share: { value: 12.0, numerator: 3, denominator: 25, paired_matches: 10 },
+      },
+    });
+    expect(PLAYER_METRICS.passCompletionRate.value(r)).toBe(78.5);
+    expect(PLAYER_METRICS.longBallShare.value(r)).toBe(12.0);
+  });
+
+  it("longBallShare 语义是 style(打法特征,不是强弱评价)", () => {
+    expect(PLAYER_METRICS.longBallShare.semantic).toBe("style");
+  });
+
+  it("12 个指标全部有非空的 caliber 口径说明", () => {
+    expect(Object.keys(PLAYER_METRICS)).toHaveLength(12);
     for (const m of Object.values(PLAYER_METRICS)) {
       expect(m.caliber, `${m.id} 缺 caliber`).toBeTruthy();
     }

@@ -14,6 +14,15 @@
  * 明确要求的设计,见 2026-09-15 会话记录)。因此"射门与终结"视角对中场
  * 同样开放,不锁死只给前锋。
  *
+ * 2026-09-16 补第六个视角"门将出球"(传球成功率 × 长传占比,仅 2026/2027
+ * 起有数据)——同时补上每个视角的 `positions` 位置限定字段。这不是推翻
+ * 上一条"位置=比较基准"的原则,是补上它没覆盖的反方向:那条原则解决的是
+ * "别把射门与终结锁死只给前锋",没考虑"有些视角对门将这个位置从概念上
+ * 就不该出现"——门将也会有触球/回收球一类的零星数据,足够凑够 4 人把
+ * "防守贡献""持球推进"这类视角的数据门槛喂饱,但拿这些数据比较门将毫无
+ * 产品意义(真实反馈,站长发现后要求修正)。据此固定:非门将视角只对
+ * 后卫/中场/前锋开放,门将专属视角只对门将开放,两者不重叠。
+ *
  * 每个象限只画离均值最远的 10 人(站长拍板)——outlierNames 的"离均值距离"
  * 排序同款逻辑,按象限分组后各取前 10。均值仍由**全部达标球员**计算,
  * 不是只由画出来的 10 人计算(图下必须说明这一点,不能让虚线的含义随
@@ -30,6 +39,7 @@ import {
   playerKey,
   PLAYER_METRICS,
   type PlayerMetricDef,
+  type PositionValue,
 } from "./playerMetrics";
 import {
   axisLabel,
@@ -56,6 +66,10 @@ export type PlayerView = {
    *  (同 quadrantViews.ts::quadrantOf 的既有约定)。 */
   quadrants: [string, string, string, string];
   note: string;
+  /** 这个视角在哪些位置下可选——不是数据门槛(那是 playerPlotSet 的
+   *  minutes_share 40% 校验),是"这个组合有没有产品意义"的硬性限定。
+   *  门将专属视角只列 [0],非门将视角只列 [1,2,3],两者互不相交。 */
+  positions: readonly PositionValue[];
 };
 
 /** 按 id 取视角,找不到直接抛错(不允许静默回退)。 */
@@ -74,6 +88,9 @@ export const PLAYER_VIEWS: PlayerView[] = [
     y: PLAYER_METRICS.finishingDeltaPer90,
     quadrants: ["机会多且效率高", "机会少但效率惊人", "机会少且效率不足", "机会多但效率不足"],
     note: "横轴是每 90 分钟制造的非点球预期进球(机会质量与数量),纵轴是场均终结超额(实际进球减去预期进球)——纵轴是短期窗口的结果记录,不是稳定的终结能力,调研认为这类差值跨赛季相关性接近零。这个视角对中场同样开放:射门威胁突出的中场(如常被拿来举例的「本菲卡/皇马式」攻击型中场)只有放进中场自己的比较池里,才能正确显示出这份威胁,丢进全联赛混合池会被前锋的量级压平。",
+    // 后卫/中场/前锋都开放(不只锁中场/前锋)——本次修正只处理"门将不该
+    // 看这批非门将视角"这一件事,不额外收紧非门将位置之间的既有开放度。
+    positions: [1, 2, 3],
   },
   {
     id: "player-creativity",
@@ -83,6 +100,7 @@ export const PLAYER_VIEWS: PlayerView[] = [
     y: PLAYER_METRICS.xaPer90,
     quadrants: ["量质俱佳", "少而精", "创造有限", "机会多但质量不足"],
     note: "横轴是每 90 分钟创造的射门机会次数,纵轴是预期助攻(创造的机会按转化概率折算)——只有球员维度才有 xA 这个字段,球队维度算不出来。右下角「机会多但质量不足」是创造次数不少、但机会平均含金量偏低的球员。",
+    positions: [1, 2, 3],
   },
   {
     id: "player-defensive-contribution",
@@ -92,6 +110,7 @@ export const PLAYER_VIEWS: PlayerView[] = [
     y: PLAYER_METRICS.duelWinRate,
     quadrants: ["高产且高效", "动作不多但赢得多", "参与有限", "动作多但成功率不高"],
     note: "横轴是每 90 分钟的抢断+拦截+解围+封堵+回收球——行业标准 Defensive Contribution 口径(FPL/Opta 的 CBIRT),不是本站发明的代理指标。纵轴是全部对抗(地面+空中)里赢下的比例。两轴都是可比优劣的表现指标,但数字高不直接等于「防守好」,也要结合位置与球队整体防守策略一起看。",
+    positions: [1, 2, 3],
   },
   {
     id: "player-progression",
@@ -101,6 +120,7 @@ export const PLAYER_VIEWS: PlayerView[] = [
     y: PLAYER_METRICS.progressionRate,
     quadrants: ["高产且高效推进", "触球不多但效率高", "推进乏力", "触球多但效率不足"],
     note: "横轴是每 90 分钟触球次数,纵轴是每百次触球里有多少次传球送进了前场——两轴都是打法特征,不是强弱评价。触球数同时是纵轴的分母,数字有轻度机械相关(触球基数越大,单次「送进前场」的比例天然更容易被稀释),读图时留意。",
+    positions: [1, 2, 3],
   },
   {
     id: "player-goalkeeping",
@@ -110,6 +130,17 @@ export const PLAYER_VIEWS: PlayerView[] = [
     y: PLAYER_METRICS.goalsPreventedPer90,
     quadrants: ["低压力且高产出", "低压力但产出一般", "高压力且吃紧", "高压力下站得住"],
     note: "横轴是每 90 分钟面对的射正预期进球(承压程度,已反转,越靠左说明球队防线把对手逼到的射门位置越差),纵轴是扑救超额(面对的预期进球减去实际失球)——纵轴是短期窗口的结果记录,不是稳定的门将能力评价,不代表未来表现。",
+    positions: [0],
+  },
+  {
+    id: "player-goalkeeper-distribution",
+    tab: "门将出球",
+    title: "传球成功率 × 长传占比",
+    x: PLAYER_METRICS.passCompletionRate,
+    y: PLAYER_METRICS.longBallShare,
+    quadrants: ["短传精准且常出长传", "短传精准但少出长传", "短传欠精准且少出长传", "短传欠精准但常出长传"],
+    note: "横轴是传球成功率,纵轴是长传占全部传球的比例——两轴共用同一个分母(传球尝试总数),不会出现两种口径打架。这是打法特征(短传出球型 vs 长传解围型),不是强弱评价。仅 2026/2027 起的赛季有数据:传球尝试总数这个字段更早的赛季历史上几乎不下发。",
+    positions: [0],
   },
 ];
 
