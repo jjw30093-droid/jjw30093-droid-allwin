@@ -456,9 +456,10 @@ TEAM_QUADRANT_RATIOS: dict[str, MetricDef] = {
         missing_policy="分子或分母该场缺失时整场排除,不按 0/0 计入;无一场配对成功时 value=None,不是 0",
         eligible_positions=None, venue_sensitive="home_away_split_required",
         opponent_adjustment_policy="none",
-        # touches_opp_box 只有 2024/2025、2025/2026 覆盖率 100%,其余赛季
-        # 随机缺失(13%~30%),球队间不可比——该指标只对这两个赛季开放。
-        coverage_note="仅 2024/2025、2025/2026 两个赛季开放(其余赛季 touches_opp_box 随机缺失 13%~30%,球队间不可比)",
+        # touches_opp_box 实测 2024 年起覆盖率稳定 98%+,更早的赛季随机缺失
+        # (13%~87%不等),球队间不可比——该指标只对 2024 年起的赛季开放
+        # (backend/silver/ratio_metrics.py::touches_opp_box_eligible 同一份判定)。
+        coverage_note="仅 2024 年起的赛季开放(更早的赛季 touches_opp_box 随机缺失,球队间不可比)",
         source_field="fact_team_match_stats.extra_json.touches_opp_box(本队+对手两行)",
         methodology_version="v1",
         min_denominator=40.0,
@@ -471,7 +472,7 @@ TEAM_QUADRANT_RATIOS: dict[str, MetricDef] = {
         missing_policy="分子或分母该场缺失时整场排除,不按 0/0 计入;无一场配对成功时 value=None,不是 0",
         eligible_positions=None, venue_sensitive="home_away_split_required",
         opponent_adjustment_policy="not_validated",
-        coverage_note="仅 2024/2025、2025/2026 两个赛季开放(理由同 box_touch_share)",
+        coverage_note="仅 2024 年起的赛季开放(理由同 box_touch_share)",
         source_field="fact_team_match_stats.extra_json.{expected_goals_non_penalty,touches_opp_box}",
         methodology_version="v1",
         min_denominator=20.0,

@@ -200,10 +200,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "成功传球里有多大比例发生在对方半场(分母是成功传球,不是传球尝试总数)——本站用现有数据算的代理指标,不是 Opta/StatsBomb 的官方 Field Tilt。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.opp_half_pass_share?.denominator),
-        atLeast: 2000,
+        atLeast: 1000,
         label: "赛季累计成功传球",
         unit: "次",
         digits: 0,
@@ -223,10 +223,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "赛季累计定位球 xG ÷ 赛季累计(运动战 xG + 定位球 xG),逐场配对后求和,不是两个场均值相除;分母不含点球,也不是「占总 xG」。",
     sample: {
-      minMatches: 8,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.set_piece_xg_share?.denominator),
-        atLeast: 8,
+        atLeast: 3,
         label: "赛季累计运动战+定位球 xG",
         unit: "",
         digits: 1,
@@ -242,10 +242,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "对手赛季累计定位球 xG ÷ 对手赛季累计(运动战 xG + 定位球 xG),口径与「定位球 xG 占比」相同,取自同场对手。",
     sample: {
-      minMatches: 8,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.set_piece_xga_share?.denominator),
-        atLeast: 8,
+        atLeast: 3,
         label: "对手赛季累计运动战+定位球 xG",
         unit: "",
         digits: 1,
@@ -265,10 +265,10 @@ export const METRICS = {
     semantic: "performance",
     caliber: "对手赛季累计 xG ÷ 对手赛季累计射门数,逐场配对后求和,取自同场对手。数字越低说明防线把对手逼到了更差的射门位置。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.opp_xg_per_shot?.denominator),
-        atLeast: 60,
+        atLeast: 30,
         label: "对手赛季累计射门数",
         unit: "脚",
         digits: 0,
@@ -285,10 +285,10 @@ export const METRICS = {
     semantic: "performance",
     caliber: "赛季累计射正 ÷ 赛季累计(射正+射偏)——分母已排除被封堵射门,不是除以总射门数。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.shot_accuracy?.denominator),
-        atLeast: 60,
+        atLeast: 30,
         label: "赛季累计非封堵射门",
         unit: "脚",
         digits: 0,
@@ -305,10 +305,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "赛季累计禁区内射门 ÷ 赛季累计(禁区内+禁区外射门),逐场配对后求和。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.box_shot_share?.denominator),
-        atLeast: 60,
+        atLeast: 30,
         label: "赛季累计射门数",
         unit: "脚",
         digits: 0,
@@ -326,10 +326,10 @@ export const METRICS = {
     semantic: "performance",
     caliber: "赛季累计(大机会−错失大机会)÷ 赛季累计大机会,逐场配对后求和。样本越小越容易被一两次运气波动带偏。",
     sample: {
-      minMatches: 10,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.big_chance_conversion?.denominator),
-        atLeast: 25,
+        atLeast: 8,
         label: "赛季累计大机会",
         unit: "次",
         digits: 0,
@@ -348,10 +348,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "赛季累计本队争顶成功 ÷ 赛季累计(本队+对手争顶成功之和)——没有单独的“争顶总数”字段,用双方赢下的次数之和近似全场争顶总量。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.aerial_win_share?.denominator),
-        atLeast: 300,
+        atLeast: 150,
         label: "赛季累计双方争顶成功之和",
         unit: "次",
         digits: 0,
@@ -370,10 +370,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "赛季累计快速反击 xG ÷ 赛季累计非点球 xG(射门级数据,按 Situation 分类,逐场配对后求和)。",
     sample: {
-      minMatches: 12,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.fast_break_xg_share?.denominator),
-        atLeast: 15,
+        atLeast: 4,
         label: "赛季累计非点球 xG",
         unit: "",
         digits: 1,
@@ -392,12 +392,12 @@ export const METRICS = {
     unit: "%",
     digits: 1,
     semantic: "style",
-    caliber: "赛季累计本队对方禁区触球 ÷ 赛季累计(本队+对手对方禁区触球之和)。仅 2024/2025、2025/2026 两个赛季有数据(其余赛季 touches_opp_box 随机缺失,球队间不可比)。这是本站目前最接近 Field Tilt 的字段,但不是 Opta/StatsBomb 的官方 Field Tilt。",
+    caliber: "赛季累计本队对方禁区触球 ÷ 赛季累计(本队+对手对方禁区触球之和)。仅 2024 年起的赛季有数据(2024 年之前 touches_opp_box 随机缺失,球队间不可比)。这是本站目前最接近 Field Tilt 的字段,但不是 Opta/StatsBomb 的官方 Field Tilt。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.box_touch_share?.denominator),
-        atLeast: 40,
+        atLeast: 20,
         label: "赛季累计双方禁区触球之和",
         unit: "次",
         digits: 0,
@@ -412,12 +412,12 @@ export const METRICS = {
     unit: "",
     digits: 3,
     semantic: "performance",
-    caliber: "赛季累计非点球 xG ÷ 赛季累计对方禁区触球。仅 2024/2025、2025/2026 两个赛季有数据。",
+    caliber: "赛季累计非点球 xG ÷ 赛季累计对方禁区触球。仅 2024 年起的赛季有数据。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.npxg_per_box_touch?.denominator),
-        atLeast: 20,
+        atLeast: 10,
         label: "赛季累计对方禁区触球",
         unit: "次",
         digits: 0,
@@ -435,10 +435,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "赛季累计本队(抢断+拦截+犯规)÷ 赛季累计对手传球数 × 100。不是 PPDA——没有动作坐标,无法限定逼抢发生在哪个区域,铁桶阵与高位压迫可能拿到相近的数字。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.def_action_density?.denominator),
-        atLeast: 2000,
+        atLeast: 1000,
         label: "赛季累计对手传球数",
         unit: "次",
         digits: 0,
@@ -455,10 +455,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "对手赛季累计前场成功传球 ÷ 对手赛季累计成功传球,与「前场成功传球占比」同一公式,取自同场对手。",
     sample: {
-      minMatches: 6,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.opp_territory_share?.denominator),
-        atLeast: 2000,
+        atLeast: 1000,
         label: "对手赛季累计成功传球",
         unit: "次",
         digits: 0,
@@ -475,10 +475,10 @@ export const METRICS = {
     semantic: "style",
     caliber: "赛季累计(由角球产生的射门次数)÷ 赛季累计角球数。分母通常较小,详情面板按原始计数展示(如 11/48),不只给百分比。",
     sample: {
-      minMatches: 10,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.corner_shot_rate?.denominator),
-        atLeast: 50,
+        atLeast: 15,
         label: "赛季累计角球数",
         unit: "个",
         digits: 0,
@@ -500,10 +500,10 @@ export const METRICS = {
     semantic: "outcome_variance",
     caliber: "场均(非点球进球 − 非点球预期进球),进球按受益方计乌龙球。这不是稳定的终结能力,只是短期窗口的结果记录——调研认为这类差值跨赛季的相关性接近零。",
     sample: {
-      minMatches: 15,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.finishing_delta?.sample_count),
-        atLeast: 150,
+        atLeast: 30,
         label: "赛季累计非点球射门数",
         unit: "次",
         digits: 0,
@@ -520,10 +520,10 @@ export const METRICS = {
     semantic: "outcome_variance",
     caliber: "场均(对手射正的预期进球质量 − 实际非点球失球),只统计非点球、非乌龙、且有真实 xGOT 数据的射正。这不是稳定的门将能力评价,只是短期窗口的近期记录,不代表未来表现。",
     sample: {
-      minMatches: 10,
+      minMatches: 3,
       minVolume: {
         of: (r) => num(r.ratios?.gk_saves_above_expected?.sample_count),
-        atLeast: 60,
+        atLeast: 18,
         label: "赛季累计有效xGOT射正次数",
         unit: "次",
         digits: 0,

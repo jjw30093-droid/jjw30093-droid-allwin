@@ -397,11 +397,13 @@ DIM_PLAYER_I18N_COLUMNS = [
 #     但代码仍要显式过滤，防止未来数据出现未完赛/取消的场次)。
 #   - 大小球/比分分布/进球时间分布全部由 dim_match 的最终比分/由
 #     fact_match_events 的 event_type='Goal' 算，不依赖 extra_json。
-#   - touches_opp_box(禁区触球次数)只有 2024/2025、2025/2026 两个赛季
-#     覆盖率 100%，更早的赛季覆盖率 73%~87%，是 FotMob 历史采集限制
-#     （随赛季分布，不是随机缺失，也不是本项目的 bug）——所以本项目只在
-#     这两个赛季计算 avg_touches_opp_box，其余赛季该列显式存 NULL，
-#     不做插补/不用低覆盖率赛季的数字滥竽充数。
+#   - touches_opp_box(禁区触球次数)2024 年起(含跨年赛制的"2024"/
+#     "2024/2025"及以后)覆盖率稳定 98%+，更早的赛季覆盖率随赛季分布不同
+#     大致在 50%~87%（不是随机缺失，也不是本项目的 bug，是 FotMob 历史
+#     采集限制）——所以本项目只在 2024 年起的赛季计算 avg_touches_opp_box
+#     （backend/silver/ratio_metrics.py::touches_opp_box_eligible 同一份
+#     判定），其余赛季该列显式存 NULL，不做插补/不用低覆盖率赛季的数字
+#     滥竽充数。
 
 SILVER_TEAM_SEASON_STATS_COLUMNS = [
     ("League_ID", "INTEGER"),
@@ -420,7 +422,7 @@ SILVER_TEAM_SEASON_STATS_COLUMNS = [
     ("avg_expected_goals_open_play", "REAL"),
     ("avg_expected_goals_set_play", "REAL"),
     ("avg_expected_goals_on_target", "REAL"),
-    # touches_opp_box 仅 2024/2025、2025/2026 有数据，其余赛季固定 NULL
+    # touches_opp_box 仅 2024 年起的赛季有数据，其余赛季固定 NULL
     # （FotMob 历史采集限制，非 bug，见本文件顶部口径说明）。
     ("avg_touches_opp_box", "REAL"),
     ("clean_sheets", "INTEGER"),

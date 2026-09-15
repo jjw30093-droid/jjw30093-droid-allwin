@@ -518,17 +518,17 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
 
   it("百分比单位视角(推进方式)能渲染,且样本不足的球队不落点", () => {
     const passShare = viewById("possession-passing");
-    // 前 4 队样本不达标(累计成功传球 < 2000),其余 16 队达标
+    // 前 4 队样本不达标(累计成功传球 < 1000),其余 16 队达标
     const rows = twenty.map((r, i) => ({
       ...r,
-      matches_played: i < 4 ? 3 : 20,
+      matches_played: i < 4 ? 2 : 20,
       ratios: {
         opp_half_pass_share: {
           value: 45 + (i % 10),
           numerator: 900,
-          denominator: i < 4 ? 1200 : 4200,
-          paired_matches: i < 4 ? 3 : 20,
-          matches_played: i < 4 ? 3 : 20,
+          denominator: i < 4 ? 500 : 4200,
+          paired_matches: i < 4 ? 2 : 20,
+          matches_played: i < 4 ? 2 : 20,
         },
       },
     })) as unknown as TeamSeasonStatRow[];
@@ -549,22 +549,22 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
   });
 
   it("筛选激活(最近 5 场)时样本门槛按比例缩小,原本样本不足的球队重新画出来", () => {
-    // 与上一条"百分比单位视角"用同一份 fixture:未筛选时门槛 minMatches=6/
-    // minVolume=2000 挡掉前 4 队(matches_played=3、denominator=1200)。
-    // windowScale=5/38 时,minMatches 缩到 round(6*5/38)=1、minVolume 缩到
-    // 2000*5/38≈263.2——两队都远超缩小后的门槛,20 队应该全部画出来,证明
-    // "筛选激活时大部分指标仍能画出点",不是全部消失。
+    // 与上一条"百分比单位视角"用同一份 fixture:未筛选时门槛 minMatches=3/
+    // minVolume=1000 挡掉前 4 队(matches_played=2、denominator=500)。
+    // windowScale=5/38 时,minMatches 缩到 max(1,round(3*5/38))=1、minVolume
+    // 缩到 1000*5/38≈131.6——两队都远超缩小后的门槛,20 队应该全部画出来,
+    // 证明"筛选激活时大部分指标仍能画出点",不是全部消失。
     const passShare = viewById("possession-passing");
     const rows = twenty.map((r, i) => ({
       ...r,
-      matches_played: i < 4 ? 3 : 20,
+      matches_played: i < 4 ? 2 : 20,
       ratios: {
         opp_half_pass_share: {
           value: 45 + (i % 10),
           numerator: 900,
-          denominator: i < 4 ? 1200 : 4200,
-          paired_matches: i < 4 ? 3 : 20,
-          matches_played: i < 4 ? 3 : 20,
+          denominator: i < 4 ? 500 : 4200,
+          paired_matches: i < 4 ? 2 : 20,
+          matches_played: i < 4 ? 2 : 20,
         },
       },
     })) as unknown as TeamSeasonStatRow[];

@@ -171,7 +171,7 @@ describe("finishing_delta / gk_saves_above_expected 的样本门槛读 sample_co
     } as Partial<TeamSeasonStatRow>);
     const notEnough = row(1, "A", {
       matches_played: 15,
-      ratios: { finishing_delta: { value: 0.2, sample_count: 149 } },
+      ratios: { finishing_delta: { value: 0.2, sample_count: 29 } },
     } as Partial<TeamSeasonStatRow>);
     expect(meetsSample(enough, METRICS.finishingDelta)).toBe(true);
     expect(meetsSample(notEnough, METRICS.finishingDelta)).toBe(false);

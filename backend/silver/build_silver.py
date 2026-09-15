@@ -10,7 +10,7 @@ build_silver.py — 从 Bronze(dim_match / fact_team_match_stats / fact_match_ev
     - 场均射门/射正/控球/角球/犯规/黄牌/xG 及其变体，从
       fact_team_match_stats(Period='All')的 extra_json 里 NULL-safe 地取平均，
       缺失值不计入平均(不当 0 算)。
-    - avg_touches_opp_box 只在 2024/2025、2025/2026 两个赛季计算，
+    - avg_touches_opp_box 只在 2024 年起的赛季计算(touches_opp_box_eligible)，
       其余赛季固定 NULL(FotMob 历史采集限制，覆盖率随赛季分布，非 bug)。
     - 进球时间分桶直接用 fact_match_events.minute 原始值(0-15/16-30/31-45/
       46-60/61-75/76-90)，不加 overload_time——字段体检已确认补时进球的
