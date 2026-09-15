@@ -168,6 +168,56 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
 
   const series: NonNullable<EChartsOption["series"]> = [];
 
+  // 四象限名直接画在图上(2026-09-16 真实反馈:站长看完"门将出球"视角说
+  // "并没有在象限图中看到有说明,例如是什么类型的门将"——四象限名此前只在
+  // tooltip/图例列表/点击后的详情面板里出现,不看图上任何一个具体点、
+  // 不滚动到图表下方就完全看不到"这是什么类型")。用 4 个不可交互的
+  // "隐形散点+文字标签"分别定位到 4 个几何角(留一点内缩,避免贴边被裁),
+  // 每个角对应的象限用真实的 quadrantOf 在该角的数据坐标上算一次,不是
+  // 凭"左上/右上"猜——这样无论某个视角的 x/y 方向如何(dirsOf 决定"好"在
+  // 数值大还是小的一侧),角标文字永远和图例、tooltip 里的象限名对得上。
+  const cornerInsetX = (xr.max - xr.min) * 0.04;
+  const cornerInsetY = (yr.max - yr.min) * 0.04;
+  const cornerLabelData = (
+    [
+      [xr.max, yr.max],
+      [xr.min, yr.max],
+      [xr.min, yr.min],
+      [xr.max, yr.min],
+    ] as const
+  ).map(([cornerX, cornerY]) => {
+    const idx = quadrantOf({ x: cornerX, y: cornerY }, mx, my, dirs);
+    const px = cornerX === xr.max ? cornerX - cornerInsetX : cornerX + cornerInsetX;
+    const py = cornerY === yr.max ? cornerY - cornerInsetY : cornerY + cornerInsetY;
+    const align: "left" | "right" = cornerX === xr.max ? "right" : "left";
+    const verticalAlign: "top" | "bottom" = cornerY === yr.max ? "top" : "bottom";
+    return {
+      value: [px, py],
+      label: {
+        show: true,
+        formatter: view.quadrants[idx],
+        color: QUAD_COLOR[idx],
+        fontWeight: 700 as const,
+        fontSize: tk.axisFont,
+        align,
+        verticalAlign,
+      },
+    };
+  });
+  series.push({
+    name: "quadrant-labels",
+    type: "scatter",
+    silent: true,
+    tooltip: { show: false },
+    z: 0,
+    // symbol:'none' 在部分 ECharts 版本里会连带压掉数据点自己的 label——
+    // 用 symbolSize:0(而不是 symbol:'none')保留点位机制,只是尺寸为零,
+    // 这样每个点自带的 label 仍然正常渲染。
+    symbol: "circle",
+    symbolSize: 0,
+    data: cornerLabelData,
+  });
+
   if (mode === "interactive") {
     series.push({
       name: "hit",

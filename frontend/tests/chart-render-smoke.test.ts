@@ -587,7 +587,7 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
     expect(r.images).toBe(20);
   });
 
-  it("x 轴反转视角能渲染不抛(dirsOf 的 x 分支)", () => {
+  it("x 轴反转视角能渲染不抛,四象限名也正确画在图上(dirsOf 的 x 分支)", () => {
     // 借用现有 both-ends 视角构造一个 x.lowerIsBetter 的临时 view,验证
     // quadrantOption 的 dirsOf 分支真的处理了 x 反转,不只是 y。
     const base = viewById("both-ends");
@@ -597,15 +597,16 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
     const my = mean(pts.map((p) => p.y));
     const xr = niceAxisRange(pts.map((p) => p.x));
     const yr = niceAxisRange(pts.map((p) => p.y));
-    expect(() =>
-      renderSvg(
-        buildLeagueQuadrantOption({
-          view: xInverted, pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
-          layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
-        }),
-        SIZE,
-      ),
-    ).not.toThrow();
+    const r = renderSvg(
+      buildLeagueQuadrantOption({
+        view: xInverted, pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+        layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+      }),
+      SIZE,
+    );
+    for (const q of xInverted.quadrants) {
+      expect(r.svg, `象限名"${q}"应该出现在渲染出的 SVG 里`).toContain(q);
+    }
   });
 
   it("包四第二批新视角(角球成色/终结记录/防线与门将)都能渲染不抛,防线与门将的真实 x 反转也走通", () => {
@@ -750,5 +751,40 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(球员头像当
         SIZE,
       ),
     ).not.toThrow();
+  });
+
+  it("四象限名直接画在图上(2026-09-16 真实反馈:站长说'并没有在象限图中看到" +
+    "有说明,例如是什么类型的门将')——门将这个 x 轴反转的视角,四个角标必须" +
+    "分别对应真实的 x/y 好坏组合,不能凭'左上/右上'位置猜", () => {
+    const gkView = playerViewById("player-goalkeeping");
+    const gkRows = Array.from({ length: 15 }, (_, i) => ({
+      ...playerRow(i, true),
+      usual_position: 0,
+      ratios: {
+        xgot_faced_per90: { value: 1 + (i % 5) / 10, numerator: 1, denominator: 900, paired_matches: 10 },
+        goals_prevented_per90: { value: -0.5 + (i % 7) / 10, numerator: -0.5, denominator: 900, paired_matches: 10 },
+      },
+    })) as PlayerQuadrantRow[];
+    const { pts: fullPts } = playerPlotSet(gkRows, gkView);
+    const mx = mean(fullPts.map((p) => p.x));
+    const my = mean(fullPts.map((p) => p.y));
+    const dirs = { x: gkView.x.lowerIsBetter === true, y: gkView.y.lowerIsBetter === true };
+    const { drawn } = topPerQuadrant(fullPts, mx, my, dirs);
+    const xr = niceAxisRange(drawn.map((p) => p.x));
+    const yr = niceAxisRange(drawn.map((p) => p.y));
+    const box = { ...SIZE, grid: QUADRANT_GRID };
+    const crestSize = crestSizeFor(box, drawn.length, PLAYER_CREST_OPTS);
+    const layout = layoutCrests({ pts: drawn, box, xr, yr, yInverse: false, radius: crestSize / 2 + 4 });
+    const r = renderSvg(
+      buildLeagueQuadrantOption({
+        view: gkView, pts: drawn, mx, my, colors: COLORS, labelled: new Set(), crestSize,
+        layout, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+        symbolUrlOf: (p: PlayerPt) => p.avatarUrl,
+      }),
+      SIZE,
+    );
+    for (const q of gkView.quadrants) {
+      expect(r.svg, `象限名"${q}"应该出现在渲染出的 SVG 里`).toContain(q);
+    }
   });
 });
