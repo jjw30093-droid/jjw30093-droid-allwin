@@ -205,15 +205,20 @@ test("联赛速览四图 + xG 运气榜:此前零消费的银层/xg 档真的渲
   // 必须写明是数据源官方 xG 口径,不能被读成"本站模型算的"
   await expect(page.getByText(/不是本站模型输出/)).toBeVisible();
 
-  // ③ 两个切换器互相带着走:切榜别不丢赛季,切赛季不掉回总榜
+  // ③ 两个切换器互相带着走:切榜别不丢赛季,切赛季不掉回总榜。
+  //    赛季切换器 2026-09-15 改下拉(不再是 <a href> chip),用 <select> 交互
+  //    真实触发一次 onChange 后校验最终 URL,而不是读某个链接的 href。
   await page.goto("/league/47/standings?season=2024%2F2025&table_type=xg");
-  const seasonChip = page.getByTestId("season-switcher-chip").first();
-  await expect(seasonChip).toHaveAttribute("href", /table_type=xg/);
   const homeChip = page.getByTestId("table-type-chip").nth(1);
   await expect(homeChip).toHaveAttribute("href", /season=2024/);
+  const seasonSelect = page.getByLabel("选择赛季");
+  await expect(seasonSelect).toHaveValue("2024/2025");
+  await seasonSelect.selectOption("2023/2024");
+  await expect(page).toHaveURL(/table_type=xg/);
+  await expect(page).toHaveURL(/season=2023/);
 });
 
-test("球队象限图:三视角可切换,缺数据的视角诚实禁用而不是补 0", async ({ page }) => {
+test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用而不是补 0", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/league/47/team-stats");
 
@@ -253,10 +258,25 @@ test("球队象限图:三视角可切换,缺数据的视角诚实禁用而不是
   await page.keyboard.press("Escape");
   await expect(panel).toHaveAttribute("data-empty", "true");
 
-  // 三个视角都在,点了要真的换图
+  // 攻防/战术/射门质量三个既有视角同属默认分组"攻防总览",一行内直接切换,
+  // 不用先点分类按钮
   await page.getByRole("tab", { name: "战术" }).click();
   await expect(page.getByText(/运动战 × 定位球象限图/)).toBeVisible();
-  await expect(page.getByText(/双线开花/).first()).toBeVisible();
+  await expect(page.getByText(/多点开花/).first()).toBeVisible();
+
+  // 分组选择器:点另一个类别(控球与推进)= 换到该类别下的视角,
+  // 且原类别的视角不再出现在视角行里(证明分组筛选真的生效)
+  await page.getByRole("button", { name: "控球与推进" }).click();
+  await expect(page.getByRole("tab", { name: "推进方式" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("tab", { name: "战术" })).toHaveCount(0);
+  await expect(page.getByText(/前场传球占比/).first()).toBeVisible();
+
+  // 切回攻防总览,战术不再被选中(证明类别切换真的换了图,不是原地不动)
+  await page.getByRole("button", { name: "攻防总览" }).click();
+  await expect(page.getByRole("tab", { name: "攻防" })).toBeVisible();
 
   // 数据源没给 xg 档的赛季:攻防视角禁用并说明原因,默认落到战术,不静默补 0
   await page.goto("/league/53/team-stats?season=2020%2F2021");

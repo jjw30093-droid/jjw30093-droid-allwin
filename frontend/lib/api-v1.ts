@@ -45,6 +45,8 @@ export type TeamStatsResponse = GetJson<"/api/v1/leagues/{league_id}/team-stats"
 export type TeamSeasonStatRow = TeamStatsResponse["rows"][number];
 export type TeamSourceBoard = TeamStatsResponse["boards"][number];
 export type PlayersResponse = GetJson<"/api/v1/leagues/{league_id}/players">;
+export type PlayerQuadrantResponse = GetJson<"/api/v1/leagues/{league_id}/player-quadrant">;
+export type PlayerQuadrantRow = PlayerQuadrantResponse["rows"][number];
 export type MatchListResponse = GetJson<"/api/v1/matches">;
 export type MatchSummary = MatchListResponse["matches"][number];
 export type WinProbability = NonNullable<MatchSummary["win_probability"]>;
@@ -64,16 +66,22 @@ export type LeagueSectionKind =
   | "fixtures"
   | "team-stats"
   | "players"
+  | "player-quadrant"
   | "season-profile";
 
 export function leagueSectionPath(
   kind: LeagueSectionKind,
   leagueId: string,
-  season?: string,
+  /** 2026-09-14 起改选项对象:recency/venue 是球队数据页"最近 N 场/主客场"
+   *  筛选新增的两个可选参数,只有 team-stats 会用到,其它 5 个调用点不传。 */
+  opts?: { season?: string; recency?: number; venue?: string },
 ): string {
+  const { season, recency, venue } = opts ?? {};
   const params = new URLSearchParams();
   if (kind === "fixtures") params.set("limit", "400");
   if (season) params.set("season", season);
+  if (recency) params.set("recency", String(recency));
+  if (venue && venue !== "all") params.set("venue", venue);
   const qs = params.toString();
   return `/api/v1/leagues/${leagueId}/${kind}${qs ? `?${qs}` : ""}`;
 }

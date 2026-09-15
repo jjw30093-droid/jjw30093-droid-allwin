@@ -14,6 +14,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { playerAvatarUrl } from "./playerAvatarUrl";
 import styles from "./PlayerAvatar.module.css";
 
 export type PlayerAvatarSize = 24 | 28 | 32 | 36 | 40 | 48 | 56;
@@ -27,8 +28,6 @@ const SIZE_CLASS: Record<PlayerAvatarSize, string> = {
   48: styles.size48,
   56: styles.size56,
 };
-
-const PLAYER_AVATAR_BASE = "https://images.fotmob.com/image_resources/playerimages";
 
 /** 文字兜底:球衣号优先,否则姓名首字符(单字符,不是 TeamBadge.teamInitials
  * 的双字符缩写——球员场景既有惯例是"球衣号+姓名"分开展示,不是缩写)。 */
@@ -55,7 +54,7 @@ export function PlayerAvatar({
   accessibleName?: string;
   eager?: boolean;
 }) {
-  const url = `${PLAYER_AVATAR_BASE}/${playerId}.png`;
+  const url = playerAvatarUrl(playerId);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const showImage = failedUrl !== url;
   const label = accessibleName ?? `${playerName}头像`;

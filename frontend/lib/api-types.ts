@@ -199,6 +199,12 @@ export interface paths {
         /**
          * League Team Stats
          * @description 球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。
+         *
+         *     `recency`/`venue`(2026-09-14,"最近 N 场/主客场"筛选新增,均可选)——
+         *     任一被显式设置时,`q_league_stats.team_season_stats()` 内部绕开物化表
+         *     实时聚合(见该函数 docstring),响应字段形状不变,`matches_played`/
+         *     `ratios.*.matches_played` 天然表示"筛选窗口内的场次数"。筛选激活时
+         *     `boards` 恒为空列表(来源方赛季级榜单结构上无法按筛选窗口切片)。
          */
         get: operations["league_team_stats_api_v1_leagues__league_id__team_stats_get"];
         put?: never;
@@ -245,6 +251,31 @@ export interface paths {
          * @description 球员榜(5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。
          */
         get: operations["league_players_api_v1_leagues__league_id__players_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/leagues/{league_id}/player-quadrant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * League Player Quadrant
+         * @description 联赛球员象限图(2026-09-15):一次返回全部位置的球员 + 10 个复合指标。
+         *
+         *     刻意不接受 position 参数——真正的位置过滤与出场占比门槛(40%)留在
+         *     前端(`q_player_quadrant.player_quadrant_stats()` 的 docstring 说明理由),
+         *     这里只按宽松下限裁掉真正的长尾替补,`excluded_below_floor` 如实回传
+         *     裁掉几个人,不静默丢弃。
+         */
+        get: operations["league_player_quadrant_api_v1_leagues__league_id__player_quadrant_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3647,6 +3678,104 @@ export interface components {
             value?: number | null;
             team_color?: components["schemas"]["TeamBrandColor"] | null;
         };
+        /** PlayerQuadrantResponse */
+        PlayerQuadrantResponse: {
+            /** League Id */
+            league_id: number;
+            /** Season */
+            season?: string | null;
+            /**
+             * Available Seasons
+             * @default []
+             */
+            available_seasons: string[];
+            /**
+             * Rows
+             * @default []
+             */
+            rows: components["schemas"]["PlayerQuadrantRow"][];
+            /**
+             * Excluded Below Floor
+             * @default 0
+             */
+            excluded_below_floor: number;
+            /** Empty Reason */
+            empty_reason?: string | null;
+        };
+        /**
+         * PlayerQuadrantRow
+         * @description silver_player_season 一行 + 关联的 ratios。位置用 0=门将/1=后卫/
+         *     2=中场/3=前锋(usual_position 实测口径),前端按位置过滤、且**在选中
+         *     位置内部**重算均值/象限归属/每象限前 10(不是先算全体再筛,见
+         *     RecencyVenueSwitcher 同款"筛选即比较基准"设计)。
+         */
+        PlayerQuadrantRow: {
+            player: components["schemas"]["PlayerRef"];
+            team: components["schemas"]["TeamRef"];
+            team_color?: components["schemas"]["TeamBrandColor"] | null;
+            /** Usual Position */
+            usual_position?: number | null;
+            /** Appearances */
+            appearances?: number | null;
+            /** Minutes Played */
+            minutes_played?: number | null;
+            /** Team Minutes */
+            team_minutes?: number | null;
+            /** Minutes Share */
+            minutes_share?: number | null;
+            /** Teams Count */
+            teams_count?: number | null;
+            ratios?: components["schemas"]["PlayerSeasonRatios"] | null;
+        };
+        /**
+         * PlayerRatioValue
+         * @description 比值类指标的赛季口径(silver_player_season_ratios 一行,
+         *     backend/silver/player_season.py)。value 已按
+         *     backend/metrics/registry.py 该指标的 display_scale 缩放
+         *     (per-90 类 ×90,百分比类 ×100)。numerator/denominator 是**赛季累计量**,
+         *     不是场均——per-90 指标 denominator 是赛季累计出场分钟数。
+         */
+        PlayerRatioValue: {
+            /** Value */
+            value?: number | null;
+            /** Numerator */
+            numerator?: number | null;
+            /** Denominator */
+            denominator?: number | null;
+            /**
+             * Paired Matches
+             * @default 0
+             */
+            paired_matches: number;
+        };
+        /** PlayerRef */
+        PlayerRef: {
+            /** Player Id */
+            player_id: string;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en?: string | null;
+        };
+        /**
+         * PlayerSeasonRatios
+         * @description 每加一个球员象限图指标 = 这里加一个具名字段 + backend/silver/
+         *     player_season.py::PLAYER_METRIC_SPECS 加一行(或 finishing_delta 那样的
+         *     专用函数),不需要新的 migration(§10.3:不用 dict[str, PlayerRatioValue],
+         *     那样生成的 TS 是索引签名,键名写错要到运行时才发现)。
+         */
+        PlayerSeasonRatios: {
+            npxg_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            finishing_delta_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            chances_created_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            xa_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            defensive_actions_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            duel_win_rate?: components["schemas"]["PlayerRatioValue"] | null;
+            touches_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            progression_rate?: components["schemas"]["PlayerRatioValue"] | null;
+            xgot_faced_per90?: components["schemas"]["PlayerRatioValue"] | null;
+            goals_prevented_per90?: components["schemas"]["PlayerRatioValue"] | null;
+        };
         /** PlayersResponse */
         PlayersResponse: {
             /** League Id */
@@ -3708,6 +3837,16 @@ export interface components {
             /** Problems */
             problems: string[];
         };
+        /**
+         * RecencyWindow
+         * @description 球队数据页"最近 N 场"筛选的白名单(`/leagues/{id}/team-stats?recency=`,
+         *     2026-09-14 新增)。同 `ProfileWindowN` 一样用 IntEnum 而不是
+         *     `Literal[3,5,10]`(理由见上方 `ProfileWindowN` 文档字符串,同一个 pydantic
+         *     v2 坑)——不同点是这里默认值是 `None`(不筛选,不是"默认取最近 10 场"),
+         *     `IntEnum | None` 同样按枚举白名单强制转换,`?recency=` 缺省时仍是 None。
+         * @enum {integer}
+         */
+        RecencyWindow: 3 | 5 | 10;
         /** RecoAccessGrantBody */
         RecoAccessGrantBody: {
             /** User Id */
@@ -4736,6 +4875,35 @@ export interface components {
              */
             result: "W" | "D" | "L";
         };
+        /**
+         * TeamRatioValue
+         * @description 比值类指标的赛季口径(silver_team_season_ratios 一行,
+         *     backend/silver/ratio_metrics.py)。value 已按
+         *     backend/metrics/registry.py 该指标的 unit 缩放(百分比已 ×100);
+         *     numerator/denominator 是**赛季累计量**,不是场均——球队象限图的最小分母
+         *     门槛直接看 denominator。paired_matches < matches_played 说明有场次没配对上
+         *     (分子分母任一缺失或分母<=0 的场次不计入,不是数据丢失)。
+         */
+        TeamRatioValue: {
+            /** Value */
+            value?: number | null;
+            /** Numerator */
+            numerator?: number | null;
+            /** Denominator */
+            denominator?: number | null;
+            /**
+             * Paired Matches
+             * @default 0
+             */
+            paired_matches: number;
+            /**
+             * Matches Played
+             * @default 0
+             */
+            matches_played: number;
+            /** Sample Count */
+            sample_count?: number | null;
+        };
         /** TeamRef */
         TeamRef: {
             /** Team Id */
@@ -4746,6 +4914,31 @@ export interface components {
             name_en?: string | null;
             /** Crest Url */
             crest_url?: string | null;
+        };
+        /**
+         * TeamSeasonRatios
+         * @description 每加一个比值型视角指标 = 这里加一个具名字段 + backend/silver/
+         *     ratio_metrics.py::RATIO_SPECS 加一行,不需要新的 migration(§10.3:
+         *     不用 dict[str, TeamRatioValue],那样生成的 TS 是索引签名,键名写错要到
+         *     运行时才发现)。
+         */
+        TeamSeasonRatios: {
+            opp_half_pass_share?: components["schemas"]["TeamRatioValue"] | null;
+            set_piece_xg_share?: components["schemas"]["TeamRatioValue"] | null;
+            set_piece_xga_share?: components["schemas"]["TeamRatioValue"] | null;
+            opp_xg_per_shot?: components["schemas"]["TeamRatioValue"] | null;
+            shot_accuracy?: components["schemas"]["TeamRatioValue"] | null;
+            box_shot_share?: components["schemas"]["TeamRatioValue"] | null;
+            big_chance_conversion?: components["schemas"]["TeamRatioValue"] | null;
+            aerial_win_share?: components["schemas"]["TeamRatioValue"] | null;
+            fast_break_xg_share?: components["schemas"]["TeamRatioValue"] | null;
+            box_touch_share?: components["schemas"]["TeamRatioValue"] | null;
+            npxg_per_box_touch?: components["schemas"]["TeamRatioValue"] | null;
+            def_action_density?: components["schemas"]["TeamRatioValue"] | null;
+            opp_territory_share?: components["schemas"]["TeamRatioValue"] | null;
+            corner_shot_rate?: components["schemas"]["TeamRatioValue"] | null;
+            finishing_delta?: components["schemas"]["TeamRatioValue"] | null;
+            gk_saves_above_expected?: components["schemas"]["TeamRatioValue"] | null;
         };
         /**
          * TeamSeasonStatRow
@@ -4790,6 +4983,7 @@ export interface components {
             btts_matches?: number | null;
             /** Btts Pct */
             btts_pct?: number | null;
+            ratios?: components["schemas"]["TeamSeasonRatios"] | null;
         };
         /**
          * TeamSourceBoard
@@ -5804,6 +5998,8 @@ export interface operations {
         parameters: {
             query?: {
                 season?: string | null;
+                recency?: components["schemas"]["RecencyWindow"] | null;
+                venue?: "home" | "away" | "all";
             };
             header?: never;
             path: {
@@ -5922,6 +6118,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlayersResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    league_player_quadrant_api_v1_leagues__league_id__player_quadrant_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+            };
+            header?: never;
+            path: {
+                league_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerQuadrantResponse"];
                 };
             };
             /** @description Bad Request */

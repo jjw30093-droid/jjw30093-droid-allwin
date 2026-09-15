@@ -34,7 +34,7 @@ export default async function MatchesPage({
   let data: LeagueFixturesResponse | null;
   try {
     data = await serverGetOptional<LeagueFixturesResponse>(
-      leagueSectionPath("fixtures", id, seasonParam)
+      leagueSectionPath("fixtures", id, { season: seasonParam })
     );
   } catch {
     return (
@@ -73,7 +73,7 @@ export default async function MatchesPage({
       {data ? (
         <FixtureRounds
           matches={data.matches}
-          returnTo={buildLeagueSeasonHref(id, "matches", seasonParam)}
+          returnTo={buildLeagueSeasonHref(id, "matches", { season: seasonParam })}
         />
       ) : (
         <MemberLeagueSection kind="fixtures" leagueId={id} season={seasonParam} />

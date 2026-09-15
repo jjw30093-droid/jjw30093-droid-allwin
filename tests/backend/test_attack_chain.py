@@ -28,7 +28,7 @@ def _seed_full_window(conn, team_id, *, n=10, xg_all=True):
                      status="Finish", home_score=1, away_score=0,
                      kickoff_at_utc=f"2025-01-{10+j:02d}T12:00:00Z")
         fields = dict(
-            opposition_half_passes=200.0, passes=400.0, touches_opp_box=20.0,
+            opposition_half_passes=200.0, accurate_passes=250.0, passes=400.0, touches_opp_box=20.0,
             total_shots=12.0, ShotsOnTarget=5.0,
         )
         if xg_all or j < n - 2:
@@ -47,7 +47,7 @@ class TestTeamAttackChain:
         result = team_attack_chain(conn, TEAM, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
         assert result["tier"] == "venue_full"
         assert result["matches"] == 10
-        assert result["opp_half_pass_share"]["value"] == 50.0  # 200/400
+        assert result["opp_half_pass_share"]["value"] == 80.0  # 200/250(分母是成功传球,不是传球总数)
         assert result["opp_half_pass_share"]["complete"] is True
         assert result["xg"]["value"] == 1.5
         assert result["xg"]["complete"] is True
@@ -84,15 +84,15 @@ class TestTeamAttackChain:
         那场不该计入比例分母求和,否则比例会失真。"""
         conn = connect_rw("core")
         seed_core_schema(conn)
-        # 3 场都有 opposition_half_passes + passes(200/400 = 50%)
+        # 3 场都有 opposition_half_passes + accurate_passes(200/250 = 80%)
         for j in range(3):
             mid = TEAM * 10 + j
             insert_match(conn, mid, league_id=LEAGUE, date=f"2025-01-{10+j:02d}",
                          home_id=TEAM, away_id=9000 + j, home="队A", away="路人",
                          status="Finish", home_score=1, away_score=0,
                          kickoff_at_utc=f"2025-01-{10+j:02d}T12:00:00Z")
-            _stats(conn, mid, TEAM, opposition_half_passes=200.0, passes=400.0)
-        # 1 场只有 opposition_half_passes,没有 passes(不该拉低或改变比例)
+            _stats(conn, mid, TEAM, opposition_half_passes=200.0, accurate_passes=250.0)
+        # 1 场只有 opposition_half_passes,没有 accurate_passes(不该拉低或改变比例)
         mid = TEAM * 10 + 99
         insert_match(conn, mid, league_id=LEAGUE, date="2025-01-20",
                      home_id=TEAM, away_id=9099, home="队A", away="路人",
@@ -102,7 +102,7 @@ class TestTeamAttackChain:
         conn.commit()
 
         result = team_attack_chain(conn, TEAM, LEAGUE, "2025-02-01T00:00:00Z", is_home=True)
-        assert result["opp_half_pass_share"]["value"] == 50.0
+        assert result["opp_half_pass_share"]["value"] == 80.0
         assert result["opp_half_pass_share"]["matches_with_data"] == 3
 
 

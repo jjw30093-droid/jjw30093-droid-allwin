@@ -27,18 +27,26 @@ import {
   type PlotBox,
 } from "@/components/charts/crestQuadrantLayout";
 import type { TeamSeasonStatRow } from "@/lib/api-v1";
+import { teamKey, windowScaleFor } from "./teamMetrics";
 import { buildQuadrantOption } from "./quadrantOption";
 import {
   VIEWS,
-  collectPoints,
+  VIEW_GROUPS,
+  dirsOf,
+  filterWindowLabel,
   fmt,
+  groupedViews,
+  hiddenNote,
   mean,
   outlierNames,
+  plotSet,
   quadrantOf,
   resolveClickedKey,
   resolveSelectedTeams,
   toggleSelection,
+  type PlotSet,
   type Pt,
+  type ViewGroupId,
 } from "./quadrantViews";
 import { TeamQuadrantDetail } from "./TeamQuadrantDetail";
 import styles from "./TeamQuadrantChart.module.css";
@@ -51,6 +59,18 @@ export {
   type __TestView,
 } from "./quadrantViews";
 
+/** 禁用文案分两种,不能混成一句:有数但样本不够 vs 数据源根本没给。
+ *  后者原文案 e2e 逐字依赖,不能改。`filtered` 时样本不足的提示额外提醒
+ *  用户放宽筛选窗口可能就有数据了——这一支球队不是永久没数据,只是在当前
+ *  筛选窗口下不够,不能让用户误以为是数据源的问题。 */
+function disabledReason(p: PlotSet, filtered: boolean): string {
+  const sampleHidden = p.hidden.filter((h) => h.reason === "sample").length;
+  if (p.pts.length + sampleHidden < 4) return "该联赛该赛季缺少此视角所需的数据";
+  return filtered
+    ? "当前筛选窗口下样本达标的球队不足 4 支，试试放宽筛选范围"
+    : "该联赛该赛季样本达标的球队不足 4 支";
+}
+
 /** 宽度变化小于这个像素数不重算布局,避免拖动窗口时反复重排 */
 const WIDTH_HYSTERESIS = 8;
 
@@ -59,15 +79,45 @@ function chartHeightFor(n: number) {
   return Math.max(340, n * 19);
 }
 
-export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
+export function TeamQuadrantChart({
+  rows,
+  recency,
+  venue,
+}: {
+  rows: TeamSeasonStatRow[];
+  /** 2026-09-14"最近 N 场/主客场"筛选新增,均可选——由 team-stats/page.tsx
+   *  从 searchParams 透传。两者都缺省时行为与筛选功能上线前逐字节相同。 */
+  recency?: number;
+  venue?: string;
+}) {
   const c = useChartColors();
-  // 攻防视角依赖数据源的 xg 档,不是每个联赛赛季都有 —— 先算可用性再定默认视角
+  // 样本门槛按当前筛选窗口等比缩小(见 teamMetrics.ts::windowScaleFor)——
+  // "最近 3 场"下继续套用整赛季门槛会让几乎所有比率型指标判定样本不足。
+  const windowScale = windowScaleFor(recency, venue);
+  const filtered = recency != null || (venue != null && venue !== "all");
+  // 每个视角各自算一次点集与隐藏名单(样本门槛是指标自己的属性,视角越多
+  // 这张 Map 越有用:切视角不用重新扫一遍全部 rows)。
+  const plots = useMemo(
+    () => new Map(VIEWS.map((v) => [v.id, plotSet(rows, v, windowScale)] as const)),
+    [rows, windowScale],
+  );
+  // 攻防视角依赖数据源的 xg 档,不是每个联赛赛季都有;新视角还可能因样本门槛
+  // 不达标而不可用 —— 先算可用性再定默认视角。
   const available = useMemo(
-    () => VIEWS.filter((v) => collectPoints(rows, v).length >= 4),
-    [rows],
+    () => VIEWS.filter((v) => (plots.get(v.id)?.pts.length ?? 0) >= 4),
+    [plots],
   );
   const [viewId, setViewId] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState<ViewGroupId | null>(null);
   const view = available.find((v) => v.id === viewId) ?? available[0];
+  const activeGroup = groupId ?? view?.group ?? VIEW_GROUPS[0].id;
+  const pickGroup = (g: ViewGroupId) => {
+    setGroupId(g);
+    // 类别一换就把图切到该类别下第一个可用视角 —— 不留"选了类别但图还停在
+    // 另一个类别的视角"这种对不上的状态,不需要 useEffect,点击里一次做完。
+    const first = available.find((v) => v.group === g) ?? VIEWS.find((v) => v.group === g);
+    if (first) setViewId(first.id);
+  };
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
   // 图表宽度:自己测(ShotMapChart 的既有范式),不依赖 EChart 暴露实例
@@ -99,13 +149,27 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedKeys.length]);
 
-  const pts = useMemo(() => (view ? collectPoints(rows, view) : []), [rows, view]);
+  // plots.get(...) 本身是稳定引用(同一个 plots 不变就返回同一个对象),
+  // 但包一层 useMemo 让 React Compiler 能静态确认 pts/hidden 的稳定性,
+  // 下游好几个 useMemo 都依赖它们,写成裸解构会让编译器放弃优化整个组件。
+  const { pts, hidden } = useMemo<PlotSet>(
+    () => (view ? plots.get(view.id)! : { pts: [], hidden: [] }),
+    [plots, view],
+  );
+  // 门槛开启后,均值/排名只应统计真正画在图上的球队 —— 否则详情面板的
+  // "均值 X" 会和虚线代表的均值对不上(两处必须同一份 pts 派生)。
+  const eligibleRows = useMemo(() => {
+    if (!pts.length) return [];
+    const onChart = new Set(pts.map((p) => p.key));
+    return rows.filter((r) => onChart.has(teamKey(r.team)));
+  }, [rows, pts]);
 
   const derived = useMemo(() => {
     if (!view || pts.length < 4) return null;
     const mx = mean(pts.map((p) => p.x));
     const my = mean(pts.map((p) => p.y));
-    const lowY = view.y.lowerIsBetter === true;
+    const dirs = dirsOf(view);
+    const lowY = dirs.y === true;
     const xr = niceAxisRange(pts.map((p) => p.x), { pad: 0.14 });
     const yr = niceAxisRange(pts.map((p) => p.y), { pad: 0.16 });
     const height = chartHeightFor(pts.length);
@@ -114,7 +178,7 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
     const layout = box
       ? layoutCrests({ pts, box, xr, yr, yInverse: lowY, radius: crestSize / 2 + CREST.PAD })
       : null;
-    return { mx, my, lowY, xr, yr, height, crestSize, layout };
+    return { mx, my, dirs, lowY, xr, yr, height, crestSize, layout };
   }, [view, pts, width]);
 
   const selected = useMemo(() => resolveSelectedTeams(pts, selectedKeys), [pts, selectedKeys]);
@@ -150,8 +214,8 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
     );
   }
 
-  const { mx, my, lowY, height } = derived;
-  const quad = (p: Pt) => quadrantOf(p, mx, my, lowY);
+  const { mx, my, dirs, height } = derived;
+  const quad = (p: Pt) => quadrantOf(p, mx, my, dirs);
 
   const handleChartClick = (params: unknown) => {
     const key = resolveClickedKey(params, pts);
@@ -177,20 +241,47 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
     return lo === hi ? `每队 ${lo} 场` : `每队 ${lo}–${hi} 场`;
   })();
 
+  // outcome_variance 语义免责声明:只要这个视角有一根轴是"短期结果记录,
+  // 不是稳定能力"(如场均终结超额/场均门将扑救超额),就固定展示这行提示,
+  // 而不是散落进各视角的 note 里各写一遍——新增同语义指标自动获得这条提示,
+  // 不需要逐个视角补文案。
+  const outcomeVarianceBanner =
+    view.x.semantic === "outcome_variance" || view.y.semantic === "outcome_variance"
+      ? "这个视角展示的是本赛季至今的结果记录，不是稳定的能力评价，赛季间相关性低，不代表未来表现。"
+      : null;
+
   const byQuadrant = view.quadrants.map((label, i) => ({
     label,
     teams: pts.filter((p) => quad(p) === i),
   }));
 
-  // 摘要措辞与改造前逐字一致(e2e 依赖),有选中时只在末尾追加一句
+  const hiddenText = hiddenNote(hidden, view, windowScale);
+  const windowLabel = filterWindowLabel(recency, venue);
+
+  // 灰掉的 tab 分两种原因,脚注措辞不能混为一谈:数据源真没给 vs 有数但样本不够。
+  const disabledViews = VIEWS.filter((v) => !available.some((a) => a.id === v.id)).reduce(
+    (acc, v) => {
+      const p = plots.get(v.id)!;
+      const sampleHidden = p.hidden.filter((h) => h.reason === "sample").length;
+      if (p.pts.length + sampleHidden >= 4) acc.hasSample = true;
+      else acc.hasMissing = true;
+      return acc;
+    },
+    { hasMissing: false, hasSample: false },
+  );
+
+  // 摘要措辞与改造前逐字一致(e2e 依赖),有选中时只在末尾追加一句;
+  // hiddenText 插在"共 N 支球队…"之后、"参考线是联赛内部平均…"之前 ——
+  // 没有隐藏球队时 hiddenText 是空串,这句话与改造前逐字节相同。
   const ariaSummary =
-    `${view.title}象限图，虚线是本联赛本赛季平均值（${view.x.label} ${fmt(mx, view.x)}，` +
+    `${view.title}象限图，虚线是${windowLabel}平均值（${view.x.label} ${fmt(mx, view.x)}，` +
     `${view.y.label} ${fmt(my, view.y)}）。` +
     byQuadrant
       .filter((q) => q.teams.length)
       .map((q) => `${q.label}：${q.teams.map((p) => p.name).join("、")}`)
       .join("；") +
     `。共 ${pts.length} 支球队${sampleNote ? `，${sampleNote}` : ""}。` +
+    (hiddenText ? `${hiddenText}` : "") +
     `参考线是联赛内部平均，不能拿来跨联赛比较。` +
     (selected.length
       ? `当前选中：${selected.map((p) => `${p.name}（${view.quadrants[quad(p)]}）`).join("、")}。`
@@ -199,15 +290,40 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
   return (
     <section className={styles.card}>
       <header className={styles.head}>
-        <div>
-          <h2 className={styles.title}>球队象限图</h2>
-          <p className={styles.sub}>
-            {view.title} · 虚线为本联赛本赛季平均
-            {sampleNote ? ` · ${sampleNote}` : ""}
-          </p>
+        <div className={styles.headTop}>
+          <div>
+            <h2 className={styles.title}>球队象限图</h2>
+            <p className={styles.sub}>
+              {view.title} · 虚线为{windowLabel}平均
+              {sampleNote ? ` · ${sampleNote}` : ""}
+            </p>
+          </div>
         </div>
+
+        {/* 类别行是筛选器,不是第二层 tablist——role="group" + aria-pressed,
+            与下方图例的球队按钮同一套交互模式,不用 role="radio"(会承诺
+            未实现的方向键导航)也不嵌套 tablist(无效标记)。 */}
+        <div className={styles.groups} role="group" aria-label="象限图视角分类">
+          {groupedViews().map(({ group, views: groupViews }) => {
+            const usable = groupViews.some((v) => available.some((a) => a.id === v.id));
+            return (
+              <button
+                key={group.id}
+                type="button"
+                aria-pressed={group.id === activeGroup}
+                disabled={!usable}
+                title={usable ? group.blurb : "该联赛该赛季缺少这一类视角所需的数据"}
+                className={group.id === activeGroup ? styles.groupOn : styles.group}
+                onClick={() => pickGroup(group.id)}
+              >
+                {group.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className={styles.tabs} role="tablist" aria-label="象限图视角">
-          {VIEWS.map((v) => {
+          {VIEWS.filter((v) => v.group === activeGroup).map((v) => {
             const usable = available.some((a) => a.id === v.id);
             return (
               <button
@@ -216,7 +332,7 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
                 role="tab"
                 aria-selected={v.id === view.id}
                 disabled={!usable}
-                title={usable ? undefined : "该联赛该赛季缺少此视角所需的数据"}
+                title={usable ? undefined : disabledReason(plots.get(v.id)!, filtered)}
                 className={v.id === view.id ? styles.tabOn : styles.tab}
                 onClick={() => setViewId(v.id)}
               >
@@ -226,6 +342,8 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
           })}
         </div>
       </header>
+
+      {outcomeVarianceBanner && <p className={styles.outcomeVarianceBanner}>{outcomeVarianceBanner}</p>}
 
       {/* chartBox 不能有 padding/border:它的内容宽度必须等于图表宽度,布局才能对上像素 */}
       {/* 键盘路径走名单按钮与 Esc,这个 div 的 onClick 只服务鼠标/触屏"点空白"。
@@ -251,13 +369,14 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
           option={option}
           height={height}
           ariaSummary={ariaSummary}
+          showSummary={false}
           onEvents={{ click: handleChartClick }}
         />
       </div>
 
       <TeamQuadrantDetail
         view={view}
-        rows={rows}
+        rows={eligibleRows}
         selected={selected}
         mx={mx}
         my={my}
@@ -290,17 +409,25 @@ export function TeamQuadrantChart({ rows }: { rows: TeamSeasonStatRow[] }) {
           ))}
       </div>
 
-      <p className={styles.note}>
-        {view.note} 图上每支球队用队徽表示，位置挤在一起的会自动错开一点避免遮挡；
-        精确数值以点击后的详情面板为准。点击队徽或上方名单查看该队数值与排名，
-        再点一支可对比，按 Esc 或点空白处取消。
-        {available.length < VIEWS.length && (
-          <>
-            {" "}
-            灰掉的视角是该联赛该赛季数据源没有提供对应指标，不是本站算不出来。
-          </>
-        )}
-      </p>
+      <details className={styles.noteDetails}>
+        <summary className={styles.noteSummary}>视角说明</summary>
+        <p className={styles.note}>
+          {view.note} 图上每支球队用队徽表示，位置挤在一起的会自动错开一点避免遮挡；
+          精确数值以点击后的详情面板为准。点击队徽或上方名单查看该队数值与排名，
+          再点一支可对比，按 Esc 或点空白处取消。
+          {hiddenText && <> {hiddenText}</>}
+          {disabledViews.hasMissing && (
+            <> 灰掉的视角是该联赛该赛季数据源没有提供对应指标，不是本站算不出来。</>
+          )}
+          {disabledViews.hasSample && (
+            <>
+              {" "}
+              另有视角是数据源有，但样本达标的球队不足 4 支，暂不可用
+              {filtered ? "，放宽筛选范围可能就有数据了" : ""}。
+            </>
+          )}
+        </p>
+      </details>
     </section>
   );
 }

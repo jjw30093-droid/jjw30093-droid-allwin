@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
 import { leagueSectionMetadata } from "@/lib/league-metadata";
-import { leagueSectionPath, serverGetOptional, type PlayersResponse } from "@/lib/api-v1";
+import {
+  leagueSectionPath,
+  serverGetOptional,
+  type PlayerQuadrantResponse,
+  type PlayersResponse,
+} from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { PlayerBoards } from "@/components/league/PlayerBoards";
+import { PlayerQuadrantChart } from "@/components/league/PlayerQuadrantChart";
 import { MemberLeagueSection } from "@/components/league/MemberLeagueSection";
 import { SeasonSwitcher } from "@/components/league/SeasonSwitcher";
 import styles from "./players.module.css";
@@ -33,7 +39,7 @@ export default async function PlayersPage({
   let data: PlayersResponse | null;
   try {
     data = await serverGetOptional<PlayersResponse>(
-      leagueSectionPath("players", id, seasonParam)
+      leagueSectionPath("players", id, { season: seasonParam })
     );
   } catch {
     return (
@@ -53,6 +59,20 @@ export default async function PlayersPage({
   // 其它 tab 的显式选择,导致点导航跳到用户没选过的赛季(见 docs/data-plan.md)。
   const resolvedSeason = data?.season ?? seasonParam;
 
+  // 球员象限图(2026-09-15)独立端点,单独 try/catch——这一路取数失败不该
+  // 拖垮整页(球员榜是主内容,象限图是补充);quadrantData 为 null 时象限图
+  // 区块直接不渲染,不影响上面的球员榜。
+  let quadrantData: PlayerQuadrantResponse | null = null;
+  if (data) {
+    try {
+      quadrantData = await serverGetOptional<PlayerQuadrantResponse>(
+        leagueSectionPath("player-quadrant", id, { season: seasonParam }),
+      );
+    } catch {
+      quadrantData = null;
+    }
+  }
+
   return (
     <main className={styles.page}>
       <LeagueNav leagueId={id} active="players" season={seasonParam} />
@@ -70,7 +90,14 @@ export default async function PlayersPage({
       )}
 
       {data ? (
-        <PlayerBoards boards={data.boards} />
+        <>
+          {/* 象限图在前:一屏看到位置内的分布,同球队数据页"象限图在上、
+              榜单在下"的既有顺序。 */}
+          {quadrantData && quadrantData.rows.length > 0 && (
+            <PlayerQuadrantChart rows={quadrantData.rows} />
+          )}
+          <PlayerBoards boards={data.boards} />
+        </>
       ) : (
         <MemberLeagueSection kind="players" leagueId={id} season={seasonParam} />
       )}

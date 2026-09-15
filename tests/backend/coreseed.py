@@ -75,23 +75,39 @@ def seed_core_schema(conn):
         """CREATE TABLE IF NOT EXISTS fact_shotmap (
             Match_ID INTEGER, Player_ID TEXT, Team_ID INTEGER, Minute INTEGER,
             Period TEXT, X_Coord REAL, Y_Coord REAL, xG REAL, xGOT REAL,
-            Situation TEXT, Outcome TEXT, Shot_Type TEXT)"""
+            Situation TEXT, Outcome TEXT, Shot_Type TEXT, Is_Own_Goal INTEGER)"""
     )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS fact_team_match_stats (
             Match_ID INTEGER, Team_ID INTEGER, Period TEXT, Goals REAL, extra_json TEXT)"""
     )
-    # 真实库该表 76 列;测试只镜像 report 查询 SELECT 的列 + 带点列名(那正是
-    # 手写测试 schema 最容易漏掉/写错的地方,必须与真实库一字不差)
+    # 球队象限图复合指标(migrations/core/0017),真实列定义见
+    # backend/schema.py::SILVER_TEAM_SEASON_RATIOS_COLUMNS。
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS silver_team_season_ratios (
+            League_ID INTEGER, Season TEXT, Team_ID INTEGER, metric_key TEXT,
+            numerator_sum REAL, denominator_sum REAL, paired_matches INTEGER,
+            matches_played INTEGER, methodology_version TEXT, updated_at TEXT,
+            sample_count INTEGER)"""
+    )
+    # 真实库该表 79 列;测试只镜像 report 查询 SELECT 的列 + 带点列名(那正是
+    # 手写测试 schema 最容易漏掉/写错的地方,必须与真实库一字不差)+ 球员象限图
+    # (backend/silver/player_season.py)用到的列(2026-09-15 补
+    # usual_position/expected_goals_non_penalty/passes_into_final_third/
+    # duel_lost/shot_blocks/recoveries)。
     conn.execute(
         """CREATE TABLE IF NOT EXISTS fact_player_match_stats (
             Match_ID INTEGER, Player_ID TEXT, Team_ID INTEGER, is_goalkeeper INTEGER,
+            usual_position TEXT,
             rating_title REAL, minutes_played INTEGER, player_name TEXT,
             goals REAL, assists REAL, expected_goals REAL, expected_assists REAL,
+            expected_goals_non_penalty REAL,
             ShotsOnTarget REAL, ShotsOffTarget REAL, accurate_passes REAL,
-            chances_created REAL, touches REAL, touches_opp_box REAL,
+            chances_created REAL, passes_into_final_third REAL,
+            touches REAL, touches_opp_box REAL,
             dribbles_succeeded REAL, "matchstats.headers.tackles" REAL,
-            clearances REAL, interceptions REAL, duel_won REAL, aerials_won REAL,
+            clearances REAL, interceptions REAL, shot_blocks REAL, recoveries REAL,
+            duel_won REAL, duel_lost REAL, aerials_won REAL,
             fouls REAL, corners REAL, Offsides REAL, saves REAL,
             goals_conceded REAL, goals_prevented REAL,
             expected_goals_on_target_faced REAL)"""

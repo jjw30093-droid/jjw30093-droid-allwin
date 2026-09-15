@@ -1148,7 +1148,7 @@
      "public"
     ],
     "summary": "League Team Stats",
-    "description": "球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。",
+    "description": "球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。\n\n`recency`/`venue`(2026-09-14,\"最近 N 场/主客场\"筛选新增,均可选)——\n任一被显式设置时,`q_league_stats.team_season_stats()` 内部绕开物化表\n实时聚合(见该函数 docstring),响应字段形状不变,`matches_played`/\n`ratios.*.matches_played` 天然表示\"筛选窗口内的场次数\"。筛选激活时\n`boards` 恒为空列表(来源方赛季级榜单结构上无法按筛选窗口切片)。",
     "operationId": "league_team_stats_api_v1_leagues__league_id__team_stats_get",
     "parameters": [
      {
@@ -1174,6 +1174,37 @@
         }
        ],
        "title": "Season"
+      }
+     },
+     {
+      "name": "recency",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/RecencyWindow"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Recency"
+      }
+     },
+     {
+      "name": "venue",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "home",
+        "away",
+        "all"
+       ],
+       "type": "string",
+       "default": "all",
+       "title": "Venue"
       }
      }
     ],
@@ -1342,6 +1373,85 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/PlayersResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/leagues/{league_id}/player-quadrant": {
+   "get": {
+    "tags": [
+     "public"
+    ],
+    "summary": "League Player Quadrant",
+    "description": "联赛球员象限图(2026-09-15):一次返回全部位置的球员 + 10 个复合指标。\n\n刻意不接受 position 参数——真正的位置过滤与出场占比门槛(40%)留在\n前端(`q_player_quadrant.player_quadrant_stats()` 的 docstring 说明理由),\n这里只按宽松下限裁掉真正的长尾替补,`excluded_below_floor` 如实回传\n裁掉几个人,不静默丢弃。",
+    "operationId": "league_player_quadrant_api_v1_leagues__league_id__player_quadrant_get",
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     },
+     {
+      "name": "season",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Season"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlayerQuadrantResponse"
         }
        }
       }
@@ -13987,6 +14097,346 @@
     ],
     "title": "PlayerBoardEntry"
    },
+   "PlayerQuadrantResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "season": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Season"
+     },
+     "available_seasons": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Available Seasons",
+      "default": []
+     },
+     "rows": {
+      "items": {
+       "$ref": "#/components/schemas/PlayerQuadrantRow"
+      },
+      "type": "array",
+      "title": "Rows",
+      "default": []
+     },
+     "excluded_below_floor": {
+      "type": "integer",
+      "title": "Excluded Below Floor",
+      "default": 0
+     },
+     "empty_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Empty Reason"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id"
+    ],
+    "title": "PlayerQuadrantResponse"
+   },
+   "PlayerQuadrantRow": {
+    "properties": {
+     "player": {
+      "$ref": "#/components/schemas/PlayerRef"
+     },
+     "team": {
+      "$ref": "#/components/schemas/TeamRef"
+     },
+     "team_color": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamBrandColor"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "usual_position": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Usual Position"
+     },
+     "appearances": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Appearances"
+     },
+     "minutes_played": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Minutes Played"
+     },
+     "team_minutes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Team Minutes"
+     },
+     "minutes_share": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Minutes Share"
+     },
+     "teams_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Teams Count"
+     },
+     "ratios": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerSeasonRatios"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "required": [
+     "player",
+     "team"
+    ],
+    "title": "PlayerQuadrantRow",
+    "description": "silver_player_season 一行 + 关联的 ratios。位置用 0=门将/1=后卫/\n2=中场/3=前锋(usual_position 实测口径),前端按位置过滤、且**在选中\n位置内部**重算均值/象限归属/每象限前 10(不是先算全体再筛,见\nRecencyVenueSwitcher 同款\"筛选即比较基准\"设计)。"
+   },
+   "PlayerRatioValue": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "numerator": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Numerator"
+     },
+     "denominator": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Denominator"
+     },
+     "paired_matches": {
+      "type": "integer",
+      "title": "Paired Matches",
+      "default": 0
+     }
+    },
+    "type": "object",
+    "title": "PlayerRatioValue",
+    "description": "比值类指标的赛季口径(silver_player_season_ratios 一行,\nbackend/silver/player_season.py)。value 已按\nbackend/metrics/registry.py 该指标的 display_scale 缩放\n(per-90 类 ×90,百分比类 ×100)。numerator/denominator 是**赛季累计量**,\n不是场均——per-90 指标 denominator 是赛季累计出场分钟数。"
+   },
+   "PlayerRef": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "name_en": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name En"
+     }
+    },
+    "type": "object",
+    "required": [
+     "player_id",
+     "name"
+    ],
+    "title": "PlayerRef"
+   },
+   "PlayerSeasonRatios": {
+    "properties": {
+     "npxg_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "finishing_delta_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "chances_created_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "xa_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "defensive_actions_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "duel_win_rate": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "touches_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "progression_rate": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "xgot_faced_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "goals_prevented_per90": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PlayerRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "title": "PlayerSeasonRatios",
+    "description": "每加一个球员象限图指标 = 这里加一个具名字段 + backend/silver/\nplayer_season.py::PLAYER_METRIC_SPECS 加一行(或 finishing_delta 那样的\n专用函数),不需要新的 migration(§10.3:不用 dict[str, PlayerRatioValue],\n那样生成的 TS 是索引签名,键名写错要到运行时才发现)。"
+   },
    "PlayersResponse": {
     "properties": {
      "league_id": {
@@ -14141,6 +14591,16 @@
     ],
     "title": "ReadyzProblemsDTO",
     "description": "/readyz 503 时的诚实故障说明。"
+   },
+   "RecencyWindow": {
+    "type": "integer",
+    "enum": [
+     3,
+     5,
+     10
+    ],
+    "title": "RecencyWindow",
+    "description": "球队数据页\"最近 N 场\"筛选的白名单(`/leagues/{id}/team-stats?recency=`,\n2026-09-14 新增)。同 `ProfileWindowN` 一样用 IntEnum 而不是\n`Literal[3,5,10]`(理由见上方 `ProfileWindowN` 文档字符串,同一个 pydantic\nv2 坑)——不同点是这里默认值是 `None`(不筛选,不是\"默认取最近 10 场\"),\n`IntEnum | None` 同样按枚举白名单强制转换,`?recency=` 缺省时仍是 None。"
    },
    "RecoAccessGrantBody": {
     "properties": {
@@ -17022,6 +17482,67 @@
     ],
     "title": "TeamFormEntry"
    },
+   "TeamRatioValue": {
+    "properties": {
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "numerator": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Numerator"
+     },
+     "denominator": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Denominator"
+     },
+     "paired_matches": {
+      "type": "integer",
+      "title": "Paired Matches",
+      "default": 0
+     },
+     "matches_played": {
+      "type": "integer",
+      "title": "Matches Played",
+      "default": 0
+     },
+     "sample_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sample Count"
+     }
+    },
+    "type": "object",
+    "title": "TeamRatioValue",
+    "description": "比值类指标的赛季口径(silver_team_season_ratios 一行,\nbackend/silver/ratio_metrics.py)。value 已按\nbackend/metrics/registry.py 该指标的 unit 缩放(百分比已 ×100);\nnumerator/denominator 是**赛季累计量**,不是场均——球队象限图的最小分母\n门槛直接看 denominator。paired_matches < matches_played 说明有场次没配对上\n(分子分母任一缺失或分母<=0 的场次不计入,不是数据丢失)。"
+   },
    "TeamRef": {
     "properties": {
      "team_id": {
@@ -17067,6 +17588,173 @@
      "name"
     ],
     "title": "TeamRef"
+   },
+   "TeamSeasonRatios": {
+    "properties": {
+     "opp_half_pass_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "set_piece_xg_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "set_piece_xga_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "opp_xg_per_shot": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "shot_accuracy": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "box_shot_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "big_chance_conversion": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "aerial_win_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "fast_break_xg_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "box_touch_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "npxg_per_box_touch": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "def_action_density": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "opp_territory_share": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "corner_shot_rate": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "finishing_delta": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "gk_saves_above_expected": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamRatioValue"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "title": "TeamSeasonRatios",
+    "description": "每加一个比值型视角指标 = 这里加一个具名字段 + backend/silver/\nratio_metrics.py::RATIO_SPECS 加一行,不需要新的 migration(§10.3:\n不用 dict[str, TeamRatioValue],那样生成的 TS 是索引签名,键名写错要到\n运行时才发现)。"
    },
    "TeamSeasonStatRow": {
     "properties": {
@@ -17269,6 +17957,16 @@
        }
       ],
       "title": "Btts Pct"
+     },
+     "ratios": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/TeamSeasonRatios"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",

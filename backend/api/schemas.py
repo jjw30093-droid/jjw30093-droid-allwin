@@ -352,6 +352,49 @@ class StandingsResponse(BaseModel):
 
 # ── 联赛球队/球员赛季统计(免费字段投影,CLAUDE.md §3) ──────
 
+class TeamRatioValue(BaseModel):
+    """比值类指标的赛季口径(silver_team_season_ratios 一行,
+    backend/silver/ratio_metrics.py)。value 已按
+    backend/metrics/registry.py 该指标的 unit 缩放(百分比已 ×100);
+    numerator/denominator 是**赛季累计量**,不是场均——球队象限图的最小分母
+    门槛直接看 denominator。paired_matches < matches_played 说明有场次没配对上
+    (分子分母任一缺失或分母<=0 的场次不计入,不是数据丢失)。"""
+
+    value: Optional[float] = None
+    numerator: Optional[float] = None
+    denominator: Optional[float] = None
+    paired_matches: int = 0
+    matches_played: int = 0
+    # 覆盖率类免责披露用的额外样本量,只有极少数指标(如「场均门将扑救超额」
+    # 排除 xGOT 缺失的射正后,需要如实公示纳入求和的有效次数)使用;其余
+    # 指标恒为 None,不是 0(0 是"有效样本数确实为零"这个真实结果)。
+    sample_count: Optional[int] = None
+
+
+class TeamSeasonRatios(BaseModel):
+    """每加一个比值型视角指标 = 这里加一个具名字段 + backend/silver/
+    ratio_metrics.py::RATIO_SPECS 加一行,不需要新的 migration(§10.3:
+    不用 dict[str, TeamRatioValue],那样生成的 TS 是索引签名,键名写错要到
+    运行时才发现)。"""
+
+    opp_half_pass_share: Optional[TeamRatioValue] = None
+    set_piece_xg_share: Optional[TeamRatioValue] = None
+    set_piece_xga_share: Optional[TeamRatioValue] = None
+    opp_xg_per_shot: Optional[TeamRatioValue] = None
+    shot_accuracy: Optional[TeamRatioValue] = None
+    box_shot_share: Optional[TeamRatioValue] = None
+    big_chance_conversion: Optional[TeamRatioValue] = None
+    aerial_win_share: Optional[TeamRatioValue] = None
+    fast_break_xg_share: Optional[TeamRatioValue] = None
+    box_touch_share: Optional[TeamRatioValue] = None
+    npxg_per_box_touch: Optional[TeamRatioValue] = None
+    def_action_density: Optional[TeamRatioValue] = None
+    opp_territory_share: Optional[TeamRatioValue] = None
+    corner_shot_rate: Optional[TeamRatioValue] = None
+    finishing_delta: Optional[TeamRatioValue] = None
+    gk_saves_above_expected: Optional[TeamRatioValue] = None
+
+
 class TeamSeasonStatRow(BaseModel):
     """silver_team_season_stats 全字段投影(2026-08-16 起,除"每日精选"外
     普通比赛内容全部免费——角球/红黄牌/零封/BTTS 与射门/xG 等字段同属免费
@@ -382,6 +425,8 @@ class TeamSeasonStatRow(BaseModel):
     clean_sheets: Optional[int] = None
     btts_matches: Optional[int] = None
     btts_pct: Optional[float] = None
+    # 球队象限图复合(比率)指标(2026-09-14),见 TeamSeasonRatios 头注释。
+    ratios: Optional[TeamSeasonRatios] = None
 
 
 class TeamSourceBoardEntry(BaseModel):
@@ -421,6 +466,77 @@ class TeamStatsResponse(BaseModel):
     available_seasons: list[str]
     rows: list[TeamSeasonStatRow]
     boards: list[TeamSourceBoard] = []
+    empty_reason: Optional[str] = None
+
+
+# ── 联赛球员象限图(2026-09-15,silver_player_season(_ratios)) ─────────
+
+class PlayerRatioValue(BaseModel):
+    """比值类指标的赛季口径(silver_player_season_ratios 一行,
+    backend/silver/player_season.py)。value 已按
+    backend/metrics/registry.py 该指标的 display_scale 缩放
+    (per-90 类 ×90,百分比类 ×100)。numerator/denominator 是**赛季累计量**,
+    不是场均——per-90 指标 denominator 是赛季累计出场分钟数。"""
+
+    value: Optional[float] = None
+    numerator: Optional[float] = None
+    denominator: Optional[float] = None
+    paired_matches: int = 0
+
+
+class PlayerSeasonRatios(BaseModel):
+    """每加一个球员象限图指标 = 这里加一个具名字段 + backend/silver/
+    player_season.py::PLAYER_METRIC_SPECS 加一行(或 finishing_delta 那样的
+    专用函数),不需要新的 migration(§10.3:不用 dict[str, PlayerRatioValue],
+    那样生成的 TS 是索引签名,键名写错要到运行时才发现)。"""
+
+    npxg_per90: Optional[PlayerRatioValue] = None
+    finishing_delta_per90: Optional[PlayerRatioValue] = None
+    chances_created_per90: Optional[PlayerRatioValue] = None
+    xa_per90: Optional[PlayerRatioValue] = None
+    defensive_actions_per90: Optional[PlayerRatioValue] = None
+    duel_win_rate: Optional[PlayerRatioValue] = None
+    touches_per90: Optional[PlayerRatioValue] = None
+    progression_rate: Optional[PlayerRatioValue] = None
+    xgot_faced_per90: Optional[PlayerRatioValue] = None
+    goals_prevented_per90: Optional[PlayerRatioValue] = None
+
+
+class PlayerRef(BaseModel):
+    player_id: str
+    name: str                              # 中文短名 > 中文全名 > 来源英文名 > id
+    name_en: Optional[str] = None
+
+
+class PlayerQuadrantRow(BaseModel):
+    """silver_player_season 一行 + 关联的 ratios。位置用 0=门将/1=后卫/
+    2=中场/3=前锋(usual_position 实测口径),前端按位置过滤、且**在选中
+    位置内部**重算均值/象限归属/每象限前 10(不是先算全体再筛,见
+    RecencyVenueSwitcher 同款"筛选即比较基准"设计)。"""
+
+    player: PlayerRef
+    team: TeamRef
+    team_color: Optional[TeamBrandColor] = None
+    usual_position: Optional[int] = None
+    appearances: Optional[int] = None
+    minutes_played: Optional[int] = None
+    # 分母:该球员出场过的每支球队(该队该赛季完赛场次×90)取 MAX——转会球员
+    # 拿更严的分母。teams_count>1 时前端标注"转会球员,分母取更严格的那支队"。
+    team_minutes: Optional[int] = None
+    minutes_share: Optional[float] = None
+    teams_count: Optional[int] = None
+    ratios: Optional[PlayerSeasonRatios] = None
+
+
+class PlayerQuadrantResponse(BaseModel):
+    league_id: int
+    season: Optional[str] = None
+    available_seasons: list[str] = []
+    rows: list[PlayerQuadrantRow] = []
+    # 后端按宽松下限 minutes_share>=0.15 裁掉的长尾人数(如实披露,不静默
+    # 丢弃)——真正的 40% 门槛留在前端(hiddenNote 那套"藏了几个、为什么"
+    # 的诚实披露需要这个数才能对上)。
+    excluded_below_floor: int = 0
     empty_reason: Optional[str] = None
 
 
@@ -1409,6 +1525,19 @@ class ProfileWindowN(IntEnum):
     IntEnum 两者兼得——`?n=3` 正常、`?n=7` 仍是 422,而且在 OpenAPI 里生成
     真正的 enum schema,`npm run gen:api` 直接产出 TS 联合类型 `3|5|10`,
     前端的按钮列表与后端白名单共用同一真源(§10.3),不用手抄一遍。
+    """
+
+    N3 = 3
+    N5 = 5
+    N10 = 10
+
+
+class RecencyWindow(IntEnum):
+    """球队数据页"最近 N 场"筛选的白名单(`/leagues/{id}/team-stats?recency=`,
+    2026-09-14 新增)。同 `ProfileWindowN` 一样用 IntEnum 而不是
+    `Literal[3,5,10]`(理由见上方 `ProfileWindowN` 文档字符串,同一个 pydantic
+    v2 坑)——不同点是这里默认值是 `None`(不筛选,不是"默认取最近 10 场"),
+    `IntEnum | None` 同样按枚举白名单强制转换,`?recency=` 缺省时仍是 None。
     """
 
     N3 = 3

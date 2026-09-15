@@ -262,6 +262,38 @@ class TestLeagueSeasonStats:
         assert client.get("/api/v1/leagues/9999/team-stats").status_code == 404
         assert client.get("/api/v1/leagues/9999/players").status_code == 404
 
+    def test_recency_only_accepts_3_5_10(self, app, seeded):
+        """recency(2026-09-14 "最近 N 场"筛选新增)只接受 3/5/10 三个 UI 可选
+        值,不是自由数字输入——非法值必须 422,不能被悄悄按最近整数取整。"""
+        client = TestClient(app)
+        for bad in (1, 7, 0, -1, 38):
+            r = client.get(f"/api/v1/leagues/47/team-stats?recency={bad}")
+            assert r.status_code == 422, f"recency={bad} 应被拒绝"
+        for ok in (3, 5, 10):
+            r = client.get(f"/api/v1/leagues/47/team-stats?recency={ok}")
+            assert r.status_code == 200, f"recency={ok} 应被接受"
+
+    def test_venue_only_accepts_home_away_all(self, app, seeded):
+        client = TestClient(app)
+        r = client.get("/api/v1/leagues/47/team-stats?venue=derby")
+        assert r.status_code == 422
+        for ok in ("home", "away", "all"):
+            r = client.get(f"/api/v1/leagues/47/team-stats?venue={ok}")
+            assert r.status_code == 200, f"venue={ok} 应被接受"
+
+    def test_filtered_request_hides_source_boards_and_keeps_response_shape(
+        self, app, seeded
+    ):
+        """筛选激活时响应字段形状不变(不是换了一套 DTO),只是 boards 变空、
+        matches_played 变成筛选窗口内的场次数(fixture 里 9002 是该队唯一一场
+        完赛比赛,筛"最近 3 场"时不会比未筛选多出比赛,但不应报错或 500)。"""
+        client = TestClient(app)
+        r = client.get("/api/v1/leagues/47/team-stats?recency=3&venue=home")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["boards"] == []
+        assert "rows" in body
+
     def test_fixtures_season_filter_applies_before_sql_limit(self, app, seeded):
         """回归:赛季过滤必须在 SQL LIMIT 之前。曾经的实现先 LIMIT 再 Python 筛
         赛季——多赛季联赛下小 limit 页面可能全是旧赛季的行,目标赛季 0 命中。"""

@@ -16,6 +16,7 @@
 import { TeamBadge } from "@/components/teams/TeamBadge";
 import type { TeamSeasonStatRow } from "@/lib/api-v1";
 import {
+  formatFraction,
   formatMetric,
   leagueMean,
   rankOf,
@@ -108,7 +109,13 @@ export function TeamQuadrantDetail({
               <span className={styles.teamName}>{pt.name}</span>
               <span className={styles.quad}>{view.quadrants[quadrantOf(pt, mx, my, lowY)]}</span>
               <span className={styles.sample}>
-                {pt.mp != null ? `样本 ${pt.mp} 场` : "样本场次未知"}
+                {pt.mp != null ? (
+                  <>
+                    样本 <span className="num">{pt.mp}</span> 场
+                  </>
+                ) : (
+                  "样本场次未知"
+                )}
               </span>
               {compare && (
                 <button
@@ -160,17 +167,22 @@ export function TeamQuadrantDetail({
                     }
                     const delta = cell.mean ? cell.value - cell.mean.mean : null;
                     const good = delta == null ? null : m.lowerIsBetter ? delta < 0 : delta > 0;
+                    const row = teamRows[i].row;
+                    const fraction = row ? formatFraction(row, m) : null;
                     return (
                       <td key={teamRows[i].pt.key}>
-                        <span className={styles.value}>{formatMetric(cell.value, m)}</span>
+                        <span className={`${styles.value} num`}>
+                          {formatMetric(cell.value, m)}
+                          {fraction && <span className={styles.fraction}> ({fraction})</span>}
+                        </span>
                         {cell.rank && (
-                          <span className={styles.rank}>
+                          <span className={`${styles.rank} num`}>
                             第 {cell.rank.rank}/{cell.rank.total}
                           </span>
                         )}
                         {delta != null && cell.mean && (
                           <span
-                            className={`${styles.delta} ${
+                            className={`${styles.delta} num ${
                               delta === 0 ? "" : good ? styles.deltaGood : styles.deltaBad
                             }`}
                           >
@@ -181,7 +193,7 @@ export function TeamQuadrantDetail({
                     );
                   })}
                   {compare && (
-                    <td className={diff == null ? styles.missing : styles.value}>
+                    <td className={diff == null ? styles.missing : `${styles.value} num`}>
                       {diff == null ? "—" : signed(diff, m.digits)}
                     </td>
                   )}
@@ -200,10 +212,40 @@ export function TeamQuadrantDetail({
         </ul>
       )}
       <p className={styles.foot}>
-        「第 N/M」= 联赛内排名 / 有该项数据的球队数；排名与均值均为本联赛本赛季内部比较，不能跨联赛对比；
+        「第 N/M」= 联赛内排名 / 有该项数据的球队数；排名与均值只统计画在图上、样本达标的球队，均为本联赛本赛季内部比较，不能跨联赛对比；
         {lowY ? `${view.y.label}越低越好，排名按升序。` : ""}
         {compare ? "差值 = 左队 − 右队。" : ""}
       </p>
+      {metrics.some((m) => m.caliber) && (
+        <ul className={styles.notes}>
+          {metrics
+            .filter((m) => m.caliber)
+            .map((m) => (
+              <li key={`caliber:${m.id}`}>
+                {m.label}：{m.caliber}
+              </li>
+            ))}
+        </ul>
+      )}
+      {metrics.some((m) => m.sampleCountOf) && (
+        <ul className={styles.notes}>
+          {metrics
+            .filter((m) => m.sampleCountOf)
+            .flatMap((m) =>
+              teamRows
+                .map(({ pt, row }) => {
+                  const n = row ? m.sampleCountOf!(row) : null;
+                  if (n == null) return null;
+                  return (
+                    <li key={`sample:${m.id}:${pt.key}`}>
+                      {pt.name}「{m.label}」基于 {n} 次{m.sampleCountLabel ?? "有效样本"}。
+                    </li>
+                  );
+                })
+                .filter((x): x is NonNullable<typeof x> => x != null),
+            )}
+        </ul>
+      )}
     </div>
   );
 }

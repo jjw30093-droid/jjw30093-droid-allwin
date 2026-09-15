@@ -8,8 +8,10 @@ import type { TeamSeasonStatRow } from "@/lib/api-v1";
 import {
   METRICS,
   columnMetric,
+  formatFraction,
   formatMetric,
   leagueMean,
+  meetsSample,
   rankOf,
   teamKey,
 } from "@/components/league/teamMetrics";
@@ -109,7 +111,7 @@ describe("选中态纯逻辑", () => {
   it("resolveSelectedTeams 挡陈旧选中并保持选中顺序", () => {
     const pts = collectPoints(
       [row(1, "A"), row(2, "B"), row(3, "C")],
-      { x: { key: "avg_expected_goals" }, y: { key: "avg_expected_goals_conceded" } },
+      { x: METRICS.xg, y: METRICS.xga },
     );
     const keyB = teamKey({ team_id: 2, name: "B" });
     const keyA = teamKey({ team_id: 1, name: "A" });
@@ -139,5 +141,61 @@ describe("选中态纯逻辑", () => {
     expect(resolveClickedKey({ seriesName: "other", data: { pt: { key: "id:2" } } }, pts)).toBe("id:2");
     expect(resolveClickedKey({}, pts)).toBeNull();
     expect(resolveClickedKey(null, pts)).toBeNull();
+  });
+});
+
+describe("角球成射率的分数展示(方案护栏:分母小的比率不只给百分比)", () => {
+  it("formatFraction 返回原始计数字符串,不是百分比", () => {
+    const r = row(1, "A", {
+      ratios: { corner_shot_rate: { value: 22.9, numerator: 11, denominator: 48 } },
+    } as Partial<TeamSeasonStatRow>);
+    expect(formatFraction(r, METRICS.cornerShotRate)).toBe("11/48");
+  });
+
+  it("分子或分母缺失时返回 null,不臆造分数", () => {
+    const r = row(1, "A", { ratios: { corner_shot_rate: { value: null } } } as Partial<TeamSeasonStatRow>);
+    expect(formatFraction(r, METRICS.cornerShotRate)).toBeNull();
+  });
+
+  it("没有 fraction 访问器的指标返回 null", () => {
+    const r = row(1, "A");
+    expect(formatFraction(r, xg)).toBeNull();
+  });
+});
+
+describe("finishing_delta / gk_saves_above_expected 的样本门槛读 sample_count,不是 denominator", () => {
+  it("finishing_delta 的 minVolume 门槛看赛季累计非点球射门数(sample_count)", () => {
+    const enough = row(1, "A", {
+      matches_played: 15,
+      ratios: { finishing_delta: { value: 0.2, sample_count: 150 } },
+    } as Partial<TeamSeasonStatRow>);
+    const notEnough = row(1, "A", {
+      matches_played: 15,
+      ratios: { finishing_delta: { value: 0.2, sample_count: 149 } },
+    } as Partial<TeamSeasonStatRow>);
+    expect(meetsSample(enough, METRICS.finishingDelta)).toBe(true);
+    expect(meetsSample(notEnough, METRICS.finishingDelta)).toBe(false);
+  });
+
+  it("gk_saves_above_expected 的 sampleCountOf 读 sample_count 字段", () => {
+    const r = row(1, "A", {
+      ratios: { gk_saves_above_expected: { value: 0.4, sample_count: 233 } },
+    } as Partial<TeamSeasonStatRow>);
+    expect(METRICS.gkSavesAboveExpected.sampleCountOf!(r)).toBe(233);
+  });
+});
+
+describe("nonPenaltyShotsPerMatch(终结记录视角 x 轴)", () => {
+  it("赛季累计非点球射门数 ÷ 已赛场次", () => {
+    const r = row(1, "A", {
+      matches_played: 10,
+      ratios: { finishing_delta: { value: 0.1, sample_count: 130 } },
+    } as Partial<TeamSeasonStatRow>);
+    expect(METRICS.nonPenaltyShotsPerMatch.value(r)).toBeCloseTo(13.0);
+  });
+
+  it("已赛场次或射门数缺失时返回 null,不补 0", () => {
+    const r = row(1, "A", { matches_played: null } as Partial<TeamSeasonStatRow>);
+    expect(METRICS.nonPenaltyShotsPerMatch.value(r)).toBeNull();
   });
 });

@@ -24,7 +24,7 @@
  */
 
 import type { EChartsOption } from "echarts";
-import type { ChartColors } from "@/components/charts/useChartColors";
+import { hexToRgba, type ChartColors } from "@/components/charts/useChartColors";
 import { scaleGrid, tokensFor, type ChartMode } from "@/components/charts/chartMode";
 import {
   CREST,
@@ -36,12 +36,27 @@ import {
   type Grid,
   type LabelCandidate,
 } from "@/components/charts/crestQuadrantLayout";
-import { fmt, quadrantOf, type Pt, type View } from "./quadrantViews";
+import { axisLabel, dirsOf, fmt, quadrantOf, type AxisLike, type Pt } from "./quadrantViews";
 
-export type QuadrantOptionArgs = {
-  view: View;
+/** 2026-09-15 起泛型化,球队/球员象限图共用同一个 option 构造器(零行为
+ *  变化,好过复制这 286 行):`P` 是渲染的点类型(球队用现有 Pt,球员用
+ *  PlayerPt),只要求 {key,name,x,y,mp?} 这个最小形状;`symbolUrlOf` 取代
+ *  直接读 `p.crestUrl`,球队传 `(p) => p.crestUrl`、球员传
+ *  `(p) => p.avatarUrl`,不强行统一字段名。`view` 同样放宽成结构类型
+ *  (ViewLike),不要求完整 View/MetricDef.value(那部分是取数逻辑,
+ *  option 构造器从不调用它)。 */
+export type QuadrantPoint = { key: string; name: string; x: number; y: number; mp?: number | null };
+export type ViewLike = {
+  title: string;
+  x: AxisLike;
+  y: AxisLike;
+  quadrants: [string, string, string, string];
+};
+
+export type QuadrantOptionArgs<P extends QuadrantPoint = Pt> = {
+  view: ViewLike;
   /** 渲染顺序 == dataIndex 顺序,点击回查靠它 */
-  pts: Pt[];
+  pts: P[];
   mx: number;
   my: number;
   colors: ChartColors;
@@ -56,6 +71,10 @@ export type QuadrantOptionArgs = {
   /** 0~2 个,pts 下标 */
   selectedIndexes: number[];
   mode?: ChartMode;
+  /** 该点用哪张图当坐标符号(队徽/头像),null 时退回象限色圆点。
+   *  默认读 `(p as Pt).crestUrl`——球队侧调用点不用传,球员侧必传
+   *  `(p) => p.avatarUrl`。 */
+  symbolUrlOf?: (p: P) => string | null | undefined;
 };
 
 export function quadColors(c: ChartColors): [string, string, string, string] {
@@ -63,13 +82,17 @@ export function quadColors(c: ChartColors): [string, string, string, string] {
   return [c.win, c.teal, c.loss, c.teal];
 }
 
-export function buildQuadrantOption(args: QuadrantOptionArgs): EChartsOption {
+export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
+  args: QuadrantOptionArgs<P>,
+): EChartsOption {
   const { view, pts, mx, my, colors: c, labelled, crestSize, layout, xr, yr, selectedIndexes } = args;
+  const symbolUrlOf = args.symbolUrlOf ?? ((p: P) => (p as unknown as Pt).crestUrl);
   const mode = args.mode ?? "interactive";
   const tk = tokensFor(mode);
   const grid = mode === "export" ? scaleGrid(args.grid, mode) : args.grid;
-  const lowY = view.y.lowerIsBetter === true;
-  const quad = (p: Pt) => quadrantOf(p, mx, my, lowY);
+  const dirs = dirsOf(view);
+  const lowY = dirs.y === true;
+  const quad = (p: P) => quadrantOf(p, mx, my, dirs);
   const QUAD_COLOR = quadColors(c);
   const hasSelection = selectedIndexes.length > 0;
   const isSelected = (i: number) => selectedIndexes.includes(i);
@@ -100,14 +123,15 @@ export function buildQuadrantOption(args: QuadrantOptionArgs): EChartsOption {
   const crestData = pts.map((p, i) => {
     const sel = isSelected(i);
     const opacity = !hasSelection ? CREST.BASE_OPACITY : sel ? 1 : CREST.DIM_OPACITY;
+    const symbolUrl = symbolUrlOf(p);
     const base = {
       value: [p.x, p.y],
       pt: p,
-      symbol: crestSymbol(p.crestUrl),
+      symbol: crestSymbol(symbolUrl),
       symbolSize: sel ? Math.round(crestSize * CREST.SELECTED_SCALE) : crestSize,
       symbolOffset: offsetOf(i),
     };
-    return p.crestUrl
+    return symbolUrl
       ? { ...base, itemStyle: { opacity } }
       : {
           ...base,
@@ -206,13 +230,25 @@ export function buildQuadrantOption(args: QuadrantOptionArgs): EChartsOption {
       label: { show: false, color: c.ink, fontSize: tk.labelFont },
       data: [{ xAxis: mx }, { yAxis: my }, ...dropLines] as never,
     },
+    // 四象限底色:纯视觉棋盘格,不挂任何"好/坏"语义(颜色只取 c.ink 的极低
+    // 透明度,两个主题下都是"比背景略深一点"而不是某种判断色)——只是让
+    // "这一条是四个区"这件事一眼可辨,不用靠脑内延长两条虚线。对角两块上色,
+    // 另外对角两块透明,像棋盘格一样纯粹分区,不隐含"这个角比那个角好"。
+    markArea: {
+      silent: true,
+      itemStyle: { color: hexToRgba(c.ink, 0.035) },
+      data: [
+        [{ coord: [xr.min, yr.min] }, { coord: [mx, my] }],
+        [{ coord: [mx, my] }, { coord: [xr.max, yr.max] }],
+      ] as never,
+    },
   });
 
   return {
     grid,
     xAxis: {
       type: "value",
-      name: view.x.label,
+      name: axisLabel(view.x),
       nameLocation: "middle",
       nameGap: 26,
       nameTextStyle: { color: c.ink2, fontSize: tk.axisFont },
@@ -225,7 +261,7 @@ export function buildQuadrantOption(args: QuadrantOptionArgs): EChartsOption {
     },
     yAxis: {
       type: "value",
-      name: view.y.label,
+      name: axisLabel(view.y),
       // inverse 会把轴的 end 翻到底部,和 x 轴名撞在一起 —— 反转时改用 start,
       // 让轴名永远停在图的左上角。
       nameLocation: lowY ? "start" : "end",
@@ -244,14 +280,25 @@ export function buildQuadrantOption(args: QuadrantOptionArgs): EChartsOption {
       trigger: "item",
       // 桌面保留 hover;手机(touch 不产生 mousemove)不与点击选中打架
       triggerOn: "mousemove",
+      // 默认 ECharts 提示框样式(直角、细描边)和站内卡片系统的圆角/阴影
+      // 语言对不上——这里显式接管容器样式,颜色仍从 c(useChartColors)取,
+      // 深浅主题自动跟随,不新引入颜色。
+      backgroundColor: c.surface,
+      borderColor: c.grey,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: [10, 13],
+      extraCssText: "box-shadow:0 6px 20px rgba(0,0,0,.14); line-height:1.65;",
+      textStyle: { color: c.ink2, fontSize: 12.5 },
       formatter: (p: unknown) => {
-        const d = (p as { data?: { pt?: Pt } }).data?.pt;
+        const d = (p as { data?: { pt?: P } }).data?.pt;
         if (!d) return "";
         const q = view.quadrants[quad(d)];
         return (
-          `<b>${d.name}</b>（${q}）<br/>` +
-          `${view.x.label} ${fmt(d.x, view.x)}（联赛均值 ${fmt(mx, view.x)}）<br/>` +
-          `${view.y.label} ${fmt(d.y, view.y)}（联赛均值 ${fmt(my, view.y)}）` +
+          `<div style="font-weight:700;font-size:13.5px;color:${c.ink};margin-bottom:2px;">` +
+          `${d.name}<span style="margin-left:6px;font-weight:500;font-size:11.5px;color:${c.teal};">${q}</span></div>` +
+          `${view.x.label} <b style="color:${c.ink};">${fmt(d.x, view.x)}</b>（联赛均值 ${fmt(mx, view.x)}）<br/>` +
+          `${view.y.label} <b style="color:${c.ink};">${fmt(d.y, view.y)}</b>（联赛均值 ${fmt(my, view.y)}）` +
           (d.mp != null ? `<br/>样本 ${d.mp} 场` : "") +
           `<br/><span style="opacity:.7">点击查看排名与更多指标</span>`
         );

@@ -157,6 +157,76 @@ def _lookback_floor(before_boundary: str) -> str:
     return (d - datetime.timedelta(days=MAX_LOOKBACK_DAYS)).isoformat()
 
 
+def resolve_match_window(
+    conn: sqlite3.Connection, league_id: int, season: str, *,
+    venue: Literal["home", "away", "all"], recency: int | None,
+) -> list[tuple[int, int]] | None:
+    """球队数据页"最近 N 场 / 主客场"筛选(2026-09-14)专用——按队各自的
+    视角返回 [(Team_ID, Match_ID), ...]:`venue="home"` 只保留该队是主队的
+    比赛,不是"联赛里发生在主场的比赛"这个全局概念(每场比赛对主队和客队
+    是两件不同的事)。`recency` 用 `ROW_NUMBER() OVER (PARTITION BY
+    Team_ID ...)` 限定每队各自最近 N 场,不是联赛级的最近 N 场比赛。
+
+    `venue="all"` 且 `recency=None`(两个维度都没筛选)时返回 `None`——
+    调用方据此回退到"无筛选"的整赛季查询路径,SQL 与今天逐字节相同,
+    零性能回归。
+
+    与 `venue_window()` 的关键差异:**没有 fallback 降级**。`venue_window()`
+    是给"某场比赛找历史参照"设计的,样本不够时的 `mixed`(悄悄混主客场)
+    档位在那个场景下是合理的诚实兜底;但这里是用户在球队数据页显式选了
+    "主场"这个筛选,样本不够就该如实返回更少的场次甚至 0 场——静默把客场
+    比赛混进来充数,会让"主场"这个筛选标签本身失真,等于骗用户。
+    """
+    if venue == "all" and recency is None:
+        return None
+    venue_clause = {
+        "home": "m.Home_Team_ID = fts.Team_ID",
+        "away": "m.Away_Team_ID = fts.Team_ID",
+        "all": "1=1",
+    }[venue]
+    recency_clause = "AND rn <= ?" if recency is not None else ""
+    sql = f"""
+        WITH ranked AS (
+            SELECT m.Match_ID AS mid, fts.Team_ID AS tid,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY fts.Team_ID
+                       ORDER BY COALESCE(m.kickoff_at_utc, m.Date) DESC, m.Match_ID DESC
+                   ) AS rn
+            FROM dim_match m
+            JOIN fact_team_match_stats fts ON fts.Match_ID = m.Match_ID AND fts.Period = 'All'
+            WHERE m.League_ID = ? AND m.Season = ? AND m.status = 'Finish'
+              AND {venue_clause}
+        )
+        SELECT tid, mid FROM ranked WHERE 1=1 {recency_clause}
+    """
+    params: list[Any] = [league_id, season]
+    if recency is not None:
+        params.append(recency)
+    return [(r[0], r[1]) for r in conn.execute(sql, params).fetchall()]
+
+
+def match_window_join_sql(
+    pairs: list[tuple[int, int]] | None, *, team_col: str, match_col: str
+) -> tuple[str, list[int]]:
+    """把 `resolve_match_window()` 的结果转成可直接拼进任意聚合 SQL 的
+    `AND (...)` 片段 + 对应参数列表——`team_col`/`match_col` 是调用方查询里
+    代表"本队"/"本场比赛"的列名(通常是 `fts.Team_ID`/`fts.Match_ID`)。
+
+    `pairs is None`(未筛选)返回 `("", [])`,拼接后 SQL 与今天完全相同。
+    `pairs == []`(筛选后一场都不剩,比如某队本赛季主场还没开踢过)返回
+    一个恒假条件,让聚合查询自然产出空结果——不是抛异常,也不能悄悄退回
+    查询全部比赛(那样"筛选生效"这件事本身就是假的)。行值比较
+    `(a, b) IN (VALUES (?,?), ...)` 是 SQLite 3.15+ 支持的标准写法。
+    """
+    if pairs is None:
+        return "", []
+    if not pairs:
+        return "AND 1=0", []
+    placeholders = ",".join("(?,?)" for _ in pairs)
+    values = [v for pair in pairs for v in pair]
+    return f"AND ({team_col}, {match_col}) IN (VALUES {placeholders})", values
+
+
 def venue_window(
     conn: sqlite3.Connection, team_id: int, league_id: int | None, before_boundary: str,
     *, is_home: bool, max_n: int = DEFAULT_MAX_N, min_n: int = DEFAULT_MIN_N,

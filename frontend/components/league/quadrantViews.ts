@@ -17,73 +17,267 @@
  *   是有意义的真实值,不能拿来当缺失占位)。
  * - 攻防视角依赖 fact_league_table 的 xg 档,并非每个联赛赛季都有;
  *   数据不足时该视角禁用并写明原因,不静默回退。
- * - 参考线是**本联赛本赛季**的平均值,不是跨联赛基准 —— 摘要里说清楚。
+ * - 参考线是**当前筛选窗口内**(未筛选时即本联赛本赛季)的平均值,不是跨联赛
+ *   基准 —— 摘要里说清楚(2026-09-14"最近 N 场/主客场"筛选新增后,虚线随
+ *   筛选状态变化,不再恒等于整赛季平均)。
  */
 
 import type { TeamSeasonStatRow } from "@/lib/api-v1";
-import { METRICS, teamKey, type MetricDef } from "./teamMetrics";
+import { METRICS, meetsSample, sampleText, teamKey, type MetricDef } from "./teamMetrics";
 
 export { teamKey };
 
-export type Axis = {
-  key: keyof TeamSeasonStatRow;
-  label: string;
-  unit: string;
-  digits: number;
-  /** true 表示"数值越小越好",用于象限命名与 y 轴反转 */
-  lowerIsBetter?: boolean;
+/** 轴就是指标(2026-09-14 改造):Axis = MetricDef,只多一个可选的轴上短名
+ *  (图表 nameGap 只有 26px,详情面板/摘要仍用 label,e2e 逐字依赖那串文案)。 */
+export type Axis = MetricDef & {
+  axisName?: string;
 };
+export const axisLabel = (a: { axisName?: string; label: string }) => a.axisName ?? a.label;
+
+export type ViewGroupId = "overview" | "attack" | "quality" | "control" | "defence";
+
+export type ViewGroup = {
+  id: ViewGroupId;
+  label: string;
+  /** 选中该类别时显示的一行说明(CLAUDE.md §11.2 的文字摘要义务) */
+  blurb: string;
+};
+
+export const VIEW_GROUPS: ViewGroup[] = [
+  { id: "overview", label: "攻防总览", blurb: "整体创造与让出的对比。" },
+  { id: "attack", label: "进攻构成", blurb: "进球机会从哪来。" },
+  { id: "quality", label: "射门质量", blurb: "射得多不等于射得好。" },
+  { id: "control", label: "控球与推进", blurb: "球权在谁脚下，有没有真的推进到前场。" },
+  { id: "defence", label: "防守承压", blurb: "对手在本队门前拿到了什么。" },
+];
 
 export type View = {
   id: string;
+  group: ViewGroupId;
   tab: string;
   title: string;
   x: Axis;
   y: Axis;
   /** 四象限中文名,顺序按**好/差**:x好y好 / x差y好 / x差y差 / x好y差
-   *  (不是高/低 —— "场均预期失球"越低越好,见 quadrantOf) */
+   *  (不是高/低 —— "场均预期失球"越低越好,见 quadrantOf)。x 轴反向
+   *  (x.lowerIsBetter)时"x好"在**左**半边,这类视角的 note 必须写明
+   *  x 轴从右往左读。 */
   quadrants: [string, string, string, string];
   note: string;
   /** 详情面板里跟这个视角相关的补充指标(各自带联赛排名),不堆全部 17 项 */
   related: MetricDef[];
 };
 
+/** 按 id 取视角,找不到直接抛错(不允许静默回退到 undefined)。测试与调用方
+ *  优先用它而不是 VIEWS[下标]——分组/重排后下标会静默换掉被覆盖的对象。 */
+export function viewById(id: string): View {
+  const v = VIEWS.find((x) => x.id === id);
+  if (!v) throw new Error(`未知视角 id: ${id}`);
+  return v;
+}
+
+/** 按 VIEWS 原始顺序分组;空组(还没有视角的类别)直接不出现。 */
+export function groupedViews(views: View[] = VIEWS): { group: ViewGroup; views: View[] }[] {
+  return VIEW_GROUPS.map((group) => ({ group, views: views.filter((v) => v.group === group.id) })).filter(
+    (g) => g.views.length > 0,
+  );
+}
+
 export const VIEWS: View[] = [
   {
     id: "both-ends",
+    group: "overview",
     tab: "攻防",
     title: "预期进球 × 预期失球",
-    x: { key: "avg_expected_goals", label: "场均预期进球 xG", unit: "", digits: 2 },
-    y: {
-      key: "avg_expected_goals_conceded",
-      label: "场均预期失球 xGA",
-      unit: "",
-      digits: 2,
-      lowerIsBetter: true,
-    },
+    x: METRICS.xg,
+    y: METRICS.xga,
     quadrants: ["攻守兼备", "重守轻攻", "攻守俱弱", "对攻型"],
     note: "横轴是本队每场制造出多少质量的射门机会（预期进球），纵轴是对手在本队门前每场拿到多少（预期失球，已反转，越靠上防守越好）。",
     related: [METRICS.shotsOnTarget, METRICS.cleanSheets, METRICS.bttsPct],
   },
   {
     id: "tactics",
+    // 与 both-ends 同组(overview):两者都是"整体看这支球队攻防长什么样"的
+    // 总览视角,放同一组也让默认分组在任一视角被禁用时,仍同时展示"缺数据
+    // 的那个 tab(带说明)"和"实际回退选中的 tab"——不必额外点一次分类
+    // 才能看到禁用原因。射门质量(volume)同理留在这组。等这一组视角变多、
+    // 真的需要拆分时再分组,不为了"看起来像分了类"而提前拆。
+    group: "overview",
     tab: "战术",
     title: "运动战 × 定位球",
-    x: { key: "avg_expected_goals_open_play", label: "场均运动战 xG", unit: "", digits: 2 },
-    y: { key: "avg_expected_goals_set_play", label: "场均定位球 xG", unit: "", digits: 2 },
-    quadrants: ["双线开花", "依赖定位球", "进攻乏术", "运动战主导"],
+    x: METRICS.openPlayXg,
+    y: METRICS.setPlayXg,
+    quadrants: ["多点开花", "依赖定位球", "进攻乏术", "运动战主导"],
     note: "运动战 xG 来自流畅进攻，定位球 xG 来自角球/任意球/界外球后的机会。两项相加约等于非点球 xG，剩下的是点球。",
     related: [METRICS.nonPenXg, METRICS.penXg, METRICS.corners],
   },
   {
     id: "volume",
+    group: "overview", // 同上 tactics 的分组说明
     tab: "射门质量",
     title: "射门数量 × 机会质量",
-    x: { key: "avg_total_shots", label: "场均射门数", unit: "脚", digits: 1 },
-    y: { key: "avg_expected_goals", label: "场均预期进球 xG", unit: "", digits: 2 },
+    x: METRICS.totalShots,
+    y: METRICS.xg,
     quadrants: ["量质齐优", "少而精", "量质皆低", "广种薄收"],
     note: "同样的射门数，预期进球越高说明射门位置越好。右下角是打得多但位置差，左上角是射门少但每次都在好位置。",
     related: [METRICS.shotsOnTarget, METRICS.xgot, METRICS.xgPerShot],
+  },
+  {
+    id: "possession-passing",
+    group: "control",
+    tab: "推进方式",
+    title: "前场传球占比",
+    x: METRICS.oppHalfPassShare,
+    y: METRICS.totalShots,
+    quadrants: ["前场压制", "少传多射", "推进乏力", "倒脚少射"],
+    note: "横轴是成功传球里有多大比例发生在对方半场，纵轴是场均射门数——这是本站用现有数据算的代理指标，不是 Opta/StatsBomb 的官方 Field Tilt。",
+    related: [METRICS.shotsOnTarget, METRICS.xg],
+  },
+  {
+    id: "set-piece-both-ends",
+    group: "overview",
+    tab: "定位球攻防",
+    title: "定位球攻防",
+    x: METRICS.setPieceXgShare,
+    y: METRICS.setPieceXgaShare,
+    // 两根轴都是 style(打法特征,不代表强弱),四象限一律用中性打法原型
+    // 命名,不用好/差措辞——右上角"定位球拉锯"不代表比左下角"运动战对决"更强。
+    quadrants: ["定位球拉锯", "防空吃紧", "运动战对决", "定位球见长"],
+    note: "横轴是本队进攻端定位球 xG 占运动战+定位球 xG 的比例，纵轴是对手打进来的威胁里定位球占的比例（同一套口径，取自对手）。两轴都是打法特征，不是强弱评价。",
+    related: [METRICS.corners, METRICS.setPlayXg],
+  },
+  // 2026-09-14 站长审核发现:「定位球依赖」(x=定位球xG占比, y=场均运动战xG
+  // 绝对值)与既有「战术」视角(x=运动战xG绝对值, y=定位球xG绝对值)高度重叠
+  // ——战术视角本来就有一个象限直接叫"依赖定位球",讲的是同一对原始数字
+  // (运动战 xG、定位球 xG),只是换了呈现口径(绝对值 vs 占比)。三个"定位球
+  // 相关"视角(战术/定位球攻防/定位球依赖)信息重叠过多,「定位球攻防」是
+  // 唯一同时覆盖进攻端与防守端的(战术视角完全没有防守信息),保留它、
+  // 删掉这一个。METRICS.setPieceXgShare/openPlayXg 仍被其它视角使用,不删。
+
+  // ── 包三 ──────────────────────────────────────────────────────────
+  {
+    id: "attack-defence-quality",
+    group: "overview",
+    tab: "攻防质量",
+    title: "攻防质量",
+    x: METRICS.xgPerShot,
+    y: METRICS.oppXgPerShot,
+    quadrants: ["攻守俱精", "守稳攻钝", "攻钝守险", "大开大合"],
+    note: "横轴是我方每脚射门平均创造多少预期进球（射门成色），纵轴是对手每脚射门平均能换来多少（已反转，越靠上说明防线把对手逼到的射门位置越差）。这是既有「预期进球 × 预期失球」视角的成色版——两队场均 xG 相同，一队可能是好机会打出来的，另一队可能是数量堆出来的，这张图能分开。",
+    related: [METRICS.totalShots, METRICS.xg, METRICS.xga],
+  },
+  {
+    id: "shot-quality-accuracy",
+    group: "quality",
+    tab: "质量与准星",
+    title: "质量与准星",
+    x: METRICS.xgPerShot,
+    y: METRICS.shotAccuracy,
+    quadrants: ["有质有准", "准星尚在", "攻门粗糙", "屡失良机"],
+    note: "横轴是每脚射门的平均质量，纵轴是射正率（已排除被封堵射门）。右下角「屡失良机」是位置好但打飞/打偏多的球队。",
+    related: [METRICS.shotsOnTarget, METRICS.totalShots],
+  },
+  {
+    id: "box-shots",
+    group: "attack",
+    tab: "禁区内外",
+    title: "禁区内外",
+    x: METRICS.boxShotShare,
+    y: METRICS.totalShots,
+    quadrants: ["围攻禁区", "远射成风", "攻势零散", "禁区精准"],
+    note: "横轴是射门里有多大比例在禁区内完成，纵轴是场均射门数。同样是射门多，位置好坏差很多。",
+    related: [METRICS.xgPerShot, METRICS.shotsOnTarget],
+  },
+  {
+    id: "fast-break-possession",
+    group: "attack",
+    tab: "反击与控球",
+    title: "反击与控球",
+    x: METRICS.fastBreakXgShare,
+    y: METRICS.possession,
+    quadrants: ["控反兼备", "阵地推进", "低位固守", "防守反击"],
+    note: "横轴是进攻威胁里有多大比例来自快速反击（取自射门级数据，分母是全部非点球 xG），纵轴是控球率。右下角「防守反击」是控球率低、但机会多靠转换创造的球队。",
+    related: [METRICS.xg, METRICS.totalShots],
+  },
+  {
+    id: "chance-conversion",
+    group: "quality",
+    tab: "机会转化",
+    title: "机会转化",
+    x: METRICS.xgPerShot,
+    y: METRICS.bigChanceConversion,
+    quadrants: ["创转俱佳", "关键制胜", "创造匮乏", "浪费良机"],
+    note: "横轴是每脚射门的平均质量，纵轴是绝佳机会把握率（大机会里有多大比例真的打进）。右下角「浪费良机」是机会质量不差、但绝佳机会经常糟蹋的球队——样本小时这个数会被一两次运气波动带偏，请配合样本量一起看。",
+    related: [METRICS.shotsOnTarget, METRICS.xg],
+  },
+  {
+    id: "aerial-physicality",
+    group: "defence",
+    tab: "空中对抗",
+    title: "空中对抗",
+    x: METRICS.aerialWinShare,
+    y: METRICS.fouls,
+    // 两轴都是 style(打法/身体对抗特征),不代表强弱。
+    quadrants: ["强悍对抗", "犯规频繁", "回避对抗", "空霸克制"],
+    note: "横轴是全场争顶里本队赢下的比例（没有单独的“争顶总数”字段，用双方赢下次数之和近似分母），纵轴是场均犯规。两轴都是身体对抗风格的描述，不是强弱评价。",
+    related: [METRICS.corners],
+  },
+  {
+    id: "box-pressure",
+    group: "control",
+    tab: "禁区压制",
+    title: "禁区压制",
+    x: METRICS.boxTouchShare,
+    y: METRICS.npxgPerBoxTouch,
+    // ⚠ 轻度机械相关:触球数同时在 x 的分子与 y 的分母。
+    quadrants: ["压制转化", "一击致命", "难入禁区", "禁区空转"],
+    note: "横轴是双方对方禁区触球里本队占的份额，纵轴是每次禁区触球平均换来多少非点球 xG——这是本站目前最接近 Field Tilt 的字段组合，但不是官方 Field Tilt。仅 2024/2025、2025/2026 两个赛季有数据（其余赛季数据源随机缺失，球队间不可比，该视角会因样本不足自动禁用）。",
+    related: [METRICS.xgPerShot],
+  },
+  {
+    id: "territory-pressing",
+    group: "defence",
+    tab: "阵地与拼抢",
+    title: "阵地与拼抢",
+    x: METRICS.oppTerritoryShare,
+    y: METRICS.defActionDensity,
+    // ⚠ 中度机械相关:被压通常伴随对手控球高，而 y 的分母是对手传球数。
+    quadrants: ["低位缠斗", "前场紧逼", "控球压制", "收缩退守"],
+    note: "横轴是对手把球玩到我方半场的比例（阵地证据），纵轴是防守动作密度——这是基于阵地与动作密度的近似判断，不是 PPDA。单看防守动作密度分不出高位压迫和铁桶阵，加上「对手根本进不了我们半场」这条阵地证据之后才敢用「前场紧逼」这个词。",
+    related: [METRICS.fouls],
+  },
+  {
+    id: "corner-quality",
+    group: "attack",
+    tab: "角球成色",
+    title: "角球成色",
+    x: METRICS.cornerShotRate,
+    y: METRICS.corners,
+    quadrants: ["角球利器", "角球空转", "角球平平", "角球精准"],
+    note: "横轴是角球真正形成射门的比例（分母通常较小，详情面板按原始计数展示，不只给百分比），纵轴是场均角球数。",
+    related: [],
+  },
+  {
+    id: "finishing-record",
+    group: "quality",
+    tab: "终结记录",
+    title: "终结记录",
+    x: METRICS.nonPenaltyShotsPerMatch,
+    y: METRICS.finishingDelta,
+    quadrants: ["多射超额", "少射超额", "少射欠收", "多射欠收"],
+    note: "横轴是场均非点球射门数，纵轴是场均（非点球进球 − 非点球预期进球）——这是短期窗口的结果记录，不是稳定的终结能力，调研认为这类差值跨赛季的相关性接近零。",
+    related: [],
+  },
+  {
+    id: "defence-goalkeeping",
+    group: "defence",
+    tab: "防线与门将",
+    title: "防线与门将",
+    x: METRICS.oppXgPerShot,
+    y: METRICS.gkSavesAboveExpected,
+    quadrants: ["门线双稳", "门将救主", "门户洞开", "防线独撑"],
+    note: "横轴是对手每脚射门 xG，反转过来读——越靠左（数值越低）说明防线把对手逼到了更差的射门位置，越低越好。纵轴是场均门将扑救超额——这是短期窗口的近期记录，不代表未来表现，且被扑救射门的 xGOT 约三分之一缺失，图下详情面板会公示实际纳入统计的有效射正次数。xG 是射门前的位置质量，xGOT 是射门后、只算射正的落点质量，两者是不同信号，不是同一个数字换了个名字。",
+    related: [],
   },
 ];
 
@@ -101,28 +295,57 @@ export type Pt = {
   teamId: number | null;
 };
 
-/** collectPoints 只需要两根轴的列名;View 结构上满足它,测试可以只传列名。 */
+/** plotSet/collectPoints 只需要两根轴的取值函数与门槛;View 结构上满足它,
+ *  测试可以直接传 METRICS 里的指标对象(比手写列名更贴近真实代码路径)。 */
 export type __TestView = {
-  x: { key: keyof TeamSeasonStatRow };
-  y: { key: keyof TeamSeasonStatRow };
+  x: Pick<Axis, "value" | "sample">;
+  y: Pick<Axis, "value" | "sample">;
 };
 
-export function collectPoints(rows: TeamSeasonStatRow[], view: __TestView): Pt[] {
-  const out: Pt[] = [];
-  const seen = new Set<string>();
+export type HiddenTeam = {
+  key: string;
+  name: string;
+  axis: "x" | "y";
+  /** missing = 数据源这一项根本没给;sample = 有值,但样本不够,不画 */
+  reason: "missing" | "sample";
+};
+
+export type PlotSet = { pts: Pt[]; hidden: HiddenTeam[] };
+
+/** `windowScale`(2026-09-14"最近 N 场/主客场"筛选新增,默认 1 = 不缩放)
+ *  按当前筛选窗口把每根轴的样本门槛等比缩小,见 teamMetrics.ts::windowScaleFor。 */
+export function plotSet(rows: TeamSeasonStatRow[], view: __TestView, windowScale = 1): PlotSet {
+  const pts: Pt[] = [];
+  const plotted = new Set<string>();
+  // Map 而不是数组:同一支球队出现多行时不能被记两次"未画出";后面的行
+  // 补上了数据就要把前面的记录撤掉(保持既有"后行可救"语义)。
+  const hiddenByKey = new Map<string, HiddenTeam>();
   for (const r of rows) {
-    const x = r[view.x.key];
-    const y = r[view.y.key];
-    // 缺一个维度就整点丢弃 —— 半个坐标画不出散点,补 0 会造出假的"极端球队"
-    if (typeof x !== "number" || typeof y !== "number") continue;
-    // 同一支球队出现多行(本地测试库曾出现 16 行重复的 1001)只画第一行:
-    // key 是 React key 也是选中身份,重复会让 16 个队徽叠在一处且无法选中
     const key = teamKey(r.team);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
+    if (plotted.has(key)) continue; // 已画上的队,后续重复行一律忽略
+    const name = r.team.name;
+    const x = view.x.value(r);
+    const y = view.y.value(r);
+    // 缺一个维度就整点丢弃 —— 半个坐标画不出散点,补 0 会造出假的"极端球队"
+    if (x == null || y == null) {
+      hiddenByKey.set(key, { key, name, axis: x == null ? "x" : "y", reason: "missing" });
+      continue;
+    }
+    // 样本不足的不画,但必须能被数出来:图下方要说清楚藏了几支、为什么
+    const badAxis = !meetsSample(r, view.x, windowScale)
+      ? "x"
+      : !meetsSample(r, view.y, windowScale)
+        ? "y"
+        : null;
+    if (badAxis) {
+      hiddenByKey.set(key, { key, name, axis: badAxis, reason: "sample" });
+      continue;
+    }
+    plotted.add(key);
+    hiddenByKey.delete(key);
+    pts.push({
       key,
-      name: r.team.name,
+      name,
       x,
       y,
       mp: r.matches_played ?? null,
@@ -130,46 +353,98 @@ export function collectPoints(rows: TeamSeasonStatRow[], view: __TestView): Pt[]
       teamId: r.team.team_id ?? null,
     });
   }
-  return out;
+  return { pts, hidden: [...hiddenByKey.values()] };
+}
+
+/** 旧签名保留:调用方只要点集时用这个(组件、option 构造器、既有测试)。 */
+export const collectPoints = (rows: TeamSeasonStatRow[], view: __TestView, windowScale = 1): Pt[] =>
+  plotSet(rows, view, windowScale).pts;
+
+/** 藏了几支球队、为什么——一句话,图下脚注与 ariaSummary 共用同一个产物,
+ *  两处不可能再飘走。没有隐藏时返回空串,此时摘要与改造前逐字一致(e2e 依赖)。
+ *  `windowScale` 同 plotSet,门槛说明文案要与实际生效的门槛一致。 */
+export function hiddenNote(hidden: HiddenTeam[], view: { x: Axis; y: Axis }, windowScale = 1): string {
+  const names = (hs: HiddenTeam[]) => hs.map((h) => h.name).join("、");
+  const bySample = hidden.filter((h) => h.reason === "sample");
+  const byMissing = hidden.filter((h) => h.reason === "missing");
+  const out: string[] = [];
+  if (bySample.length) {
+    const rules = [...new Set([view.x, view.y].map((a) => sampleText(a, windowScale)).filter(Boolean))].join("；");
+    out.push(`另有 ${bySample.length} 支球队样本不足未画出${rules ? `(门槛:${rules})` : ""}：${names(bySample)}`);
+  }
+  if (byMissing.length) {
+    out.push(`${byMissing.length} 支球队数据源缺这两项之一，同样未画出：${names(byMissing)}`);
+  }
+  if (!out.length) return "";
+  return out.join("；") + "。虚线平均值只统计画出的球队。";
 }
 
 export const mean = (nums: number[]) => nums.reduce((a, b) => a + b, 0) / nums.length;
+
+/** "虚线是……平均值"这句话里,……部分随筛选状态变化(2026-09-14"最近 N 场/
+ *  主客场"筛选新增)——不筛选时是"本联赛本赛季",筛了就换成"最近 5 场"/
+ *  "主场"/"最近 5 场主场"这类更精确的描述,不能继续说"本赛季平均"却其实
+ *  只统计了最近几场。 */
+export function filterWindowLabel(recency: number | null | undefined, venue: string | undefined): string {
+  const venueLabel = venue === "home" ? "主场" : venue === "away" ? "客场" : "";
+  if (recency != null && venueLabel) return `最近${recency}场${venueLabel}`;
+  if (recency != null) return `最近${recency}场`;
+  if (venueLabel) return venueLabel;
+  return "本联赛本赛季";
+}
+
+/** 两根轴各自的"越小越好"。传 boolean 是旧调用方的兼容形态,只表示 y。 */
+export type Dirs = { x?: boolean; y?: boolean };
 
 /**
  * 点落在哪个象限,索引按**好/差**而不是高/低:
  *   0 = x 好 y 好, 1 = x 差 y 好, 2 = x 差 y 差, 3 = x 好 y 差
  *
+ * 平局规则(有意不对称,两根轴同一条规则):越大越好的轴,恰好等于均值算
+ * **好**侧(>=);越小越好的轴,恰好等于均值算**差**侧(严格 <)。这条不对称
+ * 是刻意的:一支恰好压在均值上的球队只会被算作一侧,不会因为两根轴各自
+ * "包含等号"被塞进最好的那个象限。
+ *
  * y 轴必须传 lowerIsBetter —— "场均预期失球"越小越好,若按数值高低命名,
- * 真正攻守兼备的球队会被贴上"对攻型",和配色正好互相打架。
+ * 真正攻守兼备的球队会被贴上"对攻型",和配色正好互相打架。x 轴同理支持。
  */
 export function quadrantOf<P extends { x: number; y: number }>(
   p: P,
   mx: number,
   my: number,
-  lowerIsBetterY = false,
+  lowerIsBetter: boolean | Dirs = false,
 ): number {
-  const xGood = p.x >= mx;
-  const yGood = lowerIsBetterY ? p.y < my : p.y >= my;
+  const d: Dirs = typeof lowerIsBetter === "boolean" ? { y: lowerIsBetter } : lowerIsBetter;
+  const xGood = d.x ? p.x < mx : p.x >= mx;
+  const yGood = d.y ? p.y < my : p.y >= my;
   if (xGood && yGood) return 0;
   if (!xGood && yGood) return 1;
   if (!xGood && !yGood) return 2;
   return 3;
 }
 
-export function fmt(v: number, a: Axis) {
+/** 2026-09-15 起参数放宽成结构类型(不要求完整 Axis/MetricDef 形状)——
+ *  球队象限图与球员象限图各自有一套 MetricDef(value 的行参类型不同,
+ *  TeamSeasonStatRow vs PlayerQuadrantRow,严格模式下互不兼容),但两边的
+ *  Axis 在 label/unit/digits/lowerIsBetter 这几个字段上形状完全一致——
+ *  fmt/dirsOf/axisLabel 只读这几个字段,没必要绑定某一套具体的 MetricDef。
+ *  quadrantOption.ts(唯一的图表 option 构造器)据此对两边通用,不必复制。 */
+export type AxisLike = { label: string; unit: string; digits: number; lowerIsBetter?: boolean };
+
+export function fmt(v: number, a: AxisLike) {
   return `${v.toFixed(a.digits)}${a.unit}`;
 }
 
-export function axisToMetric(a: Axis): MetricDef {
-  return {
-    id: a.key,
-    label: a.label,
-    unit: a.unit,
-    digits: a.digits,
-    lowerIsBetter: a.lowerIsBetter,
-    value: (r) => (typeof r[a.key] === "number" ? (r[a.key] as number) : null),
-  };
-}
+/** 三个调用点(组件 / option / 详情面板)统一从 view 取方向,不再各自记 lowY。 */
+export const dirsOf = (v: { x: AxisLike; y: AxisLike }): Dirs => ({
+  x: v.x.lowerIsBetter === true,
+  y: v.y.lowerIsBetter === true,
+});
+
+/** 2026-09-14 起 Axis 就是 MetricDef(多了可选的 axisName),这里是恒等转换。
+ *  不删:TeamQuadrantDetail 与既有测试都在调用,留着这层命名也把"轴 = 指标"
+ *  这件事写在代码里。 */
+export const axisToMetric = (a: Axis): MetricDef => a;
 
 /**
  * 只给"离联赛平均最远"的几支球队标队名。
@@ -210,9 +485,11 @@ export function toggleSelection(keys: string[], key: string, max = MAX_SELECTED)
   return next.length > max ? next.slice(next.length - max) : next;
 }
 
-/** 挡陈旧选中(照抄 ShotMapChart.resolveSelectedShot 的派生态做法):只保留当前视角仍在图上的 key,顺序按选中先后。 */
-export function resolveSelectedTeams(pts: Pt[], keys: string[]): Pt[] {
-  const out: Pt[] = [];
+/** 挡陈旧选中(照抄 ShotMapChart.resolveSelectedShot 的派生态做法):只保留
+ *  当前视角仍在图上的 key,顺序按选中先后。泛型化(2026-09-15)以复用给
+ *  球员象限图的 PlayerPt——只要求 {key: string},不绑定球队专属字段。 */
+export function resolveSelectedTeams<P extends { key: string }>(pts: P[], keys: string[]): P[] {
+  const out: P[] = [];
   for (const k of keys) {
     const p = pts.find((q) => q.key === k);
     if (p) out.push(p);
@@ -220,8 +497,9 @@ export function resolveSelectedTeams(pts: Pt[], keys: string[]): Pt[] {
   return out;
 }
 
-/** ECharts 点击参数 → 选中键。优先 dataIndex(不经过克隆路径),payload 兜底;点空白返回 null。 */
-export function resolveClickedKey(params: unknown, pts: Pt[]): string | null {
+/** ECharts 点击参数 → 选中键。优先 dataIndex(不经过克隆路径),payload 兜底;
+ *  点空白返回 null。泛型化(2026-09-15)同 resolveSelectedTeams。 */
+export function resolveClickedKey<P extends { key: string }>(params: unknown, pts: P[]): string | null {
   const p = params as {
     seriesName?: string;
     dataIndex?: number;

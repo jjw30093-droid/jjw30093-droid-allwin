@@ -4,9 +4,15 @@
 进攻半场传球占比、禁区触球四条对比,复用 `attack_chain.py` 的字段聚合
 helper(同一套 PIT-safe 窗口 + 分子分母配对逻辑,不重写一遍 SQL)。
 
-**命名红线**(方案 §三·图2):`opposition_half_passes ÷ passes` 一律叫
+**命名红线**(方案 §三·图2):`opposition_half_passes ÷ accurate_passes` 一律叫
 「进攻半场传球占比」,不得冒充 Opta/StatsBomb 的正式 Field Tilt——同
 `backend/metrics/registry.py` 里 `opp_half_pass_share` 的解释文案。
+
+**分母改正**(2026-09-14,站长已批准):分母原来是 `passes`(传球尝试总数),
+但 `own_half_passes + opposition_half_passes` 实测等于 `accurate_passes`
+(成功传球,26095/26096 命中),不等于 `passes`——分子只数成功、分母却数
+全部尝试,比值因此永远到不了 100%。改用 `accurate_passes` 后两个半场占比
+之和恒为 100%。
 """
 
 from __future__ import annotations
@@ -40,6 +46,6 @@ def team_possession_control(
         "label_zh": w.label_zh,
         "possession": _metric(_avg_field(conn, ids, team_id, "BallPossesion")),
         "pass_accuracy": _metric(_ratio_field(conn, ids, team_id, "accurate_passes", "passes")),
-        "opp_half_pass_share": _metric(_ratio_field(conn, ids, team_id, "opposition_half_passes", "passes")),
+        "opp_half_pass_share": _metric(_ratio_field(conn, ids, team_id, "opposition_half_passes", "accurate_passes")),
         "touches_opp_box": _metric(_avg_field(conn, ids, team_id, "touches_opp_box")),
     }

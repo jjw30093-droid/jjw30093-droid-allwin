@@ -57,11 +57,61 @@
   outline-offset: 2px;
 }
 
+/* 下拉筛选控件(2026-09-15,赛季 + 场次范围/主客场共用):原生 <select>,
+   pill 造型跟 .chip 呼应,箭头用纯 CSS 三角形(border trick,不用 data URI
+   图标)——颜色直接读 --ink-2,深浅两套主题零额外代码。 */
+.selectWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 6px 30px 6px 14px;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.select:hover {
+  background: var(--surface-2);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--gold-700);
+  outline-offset: 2px;
+}
+
+.selectWrap::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transform: translateY(-20%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--ink-2);
+}
+
 @media (max-width: 520px) {
   .chipRow {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 3px;
+    /* 窄屏下多个筛选行会堆叠(赛季 + 场次范围/主客场等),20px 的行距
+       在手机上累积得太快——2026-09-15 收窄到 12px,不影响可点击区域。 */
+    margin-bottom: 12px;
   }
 
   .chip,

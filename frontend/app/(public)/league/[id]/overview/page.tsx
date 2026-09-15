@@ -41,7 +41,7 @@ export default async function LeagueOverviewPage({
   let data: Profile | null;
   try {
     data = await serverGetOptional<Profile>(
-      leagueSectionPath("season-profile", id, seasonParam),
+      leagueSectionPath("season-profile", id, { season: seasonParam }),
     );
   } catch {
     return (

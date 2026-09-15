@@ -481,6 +481,66 @@ SILVER_GOAL_MINUTE_BUCKETS_COLUMNS = [
     ("updated_at", "TEXT"),
 ]
 
+# 窄长表:每个 (League_ID, Season, Team_ID, metric_key) 一行(migrations/core/
+# 0017,球队象限图复合指标)。不存 value 列——value = scale × numerator_sum /
+# denominator_sum,scale 是 backend/metrics/registry.py 里该指标的显示单位,
+# 改单位不该触发本表重建。denominator_sum 同时是前端最小样本门槛的"累计分母"
+# 输入。真源见 backend/silver/ratio_metrics.py::RatioSpec。
+SILVER_TEAM_SEASON_RATIOS_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("Team_ID", "INTEGER"),
+    ("metric_key", "TEXT"),
+    ("numerator_sum", "REAL"),
+    ("denominator_sum", "REAL"),
+    ("paired_matches", "INTEGER"),
+    ("matches_played", "INTEGER"),
+    ("methodology_version", "TEXT"),
+    ("updated_at", "TEXT"),
+    # 2026-09-14(migrations/core/0018):覆盖率类免责披露用的额外样本量,
+    # 不是所有指标都用——目前只有「场均门将扑救超额」(Σ xGOT 求和时排除
+    # xGOT 缺失的射正,需要如实公示纳入求和的有效次数)。恒为 NULL 表示
+    # "该指标不使用这个字段",不是 0。
+    ("sample_count", "INTEGER"),
+]
+
+# 联赛球员象限图(2026-09-15,migrations/core/0019)。位置筛选与出场门槛只扫
+# 这张宽表;team_minutes 是该球员出场过的每支队伍(该队该赛季完赛场次×90)
+# 取 MAX——转会球员拿更严的分母。Team_ID 是出场分钟最多的那支队(显示用),
+# 与算分母用的 team_minutes 不是同一个概念。见 0019 迁移文件头注释。
+SILVER_PLAYER_SEASON_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("Player_ID", "TEXT"),
+    ("Team_ID", "INTEGER"),
+    ("player_name", "TEXT"),
+    ("usual_position", "INTEGER"),
+    ("appearances", "INTEGER"),
+    ("minutes_played", "INTEGER"),
+    ("team_minutes", "INTEGER"),
+    ("minutes_share", "REAL"),
+    ("teams_count", "INTEGER"),
+    ("updated_at", "TEXT"),
+]
+
+# 窄长表:每个 (League_ID, Season, Player_ID, metric_key) 一行,与
+# SILVER_TEAM_SEASON_RATIOS_COLUMNS 同构。不存 value 列——value = display_scale
+# × numerator_sum / denominator_sum。per-90 类指标 denominator_sum 存
+# SUM(minutes_played)(display_scale=90 换算成每90分钟);比率类指标
+# denominator_sum 存另一统计量之和(display_scale=100 换算成百分比)。
+# 真源见 backend/silver/player_season.py::PlayerMetricSpec。
+SILVER_PLAYER_SEASON_RATIOS_COLUMNS = [
+    ("League_ID", "INTEGER"),
+    ("Season", "TEXT"),
+    ("Player_ID", "TEXT"),
+    ("metric_key", "TEXT"),
+    ("numerator_sum", "REAL"),
+    ("denominator_sum", "REAL"),
+    ("paired_matches", "INTEGER"),
+    ("methodology_version", "TEXT"),
+    ("updated_at", "TEXT"),
+]
+
 
 # ── int_match_features: 逐场赛前特征表(ROADMAP.md Phase 1.M.1)────────
 # 供 Gold 层模型训练用(CLAUDE.md §8),不是 Silver(不做展示，只服务建模)。

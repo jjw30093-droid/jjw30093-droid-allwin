@@ -59,7 +59,7 @@ export function MemberLeagueSection({
 
   useEffect(() => {
     let cancelled = false;
-    clientFetch<SectionData["body"]>(leagueSectionPath(kind, leagueId, season))
+    clientFetch<SectionData["body"]>(leagueSectionPath(kind, leagueId, { season }))
       .then((body) => {
         if (cancelled) return;
         setState({ phase: "data", data: { kind, body } as SectionData });
@@ -150,7 +150,7 @@ export function MemberLeagueSection({
           {switcher}
           <FixtureRounds
             matches={data.body.matches}
-            returnTo={buildLeagueSeasonHref(leagueId, "matches", season)}
+            returnTo={buildLeagueSeasonHref(leagueId, "matches", { season })}
           />
         </>
       );

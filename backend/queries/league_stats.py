@@ -12,8 +12,13 @@
 import json
 import sqlite3
 
+from backend.metrics.registry import get_metric
+from backend.queries.leagues import CROSS_LEAGUE_LEAGUE_IDS
 from backend.queries.matches import _team_ref
 from backend.queries.teams import team_brand_color_map, team_display_map
+from backend.queries.window import match_window_join_sql, resolve_match_window
+from backend.silver.build_silver import build_team_season_stats
+from backend.silver.ratio_metrics import build_team_season_ratios
 
 # 球员榜维度(2026-08-16 起全字段免费投影)。原来只暴露 5 个"免费"维度
 # (进球/助攻/xG/xGOT/评分),其余 fact_season_player_stats 里真实存在、
@@ -115,14 +120,21 @@ FREE_TEAM_BOARDS: list[tuple[str, str]] = [
 
 
 def _team_source_boards(
-    conn: sqlite3.Connection, league_id: int, season: str | None
+    conn: sqlite3.Connection, league_id: int, season: str | None,
+    *,
+    filtered: bool = False,
 ) -> list[dict]:
     """来源方球队榜(top 10/维度)。空维度整条不返回,不制造空卡片墙。
 
     season 由调用方传入**已解析好的赛季**(与本页 rows 同一个),不自己再解析
     一次——两处各自解析会让同一个页面上半部分和下半部分显示不同赛季。
+
+    `filtered=True`(2026-09-14 最近 N 场/主客场筛选新增)时整段返回空列表——
+    这批榜单读的 `fact_season_team_stats` 是 FotMob 自己的赛季级预聚合榜,
+    没有逐场明细,结构上算不出"最近 5 场"或"主场"版本(见筛选方案 note),
+    站长已拍板筛选激活时整段隐藏而不是继续展示与筛选口径不符的赛季数据。
     """
-    if season is None:
+    if season is None or filtered:
         return []
     display = team_display_map(conn)
     colors = team_brand_color_map(conn, league_id, season)
@@ -199,6 +211,22 @@ def _seasons_of(conn: sqlite3.Connection, table: str, league_id: int) -> list[st
 # 同一联赛的 2026 赛季有 20 场、2024/2025 各 38 场,才是有意义的默认。
 MIN_MATCHES_FOR_DEFAULT_SEASON = 3
 
+# "球队数据"页(含象限图)展示某个已解析赛季的数据前,该赛季至少要有一支
+# 球队完赛到这个场次(2026-09-14,站长要求)——与上面的
+# MIN_MATCHES_FOR_DEFAULT_SEASON 是两件不同的事:那个只决定"没显式传 season
+# 时默认选哪个赛季",这个决定"不管季是怎么选出来的(默认选中还是用户显式
+# ?season= 指定),这个赛季现在够不够格展示真实数据"——用户显式选中一个
+# 刚开踢的新赛季时,MIN_MATCHES_FOR_DEFAULT_SEASON 不会挡它(_resolve_season
+# 对显式请求一律尊重),但这个门槛仍然会挡,展示"赛季刚开始"占位而不是
+# 一张几乎全是单场波动的假整季榜。
+#
+# 例外:欧冠/欧联/欧协联(CROSS_LEAGUE_LEAGUE_IDS)不受这条限制——联赛阶段
+# 总共只踢 8 场(主客各 4 场),与 backend/queries/leagues.py::
+# is_cross_league_competition 的既有理由同构(那三项赛事的样本天然小,套用
+# 面向国内联赛设计的门槛,只会让它们永远显示不出数据,不是更谨慎,是直接
+# 判了终身空白)。
+MIN_MATCHES_FOR_SEASON_DATA = 4
+
 
 def _seasons_with_enough_sample(
     conn: sqlite3.Connection, table: str, league_id: int
@@ -237,16 +265,102 @@ def _resolve_season(
     return (pool or seasons)[-1]
 
 
-def team_season_stats(
-    conn: sqlite3.Connection, league_id: int, season: str | None = None
+def _team_ratios(
+    conn: sqlite3.Connection, league_id: int, season: str,
+    *,
+    window_pairs: list[tuple[int, int]] | None = None,
+    matches_played_by_team: dict[int, int] | None = None,
 ) -> dict:
+    """{Team_ID: {metric_key: TeamRatioValue-shaped dict}},来自
+    silver_team_season_ratios(球队象限图复合指标,backend/silver/ratio_metrics.py)。
+
+    value 按 backend/metrics/registry.py 该指标的 unit 缩放(unit='%' 时 ×100)
+    ——registry 是这批指标的唯一口径来源,缩放规则不在这里重复定义一份新的。
+    denominator_sum 是**赛季累计分母**,前端最小样本门槛(minVolume)直接读它,
+    不是场均值。分母 <= 0 或缺配对场次时 value=None,不产出一个虚假的比率。
+
+    `window_pairs`(2026-09-14,球队数据页"最近 N 场/主客场"筛选新增,可选)
+    非 None 时不读物化表,改用 `build_team_season_ratios()` 现算——该函数
+    产出的字典字段名与物化表列名逐字相同,下面的处理逻辑对两种来源零改动。
+    `matches_played_by_team` 是现算路径必需的参数(由调用方传入,通常是
+    `build_team_season_stats()` 在同一个筛选窗口下算出的结果,避免这里
+    重复数一遍完赛场次)。
+    """
+    if window_pairs is not None:
+        rows = build_team_season_ratios(
+            conn, league_id, season, matches_played_by_team or {}, window_pairs=window_pairs
+        )
+    else:
+        rows = conn.execute(
+            """SELECT Team_ID, metric_key, numerator_sum, denominator_sum,
+                      paired_matches, matches_played, sample_count
+               FROM silver_team_season_ratios
+               WHERE League_ID=? AND Season=?""",
+            (league_id, season),
+        ).fetchall()
+    out: dict = {}
+    for r in rows:
+        team_id, metric_key, num, den, paired, played, sample_count = (
+            r["Team_ID"], r["metric_key"], r["numerator_sum"], r["denominator_sum"],
+            r["paired_matches"], r["matches_played"], r["sample_count"],
+        )
+        scale = get_metric(metric_key).display_scale
+        value = scale * num / den if (num is not None and den is not None and den > 0) else None
+        out.setdefault(team_id, {})[metric_key] = {
+            "value": round(value, 4) if value is not None else None,
+            "numerator": num,
+            "denominator": den,
+            "paired_matches": paired or 0,
+            "matches_played": played or 0,
+            "sample_count": sample_count,
+        }
+    return out
+
+
+def _raw_matches_for_window(conn: sqlite3.Connection, league_id: int, season: str) -> list:
+    """给 `build_team_season_stats()` 现算路径用的原始比赛列表——与
+    `backend/silver/build_silver.py::_matches()` 同一份 SQL,这里本地复制
+    一份而不是导入那个模块:那是离线批处理脚本入口,模块顶层有
+    `sys.path.insert` 副作用,不适合被在线查询层长期持有。"""
+    rows = conn.execute(
+        """SELECT Match_ID, Home_Team_ID, Away_Team_ID, home_score, away_score
+           FROM dim_match
+           WHERE status = 'Finish' AND League_ID = ? AND Season = ?""",
+        (league_id, season),
+    ).fetchall()
+    return [
+        {
+            "Match_ID": r["Match_ID"],
+            "Home_Team_ID": r["Home_Team_ID"],
+            "Away_Team_ID": r["Away_Team_ID"],
+            "home_score": r["home_score"],
+            "away_score": r["away_score"],
+        }
+        for r in rows
+    ]
+
+
+def team_season_stats(
+    conn: sqlite3.Connection, league_id: int, season: str | None = None,
+    *,
+    recency: int | None = None,
+    venue: str = "all",
+) -> dict:
+    """`recency`/`venue`(2026-09-14,球队数据页"最近 N 场/主客场"筛选新增,
+    均可选)——两者都是默认值(`recency=None, venue="all"`)时行为与筛选
+    功能上线前逐字节相同,继续读物化表 `silver_team_season_stats`/
+    `silver_team_season_ratios`,零性能回归。任一被显式设置时绕开物化表,
+    实时聚合 `fact_team_match_stats`/`fact_shotmap`(见
+    `backend.queries.window.resolve_match_window`),不产出新的 silver 表。
+    """
+    filtered = recency is not None or venue != "all"
     seasons = _seasons_of(conn, "silver_team_season_stats", league_id)
     if not seasons:
         return {
             "season": season,
             "available_seasons": [],
             "rows": [],
-            "boards": _team_source_boards(conn, league_id, season),
+            "boards": _team_source_boards(conn, league_id, season, filtered=filtered),
         }
     season = _resolve_season(
         seasons,
@@ -257,38 +371,77 @@ def team_season_stats(
     )
     display = team_display_map(conn)
     colors = team_brand_color_map(conn, league_id, season)
-    # xG 拆解(运动战/定位球/非点球)与总 xG 同源同口径。
-    #
-    # 被创造 xG 走 fact_league_table 的 xg 档:该表已随 standings 的 table_type=xg
-    # 公开(xG 运气榜),这里只是换算成场均以便与 silver 的场均值同轴比较。
-    # 实测确认两源同口径:曼城 2025/2026 silver 1.877 == 65.5.../38(逐队吻合)。
-    # LEFT JOIN —— 并非每个联赛赛季都有 xg 档(如 J1 2026、瑞超 2024),
-    # 缺失时 avg_expected_goals_conceded 为 None,前端据此降级,不补 0。
-    #
-    # 2026-08-16 起(除"每日精选"外全站比赛内容全部免费):角球/黄牌/红牌/
-    # 零封/BTTS 与射门/xG 等字段同属免费投影,一并 SELECT。
-    rows = conn.execute(
-        """SELECT s.Team_ID, s.matches_played, s.avg_total_shots,
-                  s.avg_shots_on_target, s.avg_possession, s.avg_expected_goals,
-                  s.avg_expected_goals_on_target, s.avg_expected_goals_open_play,
-                  s.avg_expected_goals_set_play, s.avg_expected_goals_non_penalty,
-                  s.avg_corners, s.avg_fouls, s.avg_yellow_cards, s.avg_red_cards,
-                  s.clean_sheets, s.btts_matches, s.btts_pct,
-                  CASE WHEN COALESCE(x.played, 0) > 0
-                       THEN x.xg_conceded * 1.0 / x.played END
-                    AS avg_expected_goals_conceded
-           FROM silver_team_season_stats s
-           LEFT JOIN fact_league_table x
-             ON x.League_ID = s.League_ID AND x.Season = s.Season
-            AND x.Team_ID = s.Team_ID AND x.table_type = 'xg'
-           WHERE s.League_ID=? AND s.Season=?
-           ORDER BY s.Team_ID""",
-        (league_id, season),
-    ).fetchall()
+
+    # 赛季就绪门槛永远看**整赛季**样本,不受当前筛选影响——"这个赛季现在
+    # 够不够格展示数据"和"筛选后还剩几场"是两件事,不能混为一谈(用户筛
+    # "最近 3 场"不代表赛季本身只踢了 3 场)。见 MIN_MATCHES_FOR_SEASON_DATA
+    # 注释。
+    if league_id not in CROSS_LEAGUE_LEAGUE_IDS:
+        season_matches_played = conn.execute(
+            """SELECT MAX(COALESCE(matches_played, 0)) FROM silver_team_season_stats
+               WHERE League_ID=? AND Season=?""",
+            (league_id, season),
+        ).fetchone()[0] or 0
+        if season_matches_played < MIN_MATCHES_FOR_SEASON_DATA:
+            return {
+                "season": season,
+                "available_seasons": seasons,
+                "boards": [],
+                "rows": [],
+                "empty_reason": "本赛季刚开始，暂无足够数据（需至少一支球队完赛 4 场）",
+            }
+
+    if not filtered:
+        # xG 拆解(运动战/定位球/非点球)与总 xG 同源同口径。
+        #
+        # 被创造 xG 走 fact_league_table 的 xg 档:该表已随 standings 的 table_type=xg
+        # 公开(xG 运气榜),这里只是换算成场均以便与 silver 的场均值同轴比较。
+        # 实测确认两源同口径:曼城 2025/2026 silver 1.877 == 65.5.../38(逐队吻合)。
+        # LEFT JOIN —— 并非每个联赛赛季都有 xg 档(如 J1 2026、瑞超 2024),
+        # 缺失时 avg_expected_goals_conceded 为 None,前端据此降级,不补 0。
+        #
+        # 2026-08-16 起(除"每日精选"外全站比赛内容全部免费):角球/黄牌/红牌/
+        # 零封/BTTS 与射门/xG 等字段同属免费投影,一并 SELECT。
+        rows = conn.execute(
+            """SELECT s.Team_ID, s.matches_played, s.avg_total_shots,
+                      s.avg_shots_on_target, s.avg_possession, s.avg_expected_goals,
+                      s.avg_expected_goals_on_target, s.avg_expected_goals_open_play,
+                      s.avg_expected_goals_set_play, s.avg_expected_goals_non_penalty,
+                      s.avg_corners, s.avg_fouls, s.avg_yellow_cards, s.avg_red_cards,
+                      s.clean_sheets, s.btts_matches, s.btts_pct,
+                      CASE WHEN COALESCE(x.played, 0) > 0
+                           THEN x.xg_conceded * 1.0 / x.played END
+                        AS avg_expected_goals_conceded
+               FROM silver_team_season_stats s
+               LEFT JOIN fact_league_table x
+                 ON x.League_ID = s.League_ID AND x.Season = s.Season
+                AND x.Team_ID = s.Team_ID AND x.table_type = 'xg'
+               WHERE s.League_ID=? AND s.Season=?
+               ORDER BY s.Team_ID""",
+            (league_id, season),
+        ).fetchall()
+        ratios_by_team = _team_ratios(conn, league_id, season)
+    else:
+        # 现算路径:被创造 xG(avg_expected_goals_conceded)来自
+        # fact_league_table 的赛季级 xg 档,没有逐场明细,筛选窗口下算不出
+        # 对应版本——如实标 None,不假装能算(同 J1/瑞超没有 xg 档时的既有
+        # 降级语义,前端已经在处理这种缺失)。
+        window_pairs = resolve_match_window(conn, league_id, season, venue=venue, recency=recency)
+        matches = _raw_matches_for_window(conn, league_id, season)
+        team_rows = build_team_season_stats(conn, league_id, season, matches, window_pairs=window_pairs)
+        for row in team_rows:
+            row.setdefault("avg_expected_goals_conceded", None)
+        rows = team_rows
+        matches_played_by_team = {r["Team_ID"]: r["matches_played"] for r in team_rows}
+        ratios_by_team = _team_ratios(
+            conn, league_id, season,
+            window_pairs=window_pairs, matches_played_by_team=matches_played_by_team,
+        )
+
     return {
         "season": season,
         "available_seasons": seasons,
-        "boards": _team_source_boards(conn, league_id, season),
+        "boards": _team_source_boards(conn, league_id, season, filtered=filtered),
         "rows": [
             {
                 "team": _team_ref(r["Team_ID"], None, display),
@@ -312,6 +465,7 @@ def team_season_stats(
                 "clean_sheets": r["clean_sheets"],
                 "btts_matches": r["btts_matches"],
                 "btts_pct": r["btts_pct"],
+                "ratios": ratios_by_team.get(r["Team_ID"]),
             }
             for r in rows
         ],

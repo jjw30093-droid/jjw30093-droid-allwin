@@ -54,9 +54,10 @@
 
 .quad {
   display: inline-block;
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 999px;
   border: 1px solid var(--border-strong);
+  background: var(--surface-soft);
   color: var(--ink-2);
   font-size: 12px;
   font-weight: 600;
@@ -134,6 +135,13 @@
 .value {
   font-weight: 700;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fraction {
+  font-weight: 400;
+  font-size: 0.85em;
+  color: var(--ink-3, var(--ink-2));
   font-variant-numeric: tabular-nums;
 }
 

@@ -1,7 +1,8 @@
 .card {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--r-card, 14px);
   background: var(--surface);
+  box-shadow: var(--shadow-card);
   padding: 16px 14px 14px;
   margin-bottom: 18px;
 }
@@ -30,29 +31,79 @@
   line-height: 1.5;
 }
 
+.head {
+  /* 分组行 + 视角行两行,靠 head 纵向堆叠;各自内部仍是横排 */
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.headTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.groups,
 .tabs {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+  /* 视角从 3 个扩到十几个后,单行放不下就横滑,不换行挤压按钮 */
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
+/* 分类行是"大类目"(第一层选择),用一条 track 背景把它和下面的视角 tab
+   行区分开——否则两行都是同款药丸按钮,用户分不清哪行是分类、哪行是
+   具体视角。track 用 --surface-soft(比卡片底色略沉一档),不引入新色。 */
+.groups {
+  background: var(--surface-soft);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 8px;
+}
+
+.group,
+.groupOn,
 .tab,
 .tabOn {
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   background: transparent;
   color: var(--ink-2);
   border-radius: 999px;
   padding: 5px 13px;
   font-size: 0.8rem;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
   /* 手机端点击目标不小于 32px */
   min-height: 32px;
+}
+
+/* 视角 tab 行没有 track 背景,靠边框圈出按钮边界(与分类行区分)。 */
+.tab,
+.tabOn {
+  border-color: var(--border);
+}
+
+.group:hover:not(:disabled) {
+  color: var(--ink);
 }
 
 .tab:hover:not(:disabled) {
   color: var(--ink);
   border-color: var(--brand-teal);
+}
+
+/* 分类行是"分段控件":选中项用卡片底色 + 轻投影,像从 track 上"浮起来"的
+   一块,不用再叠一层边框色。 */
+.groupOn {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  font-weight: 600;
 }
 
 .tabOn {
@@ -62,6 +113,7 @@
   font-weight: 600;
 }
 
+.group:disabled,
 .tab:disabled {
   opacity: 0.38;
   cursor: not-allowed;
@@ -103,11 +155,12 @@
   width: 100%;
 }
 
-/* 名单里的队名是真按钮:点名字等同点队徽,顺带给键盘与读屏 */
+/* 名单里的队名是真按钮:点名字等同点队徽,顺带给键盘与读屏。默认态就带一层
+   浅底(chip 观感),不是 hover 才"凭空出现"——否则乍看像纯文字,看不出能点。 */
 .legendTeam,
 .legendTeamOn {
   border: 1px solid transparent;
-  background: transparent;
+  background: var(--surface-soft);
   color: var(--ink-2);
   border-radius: 999px;
   padding: 2px 8px;
@@ -138,6 +191,50 @@
   color: var(--ink-3, var(--ink-2));
 }
 
+/* 默认折叠,点 summary 展开——原生 <details>,不需要额外的展开状态管理。
+   子元素 .note 是纯块级 <p>,不带 display:flex,不会重演
+   LeaderboardCard.module.css::.foldedList 那种"折叠态仍占布局"的坑。 */
+.noteDetails {
+  margin-top: 4px;
+}
+
+.noteSummary {
+  cursor: pointer;
+  font-size: 0.76rem;
+  color: var(--ink-3, var(--ink-2));
+  list-style: none;
+}
+
+.noteSummary::-webkit-details-marker {
+  display: none;
+}
+
+.noteSummary::before {
+  content: "▸ ";
+}
+
+.noteDetails[open] > .noteSummary::before {
+  content: "▾ ";
+}
+
+.noteDetails .note {
+  margin-top: 6px;
+}
+
+/* outcome_variance 免责声明:灰底提示条,权重高于脚注(.note),放在图表
+   上方——用户先看到提示再看数字,不是看完数字再补一句小字。颜色沿用
+   CLAUDE.md 固定语义里的"灰=辅助说明",不引入新的语义色。 */
+.outcomeVarianceBanner {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
 .empty {
   border: 1px dashed var(--border);
   border-radius: 12px;
@@ -153,17 +250,17 @@
     padding: 14px 11px 12px;
   }
 
-  .head {
-    flex-direction: column;
-  }
-
+  .groups,
   .tabs {
     width: 100%;
+    /* 按钮数量少时天然铺不满一行也不触发横滑(overflow 只在内容溢出时生效);
+       数量一多横滑接管,不强制 flex:1 挤压按钮宽度(那样会滑不动也点不准)。 */
   }
 
+  .group,
   .tab,
+  .groupOn,
   .tabOn {
-    flex: 1;
     padding: 6px 8px;
   }
 

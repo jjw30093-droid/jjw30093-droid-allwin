@@ -43,3 +43,14 @@
   font-weight: 700;
   margin-bottom: 8px;
 }
+
+/* 赛季数据不足(不是错误,是"还没到")——不能用 .errorBox 的红色标题,
+   CLAUDE.md 固定语义"红=真实错误或不可用"/"数据等待刷新不得用红色"。
+   与 SeasonProfileCharts.module.css::.empty 同一套中性灰调。 */
+.empty {
+  margin: 0;
+  padding: 28px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+}

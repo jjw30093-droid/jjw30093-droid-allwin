@@ -47,7 +47,7 @@ export function TableTypeSwitcher({
         return (
           <Link
             key={t.key}
-            href={buildLeagueSeasonHref(leagueId, "standings", season, t.key)}
+            href={buildLeagueSeasonHref(leagueId, "standings", { season, tableType: t.key })}
             className={isActive ? styles.chipActive : styles.chip}
             aria-current={isActive ? "page" : undefined}
             data-testid="table-type-chip"

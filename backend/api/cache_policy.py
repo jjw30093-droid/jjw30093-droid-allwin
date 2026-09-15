@@ -52,6 +52,9 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/v1/leagues/{league_id}/fixtures"),
         ("GET", "/api/v1/leagues/{league_id}/team-stats"),
         ("GET", "/api/v1/leagues/{league_id}/players"),
+        # 联赛球员象限图(2026-09-15):纯赛季聚合(silver_player_season(_ratios)),
+        # 响应不随身份变化,与 /team-stats、/players 同一性质。
+        ("GET", "/api/v1/leagues/{league_id}/player-quadrant"),
         # 联赛赛季速览:纯赛季聚合(进球时段/比分分布/大小球阈值/主平客),
         # 响应不随身份变化。免费联赛给 s-maxage;需登录联赛在 endpoint 内已判为
         # NO_STORE,带 Cookie 的请求另由规则 1 强制 no-store。

@@ -27,6 +27,9 @@ try:
         SILVER_OVER_UNDER_THRESHOLDS_COLUMNS,
         SILVER_SCORE_DISTRIBUTION_COLUMNS,
         SILVER_GOAL_MINUTE_BUCKETS_COLUMNS,
+        SILVER_TEAM_SEASON_RATIOS_COLUMNS,
+        SILVER_PLAYER_SEASON_COLUMNS,
+        SILVER_PLAYER_SEASON_RATIOS_COLUMNS,
         INT_MATCH_FEATURES_COLUMNS,
         GOLD_WDL_PREDICTIONS_COLUMNS,
         _quote,
@@ -52,6 +55,9 @@ except ImportError:  # direct ``python backend/init_db.py`` compatibility
         SILVER_OVER_UNDER_THRESHOLDS_COLUMNS,
         SILVER_SCORE_DISTRIBUTION_COLUMNS,
         SILVER_GOAL_MINUTE_BUCKETS_COLUMNS,
+        SILVER_TEAM_SEASON_RATIOS_COLUMNS,
+        SILVER_PLAYER_SEASON_COLUMNS,
+        SILVER_PLAYER_SEASON_RATIOS_COLUMNS,
         INT_MATCH_FEATURES_COLUMNS,
         GOLD_WDL_PREDICTIONS_COLUMNS,
         _quote,
@@ -187,6 +193,36 @@ def init_db(db_file: Path | str | None = None, *, quiet: bool = False) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_silver_goal_minute_buckets_season "
             "ON silver_goal_minute_buckets (League_ID, Season)"
+        )
+
+        _create_table(conn, "silver_team_season_ratios", SILVER_TEAM_SEASON_RATIOS_COLUMNS)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_silver_team_season_ratios_natural "
+            "ON silver_team_season_ratios (League_ID, Season, Team_ID, metric_key)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_team_season_ratios_season "
+            "ON silver_team_season_ratios (League_ID, Season, metric_key)"
+        )
+
+        _create_table(conn, "silver_player_season", SILVER_PLAYER_SEASON_COLUMNS)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_silver_player_season_natural "
+            "ON silver_player_season (League_ID, Season, Player_ID)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_player_season_season "
+            "ON silver_player_season (League_ID, Season)"
+        )
+
+        _create_table(conn, "silver_player_season_ratios", SILVER_PLAYER_SEASON_RATIOS_COLUMNS)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_silver_player_season_ratios_natural "
+            "ON silver_player_season_ratios (League_ID, Season, Player_ID, metric_key)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_silver_player_season_ratios_season "
+            "ON silver_player_season_ratios (League_ID, Season, metric_key)"
         )
 
         _create_table(conn, "int_match_features", INT_MATCH_FEATURES_COLUMNS)

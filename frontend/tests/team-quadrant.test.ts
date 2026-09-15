@@ -5,6 +5,7 @@ import {
   quadrantOf,
   type __TestView,
 } from "@/components/league/TeamQuadrantChart";
+import { METRICS } from "@/components/league/teamMetrics";
 import type { TeamSeasonStatRow } from "@/lib/api-v1";
 
 function row(
@@ -31,8 +32,8 @@ function row(
 }
 
 const attackDefence: __TestView = {
-  x: { key: "avg_expected_goals" },
-  y: { key: "avg_expected_goals_conceded" },
+  x: METRICS.xg,
+  y: METRICS.xga,
 };
 
 describe("球队象限图取数", () => {
@@ -77,7 +78,7 @@ describe("球队象限图取数", () => {
   it("战术视角取运动战/定位球两列", () => {
     const pts = collectPoints(
       [row("A", { avg_expected_goals_open_play: 1.1, avg_expected_goals_set_play: 0.5 })],
-      { x: { key: "avg_expected_goals_open_play" }, y: { key: "avg_expected_goals_set_play" } },
+      { x: METRICS.openPlayXg, y: METRICS.setPlayXg },
     );
     expect(pts[0]).toMatchObject({ x: 1.1, y: 0.5 });
   });

@@ -122,13 +122,25 @@ export function toPixel(
   };
 }
 
-/** 按绘图区面积与球队数定徽章边长;360px 卡片 20 队 ≈ 25px,900px 桌面卡片封顶 34px。 */
-export function crestSizeFor(box: PlotBox, n: number): number {
+/** 按绘图区面积与球队数定徽章边长;360px 卡片 20 队 ≈ 25px,900px 桌面卡片封顶 34px。
+ *
+ * `opts`(2026-09-15,球员象限图新增,可选)覆盖 CREST 的 fillTarget/min/max——
+ * 球员象限图最多 40 个点(4 象限各 10 人)比球队版 20 个点密一倍,不调会
+ * 掉到 CREST.MIN 糊成一团。两参调用路径(不传 opts)逐字节不变,
+ * 那 300 行像素一致性测试(team-quadrant-layout.test.ts)不受影响。 */
+export function crestSizeFor(
+  box: PlotBox,
+  n: number,
+  opts?: { fillTarget?: number; min?: number; max?: number },
+): number {
   const { left, right, top, bottom } = box.grid;
   const plotW = Math.max(1, box.width - left - right);
   const plotH = Math.max(1, box.height - top - bottom);
-  const raw = Math.sqrt((CREST.FILL_TARGET * plotW * plotH) / Math.max(1, n)) - CREST.PAD;
-  return Math.round(Math.min(CREST.MAX, Math.max(CREST.MIN, raw)));
+  const fillTarget = opts?.fillTarget ?? CREST.FILL_TARGET;
+  const min = opts?.min ?? CREST.MIN;
+  const max = opts?.max ?? CREST.MAX;
+  const raw = Math.sqrt((fillTarget * plotW * plotH) / Math.max(1, n)) - CREST.PAD;
+  return Math.round(Math.min(max, Math.max(min, raw)));
 }
 
 export type CrestLayout = {

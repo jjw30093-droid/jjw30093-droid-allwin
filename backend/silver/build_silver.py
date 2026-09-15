@@ -50,8 +50,14 @@ from schema import (
     SILVER_OVER_UNDER_THRESHOLDS_COLUMNS,
     SILVER_SCORE_DISTRIBUTION_COLUMNS,
     SILVER_GOAL_MINUTE_BUCKETS_COLUMNS,
+    SILVER_TEAM_SEASON_RATIOS_COLUMNS,
+    SILVER_PLAYER_SEASON_COLUMNS,
+    SILVER_PLAYER_SEASON_RATIOS_COLUMNS,
     _quote,
 )
+from backend.queries.window import match_window_join_sql
+from backend.silver.ratio_metrics import build_team_season_ratios
+from backend.silver.player_season import build_player_season_stats, build_player_season_ratios
 
 OU_THRESHOLDS = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
 TOUCHES_OPP_BOX_SEASONS = {"2024/2025", "2025/2026"}
@@ -141,6 +147,17 @@ def _load_build_state(conn) -> dict:
     return {(r[0], r[1]): r[2] for r in rows}
 
 
+def _matches_played_by_team(matches: list) -> dict:
+    """(League_ID, Season) 范围内每队的完赛场次数,供 silver_team_season_ratios
+    的 matches_played 列使用(与 paired_matches 对比即可看出该队有几场没配上对)。
+    """
+    out: dict = {}
+    for m in matches:
+        out[m["Home_Team_ID"]] = out.get(m["Home_Team_ID"], 0) + 1
+        out[m["Away_Team_ID"]] = out.get(m["Away_Team_ID"], 0) + 1
+    return out
+
+
 def _finished_count(conn, league_id: int, season: str) -> int:
     return conn.execute(
         "SELECT COUNT(*) FROM dim_match WHERE status = 'Finish' AND League_ID = ? AND Season = ?",
@@ -187,7 +204,18 @@ def _matches(conn, league_id: int, season: str) -> list:
     ]
 
 
-def build_team_season_stats(conn, league_id: int, season: str, matches: list) -> list:
+def build_team_season_stats(
+    conn, league_id: int, season: str, matches: list,
+    *, window_pairs: list[tuple[int, int]] | None = None,
+) -> list:
+    """`window_pairs`(2026-09-14,球队数据页"最近 N 场/主客场"筛选新增,可选)
+    —— `backend.queries.window.resolve_match_window()` 的产物,`[(Team_ID,
+    Match_ID), ...]`,按队各自限定这次聚合只统计哪些比赛。`None`(默认)时
+    行为与筛选功能上线前逐字节相同,现有调用方(silver 全量整赛季重建)
+    零回归。"""
+    window_join_sql, window_params = match_window_join_sql(
+        window_pairs, team_col="fts.Team_ID", match_col="fts.Match_ID"
+    )
     select_parts = ["fts.Team_ID", "COUNT(*) AS matches_played"]
     for out_name, key in EXTRA_JSON_MEAN_FIELDS:
         select_parts.append(
@@ -204,31 +232,45 @@ def build_team_season_stats(conn, league_id: int, season: str, matches: list) ->
         FROM fact_team_match_stats fts
         JOIN dim_match dm ON fts.Match_ID = dm.Match_ID
         WHERE dm.status = 'Finish' AND dm.League_ID = ? AND dm.Season = ? AND fts.Period = 'All'
+        {window_join_sql}
         GROUP BY fts.Team_ID
     """
-    rows = conn.execute(sql, (league_id, season)).fetchall()
-    col_names = [d[0] for d in conn.execute(sql, (league_id, season)).description]
+    params = (league_id, season, *window_params)
+    rows = conn.execute(sql, params).fetchall()
+    col_names = [d[0] for d in conn.execute(sql, params).description]
     stats_by_team = {}
     for r in rows:
         d = dict(zip(col_names, r))
         d.setdefault("avg_touches_opp_box", None)
         stats_by_team[d["Team_ID"]] = d
 
+    # window_pairs 筛选激活时,零封/双方进球率也只能数窗口内的比赛——
+    # 用 (Team_ID, Match_ID) 集合逐队过滤,不能简单复用 matches_played
+    # 那条 SQL 已经限定好的范围,因为这里是在 Python 侧对同一份 matches
+    # 列表逐场判断"这场对这支队算不算数"(主客场筛选下,同一场比赛对主队
+    # 算、对客队不算是常态)。
+    window_pairs_set = set(window_pairs) if window_pairs is not None else None
     clean_sheets = {}
     btts_matches = {}
     for m in matches:
         home, away = m["Home_Team_ID"], m["Away_Team_ID"]
-        clean_sheets.setdefault(home, 0)
-        clean_sheets.setdefault(away, 0)
-        btts_matches.setdefault(home, 0)
-        btts_matches.setdefault(away, 0)
-        if m["away_score"] == 0:
-            clean_sheets[home] += 1
-        if m["home_score"] == 0:
-            clean_sheets[away] += 1
-        if m["home_score"] > 0 and m["away_score"] > 0:
-            btts_matches[home] += 1
-            btts_matches[away] += 1
+        mid = m["Match_ID"]
+        home_in_window = window_pairs_set is None or (home, mid) in window_pairs_set
+        away_in_window = window_pairs_set is None or (away, mid) in window_pairs_set
+        if home_in_window:
+            clean_sheets.setdefault(home, 0)
+            btts_matches.setdefault(home, 0)
+            if m["away_score"] == 0:
+                clean_sheets[home] += 1
+            if m["home_score"] > 0 and m["away_score"] > 0:
+                btts_matches[home] += 1
+        if away_in_window:
+            clean_sheets.setdefault(away, 0)
+            btts_matches.setdefault(away, 0)
+            if m["home_score"] == 0:
+                clean_sheets[away] += 1
+            if m["home_score"] > 0 and m["away_score"] > 0:
+                btts_matches[away] += 1
 
     out = []
     for team_id, d in stats_by_team.items():
@@ -375,14 +417,42 @@ def build_silver() -> None:
                 )
                 matches = []
                 team_rows = []
+                ratio_rows = []
+                player_rows = []
+                player_ratio_rows = []
             else:
                 matches = _matches(conn, league_id, season)
                 team_rows = build_team_season_stats(conn, league_id, season, matches)
+                ratio_rows = build_team_season_ratios(
+                    conn, league_id, season, _matches_played_by_team(matches)
+                )
+                player_rows = build_player_season_stats(conn, league_id, season)
+                player_ratio_rows = build_player_season_ratios(conn, league_id, season)
             conn.execute(
                 "DELETE FROM silver_team_season_stats WHERE League_ID = ? AND Season = ?",
                 (league_id, season),
             )
             _insert_many(conn, "silver_team_season_stats", SILVER_TEAM_SEASON_STATS_COLUMNS, team_rows)
+
+            conn.execute(
+                "DELETE FROM silver_team_season_ratios WHERE League_ID = ? AND Season = ?",
+                (league_id, season),
+            )
+            _insert_many(conn, "silver_team_season_ratios", SILVER_TEAM_SEASON_RATIOS_COLUMNS, ratio_rows)
+
+            conn.execute(
+                "DELETE FROM silver_player_season WHERE League_ID = ? AND Season = ?",
+                (league_id, season),
+            )
+            _insert_many(conn, "silver_player_season", SILVER_PLAYER_SEASON_COLUMNS, player_rows)
+
+            conn.execute(
+                "DELETE FROM silver_player_season_ratios WHERE League_ID = ? AND Season = ?",
+                (league_id, season),
+            )
+            _insert_many(
+                conn, "silver_player_season_ratios", SILVER_PLAYER_SEASON_RATIOS_COLUMNS, player_ratio_rows
+            )
 
             # matches 为空(该赛季当前 0 场完赛,比如刚被模拟测试回滚)时,
             # build_league_season_summary/build_over_under_thresholds 内部
@@ -434,7 +504,9 @@ def build_silver() -> None:
             _save_build_state(conn, league_id, season, finished_count, utc_now_iso())
             conn.commit()
             print(
-                f"[{league_id} {season}] team_rows={len(team_rows)} ou_rows={len(ou_rows)} "
+                f"[{league_id} {season}] team_rows={len(team_rows)} ratio_rows={len(ratio_rows)} "
+                f"player_rows={len(player_rows)} player_ratio_rows={len(player_ratio_rows)} "
+                f"ou_rows={len(ou_rows)} "
                 f"score_rows={len(score_rows)} bucket_rows={len(bucket_rows)}"
             )
     finally:

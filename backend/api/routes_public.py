@@ -24,6 +24,7 @@ from backend.queries import match_preview as q_preview
 from backend.queries import match_report as q_report
 from backend.queries import matches as q_matches
 from backend.queries import odds as q_odds
+from backend.queries import player_quadrant as q_player_quadrant
 from backend.queries.leagues import (
     LEAGUE_META,
     anonymous_cacheable_league_ids,
@@ -46,9 +47,11 @@ from .schemas import (
     MatchOddsResponse,
     MatchPreviewResponse,
     MatchReportResponse,
+    PlayerQuadrantResponse,
     PlayersResponse,
     ProfileWindowN,
     ProductsResponse,
+    RecencyWindow,
     StandingsResponse,
     TeamStatsResponse,
     error_responses,
@@ -197,14 +200,29 @@ def league_team_stats(
     league_id: int,
     response: Response,
     season: str | None = None,
+    recency: RecencyWindow | None = None,
+    venue: Literal["home", "away", "all"] = "all",
     conn=Depends(core_ro),
 ):
-    """球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。"""
+    """球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。
+
+    `recency`/`venue`(2026-09-14,"最近 N 场/主客场"筛选新增,均可选)——
+    任一被显式设置时,`q_league_stats.team_season_stats()` 内部绕开物化表
+    实时聚合(见该函数 docstring),响应字段形状不变,`matches_played`/
+    `ratios.*.matches_played` 天然表示"筛选窗口内的场次数"。筛选激活时
+    `boards` 恒为空列表(来源方赛季级榜单结构上无法按筛选窗口切片)。
+    """
     _require_known_league(league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
-    data = q_league_stats.team_season_stats(conn, league_id, season)
+    data = q_league_stats.team_season_stats(
+        conn, league_id, season, recency=recency, venue=venue
+    )
     if not data["rows"] and not data["boards"]:
-        data["empty_reason"] = "该联赛暂无球队赛季统计数据"
+        # setdefault,不是无条件赋值:赛季样本不足(MIN_MATCHES_FOR_SEASON_DATA)
+        # 时 team_season_stats 已经给了更具体的 empty_reason("本赛季刚开始…"),
+        # 这里的通用兜底只在查询层没设置任何理由时才补上("真的完全没有数据"
+        # 这一类),不能覆盖掉已经更精确的那句。
+        data.setdefault("empty_reason", "该联赛暂无球队赛季统计数据")
     return {"league_id": league_id, **data}
 
 
@@ -252,6 +270,32 @@ def league_players(
     data = q_league_stats.player_leaderboards(conn, league_id, season)
     if not any(board["entries"] for board in data["boards"]):
         data["empty_reason"] = "该联赛该赛季暂无球员榜数据"
+    return {"league_id": league_id, **data}
+
+
+@router.get(
+    "/leagues/{league_id}/player-quadrant",
+    response_model=PlayerQuadrantResponse,
+    response_model_exclude_unset=True,
+)
+def league_player_quadrant(
+    league_id: int,
+    response: Response,
+    season: str | None = None,
+    conn=Depends(core_ro),
+):
+    """联赛球员象限图(2026-09-15):一次返回全部位置的球员 + 10 个复合指标。
+
+    刻意不接受 position 参数——真正的位置过滤与出场占比门槛(40%)留在
+    前端(`q_player_quadrant.player_quadrant_stats()` 的 docstring 说明理由),
+    这里只按宽松下限裁掉真正的长尾替补,`excluded_below_floor` 如实回传
+    裁掉几个人,不静默丢弃。
+    """
+    _require_known_league(league_id)
+    response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
+    data = q_player_quadrant.player_quadrant_stats(conn, league_id, season)
+    if not data["rows"]:
+        data.setdefault("empty_reason", "该联赛暂无球员赛季统计数据")
     return {"league_id": league_id, **data}
 
 

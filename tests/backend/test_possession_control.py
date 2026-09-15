@@ -42,7 +42,7 @@ class TestTeamPossessionControl:
         assert result["tier"] == "venue_full"
         assert result["possession"]["value"] == 55.0
         assert result["pass_accuracy"]["value"] == 80.0  # 320/400
-        assert result["opp_half_pass_share"]["value"] == 45.0  # 180/400
+        assert result["opp_half_pass_share"]["value"] == 56.2  # 180/320(分母是成功传球,不是传球总数;四舍五入到 1 位)
         assert result["touches_opp_box"]["value"] == 19.5
 
     def test_no_history_returns_unavailable_with_none_values(self, data_dir):

@@ -21,14 +21,20 @@ import { cumulativeSeries, buildOption as buildXgRaceOption } from "@/components
 import { buildOption as buildShotMapOption } from "@/components/matches/ShotMapChart";
 import { buildOption as buildQuadrantOption } from "@/components/matches/TeamStyleQuadrant";
 import { buildQuadrantOption as buildLeagueQuadrantOption } from "@/components/league/quadrantOption";
-import { VIEWS, collectPoints, mean, outlierNames } from "@/components/league/quadrantViews";
+import { collectPoints, mean, outlierNames, viewById } from "@/components/league/quadrantViews";
+import {
+  playerPlotSet,
+  playerViewById,
+  topPerQuadrant,
+  type PlayerPt,
+} from "@/components/league/playerQuadrantViews";
 import {
   QUADRANT_GRID,
   crestSizeFor,
   layoutCrests,
   niceAxisRange,
 } from "@/components/charts/crestQuadrantLayout";
-import type { TeamSeasonStatRow } from "@/lib/api-v1";
+import type { PlayerQuadrantRow, TeamSeasonStatRow } from "@/lib/api-v1";
 import type { ChartColors } from "@/components/charts/useChartColors";
 
 const COLORS: ChartColors = {
@@ -406,7 +412,7 @@ describe("TeamStyleQuadrant.buildOption 渲染冒烟", () => {
 
 describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标点)", () => {
   const SIZE = { width: 360, height: 380 };
-  const view = VIEWS[0]; // 攻防:y 轴 inverse
+  const view = viewById("both-ends"); // 攻防:y 轴 inverse
 
   function teamRow(i: number, crest: boolean): TeamSeasonStatRow {
     return {
@@ -493,7 +499,8 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
   });
 
   it("非反转视角(战术)也不抛", () => {
-    const pts = collectPoints(twenty, VIEWS[1]);
+    const tactics = viewById("tactics");
+    const pts = collectPoints(twenty, tactics);
     const mx = mean(pts.map((p) => p.x));
     const my = mean(pts.map((p) => p.y));
     const xr = niceAxisRange(pts.map((p) => p.x));
@@ -501,8 +508,244 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
     expect(() =>
       renderSvg(
         buildLeagueQuadrantOption({
-          view: VIEWS[1], pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+          view: tactics, pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
           layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [0],
+        }),
+        SIZE,
+      ),
+    ).not.toThrow();
+  });
+
+  it("百分比单位视角(推进方式)能渲染,且样本不足的球队不落点", () => {
+    const passShare = viewById("possession-passing");
+    // 前 4 队样本不达标(累计成功传球 < 2000),其余 16 队达标
+    const rows = twenty.map((r, i) => ({
+      ...r,
+      matches_played: i < 4 ? 3 : 20,
+      ratios: {
+        opp_half_pass_share: {
+          value: 45 + (i % 10),
+          numerator: 900,
+          denominator: i < 4 ? 1200 : 4200,
+          paired_matches: i < 4 ? 3 : 20,
+          matches_played: i < 4 ? 3 : 20,
+        },
+      },
+    })) as unknown as TeamSeasonStatRow[];
+    const pts = collectPoints(rows, passShare);
+    expect(pts.length).toBe(16); // 证明门槛过滤真的传到了这里,不是仍然 20 支全画
+    const mx = mean(pts.map((p) => p.x));
+    const my = mean(pts.map((p) => p.y));
+    const xr = niceAxisRange(pts.map((p) => p.x));
+    const yr = niceAxisRange(pts.map((p) => p.y));
+    const r = renderSvg(
+      buildLeagueQuadrantOption({
+        view: passShare, pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+        layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+      }),
+      SIZE,
+    );
+    expect(r.images).toBe(16);
+  });
+
+  it("筛选激活(最近 5 场)时样本门槛按比例缩小,原本样本不足的球队重新画出来", () => {
+    // 与上一条"百分比单位视角"用同一份 fixture:未筛选时门槛 minMatches=6/
+    // minVolume=2000 挡掉前 4 队(matches_played=3、denominator=1200)。
+    // windowScale=5/38 时,minMatches 缩到 round(6*5/38)=1、minVolume 缩到
+    // 2000*5/38≈263.2——两队都远超缩小后的门槛,20 队应该全部画出来,证明
+    // "筛选激活时大部分指标仍能画出点",不是全部消失。
+    const passShare = viewById("possession-passing");
+    const rows = twenty.map((r, i) => ({
+      ...r,
+      matches_played: i < 4 ? 3 : 20,
+      ratios: {
+        opp_half_pass_share: {
+          value: 45 + (i % 10),
+          numerator: 900,
+          denominator: i < 4 ? 1200 : 4200,
+          paired_matches: i < 4 ? 3 : 20,
+          matches_played: i < 4 ? 3 : 20,
+        },
+      },
+    })) as unknown as TeamSeasonStatRow[];
+    const unfiltered = collectPoints(rows, passShare);
+    expect(unfiltered.length).toBe(16);
+    const windowScale = 5 / 38;
+    const filtered = collectPoints(rows, passShare, windowScale);
+    expect(filtered.length).toBe(20);
+    const mx = mean(filtered.map((p) => p.x));
+    const my = mean(filtered.map((p) => p.y));
+    const xr = niceAxisRange(filtered.map((p) => p.x));
+    const yr = niceAxisRange(filtered.map((p) => p.y));
+    const r = renderSvg(
+      buildLeagueQuadrantOption({
+        view: passShare, pts: filtered, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+        layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+      }),
+      SIZE,
+    );
+    expect(r.images).toBe(20);
+  });
+
+  it("x 轴反转视角能渲染不抛(dirsOf 的 x 分支)", () => {
+    // 借用现有 both-ends 视角构造一个 x.lowerIsBetter 的临时 view,验证
+    // quadrantOption 的 dirsOf 分支真的处理了 x 反转,不只是 y。
+    const base = viewById("both-ends");
+    const xInverted = { ...base, x: { ...base.x, lowerIsBetter: true } };
+    const pts = collectPoints(twenty, xInverted);
+    const mx = mean(pts.map((p) => p.x));
+    const my = mean(pts.map((p) => p.y));
+    const xr = niceAxisRange(pts.map((p) => p.x));
+    const yr = niceAxisRange(pts.map((p) => p.y));
+    expect(() =>
+      renderSvg(
+        buildLeagueQuadrantOption({
+          view: xInverted, pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+          layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+        }),
+        SIZE,
+      ),
+    ).not.toThrow();
+  });
+
+  it("包四第二批新视角(角球成色/终结记录/防线与门将)都能渲染不抛,防线与门将的真实 x 反转也走通", () => {
+    const rows = twenty.map((r, i) => ({
+      ...r,
+      matches_played: 20,
+      ratios: {
+        corner_shot_rate: { value: 20 + (i % 10), numerator: 10 + i, denominator: 50 + i * 2 },
+        finishing_delta: { value: -2 + (i % 5), sample_count: 200 + i * 5 },
+        gk_saves_above_expected: { value: -3 + (i % 7), sample_count: 100 + i * 3 },
+        opp_xg_per_shot: { value: 0.1 + (i % 5) * 0.01, numerator: 5, denominator: 50 },
+      },
+    })) as unknown as TeamSeasonStatRow[];
+    for (const id of ["corner-quality", "finishing-record", "defence-goalkeeping"]) {
+      const view = viewById(id);
+      const pts = collectPoints(rows, view);
+      const mx = mean(pts.map((p) => p.x));
+      const my = mean(pts.map((p) => p.y));
+      const xr = niceAxisRange(pts.map((p) => p.x));
+      const yr = niceAxisRange(pts.map((p) => p.y));
+      expect(() =>
+        renderSvg(
+          buildLeagueQuadrantOption({
+            view, pts, mx, my, colors: COLORS, labelled: new Set(), crestSize: 24,
+            layout: null, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+          }),
+          SIZE,
+        ),
+      ).not.toThrow();
+    }
+  });
+});
+
+describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(球员头像当坐标点,泛型复用)", () => {
+  const SIZE = { width: 360, height: 380 };
+  const view = playerViewById("player-creativity");
+  const PLAYER_CREST_OPTS = { fillTarget: 0.28, min: 20, max: 30 };
+
+  function playerRow(i: number, hasAvatar: boolean): PlayerQuadrantRow {
+    return {
+      player: {
+        player_id: hasAvatar ? `${1000 + i}` : null,
+        name: `球员${i}`,
+        name_en: null,
+      },
+      team: {
+        team_id: 100 + (i % 5),
+        name: `队${i % 5}`,
+        name_en: null,
+        crest_url: null,
+      },
+      team_color: null,
+      usual_position: 2,
+      appearances: 10 + (i % 5),
+      minutes_played: 900,
+      team_minutes: 1800,
+      minutes_share: 0.5,
+      teams_count: 1,
+      ratios: {
+        chances_created_per90: {
+          value: 1 + ((i * 7) % 10) / 10,
+          numerator: 1,
+          denominator: 900,
+          paired_matches: 10,
+        },
+        xa_per90: {
+          value: 0.1 + ((i * 3) % 6) / 100,
+          numerator: 0.1,
+          denominator: 900,
+          paired_matches: 10,
+        },
+      },
+    } as PlayerQuadrantRow;
+  }
+
+  function args(rows: PlayerQuadrantRow[], selectedIndexes: number[] = []) {
+    const { pts: fullPts } = playerPlotSet(rows, view);
+    const mx = mean(fullPts.map((p) => p.x));
+    const my = mean(fullPts.map((p) => p.y));
+    const { drawn } = topPerQuadrant(fullPts, mx, my, {});
+    const xr = niceAxisRange(drawn.map((p) => p.x));
+    const yr = niceAxisRange(drawn.map((p) => p.y));
+    const box = { ...SIZE, grid: QUADRANT_GRID };
+    const crestSize = crestSizeFor(box, drawn.length, PLAYER_CREST_OPTS);
+    const layout = layoutCrests({ pts: drawn, box, xr, yr, yInverse: false, radius: crestSize / 2 + 4 });
+    const labelled = new Set<string>();
+    for (const p of drawn) if (!p.avatarUrl) labelled.add(p.name);
+    return {
+      view, pts: drawn, mx, my, colors: COLORS, labelled, crestSize, layout, xr, yr,
+      grid: QUADRANT_GRID, selectedIndexes,
+      symbolUrlOf: (p: PlayerPt) => p.avatarUrl,
+    };
+  }
+
+  const thirty = Array.from({ length: 30 }, (_, i) => playerRow(i, true));
+
+  it("30 名球员全有头像:不抛异常,画出真实 <image>(泛型 buildQuadrantOption 对球员点同样能渲染)", () => {
+    const r = renderSvg(buildLeagueQuadrantOption(args(thirty)), SIZE);
+    expect(r.paths).toBeGreaterThan(0);
+    // 部分点在避让分组阶段可能不足 4 人导致该视角不可用,这里只断言真的画出了头像
+    // (>0),不强行断言精确数量(与球队版 20/20 那条不同,球员数据是构造的合成
+    // 分布,quadrantOf 分组结果不完全可控)。
+    expect(r.images).toBeGreaterThan(0);
+  });
+
+  it("部分球员无头像(player_id=null):退回圆点兜底,不抛异常", () => {
+    const rows = thirty.map((r, i) => (i % 7 === 0 ? playerRow(i, false) : r));
+    expect(() => renderSvg(buildLeagueQuadrantOption(args(rows)), SIZE)).not.toThrow();
+  });
+
+  it("选中 1 名球员:多出光环 + 到两轴的虚线,不抛异常", () => {
+    expect(() => renderSvg(buildLeagueQuadrantOption(args(thirty, [0])), SIZE)).not.toThrow();
+  });
+
+  it("门将视角(x 轴 lowerIsBetter 反转)能渲染不抛", () => {
+    const gkView = playerViewById("player-goalkeeping");
+    const gkRows = Array.from({ length: 15 }, (_, i) => ({
+      ...playerRow(i, true),
+      usual_position: 0,
+      ratios: {
+        xgot_faced_per90: { value: 1 + (i % 5) / 10, numerator: 1, denominator: 900, paired_matches: 10 },
+        goals_prevented_per90: { value: -0.5 + (i % 7) / 10, numerator: -0.5, denominator: 900, paired_matches: 10 },
+      },
+    })) as PlayerQuadrantRow[];
+    const { pts: fullPts } = playerPlotSet(gkRows, gkView);
+    const mx = mean(fullPts.map((p) => p.x));
+    const my = mean(fullPts.map((p) => p.y));
+    const dirs = { x: gkView.x.lowerIsBetter === true, y: gkView.y.lowerIsBetter === true };
+    const { drawn } = topPerQuadrant(fullPts, mx, my, dirs);
+    const xr = niceAxisRange(drawn.map((p) => p.x));
+    const yr = niceAxisRange(drawn.map((p) => p.y));
+    const box = { ...SIZE, grid: QUADRANT_GRID };
+    const crestSize = crestSizeFor(box, drawn.length, PLAYER_CREST_OPTS);
+    const layout = layoutCrests({ pts: drawn, box, xr, yr, yInverse: false, radius: crestSize / 2 + 4 });
+    expect(() =>
+      renderSvg(
+        buildLeagueQuadrantOption({
+          view: gkView, pts: drawn, mx, my, colors: COLORS, labelled: new Set(), crestSize,
+          layout, xr, yr, grid: QUADRANT_GRID, selectedIndexes: [],
+          symbolUrlOf: (p: PlayerPt) => p.avatarUrl,
         }),
         SIZE,
       ),

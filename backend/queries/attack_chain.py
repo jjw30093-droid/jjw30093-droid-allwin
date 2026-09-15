@@ -100,7 +100,12 @@ def team_attack_chain(
         "volume_keys": ["opp_half_pass_share", "touches_opp_box", "shots", "shots_on_target", "xg", "xgot"],
         "conversion_keys": ["shots_per_100_box_touches", "shot_on_target_rate", "xg_per_shot", "xgot_per_sot"],
         # 进攻产量:各自独立的窗口场均值。
-        "opp_half_pass_share": _metric(_ratio_field(conn, ids, team_id, "opposition_half_passes", "passes"), decimals=1),
+        # 分母是 accurate_passes 不是 passes(2026-09-14 改正,站长已批准):
+        # 原口径"前场传球 ÷ 传球总数"分子只数成功传球、分母却数全部尝试,
+        # 比值永远到不了 100%。实测 own_half_passes+opposition_half_passes
+        # 命中 accurate_passes(26095/26096≈100%),不等于 passes——半场拆分
+        # 统计的本来就是成功传球,不是传球尝试。
+        "opp_half_pass_share": _metric(_ratio_field(conn, ids, team_id, "opposition_half_passes", "accurate_passes"), decimals=1),
         "touches_opp_box": _metric(_avg_field(conn, ids, team_id, "touches_opp_box")),
         "shots": _metric(_avg_field(conn, ids, team_id, "total_shots")),
         "shots_on_target": _metric(_avg_field(conn, ids, team_id, "ShotsOnTarget")),

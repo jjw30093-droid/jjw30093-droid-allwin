@@ -293,3 +293,122 @@ class TestLabelNamesTheCompetition:
             r = w.WindowResult(team_id=TEAM, is_home=True, tier=tier, match_ids=[],
                                matches=6, from_date=None, to_date=None, league_zh=None)
             assert r.label_zh == expected, tier
+
+
+def _stats(conn, match_id, team_id):
+    conn.execute(
+        "INSERT INTO fact_team_match_stats (Match_ID, Team_ID, Period, Goals, extra_json)"
+        " VALUES (?, ?, 'All', 0, '{}')",
+        (match_id, team_id),
+    )
+
+
+class TestResolveMatchWindow:
+    """球队数据页"最近 N 场/主客场"筛选专用——与 venue_window() 是两套不同
+    语义(见 resolve_match_window 的文档字符串),单独一组测试。"""
+
+    def test_no_filter_returns_none(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        r = w.resolve_match_window(conn, LEAGUE, "2025/2026", venue="all", recency=None)
+        assert r is None
+
+    def test_recency_limits_to_most_recent_n_per_team(self, data_dir):
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        team_a, team_b = 1001, 1002
+        for i in range(4):
+            mid = 8000 + i
+            insert_match(conn, mid, league_id=LEAGUE, season="2025/2026", date=f"2025-09-{10+i:02d}",
+                        home_id=team_a, away_id=team_b, home="队A", away="队B",
+                        status="Finish", home_score=1, away_score=0)
+            _stats(conn, mid, team_a)
+            _stats(conn, mid, team_b)
+        conn.commit()
+
+        pairs = w.resolve_match_window(conn, LEAGUE, "2025/2026", venue="all", recency=2)
+        by_team = {}
+        for tid, mid in pairs:
+            by_team.setdefault(tid, []).append(mid)
+        assert sorted(by_team[team_a]) == [8002, 8003]  # 最近 2 场,不是最早 2 场
+        assert len(by_team[team_b]) == 2
+
+    def test_venue_home_only_keeps_team_specific_perspective(self, data_dir):
+        """"主场"筛选是按队各自的视角——同一场比赛对主队是主场,对客队不是,
+        不是"联赛里发生在某座球场的比赛"这种全局概念。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        team_a, team_b = 1001, 1002
+        insert_match(conn, 8100, league_id=LEAGUE, season="2025/2026", date="2025-09-10",
+                    home_id=team_a, away_id=team_b, home="队A", away="队B",
+                    status="Finish", home_score=1, away_score=0)
+        _stats(conn, 8100, team_a)
+        _stats(conn, 8100, team_b)
+        conn.commit()
+
+        pairs = w.resolve_match_window(conn, LEAGUE, "2025/2026", venue="home", recency=None)
+        teams_in_window = {tid for tid, _ in pairs}
+        assert teams_in_window == {team_a}  # 只有主队入选,客队这场不算它的"主场"
+
+    def test_insufficient_matches_returns_fewer_not_padded(self, data_dir):
+        """筛选窗口比实际打过的场次数大时,如实返回实际场次,不补场次凑数
+        (缺失不补 0 的同一条纪律)。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        team_a, team_b = 1001, 1002
+        insert_match(conn, 8200, league_id=LEAGUE, season="2025/2026", date="2025-09-10",
+                    home_id=team_a, away_id=team_b, home="队A", away="队B",
+                    status="Finish", home_score=1, away_score=0)
+        _stats(conn, 8200, team_a)
+        _stats(conn, 8200, team_b)
+        conn.commit()
+
+        pairs = w.resolve_match_window(conn, LEAGUE, "2025/2026", venue="all", recency=5)
+        assert len([m for t, m in pairs if t == team_a]) == 1  # 只打了 1 场,不是凑出 5 场
+
+    def test_no_silent_venue_mixing_when_home_sample_thin(self, data_dir):
+        """与 venue_window() 的关键差异:主场样本再薄也不会悄悄混进客场比赛
+        ——用户显式选了"主场",筛选标签必须如实,不能被"样本不够就混场"
+        的降级逻辑污染。"""
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        team_a, team_b = 1001, 1002
+        # team_a 只有 1 场主场比赛,但有 3 场客场比赛
+        insert_match(conn, 8300, league_id=LEAGUE, season="2025/2026", date="2025-09-10",
+                    home_id=team_a, away_id=team_b, home="队A", away="队B",
+                    status="Finish", home_score=1, away_score=0)
+        _stats(conn, 8300, team_a)
+        _stats(conn, 8300, team_b)
+        for i in range(3):
+            mid = 8310 + i
+            insert_match(conn, mid, league_id=LEAGUE, season="2025/2026", date=f"2025-09-{11+i:02d}",
+                        home_id=team_b, away_id=team_a, home="队B", away="队A",
+                        status="Finish", home_score=0, away_score=1)
+            _stats(conn, mid, team_a)
+            _stats(conn, mid, team_b)
+        conn.commit()
+
+        pairs = w.resolve_match_window(conn, LEAGUE, "2025/2026", venue="home", recency=10)
+        team_a_matches = [m for t, m in pairs if t == team_a]
+        assert team_a_matches == [8300]  # 只有那 1 场主场比赛,客场的 3 场不会被悄悄混进来
+
+
+class TestMatchWindowJoinSql:
+    def test_none_pairs_produces_empty_clause(self):
+        sql, params = w.match_window_join_sql(None, team_col="fts.Team_ID", match_col="fts.Match_ID")
+        assert sql == ""
+        assert params == []
+
+    def test_empty_pairs_produces_always_false_not_unfiltered(self):
+        """筛选后一场都不剩时必须让查询自然返回空,不能悄悄退回查全部。"""
+        sql, params = w.match_window_join_sql([], team_col="fts.Team_ID", match_col="fts.Match_ID")
+        assert "1=0" in sql
+        assert params == []
+
+    def test_real_pairs_produce_row_value_in_clause(self, data_dir):
+        conn = connect_rw("core")
+        conn.execute("CREATE TABLE t (a INTEGER, b INTEGER, v TEXT)")
+        conn.execute("INSERT INTO t VALUES (1,10,'x'),(1,11,'y'),(2,10,'z')")
+        sql, params = w.match_window_join_sql([(1, 10), (2, 10)], team_col="a", match_col="b")
+        rows = conn.execute(f"SELECT v FROM t WHERE 1=1 {sql}", params).fetchall()
+        assert sorted(r[0] for r in rows) == ["x", "z"]
