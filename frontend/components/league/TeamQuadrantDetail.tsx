@@ -23,7 +23,7 @@ import {
   teamKey,
   type MetricDef,
 } from "./teamMetrics";
-import { axisToMetric, quadrantOf, type Pt, type View } from "./quadrantViews";
+import { axisToMetric, dirsOf, quadrantOf, type Pt, type View } from "./quadrantViews";
 import styles from "./TeamQuadrantDetail.module.css";
 
 type Cell = {
@@ -75,7 +75,16 @@ export function TeamQuadrantDetail({
     );
   }
 
-  const lowY = view.y.lowerIsBetter === true;
+  // 2026-09-16 真实事故修正(与 PlayerQuadrantDetail.tsx 同一个坑):这里
+  // 此前只记了 view.y.lowerIsBetter(lowY)一个布尔值传给 quadrantOf,x 轴
+  // 的方向被悄悄丢掉——"防线与门将"视角的 x 轴(对手每脚射门xG)恰好是
+  // lowerIsBetter,会导致详情面板算出的象限标签和图表本身的图例分组
+  // (用完整 dirsOf(view) 算的)对不上。用 dirsOf(view) 同时带上 x/y 两个
+  // 方向,是 quadrantViews.ts::dirsOf 的既有设计意图(见其函数头注释),
+  // 之前只是没有真的接上。
+  const dirs = dirsOf(view);
+  const lowX = dirs.x;
+  const lowY = dirs.y;
   const metrics: MetricDef[] = [axisToMetric(view.x), axisToMetric(view.y), ...view.related];
   const rowOf = (p: Pt) => rows.find((r) => teamKey(r.team) === p.key);
   const teamRows = selected.map((p) => ({ pt: p, row: rowOf(p) }));
@@ -107,7 +116,7 @@ export function TeamQuadrantDetail({
             <div key={pt.key} className={styles.team}>
               <TeamBadge teamName={pt.name} crestUrl={pt.crestUrl} size={28} />
               <span className={styles.teamName}>{pt.name}</span>
-              <span className={styles.quad}>{view.quadrants[quadrantOf(pt, mx, my, lowY)]}</span>
+              <span className={styles.quad}>{view.quadrants[quadrantOf(pt, mx, my, dirs)]}</span>
               <span className={styles.sample}>
                 {pt.mp != null ? (
                   <>
@@ -213,6 +222,7 @@ export function TeamQuadrantDetail({
       )}
       <p className={styles.foot}>
         「第 N/M」= 联赛内排名 / 有该项数据的球队数；排名与均值只统计画在图上、样本达标的球队，均为本联赛本赛季内部比较，不能跨联赛对比；
+        {lowX ? `${view.x.label}越低越好，排名按升序。` : ""}
         {lowY ? `${view.y.label}越低越好，排名按升序。` : ""}
         {compare ? "差值 = 左队 − 右队。" : ""}
       </p>

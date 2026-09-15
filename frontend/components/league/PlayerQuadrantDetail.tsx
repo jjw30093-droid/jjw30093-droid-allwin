@@ -10,7 +10,7 @@
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { PlayerQuadrantRow } from "@/lib/api-v1";
 import { formatMetric, leagueMean, playerKey, rankOf, type PlayerMetricDef } from "./playerMetrics";
-import { quadrantOf, type PlayerPt, type PlayerView } from "./playerQuadrantViews";
+import { dirsOf, quadrantOf, type PlayerPt, type PlayerView } from "./playerQuadrantViews";
 import styles from "./TeamQuadrantDetail.module.css";
 
 type Cell = {
@@ -62,7 +62,16 @@ export function PlayerQuadrantDetail({
     );
   }
 
-  const lowY = view.y.lowerIsBetter === true;
+  // 2026-09-16 真实事故修正:这里此前只记了 view.y.lowerIsBetter(lowY)
+  // 一个布尔值传给 quadrantOf,x 轴的方向被悄悄丢掉——"门将"视角的 x 轴
+  // (每90分钟面对射正预期进球)恰好是 lowerIsBetter,导致详情面板算出的
+  // 象限标签和图表本身的图例分组(用完整 dirsOf(view) 算的)对不上,
+  // 同一个球员在两处显示成不同的象限。用 dirsOf(view) 同时带上 x/y 两个
+  // 方向,是 quadrantViews.ts::dirsOf 的既有设计意图(见其函数头注释),
+  // 之前只是没有真的接上。
+  const dirs = dirsOf(view);
+  const lowX = dirs.x;
+  const lowY = dirs.y;
   const metrics: PlayerMetricDef[] = [view.x, view.y];
   const rowOf = (p: PlayerPt) => rows.find((r) => playerKey(r.player) === p.key);
   const playerRows = selected.map((p) => ({ pt: p, row: rowOf(p) }));
@@ -93,7 +102,7 @@ export function PlayerQuadrantDetail({
             <div key={pt.key} className={styles.team}>
               <PlayerAvatar playerId={pt.playerId ?? pt.key} playerName={pt.name} size={28} />
               <span className={styles.teamName}>{pt.name}</span>
-              <span className={styles.quad}>{view.quadrants[quadrantOf(pt, mx, my, lowY)]}</span>
+              <span className={styles.quad}>{view.quadrants[quadrantOf(pt, mx, my, dirs)]}</span>
               <span className={styles.sample}>
                 {pt.mp != null ? (
                   <>
@@ -198,6 +207,7 @@ export function PlayerQuadrantDetail({
       )}
       <p className={styles.foot}>
         「第 N/M」= 该位置内排名 / 有该项数据的球员数；排名与均值只统计画在图上、当前选中位置内达标的球员,均为本联赛本赛季内部比较,不能跨位置或跨联赛对比;
+        {lowX ? `${view.x.label}越低越好,排名按升序。` : ""}
         {lowY ? `${view.y.label}越低越好,排名按升序。` : ""}
         {compare ? "差值 = 左人 − 右人。" : ""}
       </p>

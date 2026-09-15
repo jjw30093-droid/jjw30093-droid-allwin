@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { METRICS, type MetricDef } from "@/components/league/teamMetrics";
-import { VIEWS, VIEW_GROUPS, groupedViews, viewById } from "@/components/league/quadrantViews";
+import { VIEWS, VIEW_GROUPS, dirsOf, groupedViews, quadrantOf, viewById } from "@/components/league/quadrantViews";
 
 describe("视角注册表", () => {
   it("id 唯一", () => {
@@ -105,5 +105,21 @@ describe("视角注册表", () => {
       (v) => v.x.semantic === "outcome_variance" || v.y.semantic === "outcome_variance",
     ).map((v) => v.id);
     expect(outcomeVarianceViewIds).toEqual(expect.arrayContaining(["finishing-record", "defence-goalkeeping"]));
+  });
+
+  it("TeamQuadrantDetail.tsx 曾经的真实 bug(2026-09-16):只传 dirs.y(布尔值)" +
+    "会算出跟图例分组不一致的象限——防线与门将的 x 轴(对手每脚射门xG)是" +
+    "lowerIsBetter,必须传完整 dirs 对象,不能只记 y 方向", () => {
+    const view = viewById("defence-goalkeeping");
+    const dirs = dirsOf(view);
+    const mx = 10, my = 10;
+    // 合成一个"x好(承压低,< mx)y好(扑救超额高,> my)"的球队,真实象限应为
+    // "门线双稳"(index 0)。
+    const pt = { x: 5, y: 15 };
+    const correctIndex = quadrantOf(pt, mx, my, dirs);
+    const buggyIndex = quadrantOf(pt, mx, my, { y: dirs.y }); // 旧写法,x 方向丢失
+    expect(view.quadrants[correctIndex]).toBe("门线双稳");
+    expect(correctIndex).not.toBe(buggyIndex);
+    expect(view.quadrants[buggyIndex]).toBe("门将救主"); // 这就是曾经在详情面板里显示的错误标签
   });
 });

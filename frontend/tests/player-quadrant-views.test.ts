@@ -14,7 +14,7 @@ import {
   quadrantTruncationNote,
   topPerQuadrant,
 } from "@/components/league/playerQuadrantViews";
-import { mean } from "@/components/league/quadrantViews";
+import { dirsOf, mean, quadrantOf } from "@/components/league/quadrantViews";
 
 function row(pid: string, x: number | null, y: number | null, over: Partial<PlayerQuadrantRow> = {}): PlayerQuadrantRow {
   return {
@@ -75,6 +75,68 @@ describe("PLAYER_VIEWS 注册表约束", () => {
 
   it("每个视角的 note 都非空(CLAUDE.md §11.2 文字摘要义务)", () => {
     for (const v of PLAYER_VIEWS) expect(v.note.length).toBeGreaterThan(10);
+  });
+});
+
+describe("象限名与真实索引对应关系(2026-09-16 真实事故:门将两个视角的第2/4项" +
+  "手误写反,把'高压力但产出好'和'低压力但产出一般'两句话摆错了位置)", () => {
+  /** quadrantOf 的真实约定是 [x好y好, x差y好, x差y差, x好y差]
+   *  (见 quadrantViews.ts::quadrantOf 源码),不是"从左上顺时针"或任何其它
+   *  直觉顺序——新增视角时必须对着这个约定逐项核对文案,不能凭感觉排。
+   *  这里用每个视角自己的 dirs 构造 4 个合成点,直接跑真实的 quadrantOf,
+   *  锁定"整数索引 -> 中文文案"这份映射,以后手误排反会被立刻测出来。 */
+  function expectQuadrantMeaning(
+    viewId: string,
+    expected: { good: string; xBadYGood: string; bad: string; xGoodYBad: string },
+  ) {
+    const v = playerViewById(viewId);
+    const dirs = dirsOf(v);
+    const mx = 10;
+    const my = 10;
+    const at = (xGood: boolean, yGood: boolean) => {
+      const x = dirs.x ? (xGood ? 5 : 15) : xGood ? 15 : 5;
+      const y = dirs.y ? (yGood ? 5 : 15) : yGood ? 15 : 5;
+      return v.quadrants[quadrantOf({ x, y }, mx, my, dirs)];
+    };
+    expect(at(true, true)).toBe(expected.good);
+    expect(at(false, true)).toBe(expected.xBadYGood);
+    expect(at(false, false)).toBe(expected.bad);
+    expect(at(true, false)).toBe(expected.xGoodYBad);
+  }
+
+  it("门将:承压低+产出高 / 承压高+产出高 / 承压高+产出低 / 承压低+产出一般", () => {
+    expectQuadrantMeaning("player-goalkeeping", {
+      good: "低压力且高产出",
+      xBadYGood: "高压力下站得住",
+      bad: "高压力且吃紧",
+      xGoodYBad: "低压力但产出一般",
+    });
+  });
+
+  it("门将出球:精准+常长传 / 欠精准+常长传 / 欠精准+少长传 / 精准+少长传", () => {
+    expectQuadrantMeaning("player-goalkeeper-distribution", {
+      good: "全能型门将",
+      xBadYGood: "传统型门将",
+      bad: "保守型门将",
+      xGoodYBad: "清道夫型门将",
+    });
+  });
+
+  it("PlayerQuadrantDetail.tsx 曾经的真实 bug:只传 dirs.y(布尔值)会算出" +
+    "跟图例分组不一致的象限——x 轴 lowerIsBetter 的视角必须传完整 dirs 对象", () => {
+    const view = playerViewById("player-goalkeeping");
+    const dirs = dirsOf(view);
+    // 真实数据:多纳鲁马 2025/2026,x=1.02(< 均值 1.36,lowerIsBetter 故为好),
+    // y=0.17(> 均值 -0.01,为好)——应该落在"低压力且高产出"(index 0)。
+    const pt = { x: 1.02, y: 0.17 };
+    const mx = 1.36;
+    const my = -0.01;
+    const correctIndex = quadrantOf(pt, mx, my, dirs);
+    // 旧写法:只传 { y: dirs.y },x 方向被悄悄丢弃,等价于假设 x 是"越高越好"。
+    const buggyIndex = quadrantOf(pt, mx, my, { y: dirs.y });
+    expect(view.quadrants[correctIndex]).toBe("低压力且高产出");
+    expect(correctIndex).not.toBe(buggyIndex);
+    expect(view.quadrants[buggyIndex]).toBe("高压力下站得住"); // 这就是曾经在详情面板里显示的错误标签
   });
 });
 
