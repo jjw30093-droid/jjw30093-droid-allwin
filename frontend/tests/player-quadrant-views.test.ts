@@ -61,7 +61,7 @@ describe("PLAYER_VIEWS 注册表约束", () => {
     }
   });
 
-  it("命名红线:防守贡献视角不得出现 PPDA/Field Tilt 字样(CBIRT 是行业标准术语,允许出现)", () => {
+  it("命名红线:任何视角的说明文案不得出现 PPDA/Field Tilt 字样", () => {
     for (const v of PLAYER_VIEWS) {
       expect(v.note).not.toMatch(/PPDA/);
       expect(v.note).not.toMatch(/Field Tilt/);

@@ -103,11 +103,11 @@ export const PLAYER_METRICS = {
   },
   defensiveActionsPer90: {
     id: "defensive_actions_per90",
-    label: "每90分钟防守动作(CBIRT)",
+    label: "每90分钟防守动作",
     unit: "次",
     digits: 1,
     semantic: "performance",
-    caliber: "每90分钟的抢断+拦截+解围+封堵+回收球——行业标准 Defensive Contribution 口径(FPL/Opta 的 CBIRT),不是本站发明的代理指标。",
+    caliber: "每90分钟的抢断+拦截+解围+封堵+回收球——这是国际通行的防守参与度算法,不是本站发明的代理指标。",
     value: (r) => num(r.ratios?.defensive_actions_per90?.value),
   },
   duelWinRate: {
