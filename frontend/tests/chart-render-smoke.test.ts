@@ -29,6 +29,7 @@ import {
   type PlayerPt,
 } from "@/components/league/playerQuadrantViews";
 import {
+  CREST,
   QUADRANT_GRID,
   crestSizeFor,
   layoutCrests,
@@ -481,6 +482,48 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
   it("layout 为 null(宽度尚未测得):零偏移渲染不抛", () => {
     const r = renderSvg(buildLeagueQuadrantOption(args(twenty, [], false)), SIZE);
     expect(r.images).toBe(20);
+  });
+
+  it("每个 series 的 id 与选中数无关,始终稳定(2026-09-16 站长要求'点击头像" +
+    "有放大等互动效果'时排查发现的真实 bug:ring 只在 hasSelection 时才被" +
+    "push 进 series 数组,选中数 0↔1 切换那一刻会把它后面的 crest 在数组里的" +
+    "下标顶偏一位——ECharts 在 notMerge:true 下默认按'同类型+数组下标'匹配" +
+    "前后两次 setOption 的同一个 series 来算过渡动画,下标一跳,crest 就被当成" +
+    "换了个新 series,直接跳变而不是平滑放大,而这恰好发生在用户点第一下、" +
+    "最该看见放大效果的那一刻)", () => {
+    const zeroSelected = buildLeagueQuadrantOption(args(twenty, []));
+    const oneSelected = buildLeagueQuadrantOption(args(twenty, [3]));
+    const seriesArray = (option: typeof zeroSelected) =>
+      (Array.isArray(option.series) ? option.series : [option.series]) as {
+        name?: string;
+        id?: string;
+      }[];
+    const idOf = (option: typeof zeroSelected, name: string) =>
+      seriesArray(option).find((s) => s.name === name)?.id;
+    for (const name of ["quadrant-labels", "hit", "crest"]) {
+      expect(idOf(zeroSelected, name)).toBe(name);
+      expect(idOf(oneSelected, name)).toBe(name);
+    }
+    expect(idOf(oneSelected, "ring")).toBe("ring");
+    // 0 选中时 ring 干脆不存在(不是"存在但 id 为空"),这条不变量本身也要守住
+    expect(idOf(zeroSelected, "ring")).toBeUndefined();
+  });
+
+  it("头像层有明确的悬停反馈配置(cursor + 预览性放大 + 独立过渡动画)," +
+    "不依赖 ECharts 的隐式默认值——放大倍数(1.12)必须小于点击选中态的" +
+    "1.25x,悬停只是预览、点击才是确认", () => {
+    const option = buildLeagueQuadrantOption(args(twenty));
+    const seriesArray = (Array.isArray(option.series) ? option.series : [option.series]) as {
+      name?: string;
+      cursor?: string;
+      emphasis?: { scale?: number };
+      stateAnimation?: { duration?: number };
+    }[];
+    const crest = seriesArray.find((s) => s.name === "crest")!;
+    expect(crest.cursor).toBe("pointer");
+    expect(crest.emphasis?.scale).toBeGreaterThan(1);
+    expect(crest.emphasis?.scale).toBeLessThan(CREST.SELECTED_SCALE);
+    expect(crest.stateAnimation?.duration).toBeGreaterThan(0);
   });
 
   it("4 点最小集 / 坐标全同 / export 模式 / 非品牌色 都不抛", () => {

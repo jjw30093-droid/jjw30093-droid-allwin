@@ -21,6 +21,27 @@
  *   整个盖在旁边一支球队的队徽上(2026-09 用户反馈)。真正的可见性由
  *   resolveLabelVisibility 用真实绘制坐标做"标签矩形 vs 队徽圆"相交测试
  *   算出来,hideOverlap 只负责剩下的"标签 vs 标签"微调。
+ *
+ * 2026-09-16 交互性(站长要求"点击头像会放大等等,有交互效果"):
+ * - 每个 series 都带**稳定的 `id`**(不再只靠数组位置隐式区分)。这不是
+ *   顺手加的——`ring` 只在 hasSelection 时才被 push 进 series 数组,选中数
+ *   0↔1 切换的瞬间会让它后面的 `crest` 在数组里的下标跟着挪动。ECharts
+ *   在 `notMerge:true` 下默认按"同类型 + 数组下标"匹配前后两次 setOption
+ *   的同一个 series 来算过渡动画,下标一旦跳动,`crest` 就会被当成"换了一个
+ *   新 series",直接跳变而不是平滑放大——这恰好发生在用户点第一下、最该
+ *   看见放大效果的那一刻。给三个 series 都挂 `id` 后,匹配改成按 id 走,
+ *   不再受数组位置影响。
+ * - `crest` 新增 `cursor:'pointer'`(未点击前就能看出"这是可点的")与
+ *   `emphasis:{scale:1.12}`(悬停时先给一个比点击态 1.25x 更克制的预览性
+ *   放大,鼠标移开自动复位,不需要额外的 React 状态或重新计算避让布局——
+ *   `emphasis` 是 ECharts 声明式状态,内部用 zrender 直接处理,不经过
+ *   `buildQuadrantOption` 重新调用)。`stateAnimation` 单独给这个"悬停/
+ *   选中"级别的形变配一段过渡(250ms cubicOut),不牵动全局
+ *   `animationDurationUpdate`——那个全局值同时管着切视角/切位置时坐标点
+ *   的整体重新布局,调它会让无关的更新也变得忽快忽慢。
+ * - `hit` 层本身透明、`emphasis` 也保持关闭(放大一个看不见的圆没有意义),
+ *   但同样给 `cursor:'pointer'`——它比 `crest` 的可见头像大一圈(手机触控
+ *   冗余),这一圈范围鼠标移上去也该看出能点,不能只在头像本体范围内才变手型。
  */
 
 import type { EChartsOption } from "echarts";
@@ -205,6 +226,7 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
     };
   });
   series.push({
+    id: "quadrant-labels",
     name: "quadrant-labels",
     type: "scatter",
     silent: true,
@@ -220,10 +242,12 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
 
   if (mode === "interactive") {
     series.push({
+      id: "hit",
       name: "hit",
       type: "scatter",
       z: 1,
       silent: false,
+      cursor: "pointer",
       symbol: "circle",
       symbolSize: hitSizeFor(layout, crestSize),
       itemStyle: { color: "transparent" },
@@ -235,6 +259,7 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
 
   if (hasSelection) {
     series.push({
+      id: "ring",
       name: "ring",
       type: "scatter",
       silent: true,
@@ -249,9 +274,21 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
   }
 
   series.push({
+    id: "crest",
     name: "crest",
     type: "scatter",
     z: 3,
+    cursor: "pointer",
+    // 悬停时先给一个比点击选中(1.25x)更克制的预览性放大,鼠标移开自动
+    // 复位——ECharts 声明式状态,不经过本函数重新计算,cheap 且不影响
+    // 避让布局。选中态的 1.25x 走的是另一条路径(symbolSize 直接写进
+    // crestData,靠下面的 stateAnimation 补一段过渡),两者不冲突:一个是
+    // "普通态本身多大",一个是"普通态之上悬停再多放大一点"。
+    emphasis: { scale: 1.12 },
+    // 只管"普通/悬停/选中"这几个视觉状态之间怎么过渡,不碰全局
+    // animationDurationUpdate(那个还管着切视角/切位置时坐标点的整体
+    // 重新布局,调它会连累无关更新一起变忽快忽慢)。
+    stateAnimation: { duration: 250, easing: "cubicOut" },
     symbolKeepAspect: true,
     data: crestData,
     label: {
