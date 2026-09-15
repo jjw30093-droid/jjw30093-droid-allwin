@@ -3670,6 +3670,12 @@ export interface components {
             stat_name: string;
             /** Label Zh */
             label_zh: string;
+            /**
+             * Direction
+             * @default high_good
+             * @enum {string}
+             */
+            direction: "high_good" | "high_bad";
             /** Entries */
             entries: components["schemas"]["PlayerBoardEntry"][];
         };

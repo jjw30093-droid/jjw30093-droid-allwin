@@ -112,6 +112,24 @@ describe("niceAxisRange", () => {
     const r = niceAxisRange([]);
     expect(r.max).toBeGreaterThan(r.min);
   });
+
+  it("数据全非负时,轴不得跌破 0(2026-09-16 真实反馈:站长在球员象限图" +
+    "「进攻创造力」看到纵轴画到 -0.1,以为有人的 xA 是负数——xA 物理上" +
+    "不可能为负,那是 14% 留白把下端压过了零点)", () => {
+      // 真实量级:英超 2025/2026 中场每 90 分钟 xA,最小 0.016、最大 0.362
+      const xa = [0.016, 0.04, 0.08, 0.11, 0.19, 0.362];
+      expect(niceAxisRange(xa).min).toBe(0);
+      // 计数类同理(创造机会数/触球数/防守动作),贴地的小值最容易被留白压穿
+      expect(niceAxisRange([0.33, 1.1, 2.4, 3.99]).min).toBe(0);
+      expect(niceAxisRange([35.7, 62.5, 111.2]).min).toBeGreaterThanOrEqual(0);
+    });
+
+  it("本来就能为负的指标(终结超额/扑救超额)真有负值时,照常画负区——" +
+    "上面那条钳位只在数据全非负时生效,不能把真实的负数点切掉", () => {
+      const finishingDelta = [-0.21, -0.05, 0.03, 0.17];
+      const r = niceAxisRange(finishingDelta);
+      expect(r.min).toBeLessThan(-0.21);
+    });
 });
 
 describe("layoutCrests 避让", () => {

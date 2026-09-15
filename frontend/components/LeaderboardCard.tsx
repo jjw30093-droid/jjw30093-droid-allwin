@@ -109,15 +109,25 @@ function Rows({
 export function LeaderboardCard({
   title,
   rows,
+  highIsBad = false,
 }: {
   title: string;
   rows: LeaderboardRow[];
+  /** true = 这是一张"越多越差"的负榜(黄牌/犯规/错失绝佳机会/送点/失球)。
+   *  来源把 28 个榜全部按数值降序排,所以负榜的第 1 名是这项最差的那个人;
+   *  不标出来的话,它和进球榜长得一模一样,读者没有任何线索(2026-09-16
+   *  站长要求:"这里可以有正榜和负榜,让人知道比较差的是谁")。 */
+  highIsBad?: boolean;
 }) {
+  // 不用颜色区分:CLAUDE.md §11.2 把红色锁给"真实错误或不可用",拿它标
+  // 负榜会和错误态撞语义。用一枚四个字的中性文字标签,说人话。
+  const badge = highIsBad ? <span className={styles.badBadge}>越多越差</span> : null;
   if (rows.length === 0) {
     return (
       <div className={styles.card}>
         <div className={styles.head}>
           <span className={styles.title}>{title}</span>
+          {badge}
         </div>
         <div className={styles.empty}>暂无数据</div>
       </div>
@@ -133,6 +143,7 @@ export function LeaderboardCard({
       <div className={styles.card}>
         <div className={styles.head}>
           <span className={styles.title}>{title}</span>
+          {badge}
         </div>
         <Rows rows={head} start={1} />
       </div>
@@ -145,9 +156,13 @@ export function LeaderboardCard({
   // 的无障碍名默认会把里面所有文字连起来念,所以显式给一个短 aria-label。
   return (
     <details className={styles.card}>
-      <summary className={styles.summary} aria-label={`${title},展开全部 ${rows.length} 名`}>
+      <summary
+        className={styles.summary}
+        aria-label={`${title}${highIsBad ? "(越多越差)" : ""},展开全部 ${rows.length} 名`}
+      >
         <span className={styles.head}>
           <span className={styles.title}>{title}</span>
+          {badge}
           <span className={styles.chevron} aria-hidden="true" />
         </span>
         <Rows rows={head} start={1} />

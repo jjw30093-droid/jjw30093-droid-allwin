@@ -606,6 +606,11 @@ class PlayerBoardEntry(BaseModel):
 class PlayerBoard(BaseModel):
     stat_name: str                         # goals / goal_assist / expected_goals / ...
     label_zh: str
+    # high_good = 越多越好(进球/助攻/扑救…);high_bad = 越多越差(黄牌/犯规/
+    # 错失绝佳机会/送点/失球)。来源把 28 个榜**全部**按数值降序排,所以负向
+    # 榜的"第 1 名"是这项最差的那个人——界面必须标出来,否则读者没有任何
+    # 线索知道自己在看一张负榜(2026-09-16 站长要求区分正/负榜)。
+    direction: Literal["high_good", "high_bad"] = "high_good"
     entries: list[PlayerBoardEntry]
 
 

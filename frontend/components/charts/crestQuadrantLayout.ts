@@ -81,6 +81,15 @@ function niceStep(raw: number): number {
  * min/max,否则 ECharts 会把 0.47236656243863856 这种原始端点值直接画成刻度
  * 标签"——这里自己把端点吸附到 nice 刻度上,同时满足刻度干净与像素可复算。
  * 不强行把 0 拉进范围(scale:true 也不会),否则半张图是空白。
+ *
+ * 2026-09-16 真实反馈:站长在球员象限图「进攻创造力」视角看到纵轴刻度画到
+ * -0.1,以为"有人的 xA 是负数"。xA 物理上不可能为负——那是 14% 留白把下端
+ * 从 0 压到了 -0.1。据此:**数据最小值 ≥ 0 时,轴不得跌破 0**。
+ *
+ * 用数据驱动而不是给每个指标标注"能不能为负":① 永远不会切掉真实数据点
+ * (前提就是 lo0 >= 0);② 对终结超额/扑救超额这类**本来就能为负**的指标
+ * 同样安全——它们真有负值时 lo0 < 0,这条分支根本不生效;碰巧全为正时,
+ * 0 对它们也恰好是有意义的分界线,贴着 0 收边反而更准。
  */
 export function niceAxisRange(
   values: number[],
@@ -94,7 +103,7 @@ export function niceAxisRange(
   const hi0 = Math.max(...finite);
   // 全等输入:span=0 会让 step 变成 0/NaN,用数值本身的量级撑开一个可视区间
   const span = hi0 - lo0 > 0 ? hi0 - lo0 : Math.abs(hi0) || 1;
-  const lo = lo0 - pad * span;
+  const lo = lo0 >= 0 ? Math.max(0, lo0 - pad * span) : lo0 - pad * span;
   const hi = hi0 + pad * span;
   const step = niceStep((hi - lo) / targetTicks);
   const d = decimalsOf(step);

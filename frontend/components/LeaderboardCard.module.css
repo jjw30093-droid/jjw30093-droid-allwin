@@ -143,3 +143,21 @@
   font-size: 13px;
   padding: 7px 0;
 }
+
+/* 负榜标签「越多越差」(2026-09-16):.head 是 space-between,三个子元素会把
+   标签甩到正中间,所以给它 margin-right:auto —— 标题和标签左侧成组,箭头
+   仍然靠右。刻意用中性灰而不是红色:CLAUDE.md §11.2 把红锁给"真实错误或
+   不可用",拿它标负榜会撞语义(黄牌多不是"出错了")。 */
+.badBadge {
+  flex: 0 0 auto;
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: var(--ink-3);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}

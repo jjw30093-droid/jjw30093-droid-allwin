@@ -14016,6 +14016,15 @@
       "type": "string",
       "title": "Label Zh"
      },
+     "direction": {
+      "type": "string",
+      "enum": [
+       "high_good",
+       "high_bad"
+      ],
+      "title": "Direction",
+      "default": "high_good"
+     },
      "entries": {
       "items": {
        "$ref": "#/components/schemas/PlayerBoardEntry"

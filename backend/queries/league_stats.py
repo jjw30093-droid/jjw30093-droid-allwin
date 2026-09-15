@@ -62,7 +62,34 @@ FREE_PLAYER_BOARDS: list[tuple[str, str]] = [
     ("goals_conceded", "失球"),
 ]
 
+# 「越多越差」的榜(2026-09-16 站长要求区分正/负榜)。
+#
+# 来源把**全部** 28 个榜都按数值降序排,所以这几张榜的"第 1 名"其实是这项
+# 最差的那个人:失球榜第 1 = 丢球最多、错失绝佳机会第 1 = 哈兰德错失 30 次、
+# 黄牌榜第 1 = 黄牌最多。此前界面上它们和进球榜长得一模一样,读者没有任何
+# 线索知道自己在看一张"负榜"。站长的原话是"这里可以有正榜和负榜,让人知道
+# 比较差的是谁"——所以不是把它们删掉,是标出来。
+#
+# 送点(penalty_conceded)与失球(goals_conceded)都算负向:前者是犯规送点,
+# 后者是门将场均丢球。扑救(saves)刻意**不**算负向——扑救多通常意味着
+# 面对的射门多,但它本身是门将的正面动作,判成"越多越差"会冤枉人。
+HIGH_IS_BAD_PLAYER_BOARDS: frozenset[str] = frozenset(
+    {
+        "yellow_card",
+        "red_card",
+        "fouls",
+        "big_chance_missed",
+        "penalty_conceded",
+        "goals_conceded",
+    }
+)
+
 _BOARD_TOP_N = 10
+
+# 球员榜取前 20(2026-09-16 站长要求,球队榜维持 10 不动)。
+# 库里存的是来源的**全量**榜(英超进球榜 74 行、评分榜 311 行、出场时间榜
+# 406 行),这个常量只决定下发多少,不影响采集。
+_PLAYER_BOARD_TOP_N = 20
 
 
 # ── 来源方赛季球队榜(fact_season_team_stats,2026-09-10 新增)────────────
@@ -482,6 +509,23 @@ def _player_i18n_map(conn: sqlite3.Connection) -> dict:
     return {str(r["Player_ID"]): (r["name_zh"], r["name_zh_short"]) for r in rows}
 
 
+def _rank_by_value(prev_entries: list[dict], value, index: int) -> int:
+    """按**展示出来的数值**重新编名次(并列同名次,下一位跳号,即 1-2-2-4)。
+
+    2026-09-16 站长反馈"并列吃名额"。来源自己的 rank 带了我们看不见的次级
+    排序:进球榜上 5 个人 3 球排第 2、另外两个也是 3 球却排第 7——差别在
+    点球数(实测 `extra_json.SubStatValue` 与我们 shotmap 里的点球进球数逐人
+    吻合,B费/萨卡各 1 个点球)。来源的排序是合理的,但界面上只显示总进球数,
+    读者看到"一串 3 球却排 2,2,2,2,2,7,7"只会觉得排错了。
+
+    所以:**顺序仍然沿用来源的**(保住那份次级排序信息,非点球进球多的排前面),
+    只把名次按显示值重编,让名次和读者看到的数字自洽。
+    """
+    if prev_entries and prev_entries[-1]["value"] == value:
+        return prev_entries[-1]["rank"]
+    return index + 1
+
+
 def player_leaderboards(
     conn: sqlite3.Connection, league_id: int, season: str | None = None
 ) -> dict:
@@ -500,10 +544,10 @@ def player_leaderboards(
                FROM fact_season_player_stats
                WHERE League_ID=? AND Season=? AND stat_name=?
                ORDER BY rank LIMIT ?""",
-            (league_id, season, stat_name, _BOARD_TOP_N),
+            (league_id, season, stat_name, _PLAYER_BOARD_TOP_N),
         ).fetchall()
         entries = []
-        for r in rows:
+        for i, r in enumerate(rows):
             pid = str(r["Player_ID"])
             name_zh, name_zh_short = player_zh.get(pid, (None, None))
             entries.append(
@@ -513,14 +557,21 @@ def player_leaderboards(
                     "name": name_zh_short or name_zh or r["Player_Name"] or pid,
                     "name_en": r["Player_Name"],
                     "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
-                    "rank": r["rank"],
+                    "rank": _rank_by_value(entries, r["value"], i),
                     "value": r["value"],
                     "team_color": colors.get(int(r["Team_ID"]))
                     if r["Team_ID"] is not None
                     else None,
                 }
             )
-        boards.append({"stat_name": stat_name, "label_zh": label_zh, "entries": entries})
+        boards.append(
+            {
+                "stat_name": stat_name,
+                "label_zh": label_zh,
+                "direction": "high_bad" if stat_name in HIGH_IS_BAD_PLAYER_BOARDS else "high_good",
+                "entries": entries,
+            }
+        )
 
     return {"season": season, "available_seasons": seasons, "boards": boards}
 

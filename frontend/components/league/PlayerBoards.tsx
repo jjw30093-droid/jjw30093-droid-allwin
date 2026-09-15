@@ -1,6 +1,6 @@
 /**
- * 球员榜(纯展示)。消费 /api/v1/leagues/{id}/players 的 5 个免费维度
- * (进球/助攻/xG/xGOT/评分,服务端已完成中文名解析与 top10 截取)。
+ * 球员榜(纯展示)。消费 /api/v1/leagues/{id}/players 的 28 个维度
+ * (服务端已完成中文名解析、按显示值重排名次、top20 截取,并标好正/负榜)。
  */
 
 import { LeaderboardCard, type LeaderboardRow } from "@/components/LeaderboardCard";
@@ -28,7 +28,12 @@ export function PlayerBoards({ boards }: { boards: PlayersResponse["boards"] }) 
           teamColor: e.team_color,
         }));
         return (
-          <LeaderboardCard key={board.stat_name} title={board.label_zh} rows={rows} />
+          <LeaderboardCard
+            key={board.stat_name}
+            title={board.label_zh}
+            rows={rows}
+            highIsBad={board.direction === "high_bad"}
+          />
         );
       })}
     </div>
