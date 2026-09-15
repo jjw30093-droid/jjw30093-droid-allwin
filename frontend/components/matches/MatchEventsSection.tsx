@@ -112,9 +112,12 @@ export function MatchEventsSection({
         </ol>
       )}
       {events.some((e) => e.is_own_goal) && (
-        <p className={styles.note}>
-          乌龙球按受益方(得分的一队)归队;球员名是把球踢进本方球门的对方球员。
-        </p>
+        <details className={styles.methodDetail}>
+          <summary className={styles.methodSummary}>乌龙球口径</summary>
+          <p className={styles.note}>
+            乌龙球按受益方(得分的一队)归队;球员名是把球踢进本方球门的对方球员。
+          </p>
+        </details>
       )}
     </section>
   );

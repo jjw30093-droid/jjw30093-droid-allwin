@@ -78,8 +78,11 @@ describe("MatchProfilePanel", () => {
     expect(String(fn.mock.calls[0][0])).toContain(
       "/api/v1/matches/123/data-profile?venue=same_venue&n=3",
     );
-    // 窗口说明三段各印一行,所以是 getAllByText——数字必须真的跟着切换变
-    await waitFor(() => expect(screen.getAllByText(/近 3 个主场/).length).toBe(3));
+    // 窗口说明只在第一段印一次(2026-09-16 去重前是三段各印一行,同一句 14px
+     // 的话在页面上重复三遍)。这条断言真正要守的是**数字跟着切换变**,
+     // 不是"印了几遍"——所以既断言内容更新到「近 3 个」,也顺带锁死"只有一处",
+     // 防止去重被回退。
+    await waitFor(() => expect(screen.getAllByText(/近 3 个主场/).length).toBe(1));
   });
 
   it("切回看过的组合零请求(缓存命中)", async () => {

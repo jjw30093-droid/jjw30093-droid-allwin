@@ -195,7 +195,12 @@ export function MatchProfilePanel({
         <PercentileGroupSection
           key={g.key}
           title={groupSectionTitle(GROUP_TITLE_ZH[g.title_zh] ?? g.title_zh, shown.comparison_mode)}
-          windowNote={windowNote}
+          // 窗口说明三段完全一样,只在第一段印一次——与下面 showMethodNote
+          // 是同一个去重问题,那次只修了「口径说明」,漏了这个 prop,结果同一
+          // 句 14px 的话在页面上重复了三遍(2026-09-16 站长收到"小字太多、
+          // 占屏"的真实反馈后实测发现)。它是数据窗口标签(近 N 个某联赛主场),
+          // 不是纯口径小字,所以留在页面上可见,只去重、不折叠。
+          windowNote={i === 0 ? windowNote : ""}
           homeName={homeName}
           awayName={awayName}
           homeCrestUrl={homeCrestUrl}

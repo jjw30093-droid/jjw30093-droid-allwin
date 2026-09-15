@@ -131,3 +131,22 @@
   line-height: 1.6;
   color: var(--ink-3);
 }
+
+/* 口径说明的折叠壳(2026-09-16 真实用户反馈"说明的小字太多、占屏"):
+   与 PercentileGroupSection.module.css 的 .methodDetail/.methodSummary
+   同一套视觉。CSS Module 不能跨文件共享类,所以各模块各存一份。 */
+.methodDetail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.methodSummary {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  color: var(--ink-3);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}

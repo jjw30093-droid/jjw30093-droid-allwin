@@ -356,9 +356,9 @@ function OddsGroup({
             </ul>
           )}
         </details>
-        <p className={styles.disclaimer}>
-          本页为数据研究内容:历史表现不代表未来;不构成任何投注建议。
-        </p>
+        {/* 2026-09-16 删:这句与 components/SiteFooter.tsx 的站点级免责重复
+            (页脚那句更全,且每一页都有)。删掉不损失任何合规表达,只是把
+            比赛详情页底部省出一行。 */}
       </section>
     </>
   );

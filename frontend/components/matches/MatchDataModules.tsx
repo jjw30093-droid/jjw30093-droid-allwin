@@ -135,9 +135,12 @@ export function AttackSourceSection({ children }: { children: React.ReactNode })
         <span className={pageStyles.sectionBar} aria-hidden />
         进攻来源拆解
       </h2>
-      <p className={styles.windowNote}>
-        上条是射门次数占比,下条是 xG 占比 —— 两条错位的地方就是「次数多但质量差」或反过来。
-      </p>
+      <details className={styles.methodDetail}>
+        <summary className={styles.methodSummary}>怎么读这两条</summary>
+        <p className={styles.windowNote}>
+          上条是射门次数占比,下条是 xG 占比 —— 两条错位的地方就是「次数多但质量差」或反过来。
+        </p>
+      </details>
       <div className={styles.stack}>{children}</div>
     </section>
   );
@@ -166,10 +169,13 @@ export function KeyPlayersSection({
         <span className={pageStyles.sectionBar} aria-hidden />
         关键球员
       </h2>
-      <p className={styles.windowNote}>
-        占全队总量的比例,不做 per-90 外推 —— 5 场窗口下低分钟替补会被系统性抬高。
-        入选门槛:近 5 场至少出场 3 次。这是近 5 场数据最突出的球员,不代表本场首发。
-      </p>
+      <details className={styles.methodDetail}>
+        <summary className={styles.methodSummary}>口径与入选门槛</summary>
+        <p className={styles.windowNote}>
+          占全队总量的比例,不做 per-90 外推 —— 5 场窗口下低分钟替补会被系统性抬高。
+          入选门槛:近 5 场至少出场 3 次。这是近 5 场数据最突出的球员,不代表本场首发。
+        </p>
+      </details>
       <div className={styles.viewTabs} role="tablist" aria-label="切换球队">
         {([
           { key: "home" as const, name: homeName },
@@ -243,9 +249,12 @@ export function GoalkeeperSection({
         <span className={pageStyles.sectionBar} aria-hidden />
         门将对位
       </h2>
-      <p className={styles.windowNote}>
-        阻止进球 = 面对的 xGOT − 实际失球。正数表示比平均水平多扑出若干球。
-      </p>
+      <details className={styles.methodDetail}>
+        <summary className={styles.methodSummary}>「阻止进球」怎么算</summary>
+        <p className={styles.windowNote}>
+          阻止进球 = 面对的 xGOT − 实际失球。正数表示比平均水平多扑出若干球。
+        </p>
+      </details>
       <div className={styles.stack}>
         {teams.map((t) => {
           const rotated = t.keepers.length > 1;

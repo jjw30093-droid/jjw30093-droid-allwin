@@ -266,7 +266,7 @@ export function PercentileGroupSection({
         <span className={pageStyles.sectionBar} aria-hidden />
         {title}
       </h2>
-      <p className={styles.windowNote}>{windowNote}</p>
+      {windowNote && <p className={styles.windowNote}>{windowNote}</p>}
       <div className={styles.card}>
         {(verdict || sampleSize > 0) && (
           <div className={styles.cardHead}>

@@ -109,9 +109,12 @@ export function RefereeCard({ match }: { match: Match }) {
         </div>
       )}
       {stats.length > 0 && (
-        <p className={styles.note}>
-          该裁判本赛季场均执法数据;刻度线为同联赛裁判平均值,评级由数据源按联赛基准给出。
-        </p>
+        <details className={styles.methodDetail}>
+          <summary className={styles.methodSummary}>口径说明</summary>
+          <p className={styles.note}>
+            该裁判本赛季场均执法数据;刻度线为同联赛裁判平均值,评级由数据源按联赛基准给出。
+          </p>
+        </details>
       )}
     </section>
   );

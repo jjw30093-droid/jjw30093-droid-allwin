@@ -661,12 +661,15 @@ function ShotMapExplorerReady({
         <span><i className={styles.otherDot} />其他射门</span>
         <span className={styles.sizeLegend}><i />点越大，xG 越高</span>
       </div>
-      <p className={styles.note}>
-        球场统一朝上进攻；数据来自本站已采集比赛。单场切换只改变当前球场与数字，
-        不会补造缺失射门。
-        {onTargetIsOfficial &&
-          "　*射正为球队官方统计口径，与场上被扑/被挡圆点(无法区分门将扑救与后卫封堵)分别计算，二者不必相等。"}
-      </p>
+      <details className={styles.methodDetail}>
+        <summary className={styles.methodSummary}>口径说明</summary>
+        <p className={styles.note}>
+          球场统一朝上进攻；数据来自本站已采集比赛。单场切换只改变当前球场与数字，
+          不会补造缺失射门。
+          {onTargetIsOfficial &&
+            "　*射正为球队官方统计口径，与场上被扑/被挡圆点(无法区分门将扑救与后卫封堵)分别计算，二者不必相等。"}
+        </p>
+      </details>
     </div>
   );
 }

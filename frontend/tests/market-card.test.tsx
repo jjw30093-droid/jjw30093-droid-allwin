@@ -146,6 +146,25 @@ describe("MarketCard 结论区", () => {
     // avg=null 必须渲染成占位符,不能被 toFixed 之类的调用变成 "0.0"
     expect(screen.queryByText("0.0")).toBeNull();
   });
+
+  it("口径那句「不是这场的胜率」必须收在折叠里,不常驻卡面(2026-09-16 真实反馈:" +
+    "一场比赛有多张盘口卡,这句话原来每张卡各印一遍,占掉大量屏幕空间)", () => {
+    const { container } = render(<MarketCard card={BASE} />);
+    const note = screen.getByText(/不是这场的胜率/);
+    // 文案一个字都没删,只是默认不展开——祖先里必须有 <details>
+    expect(note.closest("details")).not.toBeNull();
+    // 而且那个 details 默认是收起的
+    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
+  });
+
+  it("降级态(样本不足/未标定)的解释同样收进折叠,但卡面上的降级胶囊仍然常驻" +
+    "——信号不能跟着解释一起被折走", () => {
+    const card: MarketCardData = { ...BASE, data_quality: "insufficient_sample" };
+    render(<MarketCard card={card} />);
+    expect(screen.getByText(/两队打过的场次还不够多/).closest("details")).not.toBeNull();
+    // 胶囊「样本不足」必须还在外面
+    expect(screen.getByText("样本不足").closest("details")).toBeNull();
+  });
 });
 
 describe("MarketCard 折叠区:各线回测 + 对手侧 + 回测更新时间(数据倾向卡片填充 2026-08-19)", () => {

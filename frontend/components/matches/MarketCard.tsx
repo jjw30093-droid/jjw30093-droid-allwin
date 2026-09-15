@@ -215,21 +215,25 @@ export function MarketCard({ card }: { card: MarketCardData }) {
         )}
       </div>
 
-      {degraded ? (
-        <p className={styles.note}>{degraded.fullNote}</p>
-      ) : (
-        <p className={styles.note}>
-          过去两队状态跟现在差不多的时候，{card.line} {card.market === "goals" ? "大球" : "过线"}开出过{" "}
-          <b className={styles.noteStrong}>
-            <span className="num">{card.hit_rate != null ? formatPct(card.hit_rate) : "—"}</span>
-          </b>
-          （<span className={`num ${styles.noteNum}`}>{card.sample_size ?? 0}</span> 场{card.calibration_scope === "all_leagues" ? "，跨联赛一起算" : ""}）。这是历史比例，
-          <b className={styles.noteStrong}>不是这场的胜率</b>。
-        </p>
-      )}
-
+      {/* 2026-09-16 真实用户反馈"说明的小字太多,占掉很多屏幕空间":这段口径
+          此前常驻在卡面上,而一场比赛有多张盘口卡,等于同一句话重复好几遍。
+          现在并进下面已有的「为什么这么判断」折叠里当第一段——卡面上仍然
+          留着「历史命中率」这个大数字和降级态的胶囊(样本不足/未标定),
+          信号没丢,只是解释默认不展开。文案一字未删。 */}
       <details className={styles.details}>
         <summary>为什么这么判断</summary>
+        {degraded ? (
+          <p className={styles.note}>{degraded.fullNote}</p>
+        ) : (
+          <p className={styles.note}>
+            过去两队状态跟现在差不多的时候，{card.line} {card.market === "goals" ? "大球" : "过线"}开出过{" "}
+            <b className={styles.noteStrong}>
+              <span className="num">{card.hit_rate != null ? formatPct(card.hit_rate) : "—"}</span>
+            </b>
+            （<span className={`num ${styles.noteNum}`}>{card.sample_size ?? 0}</span> 场{card.calibration_scope === "all_leagues" ? "，跨联赛一起算" : ""}）。这是历史比例，
+            <b className={styles.noteStrong}>不是这场的胜率</b>。
+          </p>
+        )}
         <table className={styles.driverTable}>
           <thead>
             <tr>
