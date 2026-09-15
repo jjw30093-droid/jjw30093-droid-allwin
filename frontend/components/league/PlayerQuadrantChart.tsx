@@ -11,7 +11,8 @@
  *    案例)。位置切换用本地 state,不经过 URL/服务端往返——服务端已经
  *    一次性把全部位置的数据都下发了。
  * 2. **每象限只画离均值最远的 10 人**(站长拍板)——playerPlotSet 算出
- *    全部达标球员后,topPerQuadrant 再从中按象限各挑 10 个来画;均值/
+ *    全部达标球员后,topPerQuadrant 再从中按象限各挑 5 个来画(且离均值
+ *    太近的不画);均值/
  *    虚线仍由全部达标球员计算,不受这条截断影响,图下有独立文案说明。
  * 3. 没有"最近 N 场/主客场"筛选(球队侧刚做完,球员侧明确不在本次范围)。
  */
@@ -130,7 +131,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
     const my = mean(fullPts.map((p) => p.y));
     const dirs = dirsOf(view);
     const lowY = dirs.y === true;
-    const { drawn, totalByQuadrant } = topPerQuadrant(fullPts, mx, my, dirs);
+    const { drawn, totalByQuadrant, nearMeanDropped } = topPerQuadrant(fullPts, mx, my, dirs);
     const xr = niceAxisRange(drawn.map((p) => p.x), { pad: 0.14 });
     const yr = niceAxisRange(drawn.map((p) => p.y), { pad: 0.16 });
     const height = chartHeightFor(drawn.length);
@@ -139,7 +140,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
     const layout = box
       ? layoutCrests({ pts: drawn, box, xr, yr, yInverse: lowY, radius: crestSize / 2 + CREST.PAD })
       : null;
-    return { mx, my, dirs, lowY, xr, yr, height, crestSize, layout, drawn, totalByQuadrant };
+    return { mx, my, dirs, lowY, xr, yr, height, crestSize, layout, drawn, totalByQuadrant, nearMeanDropped };
   }, [view, fullPts, width]);
 
   const selected = useMemo(
@@ -178,7 +179,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
     );
   }
 
-  const { mx, my, dirs, height, drawn, totalByQuadrant } = derived;
+  const { mx, my, dirs, height, drawn, totalByQuadrant, nearMeanDropped } = derived;
   const quad = (p: PlayerPt) => quadrantOf(p, mx, my, dirs);
 
   const handleChartClick = (params: unknown) => {
@@ -215,7 +216,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
   }));
 
   const hiddenText = playerHiddenNote(hidden);
-  const truncationText = quadrantTruncationNote(totalByQuadrant);
+  const truncationText = quadrantTruncationNote(totalByQuadrant, undefined, nearMeanDropped);
 
   const disabledViews = viewsForPosition.filter((v) => !available.some((a) => a.id === v.id)).reduce(
     (acc, v) => {

@@ -238,7 +238,9 @@ describe("topPerQuadrant", () => {
     const pts = [...clustered, outlier];
     const mx = mean(pts.map((p) => p.x));
     const my = mean(pts.map((p) => p.y));
-    const { drawn, totalByQuadrant } = topPerQuadrant(pts, mx, my, {}, 10);
+    // minExtremeness 传 0,把"离均值太近不画"这条单独关掉,专测名额截断
+    // 本身(两条规则各自有独立用例,混在一起断言会看不出是哪条生效)。
+    const { drawn, totalByQuadrant } = topPerQuadrant(pts, mx, my, {}, 10, 0);
     expect(drawn).toHaveLength(11); // 10(截断后的聚集组) + 1(孤点独占的象限)
     expect(totalByQuadrant.some((n) => n > 10)).toBe(true);
     // 聚集组里离均值最远的是 c10(x=110),最近的是 c0(x=100)——10 个名额
@@ -261,7 +263,7 @@ describe("topPerQuadrant", () => {
     const pts = [...clustered, outlier];
     const mx = mean(pts.map((p) => p.x));
     const my = mean(pts.map((p) => p.y));
-    const { totalByQuadrant } = topPerQuadrant(pts, mx, my, {}, 10);
+    const { totalByQuadrant } = topPerQuadrant(pts, mx, my, {}, 10, 0);
     // 截断只影响 drawn(11→10),不影响 totalByQuadrant——它必须仍反映
     // 截断前的真实分布(11 + 1 = 12),供 quadrantTruncationNote 如实披露。
     expect(totalByQuadrant.reduce((a, b) => a + b, 0)).toBe(12);
@@ -275,7 +277,55 @@ describe("quadrantTruncationNote", () => {
 
   it("有象限超过 take 时给出披露文案", () => {
     const note = quadrantTruncationNote([15, 2, 3, 4]);
-    expect(note).toContain("每象限只画离均值最远的 10 人");
-    expect(note).toContain("不受这条截断影响");
+    expect(note).toContain("每象限只画离均值最远的 5 人");
+    expect(note).toContain("不受这两条影响");
+  });
+
+  it("名额没满但有人因为离均值太近被丢掉时,单独成句——两种'没画出来'的" +
+    "原因不能混为一谈(CLAUDE.md 禁止静默截断)", () => {
+    const note = quadrantTruncationNote([2, 2, 3, 4], undefined, 3);
+    expect(note).toContain("3 人离联赛平均太近");
+    // 没有任何象限超额,所以不该出现"每象限只画"那句
+    expect(note).not.toContain("每象限只画");
+  });
+
+  it("两条规则同时生效时两句都出现", () => {
+    const note = quadrantTruncationNote([15, 2, 3, 4], undefined, 2);
+    expect(note).toContain("每象限只画离均值最远的 5 人");
+    expect(note).toContain("2 人离联赛平均太近");
+  });
+});
+
+describe("离均值太近的不画(2026-09-16 站长:'我可能只需要看最极端的几个人," +
+  "绝大多数人肯定是都在中间的')", () => {
+  const pt = (name: string, x: number, y: number) => ({
+    key: name, name, x, y, mp: 1,
+    avatarUrl: null, playerId: name, teamName: "T", teamCrestUrl: null,
+  });
+
+  it("挤在均值附近的一批人,名额没满也不画", () => {
+    // 4 个点几乎重合在原点,外加**对角两个**极端点——两个极端点必须对称,
+    // 否则均值会被单侧拽走,那 4 个"聚集点"反而变得离均值很远(第一版夹具
+    // 就栽在这:单个极端点把 mx 从 10 拽到 28,4 个点的归一化距离成了 0.71,
+    // 高于 0.6 阈值,根本不该被丢)。
+    const pts = [
+      pt("a", 0, 0), pt("b", 0.1, 0.1), pt("c", -0.1, -0.1), pt("d", 0.1, -0.1),
+      pt("far+", 100, 100), pt("far-", -100, -100),
+    ];
+    const mx = mean(pts.map((p) => p.x));
+    const my = mean(pts.map((p) => p.y));
+    const { drawn, nearMeanDropped } = topPerQuadrant(pts, mx, my, {});
+    expect(drawn.map((p) => p.name).sort()).toEqual(["far+", "far-"]);
+    expect(nearMeanDropped).toBe(4);
+  });
+
+  it("真极端的人一个都不能被这条规则误伤", () => {
+    // 两组各自远离均值(对角分布),每个人的归一化距离都 ≈1
+    const pts = [pt("hi1", 20, 20), pt("hi2", 19, 21), pt("lo1", 0, 0), pt("lo2", 1, -1)];
+    const mx = mean(pts.map((p) => p.x));
+    const my = mean(pts.map((p) => p.y));
+    const { drawn, nearMeanDropped } = topPerQuadrant(pts, mx, my, {});
+    expect(drawn).toHaveLength(4);
+    expect(nearMeanDropped).toBe(0);
   });
 });

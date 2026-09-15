@@ -254,16 +254,39 @@ export function playerHiddenNote(hidden: PlayerHiddenEntry[]): string {
   return out.join("；") + "。虚线平均值只统计画出的球员。";
 }
 
-export const PLAYERS_PER_QUADRANT = 10;
+/** 每象限画几个人。2026-09-16 从 10 降到 5(站长:"这图里不需要这么多人,
+ *  我可能只需要看最极端的几个人,绝大多数人肯定是都在中间的")。
+ *
+ *  10 的时候一张图实测画出 35–40 个头像,英超中场「射门与终结」的"锋线哑火"
+ *  象限 36 个达标球员里挑 10 个,挑出来的还都是最贴角落的那批,叠成一团
+ *  根本分不出谁是谁。降到 5 之后每张图稳定 20 个——这也正是
+ *  crestQuadrantLayout 的尺寸参数当初的设计点位(球队象限图 20 支球队),
+ *  40 个点是后来硬塞进去的。 */
+export const PLAYERS_PER_QUADRANT = 5;
+
+/** "离均值太近就别画了"的门槛,单位是**标准差**(两轴归一化后的欧氏距离)。
+ *
+ *  站长的原话是"绝大多数人肯定是都在中间的"。实测下来这条其实是**安全网**
+ *  而不是常规过滤器:取了每象限前 5 之后,英超外场三张图里最不极端的那个
+ *  也在 0.79–1.52 个标准差之外,阈值一个人都不会掉;只有门将那张(达标池小、
+ *  挤在一起)会掉 5 个真正贴着均值的人。
+ *
+ *  换句话说它只在"某个象限稀疏到前 5 名其实就是平均水平"时才生效——那种
+ *  情况下与其凑满名额,不如老实少画几个,别把平庸的人包装成某一类的代表。 */
+export const MIN_EXTREMENESS = 0.6;
 
 /**
- * 每个象限只画离均值最远的 10 人(站长拍板)。均值(mx/my)必须由调用方
- * 传入**全部达标球员**算出的均值(不是只由这 10 人算),这条不变量由
- * playerPlotSet → topPerQuadrant 的调用顺序保证:先用 plotSet 的全部 pts
- * 算 mx/my,再用 topPerQuadrant 从这批 pts 里各象限挑 10 个来画。
+ * 每个象限只画离均值最远的 N 人,且离均值太近的一律不画。
+ *
+ * 均值(mx/my)必须由调用方传入**全部达标球员**算出的均值(不是只由画出来的
+ * 这些人算),这条不变量由 playerPlotSet → topPerQuadrant 的调用顺序保证:
+ * 先用 plotSet 的全部 pts 算 mx/my,再用 topPerQuadrant 从这批 pts 里挑。
  *
  * 复用 outlierNames 同一套"两轴标准差归一化后按离均值距离排序"算法,
  * 只是这里按象限分组后各自独立排序、各取前 N,不是全局取一批。
+ *
+ * `nearMeanDropped` 是"进了前 N 名额、但因为离均值太近而没画"的人数,
+ * 供 quadrantTruncationNote 如实披露(CLAUDE.md 禁止静默截断)。
  */
 export function topPerQuadrant(
   pts: PlayerPt[],
@@ -271,7 +294,8 @@ export function topPerQuadrant(
   my: number,
   dirs: Dirs,
   take = PLAYERS_PER_QUADRANT,
-): { drawn: PlayerPt[]; totalByQuadrant: number[] } {
+  minExtremeness = MIN_EXTREMENESS,
+): { drawn: PlayerPt[]; totalByQuadrant: number[]; nearMeanDropped: number } {
   const byQuadrant: PlayerPt[][] = [[], [], [], []];
   for (const p of pts) byQuadrant[quadrantOf(p, mx, my, dirs)].push(p);
 
@@ -280,21 +304,37 @@ export function topPerQuadrant(
   const sx = sd(pts.map((p) => p.x), mx);
   const sy = sd(pts.map((p) => p.y), my);
   const dist2 = (p: PlayerPt) => ((p.x - mx) / sx) ** 2 + ((p.y - my) / sy) ** 2;
+  // 距离阈值在平方空间比较,省掉每个点开一次根号
+  const floor2 = minExtremeness * minExtremeness;
 
   const drawn: PlayerPt[] = [];
   const totalByQuadrant = byQuadrant.map((group) => group.length);
+  let nearMeanDropped = 0;
   for (const group of byQuadrant) {
     const sorted = [...group].sort((a, b) => dist2(b) - dist2(a));
-    drawn.push(...sorted.slice(0, take));
+    for (const p of sorted.slice(0, take)) {
+      if (dist2(p) >= floor2) drawn.push(p);
+      else nearMeanDropped += 1;
+    }
   }
-  return { drawn, totalByQuadrant };
+  return { drawn, totalByQuadrant, nearMeanDropped };
 }
 
-/** 每象限截断的披露文案——与 playerHiddenNote 是两种不同的"没画出来"原因
- *  (那个是样本不达标,这个是象限内人太多只挑了最极端的 N 个),文案不能
- *  混为一谈(CLAUDE.md 禁止静默截断)。 */
-export function quadrantTruncationNote(totalByQuadrant: number[], take = PLAYERS_PER_QUADRANT): string {
-  const truncated = totalByQuadrant.filter((n) => n > take);
-  if (!truncated.length) return "";
-  return `每象限只画离均值最远的 ${take} 人；虚线均值统计全部达标球员（不受这条截断影响）。`;
+/** 没画出来的两种原因要分开说(与 playerHiddenNote 的"样本不达标"又是第三种,
+ *  三者文案不能混为一谈,CLAUDE.md 禁止静默截断):
+ *  ① 象限内人太多,只挑了最极端的 N 个;
+ *  ② 名额没满,但那几个人离均值太近,宁可不画。 */
+export function quadrantTruncationNote(
+  totalByQuadrant: number[],
+  take = PLAYERS_PER_QUADRANT,
+  nearMeanDropped = 0,
+): string {
+  const truncated = totalByQuadrant.some((n) => n > take);
+  const out: string[] = [];
+  if (truncated) out.push(`每象限只画离均值最远的 ${take} 人`);
+  if (nearMeanDropped > 0) {
+    out.push(`另有 ${nearMeanDropped} 人离联赛平均太近、算不上任何一类,也没画`);
+  }
+  if (!out.length) return "";
+  return `${out.join("；")}；虚线均值统计全部达标球员（不受这两条影响）。`;
 }
