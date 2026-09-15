@@ -1,13 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { loginWithPassword } from "./helpers";
 
 test("Studio 默认安全版展示六张打法卡且不出现敏感文案", async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto("/login");
-  const summary = page.getByText("管理员密码登录");
-  await summary.click();
-  await page.getByLabel("用户名").fill("e2e-admin");
-  await page.getByLabel("密码").fill("e2e-password-123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginWithPassword(page, "e2e-admin", "e2e-password-123");
   await page.waitForURL("**/");
 
   await page.goto("/studio");

@@ -80,9 +80,11 @@ function BottomIcon({ name }: { name: BottomNavIcon }) {
 function BottomNavLinks({
   pathname,
   tab,
+  authed,
 }: {
   pathname: string;
   tab: string | null;
+  authed: boolean;
 }) {
   const onReco = pathname.startsWith("/reco");
   const items: {
@@ -111,8 +113,10 @@ function BottomNavLinks({
       active: onReco && tab === "record",
     },
     {
-      href: "/account",
-      label: "我的",
+      // 未登录时这里写「我的」,用户看不出是登录入口(2026-09-16 真实反馈),
+      // 且点进 /account 也只是又一张"前往登录"卡片,白白多一跳。
+      href: authed ? "/account" : "/login",
+      label: authed ? "我的" : "登录",
       icon: "account",
       active: pathname.startsWith("/account") || pathname.startsWith("/login"),
     },
@@ -174,7 +178,7 @@ function NavLinksWithStatus({ pathname }: { pathname: string }) {
   return <NavLinks pathname={pathname} status={searchParams.get("status")} />;
 }
 
-function BottomNavWithTab(props: { pathname: string }) {
+function BottomNavWithTab(props: { pathname: string; authed: boolean }) {
   const searchParams = useSearchParams();
   return <BottomNavLinks {...props} tab={searchParams.get("tab")} />;
 }
@@ -259,8 +263,10 @@ export function SiteNav() {
                   {me.user?.display_name ?? "已登录"}
                 </Link>
               ) : (
+                // 2026-09-16 真实用户反馈"不知道从哪里登录":这里此前写
+                // 「账户」,不含"登录"二字,未登录用户看不出这是登录入口。
                 <Link href="/login" className={styles.loginBtn}>
-                  账户
+                  登录
                 </Link>
               )}
             </div>
@@ -268,8 +274,19 @@ export function SiteNav() {
         </div>
       </header>
 
-      <Suspense fallback={<BottomNavLinks pathname={pathname} tab={null} />}>
-        <BottomNavWithTab pathname={pathname} />
+      <Suspense
+        fallback={
+          <BottomNavLinks
+            pathname={pathname}
+            tab={null}
+            authed={me?.authenticated === true}
+          />
+        }
+      >
+        <BottomNavWithTab
+          pathname={pathname}
+          authed={me?.authenticated === true}
+        />
       </Suspense>
     </>
   );

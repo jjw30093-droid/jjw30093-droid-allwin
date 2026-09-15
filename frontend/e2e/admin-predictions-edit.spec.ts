@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { seedEditMatchId, seedEditSnapshotId } from "./helpers";
+import {
+  loginWithPassword,
+  seedEditMatchId,
+  seedEditSnapshotId,
+} from "./helpers";
 
 /**
  * 管理员登录 → 预测 Tab → 编辑一条已锁定的正式预测 → 修正记录留痕可见
@@ -15,17 +19,7 @@ test("管理员登录 → 编辑已锁定预测 → 修正记录公开可查", a
   const matchId = seedEditMatchId();
   const snapshotId = seedEditSnapshotId();
 
-  await page.goto("/login");
-  const summary = page.getByText("管理员密码登录");
-  await summary.click();
-  try {
-    await expect(page.getByLabel("用户名")).toBeVisible({ timeout: 3000 });
-  } catch {
-    await summary.click();
-  }
-  await page.getByLabel("用户名").fill("e2e-admin");
-  await page.getByLabel("密码").fill("e2e-password-123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginWithPassword(page, "e2e-admin", "e2e-password-123");
   await page.waitForURL("**/");
 
   await page.goto("/admin");

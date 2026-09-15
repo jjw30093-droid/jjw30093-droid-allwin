@@ -1,5 +1,6 @@
 import { test, expect, type Download } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { loginWithPassword } from "./helpers";
 
 /**
  * P1:Studio 图片导出真实验收。
@@ -28,17 +29,7 @@ test("Studio 导出 PNG:signature + 实际像素尺寸 + JSON/SRT", async ({ pag
   test.setTimeout(180_000);
 
   // 管理员密码登录(种子 e2e-admin)
-  await page.goto("/login");
-  const summary = page.getByText("管理员密码登录");
-  await summary.click();
-  try {
-    await expect(page.getByLabel("用户名")).toBeVisible({ timeout: 3000 });
-  } catch {
-    await summary.click();
-  }
-  await page.getByLabel("用户名").fill("e2e-admin");
-  await page.getByLabel("密码").fill("e2e-password-123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginWithPassword(page, "e2e-admin", "e2e-password-123");
   await page.waitForURL("**/");
 
   // 进入 Studio 编辑器(创建或打开草稿)

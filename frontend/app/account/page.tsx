@@ -192,9 +192,13 @@ export default function AccountPage() {
       <main className={styles.page}>
         <h1 className={styles.title}>账户中心</h1>
         <section className={styles.card}>
+          {/* 2026-09-16 修正:此前这句把「每日精选历史战绩查看」列为登录后
+              才有的功能,但战绩自 2026-08-16 起就是匿名全开的
+              (app/reco/page.tsx:8)——等于在告诉用户"战绩要登录才能看",
+              是站长收到"看不到战绩"这条反馈的根因之一。 */}
           <p className={styles.note}>
-            尚未登录。登录后可使用关注比赛、每日精选历史战绩查看、精选授权状态查询等
-            账户功能;首次微信扫码会自动创建账号。
+            尚未登录。登录后可使用关注比赛、精选授权状态查询等账户功能;
+            首次微信扫码会自动创建账号。历史战绩不用登录也能看。
           </p>
           <Link className={styles.btnPrimary} href="/login?next=/account">
             前往登录

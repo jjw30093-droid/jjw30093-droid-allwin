@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { seedMatchId } from "./helpers";
+import { loginWithPassword, seedMatchId } from "./helpers";
 
 /**
  * 管理员密码登录 → Admin 后台可用 → Studio 建草稿 + 导出(TXT 下载事件)。
@@ -8,18 +8,7 @@ import { seedMatchId } from "./helpers";
 test("管理员登录 → admin 可用 → studio 导出", async ({ page }) => {
   test.setTimeout(120_000);
 
-  await page.goto("/login");
-  // <details> 在 React 水合时可能被复位:点开后校验表单真的可见,否则重试
-  const summary = page.getByText("管理员密码登录");
-  await summary.click();
-  try {
-    await expect(page.getByLabel("用户名")).toBeVisible({ timeout: 3000 });
-  } catch {
-    await summary.click();
-  }
-  await page.getByLabel("用户名").fill("e2e-admin");
-  await page.getByLabel("密码").fill("e2e-password-123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginWithPassword(page, "e2e-admin", "e2e-password-123");
   await page.waitForURL("**/");
 
   // Admin 后台:非"无权限",能看到用户管理

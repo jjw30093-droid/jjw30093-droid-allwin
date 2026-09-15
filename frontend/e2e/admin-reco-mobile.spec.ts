@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { loginWithPassword } from "./helpers";
 
 /**
  * admin 「每日精选」RecoTab 移动端可用性(P4.B,2026-08-16)。
@@ -28,17 +29,7 @@ const VIEWPORTS = [
 ];
 
 async function loginAsAdmin(page: import("@playwright/test").Page) {
-  await page.goto("/login");
-  const summary = page.getByText("管理员密码登录");
-  await summary.click();
-  try {
-    await expect(page.getByLabel("用户名")).toBeVisible({ timeout: 3000 });
-  } catch {
-    await summary.click();
-  }
-  await page.getByLabel("用户名").fill("e2e-admin");
-  await page.getByLabel("密码").fill("e2e-password-123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginWithPassword(page, "e2e-admin", "e2e-password-123");
   await page.waitForURL("**/");
 }
 

@@ -48,9 +48,26 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
-/* ── 管理员密码登录(降级为纯文字折叠入口,不再是卡片) ────── */
+/* ── 账号密码登录 ──────────────────────────────────────────
+ *
+ * 2026-09-16 真实用户反馈:站长手工开了账号,用户却"不知道从哪里登录"。
+ * 根因是这块此前被折叠在页面最底部、summary 写「管理员密码登录」、脚注
+ * 写「管理员账号专用」——普通用户即使翻到也会以为不是给自己用的,而
+ * `POST /auth/password/login` 其实不受 WECHAT_AUTH_ENABLED 影响,一直能用。
+ *
+ * 所以按微信扫码开没开放分两种形态:
+ * - 没开放(`standalone`):这是当前**唯一**能用的登录方式,渲染成常驻主卡片
+ *   并排在"扫码还在开通中"那张卡上面,不折叠。
+ * - 开放了:扫码是主路径,这里降级成折叠的次要入口。
+ */
 
-function PasswordLoginSection({ nextPath }: { nextPath: string }) {
+function PasswordLoginSection({
+  nextPath,
+  standalone,
+}: {
+  nextPath: string;
+  standalone: boolean;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,37 +90,53 @@ function PasswordLoginSection({ nextPath }: { nextPath: string }) {
     }
   };
 
+  const form = (
+    <form className={styles.pwForm} onSubmit={onSubmit}>
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>用户名</span>
+        <input
+          className={styles.input}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          autoComplete="username"
+          required
+        />
+      </label>
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>密码</span>
+        <input
+          className={styles.input}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+      {err && <p className={styles.errText}>{err}</p>}
+      <button type="submit" className={styles.btnPrimary} disabled={busy}>
+        {busy ? "登录中…" : "登录"}
+      </button>
+    </form>
+  );
+
+  if (standalone) {
+    return (
+      <section className={styles.card}>
+        <h2 className={styles.cardTitle}>账号密码登录</h2>
+        <p className={styles.note}>
+          扫码登录还没开放,现在用站长开给你的账号密码登录。
+        </p>
+        {form}
+      </section>
+    );
+  }
+
   return (
     <details className={styles.pwDetails}>
-      <summary className={styles.pwSummary}>管理员密码登录</summary>
-      <form className={styles.pwForm} onSubmit={onSubmit}>
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>用户名</span>
-          <input
-            className={styles.input}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-          />
-        </label>
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>密码</span>
-          <input
-            className={styles.input}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </label>
-        {err && <p className={styles.errText}>{err}</p>}
-        <button type="submit" className={styles.btnPrimary} disabled={busy}>
-          {busy ? "登录中…" : "登录"}
-        </button>
-        <p className={styles.note}>管理员账号专用。</p>
-      </form>
+      <summary className={styles.pwSummary}>账号密码登录</summary>
+      {form}
+      <p className={styles.note}>账号由站长开通,没有的话走上面的扫码登录。</p>
     </details>
   );
 }
@@ -179,7 +212,9 @@ function LoginBody() {
         <div className={styles.titleCopy}>
           <h1 className={styles.title}>{pageTitle}</h1>
           <p className={styles.note}>
-            第一次扫码会自动建号，不用填手机号。登完自动回到你刚才那页。
+            {wechatEnabled === false
+              ? "用站长开给你的账号密码登录。登完自动回到你刚才那页。"
+              : "第一次扫码会自动建号，不用填手机号。登完自动回到你刚才那页。"}
           </p>
         </div>
       </div>
@@ -198,6 +233,12 @@ function LoginBody() {
             </a>
           </div>
         </section>
+      )}
+
+      {/* 微信没开放时,密码登录是唯一能用的方式,必须排在"开通中"那张卡上面
+          ——用户第一眼要看到的是能走通的路,不是走不通的路。 */}
+      {wechatEnabled === false && (
+        <PasswordLoginSection nextPath={nextPath} standalone />
       )}
 
       {wechatEnabled === false ? (
@@ -233,11 +274,14 @@ function LoginBody() {
         <p className={styles.perksFoot}>比赛数据、赔率、概率都不用登录，直接看。</p>
       </section>
 
-      <PasswordLoginSection nextPath={nextPath} />
+      {wechatEnabled !== false && (
+        <PasswordLoginSection nextPath={nextPath} standalone={false} />
+      )}
 
       <p className={styles.footNote}>
-        现在只能用微信登录，短信和邮箱还没接，也就没有备用的找回方式，微信号别丢。
-        登录后我们只存一个内部账号 ID 跟你的微信对应，不读昵称和头像。
+        短信和邮箱还没接，也就没有备用的找回方式：用微信登录的话微信号别丢，
+        用账号密码的话密码别忘，忘了找站长重置。
+        微信登录后我们只存一个内部账号 ID 跟你的微信对应，不读昵称和头像。
       </p>
     </main>
   );

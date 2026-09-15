@@ -1,9 +1,36 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const API = "http://127.0.0.1:8010";
+
+/**
+ * 账号密码登录(5 个 admin/studio 用例共用)。
+ *
+ * 2026-09-16 收口:此前 5 个 spec 各抄一份
+ * `getByText("管理员密码登录").click()` + 点不开就再点一次的重试。这个写法
+ * 有两处脆弱:① 文案一改就全找不到;② 登录页按微信扫码开没开放,密码登录
+ * 有两种形态——没开放时是常驻主卡片(**没有可点的 summary**),开放时才是
+ * 折叠的次要入口,盲点一次会把已经展开的表单反向收起来。
+ *
+ * 这里改成"看表单在不在,不在才去展开",两种形态都走得通。
+ */
+export async function loginWithPassword(
+  page: Page,
+  username: string,
+  password: string,
+) {
+  await page.goto("/login");
+  const usernameField = page.getByLabel("用户名");
+  if (!(await usernameField.isVisible().catch(() => false))) {
+    await page.getByText("账号密码登录").click();
+  }
+  await expect(usernameField).toBeVisible({ timeout: 3000 });
+  await usernameField.fill(username);
+  await page.getByLabel("密码").fill(password);
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+}
 
 /** webhook 签名 Token(development 默认值,backend/auth/config.py)。 */
 const DEV_WEBHOOK_TOKEN = "dev-webhook-token";
