@@ -806,6 +806,16 @@ export interface paths {
          *     自身的历史运营记录,与 backend/queries/track_record.py 里模型预测的
          *     公开战绩端点同一先例,不属于"每日精选"按场授权的约束范围。人工内容
          *     可修正,edit_count/last_edited_at 公开可查,不使用"锁定不可改"表述。
+         *
+         *     2026-09-16 起改公开缓存:这个响应与身份无关(匿名和登录拿到的逐字节
+         *     相同),此前的 _no_store 是"匿名可见"改造时留下的保守值。战绩现在有了
+         *     独立页面 /track-record 并进了 sitemap,搜索引擎与匿名用户都会打这个
+         *     端点,再 no-store 就是白白把每次请求都打到库上。缓存档位取 PUBLIC_CACHE
+         *     (300s),与 /reco/highlight 同一理由:内容只在某张单结算时变化,没有
+         *     精确到分钟的撤下判定,陈旧 5 分钟无害且自愈。
+         *
+         *     ⚠ 改缓存要**同时**改两处:这里的响应头,和 cache_policy.py 的
+         *     PUBLIC_ALLOWLIST。只改一处不会报错,只会静默失效。
          */
         get: operations["reco_track_record_api_v1_reco_track_record_get"];
         put?: never;

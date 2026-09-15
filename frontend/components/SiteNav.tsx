@@ -28,7 +28,13 @@ const NAV_ITEMS = [
     mobile: false,
   },
   { href: "/reco", label: "每日精选", mobile: true },
-  { href: "/pricing", label: "权限说明", mobile: true },
+  // 2026-09-16 真实用户反馈"看不到战绩":战绩此前只能从 /reco 的 ?tab=record
+  // 进,桌面导航里根本没有入口。现在有独立路由了,放在「每日精选」后面
+  // ——它就是精选的成绩单,挨着看最自然。
+  { href: "/track-record", label: "战绩", mobile: true },
+  // 「权限说明」从顶栏移到只留页脚(SiteFooter 里本来就有):.nav 是
+  // overflow-x:auto,第 8 项在窄桌面会被推进横向滚动区、等于看不见,
+  // 那新加的「战绩」就白加了。这两页都是低频说明页,页脚足够。
   { href: "/about", label: "关于我们", mobile: true },
 ];
 
@@ -72,18 +78,18 @@ function BottomIcon({ name }: { name: BottomNavIcon }) {
 }
 
 /**
- * 底部导航(手机):首页|比赛|精选|战绩|我的。
- * 「精选/战绩」都指向 /reco 的两个标签,选中态需要读 ?tab=,
- * 因此拆出本组件由 Suspense 包裹(useSearchParams 的 Next 16 约束);
- * SSR fallback 用 tab=null 渲染同一结构,水合后补上标签级选中态。
+ * 底部导航(手机):首页|比赛|精选|战绩|我的(未登录时第五项是「登录」)。
+ *
+ * 2026-09-16 起不再需要读 ?tab=:「战绩」有了独立路由 /track-record,
+ * 「精选」也从 ?tab=daily(对匿名是登录墙)改成裸 /reco。两项的选中态现在
+ * 都只看 pathname,所以本组件不再依赖 useSearchParams,外层的 Suspense
+ * 包装一并去掉。
  */
 function BottomNavLinks({
   pathname,
-  tab,
   authed,
 }: {
   pathname: string;
-  tab: string | null;
   authed: boolean;
 }) {
   const onReco = pathname.startsWith("/reco");
@@ -101,16 +107,19 @@ function BottomNavLinks({
       active: pathname.startsWith("/matches"),
     },
     {
-      href: "/reco?tab=daily",
+      // 2026-09-16 修 bug:此前指向 ?tab=daily,匿名用户点这个最显眼的入口
+      // 只会撞上一张"登录后能看到你有哪几场"的登录墙,而真正免费的每日公推
+      // 在 ?tab=public(也是 /reco 的默认标签页)。裸 /reco 即落公推。
+      href: "/reco",
       label: "精选",
       icon: "picks",
-      active: onReco && tab !== "record",
+      active: onReco,
     },
     {
-      href: "/reco?tab=record",
+      href: "/track-record",
       label: "战绩",
       icon: "record",
-      active: onReco && tab === "record",
+      active: pathname.startsWith("/track-record"),
     },
     {
       // 未登录时这里写「我的」,用户看不出是登录入口(2026-09-16 真实反馈),
@@ -176,11 +185,6 @@ function NavLinks({ pathname, status }: { pathname: string; status: string | nul
 function NavLinksWithStatus({ pathname }: { pathname: string }) {
   const searchParams = useSearchParams();
   return <NavLinks pathname={pathname} status={searchParams.get("status")} />;
-}
-
-function BottomNavWithTab(props: { pathname: string; authed: boolean }) {
-  const searchParams = useSearchParams();
-  return <BottomNavLinks {...props} tab={searchParams.get("tab")} />;
 }
 
 export function SiteNav() {
@@ -274,20 +278,7 @@ export function SiteNav() {
         </div>
       </header>
 
-      <Suspense
-        fallback={
-          <BottomNavLinks
-            pathname={pathname}
-            tab={null}
-            authed={me?.authenticated === true}
-          />
-        }
-      >
-        <BottomNavWithTab
-          pathname={pathname}
-          authed={me?.authenticated === true}
-        />
-      </Suspense>
+      <BottomNavLinks pathname={pathname} authed={me?.authenticated === true} />
     </>
   );
 }

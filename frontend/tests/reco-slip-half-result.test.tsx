@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { SlipCard, slipTone, type Slip } from "@/app/reco/page";
+import { SlipCard, slipTone, type Slip } from "@/components/reco/TrackRecordPanel";
 
 afterEach(cleanup);
 

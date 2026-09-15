@@ -29,7 +29,9 @@ const PATTERN = /\.toLocaleString\(|new Intl\.DateTimeFormat\(/;
 const ALLOWLIST: Record<string, string> = {
   "app/admin/page.tsx": "运维后台内部工具,操作者自己的时区即可,不面向普通用户",
   "app/account/page.tsx": "账户/订阅到期日期,用户本地时区是合理的账单展示惯例",
-  "app/reco/page.tsx":
+  // 2026-09-16 从 app/reco/page.tsx 搬到这里:战绩单据的展示层抽成共享组件,
+  // 供 /reco?tab=record 与新的独立页面 /track-record 共用。用法和理由不变。
+  "components/reco/TrackRecordPanel.tsx":
     "仅用于'最近编辑时间'审计标注与授权有效期展示(账单类语境,同 account 页)," +
     "非赛程/开球语境;推荐单主体用 slip_date 自然日字符串,不经本地时区换算",
 };

@@ -89,6 +89,10 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # 无关。用 PUBLIC_CACHE(300s)而不是 SHORT——内容只在某张单结算时变化,
         # 没有精确到分钟的撤下判定,陈旧 5 分钟无害且自愈。
         ("GET", "/api/v1/reco/highlight"),
+        # 历史战绩(2026-08-16 起匿名可见,2026-09-16 起有独立页面 /track-record
+        # 并进 sitemap):结算/作废归档的全历史聚合,响应与身份无关。
+        # 端点自己的响应头也必须同步是 PUBLIC_CACHE——两处只改一处会静默失效。
+        ("GET", "/api/v1/reco/track-record"),
     }
 )
 

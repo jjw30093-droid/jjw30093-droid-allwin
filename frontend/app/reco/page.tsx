@@ -36,22 +36,26 @@ import {
   type GetJson,
   type MeResponse,
 } from "@/lib/api-v1";
-import { MARKET_ZH } from "@/components/matches/zh";
+// 战绩单据的展示层 2026-09-16 抽到 components/reco/TrackRecordPanel.tsx,
+// 与新的独立页面 /track-record 共用(见该文件头注释)。这里保留 re-export,
+// 因为「每日公推」标签页也在用 SlipCard,而外部(测试)按老路径 import。
+import {
+  SlipCard,
+  TrackRecordPanel,
+  slipTone,
+  type Slip,
+} from "@/components/reco/TrackRecordPanel";
 import styles from "./reco.module.css";
+
+export { SlipCard, slipTone };
+export type { Slip };
 
 type DailyResp = GetJson<"/api/v1/reco/daily">;
 type DailyItem = DailyResp["slips"][number];
 type TrackResp = GetJson<"/api/v1/reco/track-record">;
-export type Slip = TrackResp["slips"][number];
 // 每日公推(2026-09 新增,board='daily_public'):完全公开、匿名可见,
 // 响应形状同 RecoSlipDTO——直接复用既有 SlipCard,不新造投影/组件。
 type PublicResp = GetJson<"/api/v1/reco/public">;
-
-// half_win/half_loss(2026-08-16 四分之一盘口扩展):半仓赢半仓走水 / 半仓
-// 本金退回半仓告负。措辞遵守 CLAUDE.md §1(不用"红单""连红"等收益承诺式表述)。
-const RESULT_ZH: Record<string, string> = {
-  win: "命中", lose: "未中", push: "走水", half_win: "半赢", half_loss: "半输",
-};
 
 // 每日精选未授权状态固定文案:未登录时是列表级别的说明,不针对某一场,
 // 不用"本场";已登录时改成针对具体这一场的措辞。
@@ -64,173 +68,8 @@ const SLIP_STATUS_ZH: Record<string, string> = {
   voided: "已作废",
 };
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("zh-CN", { hour12: false });
-}
-
-/**
- * 推荐单卡片(结果优先层级,2026-08-15 定稿)。
- *
- * 三层视觉权重:
- *   1. 结果 —— 左列 124px 色块,21px/900,块底色即结果语义色(命中/未中/走水/已作废/未结算);
- *   2. 押的是什么 —— 右列每腿两行(比赛名 / 玩法·选项 + 赔率右对齐),串关规格在左列底部;
- *   3. 元数据 —— 日期 + 标题降为 11.5px 顶部小字,修正记录折叠成「修正记录 ›」。
- *
- * 赛前(status=published)单没有结果,左列换成浅底 + brand-teal 文字,
- * 主位是「未结算 / 最早开球 / 时间」,整卡虚线边,与已结算卡一眼分开。
- *
- * 可点:单关整卡跳 /matches/[matchId];串关每腿行各自跳自己那场
- * (不做整卡链接,避免 <a> 嵌套 <a>)。缺 match_id 的站外赛事不可点。
- */
-
-// half_win/half_loss(2026-08-16):settle_slip() 的整单判定目前只会产生
-// win/lose/push/half_loss 四种 slip 级结果(half_win 只出现在腿级——一张单
-// 净赚但含 half_win 腿时,整单仍按连乘积判 win),但 reco_slips.result 的
-// CHECK 约束同时允许 half_win,聚合与展示都按完整取值域防御式处理,不因
-// "目前走不到"就当作不存在。
-type SlipTone = "win" | "half_win" | "lose" | "half_loss" | "push" | "void" | "pending";
-
-const TONE_TEXT: Record<SlipTone, string> = {
-  win: "命中",
-  half_win: "半赢",
-  lose: "未中",
-  half_loss: "半输",
-  push: "走水",
-  void: "已作废",
-  pending: "未结算",
-};
-
-export function slipTone(slip: Slip): SlipTone {
-  if (slip.status === "voided") return "void";
-  if (slip.status !== "settled") return "pending";
-  if (slip.result === "win") return "win";
-  if (slip.result === "half_win") return "half_win";
-  if (slip.result === "lose") return "lose";
-  if (slip.result === "half_loss") return "half_loss";
-  return "push";
-}
-
-/** 串关规格:DTO 只有 combo_type(single/parlay),几串几由腿数推导。 */
-function comboLabel(legCount: number): string {
-  return legCount === 1 ? "单关" : `${legCount}串1`;
-}
-
-/**
- * 赛前单主位的开球时间。reco_legs 没有开球时间列,match_desc 按约定
- * 以 "MM-DD HH:MM" 结尾(见 0010_reco_board.sql 注释),先从描述里取最早的一场;
- * 取不到就退化为「待开赛」,不编造时间。
- * 后端若补 earliest_kickoff_at 字段,这里换成直接读字段即可。
- */
-function earliestKickoff(slip: Slip): string {
-  const stamps = slip.legs
-    .map((l) => l.match_desc.match(/(\d{2}-\d{2})\s+(\d{1,2}:\d{2})$/))
-    .filter((m): m is RegExpMatchArray => m != null)
-    .map((m) => ({ key: `${m[1]} ${m[2].padStart(5, "0")}`, time: m[2] }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-  return stamps.length > 0 ? stamps[0].time : "待开赛";
-}
-
-/** 左列色块里的「标签 + 数值」两行。 */
-function blockMetrics(slip: Slip, tone: SlipTone): { kicker: string; value: string } {
-  if (tone === "pending") return { kicker: "最早开球", value: earliestKickoff(slip) };
-  if (tone === "void") return { kicker: "", value: "不计分母" };
-  if (slip.return_units == null) return { kicker: "净单位", value: "—" };
-  const net = slip.return_units - 1;
-  return { kicker: "净单位", value: `${net >= 0 ? "+" : ""}${net.toFixed(2)}` };
-}
-
-function LegRow({ leg }: { leg: Slip["legs"][number] }) {
-  const inner = (
-    <>
-      <span className={styles.legDesc}>{leg.match_desc}</span>
-      {leg.result ? (
-        <span className={styles.legStamp} data-result={leg.result}>
-          {RESULT_ZH[leg.result]}
-        </span>
-      ) : (
-        <span />
-      )}
-      <span className={styles.legChevron} aria-hidden>
-        ›
-      </span>
-      <span className={styles.legPick}>
-        {MARKET_ZH[leg.market] ?? leg.market} · {leg.selection}
-      </span>
-      <span className={`${styles.legOdds} num`}>@{leg.odds.toFixed(2)}</span>
-    </>
-  );
-
-  if (leg.match_id == null) {
-    return <li className={styles.leg}>{inner}</li>;
-  }
-  return (
-    <li>
-      <Link className={styles.legLink} href={`/matches/${leg.match_id}`}>
-        {inner}
-      </Link>
-    </li>
-  );
-}
-
-export function SlipCard({ slip }: { slip: Slip }) {
-  const [editOpen, setEditOpen] = useState(false);
-  const tone = slipTone(slip);
-  const { kicker, value } = blockMetrics(slip, tone);
-
-  return (
-    <article className={styles.slipCard} data-tone={tone}>
-      <div className={styles.resultBlock}>
-        <strong className={styles.resultText}>{TONE_TEXT[tone]}</strong>
-        {kicker && <span className={styles.blockKicker}>{kicker}</span>}
-        <span className={`${styles.blockValue} num`}>{value}</span>
-        <span className={styles.blockRule} aria-hidden />
-        <span className={`${styles.comboLabel} num`}>{comboLabel(slip.legs.length)}</span>
-      </div>
-
-      <div className={styles.slipBody}>
-        {tone === "void" && (
-          <p className={styles.voidNote}>这场后来作废了，不计入战绩。</p>
-        )}
-
-        <div className={styles.metaLine}>
-          <span className="num">{slip.slip_date}</span>
-          <span>{slip.title}</span>
-        </div>
-
-        {slip.note && <p className={styles.note}>{slip.note}</p>}
-
-        <ul className={styles.legs}>
-          {slip.legs.map((l) => (
-            <LegRow key={l.id} leg={l} />
-          ))}
-        </ul>
-
-        {slip.edit_count > 0 && (
-          <div className={styles.editFoldRow}>
-            <button
-              type="button"
-              className={styles.editFold}
-              aria-expanded={editOpen}
-              onClick={() => setEditOpen((v) => !v)}
-            >
-              修正记录 {editOpen ? "⌄" : "›"}
-            </button>
-            {editOpen && (
-              <p className={styles.editDetail}>
-                改过 {slip.edit_count} 次，最后一次 {fmtDate(slip.last_edited_at)}。
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
-
 /** 未授权 slip 的中性卡片:只展示后端下发的存在性 + 状态(slip_date/status),
- * 标题/腿/赔率/理由这些字段在网络响应里physically 不存在,这里自然也就
+ * 标题/腿/赔率/理由这些字段在网络响应里 physically 不存在,这里自然也就
  * 没有任何东西可渲染——不是"拿到了再隐藏"。 */
 function LockedSlipCard({ slip }: { slip: Extract<DailyItem, { access_required: true }> }) {
   return (
@@ -244,56 +83,6 @@ function LockedSlipCard({ slip }: { slip: Extract<DailyItem, { access_required: 
         申请查看本场每日精选 →
       </Link>
     </article>
-  );
-}
-
-/** "1胜 2半赢 3负 1半输 2走"——四分之一盘口半赢/半输只在实际出现时才显示,
- * 避免绝大多数场次(没有 half_win/half_loss)时汇总条挤满恒为 0 的分类。 */
-function resultBreakdownText(summary: NonNullable<TrackResp["summary"]>): string {
-  const parts = [`${summary.win_count}胜`];
-  if (summary.half_win_count > 0) parts.push(`${summary.half_win_count}半赢`);
-  parts.push(`${summary.lose_count}负`);
-  if (summary.half_loss_count > 0) parts.push(`${summary.half_loss_count}半输`);
-  parts.push(`${summary.push_count}走`);
-  return parts.join(" ");
-}
-
-function SummaryRow({ summary }: { summary: NonNullable<TrackResp["summary"]> }) {
-  return (
-    <>
-      <section className={styles.summaryRow} aria-label="战绩汇总">
-        <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>{summary.settled_count}</span>
-          <span className={styles.summaryLabel}>已结算</span>
-        </div>
-        <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>{resultBreakdownText(summary)}</span>
-          <span className={styles.summaryLabel}>命中/未中/走水{(summary.half_win_count > 0 || summary.half_loss_count > 0) ? "（含四分之一盘半赢半输）" : ""}</span>
-        </div>
-        <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>
-            {summary.hit_rate == null ? "—" : `${(summary.hit_rate * 100).toFixed(1)}%`}
-          </span>
-          <span className={styles.summaryLabel}>命中率</span>
-        </div>
-        <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>
-            {summary.net_units >= 0 ? "+" : ""}
-            {summary.net_units.toFixed(2)}
-          </span>
-          <span className={styles.summaryLabel}>净单位</span>
-        </div>
-        {summary.voided_count > 0 && (
-          <div className={styles.summaryItem}>
-            <span className={`${styles.summaryNum} num`}>{summary.voided_count}</span>
-            <span className={styles.summaryLabel}>作废</span>
-          </div>
-        )}
-      </section>
-      <p className={styles.summaryNote}>
-        走水不算进去，半赢半输各算半场；每单按 1 单位算，作废的不计入命中率。
-      </p>
-    </>
   );
 }
 
@@ -458,23 +247,13 @@ function RecoBody() {
           </section>
         )
       ) : tab === "record" ? (
-        <section>
-          {trackErr && <p className={styles.errText}>{trackErr}</p>}
-          {summary && <SummaryRow summary={summary} />}
-          <h2 className={styles.sectionTitle}>战绩归档（{track?.total ?? 0}）</h2>
-          <p className={styles.archiveNote}>
-            结算完的单子都在这儿，中没中都留着。改过的地方会在那张单子上标出来。
-          </p>
-          {!track && !trackErr ? (
-            <div className={styles.card} aria-busy="true">
-              <div className={styles.skeleton} />
-            </div>
-          ) : track && track.slips.length === 0 ? (
-            <p className={styles.empty}>还没有结算完的单子。</p>
-          ) : (
-            track?.slips.map((s) => <SlipCard key={s.id} slip={s} />)
-          )}
-        </section>
+        <TrackRecordPanel
+          summary={summary ?? null}
+          slips={track?.slips ?? []}
+          total={track?.total ?? 0}
+          loading={!track && !trackErr}
+          error={trackErr}
+        />
       ) : (
         <section>
           {pubErr && <p className={styles.errText}>{pubErr}</p>}

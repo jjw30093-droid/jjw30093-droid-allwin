@@ -15,6 +15,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: "daily", priority: 1 },
     { url: `${SITE_URL}/matches`, changeFrequency: "daily", priority: 0.9 },
+    // 历史战绩(2026-09-16 起有独立路由):匿名可完整浏览的运营记录,
+    // 每有一单结算就变,按 daily。
+    { url: `${SITE_URL}/track-record`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/leagues`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/pricing`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.3 },
