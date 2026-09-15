@@ -15,6 +15,7 @@ import {
   topPerQuadrant,
 } from "@/components/league/playerQuadrantViews";
 import { dirsOf, mean, quadrantOf } from "@/components/league/quadrantViews";
+import type { PositionValue } from "@/components/league/playerMetrics";
 
 function row(pid: string, x: number | null, y: number | null, over: Partial<PlayerQuadrantRow> = {}): PlayerQuadrantRow {
   return {
@@ -50,7 +51,24 @@ describe("PLAYER_VIEWS 注册表约束", () => {
     const nonGkViews = PLAYER_VIEWS.filter((v) => !v.positions.includes(0));
     expect(gkViews.map((v) => v.id)).toEqual(["player-goalkeeping", "player-goalkeeper-distribution"]);
     for (const v of gkViews) expect(v.positions).toEqual([0]);
-    for (const v of nonGkViews) expect(v.positions).toEqual([1, 2, 3]);
+    for (const v of nonGkViews) expect(v.positions).not.toContain(0);
+  });
+
+  it("后卫/中场/前锋各自看到的视角必须不同(2026-09-16 第二次真实反馈:站长发现" +
+    "三个位置的 tab 一模一样——上一轮加 positions 时只挡了门将,把四个非门将" +
+    "视角一律写成 [1,2,3],把方案表的「主场景位置」一列丢了)", () => {
+    const tabsFor = (position: PositionValue) =>
+      PLAYER_VIEWS.filter((v) => v.positions.includes(position)).map((v) => v.tab);
+    // 方案表的「主场景位置」+ 站长当场拍板的唯一一处偏离(后卫加进攻创造力,
+    // 理由:边后卫和中卫混在「后卫」这一档里,边后卫正是创造数据的主力)。
+    expect(tabsFor(1)).toEqual(["进攻创造力", "防守贡献", "持球推进"]);
+    expect(tabsFor(2)).toEqual(["射门与终结", "进攻创造力", "防守贡献", "持球推进"]);
+    expect(tabsFor(3)).toEqual(["射门与终结", "进攻创造力"]);
+    expect(tabsFor(0)).toEqual(["门将", "门将出球"]);
+    // 三个非门将位置两两不同——这条才是站长真正在意的那件事:上面几条
+    // 逐字断言只锁住内容,锁不住"它们会不会又变回一模一样"。
+    const [df, mf, fw] = [tabsFor(1), tabsFor(2), tabsFor(3)].map((t) => t.join("/"));
+    expect(new Set([df, mf, fw]).size).toBe(3);
   });
 
   it("四象限名非空且互不相同", () => {
