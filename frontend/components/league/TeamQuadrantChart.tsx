@@ -46,6 +46,7 @@ import {
   toggleSelection,
   type PlotSet,
   type Pt,
+  type View,
   type ViewGroupId,
 } from "./quadrantViews";
 import { TeamQuadrantDetail } from "./TeamQuadrantDetail";
@@ -69,6 +70,25 @@ function disabledReason(p: PlotSet, filtered: boolean): string {
   return filtered
     ? "当前筛选窗口下样本达标的球队不足 4 支，试试放宽筛选范围"
     : "该联赛该赛季样本达标的球队不足 4 支";
+}
+
+/** 分类行同样要分清"样本不够"（赛季初的正常状态,随轮次增加会自动解锁）
+ *  和"数据源真没有"（不会自动变好）——只要该类别下所有暂不可用的视角都是
+ *  样本原因,就不该说成"缺少数据",那会被赛季初的用户误读成本站永久没有
+ *  这类数据(见 2026-09-15 真实反馈:英超新赛季踢了 4 轮,这类分类全灰,
+ *  站长问"照道理应该有数据了",根因就是这句话把"还没攒够样本"说成了
+ *  "没有这个维度")。只要有一个视角是真的缺数据,才维持严格的"缺少数据"
+ *  措辞,不能为了安慰用户而对结构性缺失也说"再等等"。 */
+function groupDisabledReason(groupViews: View[], plots: Map<string, PlotSet>, filtered: boolean): string {
+  const allSampleOnly = groupViews.every((v) => {
+    const p = plots.get(v.id)!;
+    const sampleHidden = p.hidden.filter((h) => h.reason === "sample").length;
+    return p.pts.length + sampleHidden >= 4;
+  });
+  if (!allSampleOnly) return "该联赛该赛季缺少这一类视角所需的数据";
+  return filtered
+    ? "当前筛选窗口下这一类视角样本达标的球队都不足 4 支，试试放宽筛选范围"
+    : "该联赛该赛季这一类视角样本达标的球队还不足 4 支，随着轮次增加会自动解锁";
 }
 
 /** 宽度变化小于这个像素数不重算布局,避免拖动窗口时反复重排 */
@@ -312,7 +332,7 @@ export function TeamQuadrantChart({
                 type="button"
                 aria-pressed={group.id === activeGroup}
                 disabled={!usable}
-                title={usable ? group.blurb : "该联赛该赛季缺少这一类视角所需的数据"}
+                title={usable ? group.blurb : groupDisabledReason(groupViews, plots, filtered)}
                 className={group.id === activeGroup ? styles.groupOn : styles.group}
                 onClick={() => pickGroup(group.id)}
               >
