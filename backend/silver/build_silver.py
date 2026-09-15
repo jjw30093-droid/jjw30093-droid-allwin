@@ -56,11 +56,10 @@ from schema import (
     _quote,
 )
 from backend.queries.window import match_window_join_sql
-from backend.silver.ratio_metrics import build_team_season_ratios
+from backend.silver.ratio_metrics import build_team_season_ratios, touches_opp_box_eligible
 from backend.silver.player_season import build_player_season_stats, build_player_season_ratios
 
 OU_THRESHOLDS = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
-TOUCHES_OPP_BOX_SEASONS = {"2024/2025", "2025/2026"}
 
 # 2026-08-20 次级联赛回填:这些 (League_ID, Season) 只故意采集了赛季最后
 # 10 轮(升级球队近期数据回填,不是完整赛季),season 级聚合(场均值、
@@ -222,7 +221,7 @@ def build_team_season_stats(
             f"AVG(CASE WHEN json_extract(extra_json, '$.{key}') IS NOT NULL "
             f"THEN json_extract(extra_json, '$.{key}') END) AS {out_name}"
         )
-    if season in TOUCHES_OPP_BOX_SEASONS:
+    if touches_opp_box_eligible(season):
         select_parts.append(
             "AVG(CASE WHEN json_extract(extra_json, '$.touches_opp_box') IS NOT NULL "
             "THEN json_extract(extra_json, '$.touches_opp_box') END) AS avg_touches_opp_box"

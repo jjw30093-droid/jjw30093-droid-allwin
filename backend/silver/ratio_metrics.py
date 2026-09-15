@@ -24,20 +24,42 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Callable, Literal
 
 from backend.queries.window import match_window_join_sql
 
 Source = Literal["self", "opponent", "self_plus_opponent", "self_over_opponent"]
 
-# touches_opp_box 只有这两个赛季覆盖率 100%,更早的赛季是随机缺失
-# (13%~30%,不是整季缺失),球队之间不可比——依赖它的指标必须显式按赛季
-# 关停,不能让"缺失"悄悄被 _rows_for_spec 的 NULL 排除逻辑当成个别场次的
-# 正常缺配对(那样球队间的可比性问题不会被发现)。与
-# backend/silver/build_silver.py::TOUCHES_OPP_BOX_SEASONS 同一份事实,
-# 这里独立声明一份(避免 build_silver.py ⇄ ratio_metrics.py 循环 import),
-# 两处如需改动必须同时改。
-TOUCHES_OPP_BOX_SEASONS = frozenset({"2024/2025", "2025/2026"})
+
+def season_start_year(season: str) -> int | None:
+    """从 "2024"/"2024/2025" 两种真实赛季字符串格式里取起始年份;解析不出来
+    返回 None(调用方按"不合法"处理,不猜)。"""
+    prefix = season[:4]
+    return int(prefix) if prefix.isdigit() else None
+
+
+# touches_opp_box 实测 2024 年起(含跨年赛制的"2024"/"2024/2025"及以后)
+# 覆盖率稳定在 98%~99.8%,2024 之前的赛季是随机缺失(13%~87% 不等),球队
+# 之间不可比——依赖它的指标必须显式按赛季关停,不能让"缺失"悄悄被
+# _rows_for_spec 的 NULL 排除逻辑当成个别场次的正常缺配对(那样球队间的
+# 可比性问题不会被发现)。
+#
+# 2026-09-16 真实反馈修正:此前这里是硬编码的两元素 frozenset
+# `{"2024/2025", "2025/2026"}`,build_silver.py 里还独立重复声明了一份同名
+# 常量——站长追问"技术只会变多不会变少,26-27赛季这个字段怎么会没有",生产
+# 实测证实 2024/2024-2025/2025/2025-2026/2026/2026-2027 全部 98%+ 覆盖,
+# 两份 frozenset 都漏掉了除最初两个赛季外的一切,不是数据源真的退化了,是
+# 一份会随每个新赛季持续过期的清单。改成"起始年份 >= 这个阈值"的判定式后,
+# build_silver.py 直接从本模块 import 这个函数(它已经 import
+# build_team_season_ratios,不存在反向依赖,当初"避免循环 import 故独立声明
+# 一份"的顾虑是不成立的),两处重复声明合并成一份,新赛季到来也不需要再改
+# 代码。
+TOUCHES_OPP_BOX_ELIGIBLE_FROM_YEAR = 2024
+
+
+def touches_opp_box_eligible(season: str) -> bool:
+    year = season_start_year(season)
+    return year is not None and year >= TOUCHES_OPP_BOX_ELIGIBLE_FROM_YEAR
 
 
 @dataclass(frozen=True)
@@ -59,9 +81,12 @@ class RatioSpec:
     # *_minus(目前没有指标同时需要两种复杂度,用到时再扩)。
     numerator_minus: tuple[str, ...] = field(default_factory=tuple)
     denominator_minus: tuple[str, ...] = field(default_factory=tuple)
-    # None = 所有赛季都算;给定集合则只在这些赛季计算,其它赛季这个 spec
-    # 完全不产出行(不是产出后前端再隐藏——数据源本身在那些赛季就不可比)。
-    eligible_seasons: frozenset[str] | None = None
+    # None = 所有赛季都算;给定判定函数则只在返回 True 的赛季计算,其它赛季
+    # 这个 spec 完全不产出行(不是产出后前端再隐藏——数据源本身在那些赛季就
+    # 不可比)。用可调用对象而不是固定 frozenset,是因为"哪些赛季数据可比"
+    # 天然是"从某个时间点起"这种开区间判断,固定集合会随每个新赛季持续过期
+    # (见 touches_opp_box_eligible 的真实教训)。
+    eligible_seasons: Callable[[str], bool] | None = None
 
 
 # 包一(机制打通)接的第一个指标:opp_half_pass_share,顺带用改正后的分母
@@ -156,7 +181,7 @@ RATIO_SPECS: list[RatioSpec] = [
         numerator=("touches_opp_box",),
         denominator=("touches_opp_box",),
         methodology_version="v1",
-        eligible_seasons=TOUCHES_OPP_BOX_SEASONS,
+        eligible_seasons=touches_opp_box_eligible,
     ),
     # 每次禁区触球 npxG:同样受 touches_opp_box 覆盖率限制。
     RatioSpec(
@@ -165,7 +190,7 @@ RATIO_SPECS: list[RatioSpec] = [
         numerator=("expected_goals_non_penalty",),
         denominator=("touches_opp_box",),
         methodology_version="v1",
-        eligible_seasons=TOUCHES_OPP_BOX_SEASONS,
+        eligible_seasons=touches_opp_box_eligible,
     ),
     # 防守动作密度(每百次对手传球)——不是 PPDA,没有动作坐标、无法限定
     # 逼抢区域,刻意不含 clearances(解围是低位防守的产物,计入会把摆大巴
@@ -703,7 +728,7 @@ def build_team_season_ratios(
     """
     out: list[dict] = []
     for spec in RATIO_SPECS:
-        if spec.eligible_seasons is not None and season not in spec.eligible_seasons:
+        if spec.eligible_seasons is not None and not spec.eligible_seasons(season):
             continue  # 该赛季数据源本身不可比(如 touches_opp_box 随机缺失),完全不产出行
         for team_id, numerator_sum, denominator_sum, paired_matches in _rows_for_spec(
             conn, league_id, season, spec, window_pairs=window_pairs

@@ -22,6 +22,8 @@ from backend.silver.ratio_metrics import (
     RatioSpec,
     _json_path,
     build_team_season_ratios,
+    season_start_year,
+    touches_opp_box_eligible,
 )
 from tests.backend.coreseed import insert_match, seed_core_schema
 
@@ -460,6 +462,44 @@ class TestEligibleSeasons:
         )
         assert npxg_row["numerator_sum"] == 1.5
         assert npxg_row["denominator_sum"] == 20.0
+
+
+class TestTouchesOppBoxEligibleIsYearBased:
+    """2026-09-16 真实反馈:站长追问"技术只会变多不会变少,26-27赛季这个
+    字段怎么会没有"——根因是当年只把审计到的两个赛季('2024/2025',
+    '2025/2026')硬编码进 frozenset,后续每个新赛季('2026','2026/2027'……)
+    都会被这份清单卡住,尽管生产实测覆盖率同样是 98%+。改成"起始年份 >= 2024"
+    的判定式后,这里锁死新赛季不需要再改代码就能正确判定为 eligible。"""
+
+    @pytest.mark.parametrize(
+        "season,expected_year",
+        [
+            ("2024", 2024),
+            ("2024/2025", 2024),
+            ("2025", 2025),
+            ("2025/2026", 2025),
+            ("2026", 2026),
+            ("2026/2027", 2026),
+            ("2020/2021", 2020),
+        ],
+    )
+    def test_season_start_year_parses_both_formats(self, season, expected_year):
+        assert season_start_year(season) == expected_year
+
+    def test_season_start_year_returns_none_for_unparseable_input(self):
+        assert season_start_year("") is None
+        assert season_start_year("abcd/efgh") is None
+
+    @pytest.mark.parametrize(
+        "season",
+        ["2024", "2024/2025", "2025", "2025/2026", "2026", "2026/2027", "2030/2031"],
+    )
+    def test_eligible_from_2024_onward_regardless_of_format(self, season):
+        assert touches_opp_box_eligible(season) is True
+
+    @pytest.mark.parametrize("season", ["2020/2021", "2021/2022", "2022/2023", "2023/2024"])
+    def test_ineligible_before_2024(self, season):
+        assert touches_opp_box_eligible(season) is False
 
 
 class TestSelfOverOpponentSource:
