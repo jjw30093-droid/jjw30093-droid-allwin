@@ -55,7 +55,15 @@ from backend.providers.nowgoal import WAFBlockedError, looks_blocked, normalize_
 log = logging.getLogger(__name__)
 
 BASE_ARCHIVE = "https://football.nowgoal26.com"
-BASE_LIVE = "https://live10.nowgoal26.com"
+# 2026-09-22 真实事故:此前一直是 live10,mix_history()/euro_history() 对该
+# 域名现在实测统一 301 跳转到 live11(服务器已经搬迁),但本模块的请求没有跟着
+# 跳转成功——响应体是跳转页的 HTML/无 ErrCode 字段,被当成"接口失败"处理,
+# 一度被误判为"NowGoal 历史赔率数据已过期/保留期只有几周"(不是数据问题,是
+# 这一个域名过期)。实测直接改用 live11 立即恢复正常,不需要任何 cookie/session
+# (曾怀疑是登录态问题,抓包核实 cookie jar 实际为空,证明与 cookie 无关)。
+# 这个域名号将来可能再变,如果 archive_rows/mix_history 又突然全灭,先用
+# curl 手动探测当前 liveN 是多少,不要重复"数据过期"这个错误结论。
+BASE_LIVE = "https://live11.nowgoal26.com"
 
 MIX_CID_BET365, EURO_CID_BET365 = "8", "281"
 MIX_CID_MACAUSLOT, EURO_CID_MACAUSLOT = "1", "80"
@@ -380,6 +388,38 @@ def parse_archive_season(payload: dict, *, ng_league_id: int) -> list[ArchiveRow
     return sorted(dedup.values(), key=lambda r: r.kickoff_utc)
 
 
+def _pre_match_mix_points(payload: dict, market: str, kickoff_epoch: float) -> list[tuple[float, float, float, float]]:
+    """`mix_history()` 单个市场(ah/ou)的严格赛前(mt < kickoff_epoch)有效点,
+    按 mt 升序排序。两点摘要和完整序列共用这一份过滤逻辑,不允许出现
+    "两点摘要保留的那个点,完整序列里却漏了"这种不一致。"""
+    rows = payload.get(market)
+    if not isinstance(rows, list):
+        return []
+    pre = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        mt = r.get("mt")
+        odds = r.get("odds")
+        if mt is None or not isinstance(odds, dict):
+            continue
+        try:
+            mt_val = float(mt)
+        except (TypeError, ValueError):
+            continue
+        if mt_val >= kickoff_epoch:
+            continue  # 严格赛前;赛中/赛后行一律丢弃,不回退
+        try:
+            u, g, d = float(odds["u"]), float(odds["g"]), float(odds["d"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if u <= 0 or d <= 0:
+            continue  # 该行是占位/收线标记(u=g=d=0 之类),不是真实报价
+        pre.append((mt_val, u, g, d))
+    pre.sort(key=lambda t: t[0])
+    return pre
+
+
 def two_point_from_mix_history(payload: dict, kickoff_utc: str) -> dict:
     """从 mix_history() 的 Data 提取 ah/ou 两点摘要(严格赛前,见模块 docstring)。
 
@@ -392,33 +432,9 @@ def two_point_from_mix_history(payload: dict, kickoff_utc: str) -> dict:
 
     out: dict[str, dict | None] = {"ah": None, "ou": None}
     for market in ("ah", "ou"):
-        rows = payload.get(market)
-        if not isinstance(rows, list):
-            continue
-        pre = []
-        for r in rows:
-            if not isinstance(r, dict):
-                continue
-            mt = r.get("mt")
-            odds = r.get("odds")
-            if mt is None or not isinstance(odds, dict):
-                continue
-            try:
-                mt_val = float(mt)
-            except (TypeError, ValueError):
-                continue
-            if mt_val >= kickoff_epoch:
-                continue  # 严格赛前;赛中/赛后行一律丢弃,不回退
-            try:
-                u, g, d = float(odds["u"]), float(odds["g"]), float(odds["d"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            if u <= 0 or d <= 0:
-                continue  # 该行是占位/收线标记(u=g=d=0 之类),不是真实报价
-            pre.append((mt_val, u, g, d))
+        pre = _pre_match_mix_points(payload, market, kickoff_epoch)
         if not pre:
             continue
-        pre.sort(key=lambda t: t[0])
         _, u0, g0, d0 = pre[0]
         _, u1, g1, d1 = pre[-1]
         if market == "ah":
@@ -434,13 +450,40 @@ def two_point_from_mix_history(payload: dict, kickoff_utc: str) -> dict:
     return out
 
 
+def all_points_from_mix_history(payload: dict, kickoff_utc: str) -> dict:
+    """从 mix_history() 的 Data 提取 ah/ou **完整**赛前变化序列(不只两点)。
+
+    2026-09-22 回填历史赛季时新增:实测 NowGoal 该接口本身就返回全部历史变化点
+    (不是只有开盘/收盘两条),`two_point_from_mix_history()` 此前只取首尾两点是
+    为了配一张只能存两点的历史归档表(`bronze_legacy_odds_summary`);既然完整
+    序列本来就已经下载到本地了,只存两点等于白白丢弃已经拿到的数据。这里另开
+    一个函数返回完整序列,不改动 `two_point_from_mix_history()` 的既有行为/调用方。
+
+    返回 {"ah": [{"observed_at": UTC ISO, "home":.., "line":.., "away":..}, ...],
+          "ou": [{"observed_at": UTC ISO, "over":.., "line":.., "under":..}, ...]}
+    按时间升序;某市场赛前零行则为空列表(不是 None,方便调用方直接 for 循环)。
+    """
+    kickoff_dt = datetime.strptime(kickoff_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    kickoff_epoch = kickoff_dt.timestamp()
+
+    out: dict[str, list[dict]] = {"ah": [], "ou": []}
+    for market in ("ah", "ou"):
+        pre = _pre_match_mix_points(payload, market, kickoff_epoch)
+        for mt_val, u, g, d in pre:
+            observed_at = datetime.fromtimestamp(mt_val, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if market == "ah":
+                out["ah"].append({"observed_at": observed_at, "home": u, "line": g, "away": d})
+            else:
+                out["ou"].append({"observed_at": observed_at, "over": u, "line": g, "under": d})
+    return out
+
+
 _EURO_TIME_FMT = "%Y,%m,%d,%H,%M,%S"
 
 
-def two_point_from_euro_history(rows: list, kickoff_utc: str) -> dict | None:
-    """从 euro_history() 的返回值提取 1x2 两点摘要(严格赛前)。"""
-    kickoff_dt = datetime.strptime(kickoff_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-
+def _pre_match_euro_points(rows: list, kickoff_dt: datetime) -> list[tuple[datetime, float, float, float]]:
+    """`euro_history()` 的严格赛前(TimeShow < kickoff)有效点,按时间升序排序。
+    两点摘要和完整序列共用这一份过滤逻辑,理由同 `_pre_match_mix_points()`。"""
     pre = []
     for r in rows:
         if not isinstance(r, dict):
@@ -463,12 +506,31 @@ def two_point_from_euro_history(rows: list, kickoff_utc: str) -> dict | None:
         if home <= 0 or draw <= 0 or away <= 0:
             continue
         pre.append((dt, home, draw, away))
+    pre.sort(key=lambda t: t[0])
+    return pre
+
+
+def two_point_from_euro_history(rows: list, kickoff_utc: str) -> dict | None:
+    """从 euro_history() 的返回值提取 1x2 两点摘要(严格赛前)。"""
+    kickoff_dt = datetime.strptime(kickoff_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    pre = _pre_match_euro_points(rows, kickoff_dt)
     if not pre:
         return None
-    pre.sort(key=lambda t: t[0])
     _, h0, d0, a0 = pre[0]
     _, h1, d1, a1 = pre[-1]
     return {
         "opening": {"home": h0, "draw": d0, "away": a0},
         "closing": {"home": h1, "draw": d1, "away": a1},
     }
+
+
+def all_points_from_euro_history(rows: list, kickoff_utc: str) -> list[dict]:
+    """从 euro_history() 的返回值提取 1x2 **完整**赛前变化序列(不只两点)。
+    理由同 `all_points_from_mix_history()`。返回按时间升序,赛前零行则为空列表。
+    """
+    kickoff_dt = datetime.strptime(kickoff_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    pre = _pre_match_euro_points(rows, kickoff_dt)
+    return [
+        {"observed_at": dt.strftime("%Y-%m-%dT%H:%M:%SZ"), "home": home, "draw": draw, "away": away}
+        for dt, home, draw, away in pre
+    ]

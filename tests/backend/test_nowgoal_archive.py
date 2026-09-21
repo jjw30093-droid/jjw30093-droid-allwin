@@ -16,6 +16,8 @@ import pytest
 from backend.providers.nowgoal_archive import (
     NowGoalArchiveTransport,
     SeasonIdentityError,
+    all_points_from_euro_history,
+    all_points_from_mix_history,
     archive_kickoff_to_utc,
     parse_archive_season,
     two_point_from_euro_history,
@@ -147,6 +149,53 @@ class TestTwoPointFromMixHistory:
         assert tp["ou"] is None  # 压根没有行
 
 
+class TestAllPointsFromMixHistory:
+    """2026-09-22 新增:完整赛前序列,不只两点。共用 two_point 版本同一份
+    赛前过滤逻辑,这里额外断言"排除的行不会因为换了个函数就漏网重新出现",
+    以及顺序/点数在两个函数之间必须一致(同一份 fixture,同一个 kickoff)。"""
+
+    def test_returns_all_pre_match_points_in_ascending_order(self):
+        payload = _load("mix_history_sample.json")["Data"]
+        all_pts = all_points_from_mix_history(payload, "2026-03-14T15:00:00Z")
+        assert all_pts["ah"] == [
+            {"observed_at": "2026-03-13T15:00:00Z", "home": 0.93, "line": -0.75, "away": 0.88},
+            {"observed_at": "2026-03-14T14:00:00Z", "home": 0.9, "line": -0.75, "away": 0.9},
+        ]
+        assert all_pts["ou"] == [
+            {"observed_at": "2026-03-13T15:00:00Z", "over": 0.88, "line": 3.25, "under": 0.93},
+            {"observed_at": "2026-03-14T14:00:00Z", "over": 0.8, "line": 2.5, "under": 1.0},
+        ]
+
+    def test_post_match_and_placeholder_row_excluded(self):
+        """fixture 里 mt=1773504000(赛后,且 u=g=d=0 占位)不应出现在完整序列里,
+        跟两点摘要的排除结果必须一致。"""
+        payload = _load("mix_history_sample.json")["Data"]
+        all_pts = all_points_from_mix_history(payload, "2026-03-14T15:00:00Z")
+        observed_ats = [p["observed_at"] for p in all_pts["ah"]]
+        assert "2026-03-14T16:00:00Z" not in observed_ats
+
+    def test_first_and_last_match_two_point_summary(self):
+        """完整序列的首尾两点,必须和 two_point_from_mix_history() 算出来的
+        opening/closing 完全一致——这两个函数共用同一份过滤逻辑,如果谁改坏了
+        会在这里第一时间暴露。"""
+        payload = _load("mix_history_sample.json")["Data"]
+        tp = two_point_from_mix_history(payload, "2026-03-14T15:00:00Z")
+        all_pts = all_points_from_mix_history(payload, "2026-03-14T15:00:00Z")
+        for market in ("ah", "ou"):
+            first, last = all_pts[market][0], all_pts[market][-1]
+            assert {k: v for k, v in first.items() if k != "observed_at"} == tp[market]["opening"]
+            assert {k: v for k, v in last.items() if k != "observed_at"} == tp[market]["closing"]
+
+    def test_zero_pre_match_rows_yields_empty_list_not_none(self):
+        """完整序列版本用空列表表示"没有赛前数据"(方便调用方直接 for 循环),
+        跟两点摘要版本用 None 表示是刻意的不同选择,两边各自的调用方都不用
+        再判断 None。"""
+        payload = {"ah": [{"odds": {"u": "1.9", "g": "0", "d": "1.9"}, "mt": 9999999999}], "ou": []}
+        all_pts = all_points_from_mix_history(payload, "2026-03-14T15:00:00Z")
+        assert all_pts["ah"] == []
+        assert all_pts["ou"] == []
+
+
 class TestTwoPointFromEuroHistory:
     def test_opening_and_closing(self):
         rows = _load("euro_history_sample.json")
@@ -165,6 +214,37 @@ class TestTwoPointFromEuroHistory:
         rows = [{"HomeWin": "2.0", "Standoff": "3.0", "GuestWin": "3.5",
                 "TimeShow": "2026,03,15,00,00,00"}]
         assert two_point_from_euro_history(rows, "2026-03-14T15:00:00Z") is None
+
+
+class TestAllPointsFromEuroHistory:
+    """理由同 TestAllPointsFromMixHistory:完整序列不能丢弃已经下载到本地的
+    赛前变化点,且必须和两点摘要版本共用同一份过滤结果。"""
+
+    def test_returns_all_pre_match_points_in_ascending_order(self):
+        rows = _load("euro_history_sample.json")
+        all_pts = all_points_from_euro_history(rows, "2026-03-14T15:00:00Z")
+        assert all_pts == [
+            {"observed_at": "2026-03-13T15:00:00Z", "home": 4.20, "draw": 4.00, "away": 1.70},
+            {"observed_at": "2026-03-14T14:00:00Z", "home": 4.75, "draw": 3.80, "away": 1.70},
+        ]
+
+    def test_post_match_row_excluded(self):
+        rows = _load("euro_history_sample.json")
+        all_pts = all_points_from_euro_history(rows, "2026-03-14T15:00:00Z")
+        assert all(p["home"] != 5.50 for p in all_pts)
+
+    def test_first_and_last_match_two_point_summary(self):
+        rows = _load("euro_history_sample.json")
+        tp = two_point_from_euro_history(rows, "2026-03-14T15:00:00Z")
+        all_pts = all_points_from_euro_history(rows, "2026-03-14T15:00:00Z")
+        first, last = all_pts[0], all_pts[-1]
+        assert {k: v for k, v in first.items() if k != "observed_at"} == tp["opening"]
+        assert {k: v for k, v in last.items() if k != "observed_at"} == tp["closing"]
+
+    def test_no_pre_match_rows_returns_empty_list(self):
+        rows = [{"HomeWin": "2.0", "Standoff": "3.0", "GuestWin": "3.5",
+                "TimeShow": "2026,03,15,00,00,00"}]
+        assert all_points_from_euro_history(rows, "2026-03-14T15:00:00Z") == []
 
 
 class TestArchiveSeasonIdentityGate:
