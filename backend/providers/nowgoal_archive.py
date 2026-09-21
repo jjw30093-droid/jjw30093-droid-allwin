@@ -318,6 +318,26 @@ def parse_team_info(payload: dict) -> dict[int, str]:
     return out
 
 
+def _iter_schedule_row_lists(sched: dict):
+    """`ScheduleList` 真实观测到两种形状(2026-09-22 用五大联赛真实抓包确认,
+    此前只验证过挪超/瑞典超那一种,意甲凑巧也是那种、其余四个联赛不是——
+    详见本函数下方 parse_archive_season 的形状说明):
+
+    - 嵌套两层(挪超/瑞典超/意甲): {分组key: {轮次key: [比赛行,...]}}
+    - 扁平一层(英超/西甲/德甲/法甲): {轮次key: [比赛行,...]}
+
+    这里不假设具体是哪一种,遇到 list 就直接产出,遇到 dict 就再展开一层;
+    两种形状之外的值(既不是 list 也不是 dict)原样跳过。
+    """
+    for val in sched.values():
+        if isinstance(val, list):
+            yield val
+        elif isinstance(val, dict):
+            for inner in val.values():
+                if isinstance(inner, list):
+                    yield inner
+
+
 def parse_archive_season(payload: dict, *, ng_league_id: int) -> list[ArchiveRow]:
     """从 archive_season() 的返回值提取全部已完赛(status==-1)比赛。
 
@@ -325,38 +345,36 @@ def parse_archive_season(payload: dict, *, ng_league_id: int) -> list[ArchiveRow
     [titan_id, ng_league_id, status, "YYYY-MM-DD HH:MM"(北京时间),
      home_ng_id, away_ng_id, "H-A"(全场比分), "H-A"(半场比分), ...]
     status == -1 表示已完赛;其余状态(未开赛/进行中等)本函数不处理。
+
+    `ScheduleList` 外层形状因联赛而异,不代表行结构本身有变化,
+    统一交给 `_iter_schedule_row_lists()` 展开,见其说明。
     """
     sched = payload.get("ScheduleList")
     if not isinstance(sched, dict):
         return []
     out: list[ArchiveRow] = []
-    for team_key, rounds in sched.items():
-        if not isinstance(rounds, dict):
-            continue
-        for round_key, rows in rounds.items():
-            if not isinstance(rows, list):
+    for rows in _iter_schedule_row_lists(sched):
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 7:
                 continue
-            for row in rows:
-                if not isinstance(row, list) or len(row) < 7:
-                    continue
-                titan_id, lid, status, kickoff_local = row[0], row[1], row[2], row[3]
-                if status != -1:
-                    continue
-                if lid != ng_league_id:
-                    continue
-                home_ng_id, away_ng_id = row[4], row[5]
-                score_m = _SCORE_RE.match(str(row[6] or ""))
-                if not score_m:
-                    continue
-                try:
-                    kickoff_utc = archive_kickoff_to_utc(str(kickoff_local))
-                except ValueError:
-                    continue
-                out.append(ArchiveRow(
-                    titan_id=str(titan_id), ng_league_id=lid, kickoff_utc=kickoff_utc,
-                    home_ng_id=home_ng_id, away_ng_id=away_ng_id,
-                    home_score=int(score_m.group(1)), away_score=int(score_m.group(2)),
-                ))
+            titan_id, lid, status, kickoff_local = row[0], row[1], row[2], row[3]
+            if status != -1:
+                continue
+            if lid != ng_league_id:
+                continue
+            home_ng_id, away_ng_id = row[4], row[5]
+            score_m = _SCORE_RE.match(str(row[6] or ""))
+            if not score_m:
+                continue
+            try:
+                kickoff_utc = archive_kickoff_to_utc(str(kickoff_local))
+            except ValueError:
+                continue
+            out.append(ArchiveRow(
+                titan_id=str(titan_id), ng_league_id=lid, kickoff_utc=kickoff_utc,
+                home_ng_id=home_ng_id, away_ng_id=away_ng_id,
+                home_score=int(score_m.group(1)), away_score=int(score_m.group(2)),
+            ))
     # 去重(archive 按"每个参赛队一份视角"重复列出每场比赛,titan_id 是稳定主键)
     dedup: dict[str, ArchiveRow] = {r.titan_id: r for r in out}
     return sorted(dedup.values(), key=lambda r: r.kickoff_utc)

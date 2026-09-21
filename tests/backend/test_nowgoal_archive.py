@@ -79,6 +79,43 @@ class TestParseArchiveSeason:
         assert parse_archive_season({"LeagueInfo": [22, "x", "2026"]}, ng_league_id=22) == []
 
 
+class TestParseArchiveSeasonFlatShape:
+    """2026-09-22 真实事故:`ScheduleList` 外层形状因联赛而异——挪超/瑞典超/
+    意甲是 {分组key: {轮次key: [行,...]}} 两层嵌套(上面 archive_season_sample.json
+    就是这种),但英超/西甲/德甲/法甲实测是 {轮次key: [行,...]} 一层扁平,没有
+    外层分组。旧实现只认两层嵌套,遇到扁平结构时中间那层 isinstance(...,dict)
+    判断全部落空,不报错、静默返回 0 行——五大联赛里四个因此完全拿不到历史赔率,
+    直到真实回填时才发现。fixture 数据取自 2026-09-22 用真实联赛 id(36,
+    English Premier League)抓取的真实响应(R_1/R_2 两轮),不是构造出来凑测试的。
+    """
+
+    def test_extracts_only_finished_matches_for_requested_league(self):
+        rows = parse_archive_season(_load("archive_season_sample_flat.json"), ng_league_id=36)
+        ids = sorted(r.titan_id for r in rows)
+        # 2789133 是别的联赛(999)的比赛,2789200 是未开赛(status=0),均应被排除
+        assert ids == ["2789129", "2789130"]
+
+    def test_league_filter_excludes_other_leagues(self):
+        rows = parse_archive_season(_load("archive_season_sample_flat.json"), ng_league_id=36)
+        assert all(r.ng_league_id == 36 for r in rows)
+
+    def test_kickoff_converted_to_utc(self):
+        rows = parse_archive_season(_load("archive_season_sample_flat.json"), ng_league_id=36)
+        target = next(r for r in rows if r.titan_id == "2789129")
+        assert target.kickoff_utc == "2025-08-15T19:00:00Z"
+
+    def test_score_parsed(self):
+        rows = parse_archive_season(_load("archive_season_sample_flat.json"), ng_league_id=36)
+        target = next(r for r in rows if r.titan_id == "2789129")
+        assert (target.home_score, target.away_score) == (4, 2)
+
+    def test_does_not_reproduce_the_silent_empty_bug(self):
+        """回归保护:扁平结构下之前会静默返回空列表(不是异常,极难被发现),
+        这里直接断言不是空——防止未来有人改回"只认一种形状"又踩一次。"""
+        rows = parse_archive_season(_load("archive_season_sample_flat.json"), ng_league_id=36)
+        assert len(rows) > 0
+
+
 class TestTwoPointFromMixHistory:
     """严格赛前过滤:opening=最早赛前行,closing=最晚赛前行,赛后/占位行必须
     被丢弃而不是回退使用——两点摘要绝不能悄悄掺进赛中/赛后价格。"""
