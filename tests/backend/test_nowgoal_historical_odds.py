@@ -8,6 +8,7 @@ import pytest
 from backend.ingest.nowgoal_historical_odds import (
     historical_snap_records,
     ingest_historical_odds,
+    upsert_xref_from_resolution,
 )
 
 _SCHEMA_SQL = (
@@ -123,3 +124,74 @@ class TestIngestHistoricalOdds:
         odds_db.commit()
         total = odds_db.execute("SELECT COUNT(*) FROM bronze_ng_odds_snap").fetchone()[0]
         assert total == len(bet365) + len(crown)
+
+
+class TestUpsertXrefFromResolution:
+    """2026-09-22 真实事故的回归测试:backfill_nowgoal_odds_full_history.py
+    最初完全没有调用这个函数,五大联赛 1752 场比赛的赔率数据落库了但
+    dim_match_xref 一行没写,下游分析代码全部 join 不到。"""
+
+    def test_writes_one_row_per_auto_ok_match(self, odds_db):
+        resolved = [
+            {"match_id": 100, "titan_id": "9001", "direction": "direct",
+             "evidence_kind": "id", "kickoff_diff_seconds": 12.0},
+            {"match_id": 101, "titan_id": "9002", "direction": "inverted",
+             "evidence_kind": "name", "kickoff_diff_seconds": 300.0},
+        ]
+        n = upsert_xref_from_resolution(odds_db, resolved)
+        odds_db.commit()
+        assert n == 2
+        rows = odds_db.execute(
+            "SELECT fotmob_match_id, provider_match_id, home_away_inverted, "
+            "confidence, review_status, verified FROM dim_match_xref ORDER BY fotmob_match_id"
+        ).fetchall()
+        assert rows[0] == (100, "9001", 0, 0.95, "auto_ok", 0)
+        assert rows[1] == (101, "9002", 1, 0.75, "auto_ok", 0)
+
+    def test_direction_direct_sets_inverted_zero(self, odds_db):
+        upsert_xref_from_resolution(odds_db, [
+            {"match_id": 1, "titan_id": "t1", "direction": "direct",
+             "evidence_kind": "id", "kickoff_diff_seconds": 0.0},
+        ])
+        odds_db.commit()
+        inverted = odds_db.execute(
+            "SELECT home_away_inverted FROM dim_match_xref WHERE provider_match_id='t1'"
+        ).fetchone()[0]
+        assert inverted == 0
+
+    def test_unknown_evidence_kind_uses_default_confidence(self, odds_db):
+        upsert_xref_from_resolution(odds_db, [
+            {"match_id": 1, "titan_id": "t1", "direction": "direct",
+             "evidence_kind": "something_new", "kickoff_diff_seconds": 0.0},
+        ])
+        odds_db.commit()
+        conf = odds_db.execute(
+            "SELECT confidence FROM dim_match_xref WHERE provider_match_id='t1'"
+        ).fetchone()[0]
+        assert conf == 0.85
+
+    def test_rerun_upserts_instead_of_duplicating(self, odds_db):
+        row = {"match_id": 1, "titan_id": "t1", "direction": "direct",
+               "evidence_kind": "id", "kickoff_diff_seconds": 0.0}
+        upsert_xref_from_resolution(odds_db, [row])
+        odds_db.commit()
+        upsert_xref_from_resolution(odds_db, [row])
+        odds_db.commit()
+        total = odds_db.execute(
+            "SELECT COUNT(*) FROM dim_match_xref WHERE provider_match_id='t1'"
+        ).fetchone()[0]
+        assert total == 1
+
+    def test_review_status_is_auto_ok_not_falsely_confirmed(self, odds_db):
+        """CLAUDE.md §6.1:自动映射不得静默写成已验证。verified 必须是 0,
+        review_status 是 auto_ok 不是 confirmed。"""
+        upsert_xref_from_resolution(odds_db, [
+            {"match_id": 1, "titan_id": "t1", "direction": "direct",
+             "evidence_kind": "id", "kickoff_diff_seconds": 0.0},
+        ])
+        odds_db.commit()
+        verified, status = odds_db.execute(
+            "SELECT verified, review_status FROM dim_match_xref WHERE provider_match_id='t1'"
+        ).fetchone()
+        assert verified == 0
+        assert status == "auto_ok"

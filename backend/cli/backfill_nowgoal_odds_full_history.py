@@ -43,7 +43,11 @@ from backend.cli.ingest_nowgoal_season_odds import (
     load_target_matches,
     resolve_and_gate,
 )
-from backend.ingest.nowgoal_historical_odds import historical_snap_records, ingest_historical_odds
+from backend.ingest.nowgoal_historical_odds import (
+    historical_snap_records,
+    ingest_historical_odds,
+    upsert_xref_from_resolution,
+)
 from backend.ingest.nowgoal_historical_match_resolution import STATUS_AUTO_OK
 from backend.providers.nowgoal_archive import (
     NowGoalArchiveTransport,
@@ -115,6 +119,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--core-db", type=Path, default=CORE_DB, help="仅测试用")
     parser.add_argument("--db-path", type=Path, default=ODDS_DB, help="仅测试用临时库覆盖")
     parser.add_argument("--skip-backup", action="store_true", help="仅测试用")
+    parser.add_argument("--xref-only", action="store_true",
+                        help="只解析身份、写 dim_match_xref,跳过逐场抓赔率——"
+                             "补救\"赔率已经跑完但 xref 没写\"这种情况用,"
+                             "只需 archive_season() 一次请求,几秒钟跑完,"
+                             "不用重新花几小时抓一遍已经有的赔率数据")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--live", action="store_true")
@@ -159,13 +168,27 @@ def main(argv: list[str] | None = None) -> int:
 
     backup_path = None if args.skip_backup else backup_db(args.db_path)
 
+    conn = sqlite3.connect(str(args.db_path), timeout=30)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
+
+    auto_ok_rows = [r for r in resolved if r["status"] == STATUS_AUTO_OK]
+    with conn:
+        xref_upserted = upsert_xref_from_resolution(conn, auto_ok_rows)
+
+    if args.xref_only:
+        check = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        conn.close()
+        print(json.dumps({
+            "mode": "LIVE_XREF_ONLY", "backup_path": str(backup_path) if backup_path else None,
+            "xref_upserted": xref_upserted, "integrity_check": check, **summary,
+        }, ensure_ascii=False, indent=1))
+        return 0
+
     target_by_id = {m["Match_ID"]: m for m in target_matches}
     fetch_errors: list[dict] = []
     per_company_totals: dict[str, dict[str, int]] = {c: {"inserted": 0, "skipped": 0} for c in COMPANIES}
 
-    conn = sqlite3.connect(str(args.db_path), timeout=30)
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
     poll_run_id = f"historical-full-backfill-{args.league_id}-{args.season}-{_utc_now()}"
 
     matches_written = 0
@@ -196,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(json.dumps({
         "mode": "LIVE", "backup_path": str(backup_path) if backup_path else None,
-        "matches_written": matches_written, "fetch_errors": fetch_errors,
+        "xref_upserted": xref_upserted, "matches_written": matches_written, "fetch_errors": fetch_errors,
         "per_company_totals": per_company_totals, "integrity_check": check, **summary,
     }, ensure_ascii=False, indent=1))
     return 0

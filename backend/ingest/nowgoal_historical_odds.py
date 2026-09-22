@@ -30,6 +30,56 @@ from backend.providers.nowgoal import canonical_payload_json, normalize_for_inve
 
 COMPANY_NAMES = {"8": "Bet365", "3": "Crown", "1": "Macauslot"}
 
+# resolve_and_gate() 的 evidence_kind 取值 -> confidence,与
+# backend/cli/ingest_nowgoal_historical_odds.py::_EVIDENCE_CONFIDENCE 同一套
+# 取值,不另起一套标准。resolve_and_gate 比那边多一层"精确 kickoff 门禁"
+# (见 ingest_nowgoal_season_odds.py::resolve_and_gate 文档),没有理由给更低
+# 的置信度,所以直接复用同一张表,不因为来源模块不同就编出不同数字。
+_EVIDENCE_CONFIDENCE = {"id": 0.95, "name": 0.75}
+_DEFAULT_CONFIDENCE = 0.85
+
+
+def upsert_xref_from_resolution(conn_odds: sqlite3.Connection, resolved_auto_ok_rows: list[dict]) -> int:
+    """把 `resolve_and_gate()` 里 `status==STATUS_AUTO_OK` 的行写进 dim_match_xref。
+
+    2026-09-22 真实事故:`backfill_nowgoal_odds_full_history.py` 最初直接把
+    resolve_and_gate() 的结果拿去抓赔率、写 bronze_ng_odds_snap,却从没有
+    持久化过这份映射本身——resolve_and_gate 是纯函数,不发生任何数据库写入。
+    结果是五大联赛 25/26 赛季共 1752 场比赛的赔率数据完整落库了,但
+    dim_match_xref 里一行都没有,下游任何靠这张表 join 的分析代码
+    (analyze.py/ah_study.py 等)完全找不到这批数据,等于白跑。
+
+    `review_status` 统一写 'auto_ok'(resolve_and_gate 的门禁已经比一般的
+    entity_resolution 更严格,不需要人工复核);`verified` 恒 0(自动解析,
+    不是人工确认,不能谎称已验证,见 CLAUDE.md §6.1)。
+    """
+    now = utc_now_iso()
+    n = 0
+    for row in resolved_auto_ok_rows:
+        confidence = _EVIDENCE_CONFIDENCE.get(row.get("evidence_kind"), _DEFAULT_CONFIDENCE)
+        conn_odds.execute(
+            """
+            INSERT INTO dim_match_xref
+                (fotmob_match_id, provider, provider_match_id, home_away_inverted,
+                 confidence, verified, method, kickoff_diff_seconds, review_status,
+                 created_at, updated_at)
+            VALUES (?, 'nowgoal', ?, ?, ?, 0, 'auto', ?, 'auto_ok', ?, ?)
+            ON CONFLICT(provider, provider_match_id) DO UPDATE SET
+                fotmob_match_id=excluded.fotmob_match_id,
+                home_away_inverted=excluded.home_away_inverted,
+                confidence=excluded.confidence,
+                kickoff_diff_seconds=excluded.kickoff_diff_seconds,
+                review_status=excluded.review_status,
+                updated_at=excluded.updated_at
+            """,
+            (
+                row["match_id"], row["titan_id"], int(row["direction"] == "inverted"),
+                confidence, row.get("kickoff_diff_seconds"), now, now,
+            ),
+        )
+        n += 1
+    return n
+
 _AH_FIELDS = ("home", "line", "away")
 _OU_FIELDS = ("over", "line", "under")
 _X12_FIELDS = ("home", "draw", "away")
