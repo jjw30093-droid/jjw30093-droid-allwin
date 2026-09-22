@@ -123,10 +123,10 @@ def _staged_core_migrations(tmp_path: Path, names: tuple[str, ...]) -> Path:
 
 def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
     db_path = tmp_path / "fresh.db"
-    # 19 = 0001..0019(0019 新增 silver_player_season(_ratios) 两张表,球员
-    # 象限图;这个数字随 core migrations 目录里的文件数机械增长,不是本测试
-    # 关心的逻辑)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 19
+    # 20 = 0001..0020(0020 给 fact_player_match_stats 加两列,球员 Pizza 图
+    # 数据审计的结果;这个数字随 core migrations 目录里的文件数机械增长,
+    # 不是本测试关心的逻辑)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 20
     assert schedule.apply_schedule_state_schema_v1(db_path) == 0
     conn = sqlite3.connect(db_path)
     try:
@@ -156,6 +156,7 @@ def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
             (17, "0017_silver_team_season_ratios.sql"),
             (18, "0018_ratio_sample_count.sql"),
             (19, "0019_silver_player_season.sql"),
+            (20, "0020_aerials_total_and_line_breaking_passes.sql"),
         ]
     finally:
         conn.close()
@@ -198,8 +199,9 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
     # 0016(fact_season_team_stats,同样新表、不碰 dim_match)再使它变为 14;
     # 0017(silver_team_season_ratios,同样新表、不碰 dim_match)再使它变为 15;
     # 0018(给 silver_team_season_ratios 加列,同样不碰 dim_match)再使它变为 16;
-    # 0019(silver_player_season(_ratios) 两张新表,同样不碰 dim_match)再使它变为 17。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 17
+    # 0019(silver_player_season(_ratios) 两张新表,同样不碰 dim_match)再使它变为 17;
+    # 0020(fact_player_match_stats 加两列,同样不碰 dim_match)再使它变为 18。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 18
     conn = sqlite3.connect(db_path)
     try:
         after_columns = conn.execute("PRAGMA table_info(dim_match)").fetchall()
@@ -240,8 +242,8 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
     conn.commit()
     conn.close()
 
-    # 18 = 0002..0019(0019 新增 silver_player_season(_ratios) 两张表,机械增长)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 18
+    # 19 = 0002..0020(0020 给 fact_player_match_stats 加两列,机械增长)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 19
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -255,7 +257,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall() == [
             (1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,),
-            (16,), (17,), (18,), (19,),
+            (16,), (17,), (18,), (19,), (20,),
         ]
     finally:
         conn.close()

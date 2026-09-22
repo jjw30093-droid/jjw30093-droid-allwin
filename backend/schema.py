@@ -42,6 +42,15 @@ PLAYER_STATS_COLUMNS = [
     ("chances_created", "REAL"),
     ("big_chance_created_team_title", "REAL"),
     ("passes_into_final_third", "REAL"),
+    # 2026-09-23:FotMob 对"推进/破线传球"的真实字段,APK 反编译时以为的
+    # KeyPasses/AccurateForwardZonePass/AccurateBackZonePass 经生产实测
+    # (英超+意甲各一场真实比赛,playerStats 全部 stat 标题逐一核对)确认
+    # 当前接口根本不返回,是 App 数据类里的旧字段,不必再采集。这个字段
+    # 是唯一被真实验证过存在的:同一次核对里英超那场每名球员都有非空值
+    # (Mac Allister 19、António Silva 25 等),但同一天的意甲那场整场
+    # 都没有这个 stat——覆盖率按联赛分级(欧冠/英超最全),其余联赛允许
+    # 合法 NULL,不得因为部分联赛没有就当解析出错处理。
+    ("line_breaking_passes", "REAL"),
     ("accurate_crosses", "REAL"),
     ("long_balls_accurate", "REAL"),
     ("touches", "REAL"),
@@ -57,6 +66,12 @@ PLAYER_STATS_COLUMNS = [
     ("dribbled_past", "REAL"),
     ("ground_duels_won", "REAL"),
     ("aerials_won", "REAL"),
+    # 2026-09-23:争顶成功率的分母。原始 payload 里 aerials_won 本来就是
+    # fractionWithPercentage({"value":2,"total":4}),同 accurate_passes_total
+    # 的既有先例(见上面 accurate_passes_total 的注释)——_build_stat_lookup
+    # 早就在产生 "aerials_won__total" 这个 key,此前只是没有列去接住它,
+    # 不需要新抓数据,只是把已经在流经解析器的字段落库。
+    ("aerials_won_total", "REAL"),
     ("defensive_actions", "REAL"),
     ("last_man_tackle", "REAL"),
     ("clearance_off_the_line", "REAL"),

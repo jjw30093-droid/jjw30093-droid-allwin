@@ -1271,6 +1271,9 @@ class FotMobClient:
                 "chances_created":                g("chances_created", "chancesCreated"),
                 "big_chance_created_team_title":  g("big_chance_created_team_title", "bigChanceCreated", "bigChanceCreatedTeamTitle"),
                 "passes_into_final_third":        g("passes_into_final_third", "passesIntoFinalThird"),
+                # 2026-09-23:实测只有部分联赛(英超/欧冠深度覆盖)返回这个
+                # stat,其余联赛合法 NULL——不是解析失败,不要在这里加兜底。
+                "line_breaking_passes":           g("line_breaking_passes", "lineBreakingPasses"),
                 "accurate_crosses":               g("accurate_crosses", "accurateCrosses"),
                 "long_balls_accurate":            g("long_balls_accurate", "longBallsAccurate"),
 
@@ -1290,6 +1293,7 @@ class FotMobClient:
                 "dribbled_past":                  g("dribbled_past", "dribbledPast"),
                 "ground_duels_won":               g("ground_duels_won", "groundDuelsWon"),
                 "aerials_won":                    g("aerials_won", "aerialsWon"),
+                "aerials_won_total":              g("aerials_won__total"),
                 "defensive_actions":              g("defensive_actions", "defensiveActions"),
                 "last_man_tackle":                g("last_man_tackle", "lastManTackle"),
                 "clearance_off_the_line":         g("clearance_off_the_line", "clearanceOffTheLine"),

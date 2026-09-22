@@ -63,6 +63,83 @@ class TestAccuratePassesTotal:
         assert records[0]["accurate_passes_total"] is None
 
 
+class TestAerialsWonTotal:
+    def test_extracts_value_and_total_from_fraction_stat(self):
+        """真实结构(2026-09-23 用生产 FotMobClient 对真实比赛 5795455/
+        5749680 核对):aerials_won 同 accurate_passes 一样是 fractionWithPercentage,
+        {"value":2,"total":4} 这种形状,此前只有 accurate_passes 接住了 total,
+        aerials_won 的分母被解析器一路丢弃。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Duels",
+                "stats": {
+                    "Aerial duels won": {
+                        "key": "aerials_won",
+                        "stat": {"value": 2, "total": 4, "type": "fractionWithPercentage"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["aerials_won"] == 2
+        assert records[0]["aerials_won_total"] == 4
+
+    def test_total_absent_when_stat_has_no_total(self):
+        payload = _new_format_payload("1", [
+            {
+                "title": "Top stats",
+                "stats": {
+                    "Goals": {"key": "goals", "stat": {"value": 1, "type": "integer"}},
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["aerials_won_total"] is None
+
+
+class TestLineBreakingPasses:
+    def test_present_when_league_provides_it(self):
+        """真实结构(2026-09-23 英超真实比赛 5795455 实测):value 是普通
+        integer,不带 total——不要跟 aerials_won/accurate_passes 的
+        fractionWithPercentage 形状搞混。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Attack",
+                "stats": {
+                    "Line breaking passes": {
+                        "key": "line_breaking_passes",
+                        "stat": {"value": 19, "type": "integer"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["line_breaking_passes"] == 19
+
+    def test_absent_for_leagues_without_this_stat_gives_none_not_zero(self):
+        """真实结构(2026-09-23 意甲真实比赛 5749680 实测):全场 50 人的
+        stat 标题里完全没有这一项,不是每个联赛都有——必须诚实给 None,
+        不能编造 0(同 physical metrics 的既有纪律,见下面
+        TestPhysicalMetrics.test_missing_physical_group_gives_none_not_zero)。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Attack",
+                "stats": {
+                    "Passes into final third": {
+                        "key": "passes_into_final_third",
+                        "stat": {"value": 6, "type": "integer"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["line_breaking_passes"] is None
+
+
 class TestPhysicalMetrics:
     def test_extracts_real_keys_not_camel_case_guesses(self):
         """真实结构(欧冠决赛 5205834 实测):Physical metrics 组用下划线 key,
