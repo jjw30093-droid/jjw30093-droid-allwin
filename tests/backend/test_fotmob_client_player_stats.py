@@ -99,6 +99,42 @@ class TestAerialsWonTotal:
         assert records[0]["aerials_won_total"] is None
 
 
+class TestDribblesSucceededTotal:
+    def test_extracts_value_and_total_from_fraction_stat(self):
+        """真实结构(2026-09-23 用生产 FotMobClient 对真实比赛 5795461 核对):
+        "Successful dribbles" 同 accurate_passes/aerials_won 一样是
+        fractionWithPercentage,{"value":1,"total":3} 这种形状,此前只存了
+        value(次数),total(尝试次数)被解析器一路丢弃,算不出成功率。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Attack",
+                "stats": {
+                    "Successful dribbles": {
+                        "key": "dribbles_succeeded",
+                        "stat": {"value": 1, "total": 3, "type": "fractionWithPercentage"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["dribbles_succeeded"] == 1
+        assert records[0]["dribbles_succeeded_total"] == 3
+
+    def test_total_absent_when_stat_has_no_total(self):
+        payload = _new_format_payload("1", [
+            {
+                "title": "Top stats",
+                "stats": {
+                    "Goals": {"key": "goals", "stat": {"value": 1, "type": "integer"}},
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["dribbles_succeeded_total"] is None
+
+
 class TestLineBreakingPasses:
     def test_present_when_league_provides_it(self):
         """真实结构(2026-09-23 英超真实比赛 5795455 实测):value 是普通

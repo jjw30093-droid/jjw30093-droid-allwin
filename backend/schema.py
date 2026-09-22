@@ -57,6 +57,12 @@ PLAYER_STATS_COLUMNS = [
     ("touches_opp_box", "REAL"),
     ("dispossessed", "REAL"),
     ("dribbles_succeeded", "REAL"),
+    # 2026-09-23:带球成功率的分母。同 accurate_passes_total/aerials_won_total
+    # 的既有先例(见上面两处注释)——原始 payload 的"Successful dribbles"
+    # 本来就是 fractionWithPercentage({"value":1,"total":3}),
+    # _build_stat_lookup 早就在产出 "dribbles_succeeded__total" 这个 key,
+    # 此前没有列去接住,不需要新抓数据。
+    ("dribbles_succeeded_total", "REAL"),
     ("matchstats.headers.tackles", "REAL"),
     ("shot_blocks", "REAL"),
     ("clearances", "REAL"),

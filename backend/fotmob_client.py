@@ -1282,6 +1282,7 @@ class FotMobClient:
                 "touches_opp_box":                g("touches_opp_box", "touchesOppBox"),
                 "dispossessed":                   g("dispossessed"),
                 "dribbles_succeeded":             g("dribbles_succeeded", "dribbles", "dribbleSucceeded", "dribbleWon"),
+                "dribbles_succeeded_total":        g("dribbles_succeeded__total"),
 
                 # ── 防守 ──────────────────────────────────────────────
                 "matchstats.headers.tackles":     g("matchstats.headers.tackles", "tackles"),
