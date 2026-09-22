@@ -135,6 +135,109 @@ class TestDribblesSucceededTotal:
         assert records[0]["dribbles_succeeded_total"] is None
 
 
+class TestAccurateCrossesTotal:
+    def test_extracts_value_and_total_from_fraction_stat(self):
+        """真实结构(2026-09-23 用生产 FotMobClient 对真实比赛 5868066 核对,
+        网页版逐 tab 对拍时发现):"Accurate crosses" 同样是
+        fractionWithPercentage,{"value":0,"total":2}。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Attack",
+                "stats": {
+                    "Accurate crosses": {
+                        "key": "accurate_crosses",
+                        "stat": {"value": 0, "total": 2, "type": "fractionWithPercentage"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["accurate_crosses"] == 0
+        assert records[0]["accurate_crosses_total"] == 2
+
+    def test_total_absent_when_stat_has_no_total(self):
+        payload = _new_format_payload("1", [
+            {
+                "title": "Top stats",
+                "stats": {
+                    "Goals": {"key": "goals", "stat": {"value": 1, "type": "integer"}},
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["accurate_crosses_total"] is None
+
+
+class TestLongBallsAccurateTotal:
+    def test_extracts_value_and_total_from_fraction_stat(self):
+        """真实结构(2026-09-23,同一次对拍):"Accurate long balls" 同样是
+        fractionWithPercentage,{"value":1,"total":1}。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Attack",
+                "stats": {
+                    "Accurate long balls": {
+                        "key": "long_balls_accurate",
+                        "stat": {"value": 1, "total": 1, "type": "fractionWithPercentage"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["long_balls_accurate"] == 1
+        assert records[0]["long_balls_accurate_total"] == 1
+
+    def test_total_absent_when_stat_has_no_total(self):
+        payload = _new_format_payload("1", [
+            {
+                "title": "Top stats",
+                "stats": {
+                    "Goals": {"key": "goals", "stat": {"value": 1, "type": "integer"}},
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["long_balls_accurate_total"] is None
+
+
+class TestGroundDuelsWonTotal:
+    def test_extracts_value_and_total_from_fraction_stat(self):
+        """真实结构(2026-09-23,同一次对拍):"Ground duels won" 同样是
+        fractionWithPercentage,{"value":9,"total":16}。"""
+        payload = _new_format_payload("1", [
+            {
+                "title": "Duels",
+                "stats": {
+                    "Ground duels won": {
+                        "key": "ground_duels_won",
+                        "stat": {"value": 9, "total": 16, "type": "fractionWithPercentage"},
+                    },
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["ground_duels_won"] == 9
+        assert records[0]["ground_duels_won_total"] == 16
+
+    def test_total_absent_when_stat_has_no_total(self):
+        payload = _new_format_payload("1", [
+            {
+                "title": "Top stats",
+                "stats": {
+                    "Goals": {"key": "goals", "stat": {"value": 1, "type": "integer"}},
+                },
+            },
+        ])
+        client = FotMobClient()
+        records = client.parse_player_stats_records(payload, match_id=1)
+        assert records[0]["ground_duels_won_total"] is None
+
+
 class TestLineBreakingPasses:
     def test_present_when_league_provides_it(self):
         """真实结构(2026-09-23 英超真实比赛 5795455 实测):value 是普通

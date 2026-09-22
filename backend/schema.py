@@ -52,7 +52,14 @@ PLAYER_STATS_COLUMNS = [
     # 合法 NULL,不得因为部分联赛没有就当解析出错处理。
     ("line_breaking_passes", "REAL"),
     ("accurate_crosses", "REAL"),
+    # 2026-09-23:传中成功率的分母。同 accurate_passes_total 等一串既有
+    # 先例——原始 payload 的"Accurate crosses"本来就是
+    # fractionWithPercentage({"value":0,"total":2}),经 FotMob 网页对拍
+    # 巴萨 vs 拉辛桑坦德(5868066)真实比赛核实。
+    ("accurate_crosses_total", "REAL"),
     ("long_balls_accurate", "REAL"),
+    # 2026-09-23:长传成功率的分母,同上一并核实({"value":1,"total":1})。
+    ("long_balls_accurate_total", "REAL"),
     ("touches", "REAL"),
     ("touches_opp_box", "REAL"),
     ("dispossessed", "REAL"),
@@ -71,6 +78,10 @@ PLAYER_STATS_COLUMNS = [
     ("recoveries", "REAL"),
     ("dribbled_past", "REAL"),
     ("ground_duels_won", "REAL"),
+    # 2026-09-23:地面对抗成功率的分母,同一批(与 accurate_crosses_total/
+    # long_balls_accurate_total 同一次核对)确认 ground_duels_won 也是
+    # fractionWithPercentage({"value":9,"total":16})。
+    ("ground_duels_won_total", "REAL"),
     ("aerials_won", "REAL"),
     # 2026-09-23:争顶成功率的分母。原始 payload 里 aerials_won 本来就是
     # fractionWithPercentage({"value":2,"total":4}),同 accurate_passes_total

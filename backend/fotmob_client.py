@@ -1275,7 +1275,9 @@ class FotMobClient:
                 # stat,其余联赛合法 NULL——不是解析失败,不要在这里加兜底。
                 "line_breaking_passes":           g("line_breaking_passes", "lineBreakingPasses"),
                 "accurate_crosses":               g("accurate_crosses", "accurateCrosses"),
+                "accurate_crosses_total":          g("accurate_crosses__total"),
                 "long_balls_accurate":            g("long_balls_accurate", "longBallsAccurate"),
+                "long_balls_accurate_total":       g("long_balls_accurate__total"),
 
                 # ── 持球 ──────────────────────────────────────────────
                 "touches":                        g("touches"),
@@ -1293,6 +1295,7 @@ class FotMobClient:
                 "recoveries":                     g("recoveries"),
                 "dribbled_past":                  g("dribbled_past", "dribbledPast"),
                 "ground_duels_won":               g("ground_duels_won", "groundDuelsWon"),
+                "ground_duels_won_total":          g("ground_duels_won__total"),
                 "aerials_won":                    g("aerials_won", "aerialsWon"),
                 "aerials_won_total":              g("aerials_won__total"),
                 "defensive_actions":              g("defensive_actions", "defensiveActions"),
