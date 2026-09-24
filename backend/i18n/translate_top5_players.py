@@ -203,10 +203,26 @@ def run_nickname(limit: int | None) -> None:
     conn = get_connection()
     try:
         players = _top5_players(conn)
+        # ⚠️ source 白名单:人工核定过的行不再参与阶段二。
+        #
+        # 阶段二原本只判断 name_zh 是否为空,然后无条件
+        # `UPDATE ... SET name_zh_short=?, source='qwen-plus-nickname'`。
+        # 人工修正的行 name_zh 非空,所以不但不会被跳过,反而正好落进这个 dict,
+        # 下一轮重跑就被模型生成的简称覆盖掉 —— 不报错、不告警,只是名字变回去了。
+        #
+        # 实例:Ayden Heaven 被译成「天堂」(把姓 Heaven 当普通名词意译),
+        # 人工改成「海文」后,只要再跑一次阶段二就会被打回。
+        # workflow_verified_* 两类 curated 行同样一直在被覆盖,一并保护。
         name_zh_by_id = {
             pid: name_zh
             for pid, name_zh in conn.execute(
-                "SELECT Player_ID, name_zh FROM dim_player_i18n WHERE name_zh IS NOT NULL"
+                """SELECT Player_ID, name_zh FROM dim_player_i18n
+                   WHERE name_zh IS NOT NULL
+                     AND source NOT IN (
+                       'manual-correction',
+                       'workflow_verified_star',
+                       'workflow_verified_east_asian'
+                     )"""
             ).fetchall()
         }
     finally:
