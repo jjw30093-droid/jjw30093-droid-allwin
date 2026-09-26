@@ -22,11 +22,11 @@
 
 | 用途 | 文件 | 用在哪 |
 |---|---|---|
-| 主图标(金,矢量优先) | `brand/export/icon/logo-icon-gold.svg` / `-1024/512/256.png` | 深色底、页头图标、加载态 |
+| 主图标(金,矢量优先) | `brand/export/icon/logo-icon-gold.svg` / `-512.png` | 深色底、页头图标、加载态 |
 | 图标(深色单色) | `brand/export/icon/logo-icon-black.svg` / `-black-1024.png` | 浅色底 |
 | 图标(反白) | `brand/export/icon/logo-icon-white.svg` / `-white-1024.png` | 彩色 / 深色照片底 |
-| 网站图标 | `brand/export/favicon/app-icon-512.png` `favicon-180/32/16.png` | favicon(金 on 黑,圆角方) |
-| 圆形徽标(含字) | `brand/export/logo-badge-1024.png` / `-512.png` | 社媒头像 / 圆形场景 |
+| 网站图标 | `brand/export/favicon/app-icon-512.png` `favicon-32/16.png` | favicon(金 on 黑,圆角方) |
+| 圆形徽标(含字) | `brand/export/logo-badge-512.png` | 社媒头像 / 圆形场景 |
 | 横版组合 | `brand/export/logo-horizontal-gold.png`(深色底)/ `-black.png`(浅色底) | 页头 lockup |
 
 **使用规则**
