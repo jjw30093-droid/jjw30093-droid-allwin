@@ -1,4 +1,4 @@
-import type { GetJson, MatchSummary } from "@/lib/api-v1";
+import type { GetJson, MatchListResponse, MatchSummary } from "@/lib/api-v1";
 import type { FreeTip } from "@/components/matches/MatchRow";
 
 export type AnalysisBundle = GetJson<"/api/v1/matches/{match_id}/analysis">;
@@ -45,6 +45,31 @@ function tierOf(card: HomeMatchCard): number {
 export const FEATURED_WINDOW_HOURS = 24;
 
 const FEATURED_WINDOW_MS = FEATURED_WINDOW_HOURS * 60 * 60 * 1000;
+
+/**
+ * 五大联赛(英超 47 / 西甲 87 / 意甲 55 / 德甲 54 / 法甲 53)。
+ * 同时用于重点位的"优先联赛"判定与首页"停赛期"提示的判断。
+ */
+export const FIVE_LEAGUE_IDS: readonly number[] = [47, 87, 55, 54, 53];
+
+/** 欧冠。 */
+const CHAMPIONS_LEAGUE_ID = 42;
+
+/**
+ * 重点位优先联赛 = 五大联赛 + 欧冠(2026-09-26 站长要求:第三批首页改版)。
+ * 未来 PRIORITY_WINDOW_HOURS 小时内只要有这些联赛的未开赛比赛,重点位就只从它们
+ * 里选;一场也没有才回落到原来的 24h 窗口规则(见 selectHomepageMatches)。
+ */
+export const PRIORITY_LEAGUE_IDS: readonly number[] = [...FIVE_LEAGUE_IDS, CHAMPIONS_LEAGUE_ID];
+export const PRIORITY_WINDOW_HOURS = 48;
+const PRIORITY_WINDOW_MS = PRIORITY_WINDOW_HOURS * 60 * 60 * 1000;
+
+/** 优先联赛且开球在 (now, now+48h] 内的未开赛比赛。 */
+function isPriorityMatch(card: HomeMatchCard, nowMs: number): boolean {
+  if (!PRIORITY_LEAGUE_IDS.includes(card.match.league_id)) return false;
+  const ahead = kickoffMsOf(card) - nowMs;
+  return ahead > 0 && ahead <= PRIORITY_WINDOW_MS;
+}
 
 /**
  * 强强对话名单(FotMob `team_id`,已在生产库逐一核对)。
@@ -187,9 +212,16 @@ export function selectHomepageMatches(
     const bUp = isUpcoming(b, nowMs);
     if (aUp !== bUp) return aUp ? -1 : 1;
 
+    // 主键 0.5(2026-09-26):五大联赛 + 欧冠 48h 内的比赛整体排在其它未开赛比赛之前;
+    // 组内沿用档 A 的排序键(强强对话 → 富集度 → 开球就近 → 联赛档位)。
+    // 一场都没有时这一档为空,行为与改版前逐字节一致(回落原规则)。
+    const aPri = aUp && isPriorityMatch(a, nowMs);
+    const bPri = bUp && isPriorityMatch(b, nowMs);
+    if (aPri !== bPri) return aPri ? -1 : 1;
+
     // 主键 1:未开赛内部再按是否落在 24h 窗口分档。
-    const aIn = inFeaturedWindow(a, nowMs);
-    const bIn = inFeaturedWindow(b, nowMs);
+    const aIn = aPri || inFeaturedWindow(a, nowMs);
+    const bIn = bPri || inFeaturedWindow(b, nowMs);
     if (aUp && aIn !== bIn) return aIn ? -1 : 1;
 
     const ma = marqueeRank(a);
@@ -265,6 +297,52 @@ export function selectFeaturedMatch(
     (c) => c.match.match_id !== featured?.match.match_id,
   );
   return { featured, secondary };
+}
+
+/* ── 五大联赛停赛期(国际比赛日)提示(2026-09-26) ──────────────────
+ * 判据:五大联赛**未来 7 天内**一场未开赛的比赛都没有。恢复日期 = 五大联赛里
+ * 最早一场未开赛比赛的开球日(北京时间由展示层格式化)。
+ *
+ * 为什么不直接用首页 7 天候选池判断:候选池有 limit,滚动窗口内比赛多时会被截断,
+ * "池里没有五大联赛"不等于"未来 7 天没有五大联赛"。所以每个联赛单独按
+ * league_id 取最近几场(后端按日期升序),判据只建立在这些请求的结果上。
+ *
+ * 保守原则(算不出就不显示):
+ * - 任一联赛请求失败 → 不判定(onBreak=false,resumeAt=null);
+ * - 最早开球晚于 BREAK_RESUME_MAX_DAYS 天(更像赛季间歇,而不是国际比赛日)→ 不给日期。
+ */
+export const BREAK_LOOKAHEAD_DAYS = 7;
+export const BREAK_RESUME_MAX_DAYS = 21;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type FiveLeagueBreak = { onBreak: boolean; resumeAt: string | null };
+
+export function fiveLeagueBreak(
+  lists: ReadonlyArray<MatchListResponse | null | undefined>,
+  now: Date = new Date(),
+): FiveLeagueBreak {
+  if (lists.length === 0 || lists.some((l) => !l)) return { onBreak: false, resumeAt: null };
+  const nowMs = now.getTime();
+  const kickoffs: number[] = [];
+  for (const list of lists) {
+    for (const m of list!.matches) {
+      if (!m.kickoff_at_utc) continue;
+      const t = new Date(m.kickoff_at_utc).getTime();
+      if (Number.isFinite(t) && t > nowMs) kickoffs.push(t);
+    }
+  }
+  if (kickoffs.length === 0) return { onBreak: false, resumeAt: null };
+  const earliest = Math.min(...kickoffs);
+  if (earliest - nowMs <= BREAK_LOOKAHEAD_DAYS * DAY_MS) return { onBreak: false, resumeAt: null };
+  if (earliest - nowMs > BREAK_RESUME_MAX_DAYS * DAY_MS) return { onBreak: true, resumeAt: null };
+  return { onBreak: true, resumeAt: new Date(earliest).toISOString() };
+}
+
+/** 五个联赛各取最近 12 场未开赛比赛(后端按日期升序;12 场足够覆盖 1–2 轮)。 */
+export function fiveLeagueRequestPaths(): string[] {
+  return FIVE_LEAGUE_IDS.map(
+    (id) => `/api/v1/matches?status=upcoming&window=all&league_id=${id}&limit=12`,
+  );
 }
 
 /**

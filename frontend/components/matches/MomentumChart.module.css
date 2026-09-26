@@ -1,6 +1,7 @@
 .legend {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 4px 16px;
   padding: 4px 2px 0;
   font-size: 12px;
   color: var(--ink-2);
@@ -10,6 +11,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.legendSide {
+  color: var(--ink-3);
 }
 
 .homeDot,

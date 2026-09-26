@@ -424,3 +424,83 @@ for (const section of ["team-stats", "players"] as const) {
     expect(await card.locator("li").count()).toBeLessThanOrEqual(10);
   });
 }
+
+// ── 手机端体验第三批(2026-09-26):首页首屏 / 比赛详情比分卡 ─────────────
+
+test("首页首屏(手机):第一块是一句话定位 + 三个入口;战绩条不在页面最顶部", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const h1 = page.getByRole("heading", { level: 1 });
+  await expect(h1).toHaveText(/^英超、西甲等 \d+ 个联赛的比赛与数据$/);
+  const nav = page.getByRole("navigation", { name: "首页入口" });
+  await expect(nav.getByRole("link")).toHaveText(["看比赛", "联赛数据", "今日精选"]);
+  await expect(nav.getByRole("link", { name: "看比赛" })).toHaveAttribute("href", "/matches");
+  await expect(nav.getByRole("link", { name: "联赛数据" })).toHaveAttribute("href", "/leagues");
+  await expect(nav.getByRole("link", { name: "今日精选" })).toHaveAttribute("href", "/reco");
+  for (const link of await nav.getByRole("link").all()) {
+    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  // 定位语在整页最上面;战绩条(若接口有数据)在「今日精选」卡内部,不在它上面
+  const heroBox = (await h1.boundingBox())!;
+  const strip = page.getByRole("link", { name: "推荐战绩,查看完整记录" });
+  if ((await strip.count()) > 0) {
+    const stripBox = (await strip.boundingBox())!;
+    expect(stripBox.y).toBeGreaterThan(heroBox.y);
+    const inPicksCard = await strip.evaluate(
+      (el) => !!el.closest("section")?.querySelector("#daily-picks-title"),
+    );
+    expect(inPicksCard).toBe(true);
+    // 中性配色:没有红色边框/粉色背景
+    const style = await strip.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { border: s.borderTopColor, bg: s.backgroundColor, shadow: s.boxShadow };
+    });
+    const isRedish = (c: string) => {
+      const m = c.match(/\d+(\.\d+)?/g)?.map(Number) ?? [];
+      return m.length >= 3 && m[0] > 150 && m[0] - m[1] > 60 && m[0] - m[2] > 60;
+    };
+    expect(isRedish(style.border), style.border).toBe(false);
+    expect(isRedish(style.bg), style.bg).toBe(false);
+    expect(style.shadow).toBe("none");
+  }
+  await noHorizontalOverflow(page, 390);
+});
+
+test("首页:今晚/明天/本周始终可点击,分别跳 /matches 对应筛选;今日精选没有「今天还没发」空状态", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const bar = page.getByTestId("match-counts-bar");
+  await expect(bar.getByRole("link")).toHaveCount(3);
+  await expect(bar.getByRole("link", { name: /^今晚/ })).toHaveAttribute("href", "/matches?window=today");
+  await expect(bar.getByRole("link", { name: /^明天/ })).toHaveAttribute("href", "/matches?window=tomorrow");
+  await expect(bar.getByRole("link", { name: /^本周/ })).toHaveAttribute("href", "/matches?window=7d");
+  await expect(page.getByText("今天还没发")).toHaveCount(0);
+  await bar.getByRole("link", { name: /^明天/ }).click();
+  await expect(page).toHaveURL(/\/matches\?window=tomorrow/);
+});
+
+test("首页停赛期提示:若出现,格式为「国际比赛日,五大联赛 M月D日 恢复」", async ({ page }) => {
+  await page.goto("/");
+  const note = page.getByTestId("league-break-note");
+  if ((await note.count()) > 0) {
+    await expect(note).toHaveText(/^国际比赛日，五大联赛 \d{1,2}月\d{1,2}日 恢复$/);
+  }
+});
+
+test("比赛详情比分卡:队徽外没有灰色方框(与全站队徽一致)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matches?status=finished");
+  const href = await page.locator('a[href^="/matches/"]').first().getAttribute("href");
+  await page.goto(href!.split("?")[0]);
+  const frames = page.locator('[class*="crestFrame"]');
+  expect(await frames.count()).toBeGreaterThanOrEqual(2);
+  for (const el of await frames.all()) {
+    const s = await el.evaluate((n) => {
+      const c = getComputedStyle(n);
+      return { border: c.borderTopWidth, bg: c.backgroundColor, radius: c.borderTopLeftRadius, overflow: c.overflow };
+    });
+    expect(s.border).toBe("0px");
+    expect(s.bg).toBe("rgba(0, 0, 0, 0)");
+    expect(s.radius).toBe("0px");
+  }
+});

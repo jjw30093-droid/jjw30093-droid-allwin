@@ -9,7 +9,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { LEAGUE_ZH } from "@/components/matches/zh";
+import { LEAGUE_COUNT } from "@/components/matches/zh";
 import { getMe, type MeResponse } from "@/lib/api-v1";
 import { sanitizeReturnTo } from "@/lib/match-links";
 import styles from "./SiteNav.module.css";
@@ -54,7 +54,7 @@ type BottomNavIcon = "home" | "matches" | "leagues" | "picks" | "account";
 
 /** 顶部品牌副标题里的联赛数量:从联赛配置(LEAGUE_ZH,镜像后端 LEAGUE_META)
  * 计算,新增联赛自动跟着变,不写死数字。 */
-export const LEAGUE_COUNT = Object.keys(LEAGUE_ZH).length;
+export { LEAGUE_COUNT };
 export const BRAND_DESCRIPTOR = `${LEAGUE_COUNT} 个联赛的数据图表`;
 
 function BottomIcon({ name }: { name: BottomNavIcon }) {

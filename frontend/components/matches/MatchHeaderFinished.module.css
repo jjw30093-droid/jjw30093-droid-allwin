@@ -97,13 +97,11 @@
   white-space: nowrap;
 }
 
+/* 2026-09-26:去掉队徽外的灰色方框(边框 + 灰底 + 圆角裁切),队徽直接按 TeamBadge
+ * 自身样式渲染,与全站其它位置(列表、重点比赛卡)一致。 */
 .crestFrame {
   display: inline-flex;
   flex: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--surface-soft);
-  overflow: hidden;
 }
 
 .full {

@@ -7,15 +7,24 @@ import {
   type GetJson,
   type MatchListResponse,
 } from "@/lib/api-v1";
-import { selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
+import {
+  fiveLeagueBreak,
+  fiveLeagueRequestPaths,
+  selectFeaturedMatch,
+  type FiveLeagueBreak,
+  type HomeMatchCard,
+} from "@/lib/homepage";
+import { HomeHero } from "@/components/home/HomeHero";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { ContinueWatching } from "@/components/home/ContinueWatching";
 import { HomeMatchExperienceLive, FreshnessBlock } from "@/components/home/HomeMatchExperienceLive";
 import { PublicPicksBanner } from "@/components/home/PublicPicksBanner";
 import { RecordHighlightBanner } from "@/components/home/RecordHighlightBanner";
+import { pickLatestSettledSlip, type RecapSlip } from "@/lib/home-recap";
 import styles from "./page.module.css";
 
 type RecoOverview = GetJson<"/api/v1/reco/overview">;
+type TrackRecord = GetJson<"/api/v1/reco/track-record">;
 type Freshness = GetJson<"/api/v1/status/freshness">;
 
 function SectionSkeleton({ lines = 3 }: { lines?: number }) {
@@ -43,6 +52,8 @@ type HomePageData = {
   secondary: HomeMatchCard[];
   counts: { today: number; tomorrow: number; week: number } | null;
   freshness: Freshness | null;
+  /** 五大联赛停赛期(国际比赛日)判定,见 lib/homepage.ts::fiveLeagueBreak */
+  leagueBreak: FiveLeagueBreak;
 };
 
 /**
@@ -62,13 +73,19 @@ type HomePageData = {
  * 不是发起第二次网络请求。
  */
 export const getHomePageData = cache(async (): Promise<HomePageData> => {
-  const [upcoming, todayList, tomorrowList, shotsList, freshness] = await Promise.all([
+  const [upcoming, todayList, tomorrowList, shotsList, freshness, ...fiveLeagueLists] = await Promise.all([
     // boost=free_predicted(2026-08-16):limit 截断的是原始 API 顺序,
     // 完整 7 天窗口里更靠后的比赛没机会进这一页——哪怕它才是唯一一场
     // "免费且已发布概率"的比赛(见 backend/api/routes_public.py::list_matches
     // 同名参数文档)。opt-in 参数把这场比赛在服务端顶进 limit 截断线以内,
     // 不需要把整窗口 ~95 场完整 MatchSummary 都下发到这里再筛。
     //
+    // limit=120(2026-09-26,原 70):重点位新增"五大联赛 + 欧冠 48 小时内优先"
+    // 规则,候选窗口从滚动 24h 变成滚动 48h。对生产 3518 场未来赛程实测,最密集
+    // 的滚动 48h 窗口有 115 场(全部联赛),70 会让其中约 45 场结构性进不了候选池;
+    // 120 覆盖它(后端上限 le=200)。
+    //
+    // (以下为 2026-08-19 原 limit=70 的依据,保留供追溯)
     // limit=70(2026-08-19,原为 8):重点位改成"24 小时内 + 强强对话优先"
     // (lib/homepage.ts::selectHomepageMatches)后,8 场候选结构性不够用——
     // 一场晚间的 Big6 内战完全可能排在第 15 位而根本进不了池。
@@ -81,7 +98,7 @@ export const getHomePageData = cache(async (): Promise<HomePageData> => {
     // 必须与 HomeMatchExperienceLive.tsx::fetchHomeData 保持同一个 limit:
     // 两处用的是同一个纯函数判据,候选池不一样会让挂载后的刷新换掉重点卡。
     serverGet<MatchListResponse>(
-      "/api/v1/matches?status=upcoming&window=7d&limit=70&boost=free_predicted",
+      "/api/v1/matches?status=upcoming&window=7d&limit=120&boost=free_predicted",
       { revalidate: 60 },
     ),
     serverGetOptional<MatchListResponse>(
@@ -100,6 +117,11 @@ export const getHomePageData = cache(async (): Promise<HomePageData> => {
       { revalidate: 60 },
     ).catch(() => null),
     getFreshness(),
+    // 五大联赛各取最近几场,用于"停赛期"提示的判定与恢复日期(不依赖上面的
+    // 候选池:池有 limit,被截断时"池里没有"不等于"未来 7 天没有")。
+    ...fiveLeagueRequestPaths().map((path) =>
+      serverGetOptional<MatchListResponse>(path, { revalidate: 300 }).catch(() => null),
+    ),
   ]);
 
   const cards = upcoming.matches.map((match) => ({ match, tip: null }));
@@ -119,7 +141,9 @@ export const getHomePageData = cache(async (): Promise<HomePageData> => {
         }
       : null;
 
-  return { featured, secondary, counts, freshness };
+  const leagueBreak = fiveLeagueBreak(fiveLeagueLists, new Date());
+
+  return { featured, secondary, counts, freshness, leagueBreak };
 });
 
 const getRecoOverview = cache(async (): Promise<RecoOverview | null> => {
@@ -154,6 +178,7 @@ async function HomeMatchExperienceSection() {
         initialFeatured={null}
         initialSecondary={[]}
         initialCounts={null}
+        initialBreak={{ onBreak: false, resumeAt: null }}
         initialErrored
       />
     );
@@ -164,6 +189,7 @@ async function HomeMatchExperienceSection() {
       initialFeatured={data.featured}
       initialSecondary={data.secondary}
       initialCounts={data.counts}
+      initialBreak={data.leagueBreak}
       initialErrored={false}
     />
   );
@@ -193,25 +219,43 @@ function recoResultBreakdownText(overview: RecoOverview): string {
   return parts.join(" ");
 }
 
+/** 最近一次已结算(命中/未中/走水/半赢/半输)的精选;作废单不算"已结算"。 */
+const getLatestSettledSlip = cache(async (): Promise<RecapSlip | null> => {
+  const data = await serverGetOptional<TrackRecord>("/api/v1/reco/track-record?limit=20", {
+    revalidate: 300,
+  }).catch(() => null);
+  return pickLatestSettledSlip(data?.slips ?? []);
+});
+
 async function DailyPicksSection() {
   const overview = await getRecoOverview();
   const hasRecords = !!overview && overview.settled_count > 0;
+  const publishedCount = overview?.today_published_count ?? 0;
+  const published = publishedCount > 0;
+  // 只有"今天没发"时才需要复盘;发布了就不取,省一次请求
+  const recap = overview && !published ? await getLatestSettledSlip() : null;
   return (
     <section className={styles.picksCard} aria-labelledby="daily-picks-title">
       <header className={styles.picksHead}>
         <h2 id="daily-picks-title">今日精选</h2>
-        {overview && overview.today_published_count > 0 && (
+        {published && (
           <span className={styles.picksBadge}>
-            已发布 {overview.today_published_count} 场
+            已发布 {publishedCount} 场
           </span>
         )}
       </header>
 
+      {/* 战绩条(2026-09-26 第三批):从页面最顶部挪进今日精选卡,中性配色。
+          接口挂了/没有已结算样本时自己返回 null。 */}
+      <Suspense fallback={null}>
+        <RecordHighlightBanner />
+      </Suspense>
+
       {!overview ? (
         <p className={styles.picksNote}>精选状态暂时加载不出来，可以直接进精选页看看。</p>
-      ) : overview.today_published_count > 0 ? (
+      ) : published ? (
         <p className={styles.picksNote}>
-          今天已发布 <b className="num">{overview.today_published_count}</b> 场
+          今天已发布 <b className="num">{publishedCount}</b> 场
           {overview.today_latest_published_at && (
             <>
               ，更新于 <LocalTime iso={overview.today_latest_published_at} />
@@ -219,46 +263,58 @@ async function DailyPicksSection() {
           )}
           。内容包含赛果方向、数据依据与风险提示。
         </p>
-      ) : (
-        <p className={styles.picksNote}>今天还没发。发了这儿会自己更新。</p>
+      ) : recap ? (
+        // 今天还没发:不展示空状态文案,改为最近一次已结算精选的简要复盘
+        <div className={styles.recap} data-testid="daily-picks-recap">
+          <span className={styles.recapLabel}>最近一次已结算</span>
+          <p className={styles.recapMatch}>
+            <span className={`${styles.recapDate} num`}>{recap.dateText}</span>
+            <span className={styles.recapDesc}>{recap.matchText}</span>
+          </p>
+          <span className={styles.recapResult} data-tone={recap.tone}>
+            {recap.resultText}
+          </span>
+        </div>
+      ) : null}
+
+      {overview && published && hasRecords && (
+        <div className={styles.recoSummaryRow}>
+          <div className={styles.recoSummaryItem}>
+            <b className="num">{overview.settled_count}</b>
+            <span>近 {overview.window_days} 天已结算</span>
+          </div>
+          <div className={styles.recoSummaryItem}>
+            <b className="num">{recoResultBreakdownText(overview)}</b>
+            <span>命中/未中/走水</span>
+          </div>
+          <div className={styles.recoSummaryItem}>
+            <b className={`num${overview.net_units > 0 ? ` ${styles.recoNetPositive}` : ""}`}>
+              {overview.net_units >= 0 ? "+" : ""}
+              {overview.net_units.toFixed(2)}
+            </b>
+            <span>净单位</span>
+          </div>
+          {overview.voided_count > 0 && (
+            <div className={styles.recoSummaryItem}>
+              <b className="num">{overview.voided_count}</b>
+              <span>作废</span>
+            </div>
+          )}
+        </div>
       )}
 
-      {overview &&
-        (hasRecords ? (
-          <div className={styles.recoSummaryRow}>
-            <div className={styles.recoSummaryItem}>
-              <b className="num">{overview.settled_count}</b>
-              <span>近 {overview.window_days} 天已结算</span>
-            </div>
-            <div className={styles.recoSummaryItem}>
-              <b className="num">{recoResultBreakdownText(overview)}</b>
-              <span>命中/未中/走水</span>
-            </div>
-            <div className={styles.recoSummaryItem}>
-              <b className={`num${overview.net_units > 0 ? ` ${styles.recoNetPositive}` : ""}`}>
-                {overview.net_units >= 0 ? "+" : ""}
-                {overview.net_units.toFixed(2)}
-              </b>
-              <span>净单位</span>
-            </div>
-            {overview.voided_count > 0 && (
-              <div className={styles.recoSummaryItem}>
-                <b className="num">{overview.voided_count}</b>
-                <span>作废</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className={styles.emptyText}>
-            还没开始发推荐。第一单结算之后这里开始累计，中没中都留着。
-          </p>
-        ))}
-
       <div className={styles.picksActions}>
-        <Link href="/reco?tab=daily" className={styles.picksCta}>
-          查看今日精选
-          <span aria-hidden>→</span>
-        </Link>
+        {published ? (
+          <Link href="/reco?tab=daily" className={styles.picksCta}>
+            查看今日精选
+            <span aria-hidden>→</span>
+          </Link>
+        ) : (
+          <Link href="/reco?tab=record" className={styles.picksCta}>
+            查看历史战绩
+            <span aria-hidden>→</span>
+          </Link>
+        )}
       </div>
     </section>
   );
@@ -267,13 +323,10 @@ async function DailyPicksSection() {
 export default function Home() {
   return (
     <main className={styles.page}>
-      {/* 推荐战绩 banner(2026-09):排在公推 banner 之上。展示的是**择优挑出
-          的口径**(经站长明确决定),不是全样本——完整背景见
-          backend/queries/reco_highlight.py 模块头注;全样本记录面在
-          /reco?tab=record,本 banner 整块链过去。 */}
-      <Suspense fallback={null}>
-        <RecordHighlightBanner />
-      </Suspense>
+      {/* 首屏第一块(2026-09-26):一句话定位 + 三个入口。原来排在这里的战绩条
+          已挪进下面「今日精选」卡内部(RecordHighlightBanner,中性配色),
+          背景仍见 backend/queries/reco_highlight.py 模块头注(择优口径,经站长决定)。 */}
+      <HomeHero />
 
       {/* 每日公推 banner(2026-09):有在架公推时才出现,排在「重点比赛」
           之上。fallback 用 null 而不是骨架屏——banner 是条件出现的,骨架屏

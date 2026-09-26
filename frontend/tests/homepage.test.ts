@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { MatchSummary, WinProbability } from "@/lib/api-v1";
 import type { HomeMatchCard } from "@/lib/homepage";
 import {
+  BREAK_RESUME_MAX_DAYS,
   FEATURED_WINDOW_HOURS,
+  fiveLeagueBreak,
   marqueeRank,
   selectFeaturedMatch,
   selectHomepageEvidence,
@@ -183,7 +185,9 @@ describe("selectHomepageMatches:24 小时窗口内的强强对话优先", () => 
   });
 
   it("N6:Big6 打非 Big6 不算强强对话(名单只认双方同组)", () => {
-    const lopsided = match(61, "2026-08-13T08:00:00Z", null, 47, {
+    // 2026-09-26:联赛用非优先联赛(59),否则"五大联赛 48h 内优先"规则会先于本用例
+    // 要验证的强强对话规则生效;marqueeRank 只看 team_id,与联赛无关。
+    const lopsided = match(61, "2026-08-13T08:00:00Z", null, 59, {
       home: ARSENAL,
       away: COVENTRY,
     }); // +20h
@@ -217,9 +221,10 @@ describe("selectHomepageMatches:24 小时窗口内的强强对话优先", () => 
   it("N8:team_id 缺失时不崩溃,也不被误判为强强对话", () => {
     // TeamRef.team_id 是 `number | null | undefined`(lib/api-types.ts),
     // 真实数据里未对齐的球队就是空值。
-    const halfKnown = match(81, "2026-08-13T08:00:00Z", null, 47, { away: CHELSEA });
-    const bothMissing = match(82, "2026-08-13T09:00:00Z", null, 47);
-    const nulled = match(83, "2026-08-13T10:00:00Z", null, 47, {
+    // 联赛用非优先联赛(59),理由同 N6。
+    const halfKnown = match(81, "2026-08-13T08:00:00Z", null, 59, { away: CHELSEA });
+    const bothMissing = match(82, "2026-08-13T09:00:00Z", null, 59);
+    const nulled = match(83, "2026-08-13T10:00:00Z", null, 59, {
       home: ARSENAL,
       away: CHELSEA,
     });
@@ -444,5 +449,99 @@ describe("重点比赛:比赛一开球就轮换到下一场", () => {
     const result = selectHomepageMatches([ordinary, derby], now);
 
     expect(result.featured?.match.match_id).toBe(2);
+  });
+});
+
+describe("selectHomepageMatches:五大联赛 + 欧冠 48 小时内优先(2026-09-26)", () => {
+  const now = new Date("2026-09-26T12:00:00Z");
+  const h = (hours: number) => new Date(now.getTime() + hours * 3600_000).toISOString();
+
+  it("P1:48h 内的五大联赛比赛优先于更近、数据更全的非优先联赛比赛", () => {
+    const nearRich = match(1, h(1), null, 59); // 英冠 +1h,有射门史
+    const epl = match(2, h(40), null, 47); // 英超 +40h,零数据
+    const r = selectHomepageMatches([nearRich, epl], now, { withShots: new Set([1]) });
+    expect(r.featured?.match.match_id).toBe(2);
+  });
+
+  it("P2:欧冠(42)同样算优先联赛", () => {
+    const ordinary = match(1, h(2), null, 59);
+    const ucl = match(2, h(47), null, 42);
+    expect(selectHomepageMatches([ordinary, ucl], now).featured?.match.match_id).toBe(2);
+  });
+
+  it("P3:优先联赛比赛在 48h 之外时不触发优先,回落原规则(24h 内的非优先联赛胜出)", () => {
+    const ordinary = match(1, h(20), null, 59);
+    const epl = match(2, h(49), null, 47);
+    expect(selectHomepageMatches([ordinary, epl], now).featured?.match.match_id).toBe(1);
+  });
+
+  it("P4:48h 内没有任何优先联赛比赛时,行为与原规则一致(24h 窗口 → 最近一场)", () => {
+    const a = match(1, h(30), null, 59);
+    const b = match(2, h(10), null, 268);
+    expect(selectHomepageMatches([a, b], now).featured?.match.match_id).toBe(2);
+  });
+
+  it("P5:优先联赛内部沿用强强对话 → 富集度 → 开球就近", () => {
+    const CITY = 8456;
+    const UTD = 10260;
+    const soon = match(1, h(3), null, 47);
+    const derbyLater = match(2, h(30), null, 47, { home: CITY, away: UTD });
+    expect(selectHomepageMatches([soon, derbyLater], now).featured?.match.match_id).toBe(2);
+    const richLater = match(3, h(30), null, 87); // 有射门史 → 富集度更高
+    expect(
+      selectHomepageMatches([soon, richLater], now, { withShots: new Set([3]) }).featured?.match.match_id,
+    ).toBe(3);
+    const equalLater = match(4, h(30), null, 87);
+    expect(selectHomepageMatches([soon, equalLater], now, { withShots: new Set() }).featured?.match.match_id).toBe(1);
+  });
+
+  it("P6:已开球的优先联赛比赛不进优先档(比赛一开球就让位)", () => {
+    const started = match(1, h(-1), null, 47);
+    const ordinary = match(2, h(5), null, 59);
+    expect(selectHomepageMatches([started, ordinary], now).featured?.match.match_id).toBe(2);
+  });
+});
+
+describe("fiveLeagueBreak:五大联赛停赛期(国际比赛日)", () => {
+  const now = new Date("2026-09-26T09:00:00Z");
+  const list = (...kickoffs: (string | null)[]) =>
+    ({
+      matches: kickoffs.map((k, i) => ({ match_id: i + 1, kickoff_at_utc: k })),
+      total: kickoffs.length,
+    }) as unknown as import("@/lib/api-v1").MatchListResponse;
+  const days = (d: number) => new Date(now.getTime() + d * 86400_000).toISOString();
+
+  it("五个联赛最早开球都在 7 天之后 → 停赛期,恢复日 = 最早开球", () => {
+    const r = fiveLeagueBreak(
+      [list(days(14)), list(days(13)), list(days(20)), list(days(13.5)), list(days(16))],
+      now,
+    );
+    expect(r).toEqual({ onBreak: true, resumeAt: days(13) });
+  });
+
+  it("任一联赛未来 7 天内有比赛 → 不是停赛期", () => {
+    const r = fiveLeagueBreak([list(days(14)), list(days(3)), list(days(14))], now);
+    expect(r).toEqual({ onBreak: false, resumeAt: null });
+  });
+
+  it("任一联赛请求失败(null)→ 不判定,不显示", () => {
+    expect(fiveLeagueBreak([list(days(14)), null], now)).toEqual({ onBreak: false, resumeAt: null });
+  });
+
+  it("完全没有未来比赛 → 算不出恢复日,不判定为停赛期", () => {
+    expect(fiveLeagueBreak([list(), list()], now)).toEqual({ onBreak: false, resumeAt: null });
+  });
+
+  it("最早开球超过上限(更像赛季间歇)→ 停赛期但不给日期", () => {
+    const r = fiveLeagueBreak([list(days(BREAK_RESUME_MAX_DAYS + 5))], now);
+    expect(r).toEqual({ onBreak: true, resumeAt: null });
+  });
+
+  it("没有精确开球时间的比赛不参与计算", () => {
+    expect(fiveLeagueBreak([list(null, days(12))], now)).toEqual({ onBreak: true, resumeAt: days(12) });
+  });
+
+  it("已经开球(早于 now)的比赛不参与计算", () => {
+    expect(fiveLeagueBreak([list(days(-1), days(15))], now)).toEqual({ onBreak: true, resumeAt: days(15) });
   });
 });

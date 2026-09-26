@@ -10,6 +10,69 @@
  * margin-top 叠加,首屏往下滚到底会看到一大块死白(宪法审计 D1 的让位诉求
  * 由 SiteFooter 一处满足,不需要 <main> 再单独留一次)。 */
 
+/* ── 首屏定位语 + 三个入口(2026-09-26 第三批) ─────────────────── */
+
+.hero {
+  margin: 0 0 14px;
+}
+
+.heroTitle {
+  margin: 0 0 12px;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.heroActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.heroBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.heroBtnPrimary {
+  border-color: var(--brand-teal);
+  background: var(--brand-teal);
+  color: var(--paper-bright);
+}
+
+@media (hover: hover) {
+  .heroBtn:hover {
+    border-color: var(--brand-teal);
+  }
+  .heroBtnPrimary:hover {
+    filter: brightness(0.94);
+  }
+}
+
+@media (min-width: 761px) {
+  .heroTitle {
+    font-size: 22px;
+  }
+  .heroActions {
+    grid-template-columns: repeat(3, max-content);
+  }
+  .heroBtn {
+    padding: 0 28px;
+  }
+}
+
 /* ── 重点比赛卡(2026-08-16 权限口径修正:不再区分免费/锁定,单张卡)
  * design_handoff_home_hero/README.md §3 的双卡对照布局已下架。 */
 
@@ -728,6 +791,14 @@
   font-weight: 800;
 }
 
+/* 停赛期(国际比赛日)提示:近期比赛区域上方的一行中性说明 */
+.breakNote {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .countsFallback {
   flex-basis: 100%;
   margin: 0;
@@ -852,31 +923,27 @@
   }
 }
 
-/* ── 战绩横条 ─────────────────────────────────────────── */
+/* ── 战绩条(2026-09-26 第三批:挪进「今日精选」卡内部,改中性配色) ──
+ * 原来是顶部整宽的粉红色横条(红边框 + 粉底 + 红色阴影),占据首屏第一位。
+ * 现在是卡内一行浅灰底的普通条:无红色边框/粉色背景/阴影,强调值不再上红。
+ * 窄屏放不下时 flex-wrap 折成两行;「全部 →」钉在右侧不参与折行。 */
 
 .recordStrip {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   padding: 9px 12px;
-  border: 1px solid color-mix(in srgb, var(--odds-up) 32%, transparent);
+  border: 1px solid var(--border);
   border-radius: var(--r-card-sm);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 0%,
-    var(--surface) 46%,
-    color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 100%
-  );
-  box-shadow: 0 4px 18px -8px color-mix(in srgb, var(--odds-up) 55%, transparent);
+  background: var(--surface-soft);
   text-decoration: none;
   color: var(--ink);
 }
 
 @media (hover: hover) {
   .recordStrip:hover {
-    border-color: color-mix(in srgb, var(--odds-up) 52%, transparent);
-    box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--odds-up) 70%, transparent);
+    border-color: var(--border-strong);
   }
 }
 
@@ -897,12 +964,12 @@
   gap: 5px;
   flex: none;
   padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--odds-up) 38%, transparent);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--odds-up) 8%, transparent);
+  background: var(--surface);
   font-size: 12px;
   font-weight: 500;
-  color: var(--odds-up);
+  color: var(--ink-2);
   white-space: nowrap;
 }
 
@@ -911,7 +978,7 @@
   height: 6px;
   flex: none;
   border-radius: var(--r-pill);
-  background: var(--odds-up);
+  background: var(--ink-3);
 }
 
 .recordItem {
@@ -926,9 +993,11 @@
   color: var(--ink-2);
 }
 
-/* 被后端择优逻辑判定为"值得强调"的那一条(连中 / 达标命中率)才上红。 */
+/* 被后端择优逻辑判定为"值得强调"的那一条(连中 / 达标命中率):中性配色下
+ * 只加粗、用主文字色,不再上红。 */
 .recordItemValue[data-emphasize="1"] {
-  color: var(--odds-up);
+  color: var(--ink);
+  font-weight: 700;
 }
 
 /* 文案里的头号数字(连中数 / 命中数 / 净回报),2026-09 站长要求放大。
@@ -954,8 +1023,7 @@
   vertical-align: -2px;
 }
 
-/* 回报段是次级信息:红只留给「近 N 单全中」,整行全红会吵、也会抵消掉
- * 大数字本身的重点。 */
+/* 回报段是次级信息,退成次级灰,不抢大数字的重点。 */
 .recordItemMuted {
   color: var(--ink-2);
   font-weight: 400;
@@ -964,7 +1032,7 @@
 .recordStripMore {
   flex: none;
   font-size: 12px;
-  color: var(--brand-gold-deep);
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
@@ -1302,6 +1370,60 @@
 .recoSummaryItem span {
   font-size: 12px;
   color: var(--ink-3);
+}
+
+/* 今日精选未发布时的复盘:最近一次已结算精选 = 日期 / 比赛 / 结果 */
+.recap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card-sm);
+  background: var(--surface-soft);
+}
+
+.recapLabel {
+  flex: 1 0 100%;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.recapMatch {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.recapDate {
+  flex: none;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.recapDesc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recapResult {
+  flex: none;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink-2);
+}
+
+.recapResult[data-tone="win"] {
+  color: var(--win);
 }
 
 .picksActions {

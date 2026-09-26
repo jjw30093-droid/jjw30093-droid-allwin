@@ -29,7 +29,14 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { clientFetch, type GetJson, type MatchListResponse } from "@/lib/api-v1";
-import { marqueeRank, selectFeaturedMatch, type HomeMatchCard } from "@/lib/homepage";
+import {
+  fiveLeagueBreak,
+  fiveLeagueRequestPaths,
+  marqueeRank,
+  selectFeaturedMatch,
+  type FiveLeagueBreak,
+  type HomeMatchCard,
+} from "@/lib/homepage";
 import { KickoffCountdown } from "@/components/matches/KickoffCountdown";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { LeagueBadge } from "@/components/matches/LeagueBadge";
@@ -41,6 +48,7 @@ import {
   beijingDateKey,
   formatBeijingDateTime,
   formatBeijingHM,
+  formatBeijingMD,
   formatBeijingZh,
 } from "@/components/matches/zh";
 import { syncStateLabel } from "@/lib/product-status";
@@ -53,6 +61,8 @@ interface Props {
   initialFeatured: HomeMatchCard | null;
   initialSecondary: HomeMatchCard[];
   initialCounts: Counts;
+  /** 五大联赛停赛期判定(SSR 算一次,挂载后随刷新一并更新) */
+  initialBreak: FiveLeagueBreak;
   initialErrored: boolean;
 }
 
@@ -60,20 +70,20 @@ export async function fetchHomeData(): Promise<{
   featured: HomeMatchCard | null;
   secondary: HomeMatchCard[];
   counts: Counts;
+  leagueBreak: FiveLeagueBreak;
 }> {
-  const [upcoming, todayList, tomorrowList, shotsList] = await Promise.all([
+  const [upcoming, todayList, tomorrowList, shotsList, ...fiveLeagueLists] = await Promise.all([
     // boost=free_predicted:与 app/page.tsx 的 SSR 请求同一个参数、同一个
     // 目的——把"已发布概率"的比赛在服务端顶进 limit 截断线以内,不能只看
     // API 原始顺序的前几条(见 lib/homepage.ts 顶部注释:这里和 SSR 必须用
     // 同一套判据)。参数名沿用后端既有 query 定义(backend/api/routes_public.py),
     // 与登录态无关,只是"这场比赛是否已算出概率"的服务端筛选提示。
     //
-    // limit=70(2026-08-19,原为 8):理由见 app/page.tsx 同一处请求的注释
-    // ——24h 窗口 + 强强对话优先需要看到整个窗口的候选,8 场不够;70 对齐的是
-    // 滚动 24h 窗口的实测最大容量(生产 3798 场赛程实测 70 场),不是自然日峰值。
+    // limit=120(2026-09-26,原 70):理由见 app/page.tsx 同一处请求的注释
+    // ——优先联赛 48h 窗口需要看到整个滚动 48h 的候选(实测最密 115 场)。
     // 两处必须同步改,否则挂载后的客户端刷新会用不同候选池换掉 SSR 选出的重点卡。
     clientFetch<MatchListResponse>(
-      "/api/v1/matches?status=upcoming&window=7d&limit=70&boost=free_predicted",
+      "/api/v1/matches?status=upcoming&window=7d&limit=120&boost=free_predicted",
     ),
     clientFetch<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=today&limit=1",
@@ -84,6 +94,10 @@ export async function fetchHomeData(): Promise<{
     clientFetch<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=7d&content=shots&limit=200",
     ).catch(() => null),
+    // 五大联赛停赛期判定(见 lib/homepage.ts::fiveLeagueBreak);任一失败该联赛为 null → 不判定
+    ...fiveLeagueRequestPaths().map((path) =>
+      clientFetch<MatchListResponse>(path).catch(() => null),
+    ),
   ]);
 
   const cards: HomeMatchCard[] = upcoming.matches.map((match) => ({ match, tip: null }));
@@ -95,7 +109,8 @@ export async function fetchHomeData(): Promise<{
       ? { today: todayList.total, tomorrow: tomorrowList.total, week: upcoming.total }
       : null;
 
-  return { featured, secondary, counts };
+  const now = new Date();
+  return { featured, secondary, counts, leagueBreak: fiveLeagueBreak(fiveLeagueLists, now) };
 }
 
 /* ── 今晚/明天/本周日期切换器(2026-08-23 首页信息架构重排)────────
@@ -121,20 +136,18 @@ function DateTab({
   /** "未来7天"格数字非空时用 --brand-teal(§2),与另外两格区分。 */
   highlight?: boolean;
 }) {
-  const inner = (
-    <>
+  // 2026-09-26:数量为 0 也可点击——跳到 /matches 对应的时间筛选,那里有
+  // "该时段暂无比赛"的空态与放宽提示;不再渲染成不可点的灰块。
+  return (
+    <Link
+      href={href}
+      className={styles.dateTab}
+      data-highlight={highlight || undefined}
+      data-empty={count === 0 ? "true" : undefined}
+    >
       <span>{label}</span>
       <b className={`${styles.dateTabNum} num`}>{count}</b>
-    </>
-  );
-  return count > 0 ? (
-    <Link href={href} className={styles.dateTab} data-highlight={highlight || undefined}>
-      {inner}
     </Link>
-  ) : (
-    <span className={styles.dateTab} data-empty="true">
-      {inner}
-    </span>
   );
 }
 
@@ -445,11 +458,13 @@ export function HomeMatchExperienceLive({
   initialFeatured,
   initialSecondary,
   initialCounts,
+  initialBreak,
   initialErrored,
 }: Props) {
   const [featured, setFeatured] = useState(initialFeatured);
   const [secondary, setSecondary] = useState(initialSecondary);
   const [counts, setCounts] = useState(initialCounts);
+  const [leagueBreak, setLeagueBreak] = useState(initialBreak);
   const [errored, setErrored] = useState(initialErrored);
 
   useEffect(() => {
@@ -460,6 +475,7 @@ export function HomeMatchExperienceLive({
         setFeatured(fresh.featured);
         setSecondary(fresh.secondary);
         setCounts(fresh.counts);
+        setLeagueBreak(fresh.leagueBreak);
         setErrored(false);
       })
       .catch(() => {
@@ -509,7 +525,7 @@ export function HomeMatchExperienceLive({
         <div className={styles.dateSwitcher} data-testid="match-counts-bar">
           <DateTab label="今晚" count={counts.today} href="/matches?window=today" />
           <DateTab label="明天" count={counts.tomorrow} href="/matches?window=tomorrow" />
-          <DateTab label="本周" count={counts.week} href="/matches" highlight />
+          <DateTab label="本周" count={counts.week} href="/matches?window=7d" highlight />
           {counts.today === 0 && counts.tomorrow === 0 && (
             <p className={styles.countsFallback}>
               今晚和明天没有已排期的比赛。最近一场在{" "}
@@ -522,6 +538,14 @@ export function HomeMatchExperienceLive({
             </p>
           )}
         </div>
+      )}
+
+      {/* 停赛期提示(2026-09-26):五大联赛未来 7 天没有比赛时,近期比赛上方加一行。
+          恢复日期来自五个联赛真实赛程的最早开球日(北京时间);算不出就不显示这行。 */}
+      {leagueBreak.onBreak && formatBeijingMD(leagueBreak.resumeAt) && (
+        <p className={styles.breakNote} data-testid="league-break-note">
+          国际比赛日，五大联赛 {formatBeijingMD(leagueBreak.resumeAt)} 恢复
+        </p>
       )}
 
       <ThisWeekSection cards={secondary} total={counts?.week ?? secondary.length} />

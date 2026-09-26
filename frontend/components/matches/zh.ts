@@ -350,6 +350,10 @@ export const LEAGUE_ZH: Record<number, string> = {
   10216: "欧协联",
 };
 
+/** 已收录联赛数量:从联赛配置计算,新增联赛自动跟着变,不写死数字
+ * (顶栏品牌副标题、首页定位语共用;放在非 "use client" 文件里,服务端组件才能直接取值,§11.4)。 */
+export const LEAGUE_COUNT = Object.keys(LEAGUE_ZH).length;
+
 export function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
@@ -447,6 +451,14 @@ export function beijingDateKey(iso: string): string | null {
   const p = toBeijingParts(iso);
   if (!p) return null;
   return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
+}
+
+/** 精确时间对应的北京日期"M月D日"(如"10月10日");无法解析返回 null。 */
+export function formatBeijingMD(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const p = toBeijingParts(iso);
+  if (!p) return null;
+  return `${p.month}月${p.day}日`;
 }
 
 /** 比赛日展示日期。有精确 kickoff 时换算成**北京自然日**;来源只给了日期

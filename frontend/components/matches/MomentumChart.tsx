@@ -25,11 +25,25 @@ import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
 import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
+import { colorsDistinct } from "@/components/charts/colorContrast";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import styles from "./MomentumChart.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type MomentumPoint = MatchReport["momentum"][number];
+
+/**
+ * 势头图的主客兜底配色(真实球队色缺失或对比度救不回来时使用)。
+ *
+ * 不能沿用全站的 teal/brand-blue 这一对:两者 RGB 距离只有约 32,并排画在同一条
+ * 基线上下时几乎分不出谁是谁(2026-09-26 复核发现)。这里换成青绿 vs 琥珀——色相
+ * 明确不同,且都不占用"红=真实错误"的语义;深浅两套主题各一份,对各自卡片底色
+ * 对比度均 ≥3:1(见 tests/momentum-chart-baseline.test.ts)。
+ */
+export const MOMENTUM_FALLBACK_COLORS = {
+  light: { home: "#087e78", away: "#b45309" },
+  dark: { home: "#45b9af", away: "#f5a524" },
+} as const;
 
 /** 按分钟排序(API 已经按 Minute 排,这里不信任调用方顺序)+ 算主客占优
  * 分钟数(用于文字摘要和"谁全场更占优"的粗略判断)。抽成纯函数便于测试——
@@ -58,6 +72,9 @@ export function buildOption(
   c: ChartColors,
 ): EChartsOption {
   const bound = Math.max(20, ...points.map((p) => Math.abs(p.value)));
+  // 2026-09-26:y 轴上下对称(±bound),基线正好在图的正中间——主队在基线上方、
+  // 客队在下方。此前 min/max 各取各的极值,一边数据更大时基线会偏到一侧。
+  const yLimit = Math.ceil(bound * 1.08);
   return {
     grid: {
       left: mode === "export" ? 60 : 30,
@@ -85,13 +102,17 @@ export function buildOption(
       max: endMinute,
       interval: 15,
       axisLabel: { color: c.ink2, fontSize: 11, formatter: (v: number) => `${v}′` },
+      // 基线由下面 series.markLine 画(更醒目);x 轴自身的线/刻度关掉,免得两条线叠出双线
+      axisLine: { show: false },
+      axisTick: { show: false },
       splitLine: { show: false },
     },
+    // y 轴不需要刻度:整条轴隐藏,只保留对称的取值范围
     yAxis: {
       type: "value",
       show: false,
-      min: (v: { min: number }) => Math.min(-20, v.min),
-      max: (v: { max: number }) => Math.max(20, v.max),
+      min: -yLimit,
+      max: yLimit,
     },
     // 2026-08-24:pieces 必须给闭区间。项目用的 echarts ^6.1.0 对只给
     // min 或只给 max 的开区间(即使加 type:'piecewise'/gte/lt 也一样)会在
@@ -113,12 +134,15 @@ export function buildOption(
         data: points.map((p) => [p.minute, p.value]),
         showSymbol: false,
         smooth: 0.15,
-        lineStyle: { width: 1.5 },
-        areaStyle: { opacity: 0.35 },
+        lineStyle: { width: 2 },
+        // 填色不透明度 0.35 → 0.5:客队用的深蓝/深色在 0.35 下发灰、明显弱于主队红/橙,
+        // 两边都要"清楚可见"(2026-09-26)
+        areaStyle: { opacity: 0.5 },
+        // 中间基线:实线、比曲线细但比原来的 0.4 透明度灰线醒目得多
         markLine: {
           silent: true,
           symbol: "none",
-          lineStyle: { color: c.ink3, opacity: 0.4, width: 1 },
+          lineStyle: { color: c.ink2, opacity: 0.85, width: 1.5, type: "solid" },
           label: { show: false },
           data: [{ yAxis: 0 }],
         },
@@ -158,13 +182,24 @@ export function MomentumChart({
       resolveMatchColors(homeTeamColor, awayTeamColor, {
         isDark: c.isDark,
         backgroundHex: c.surface,
-        fallback: { home: c.teal, away: c.navy },
+        fallback: c.isDark ? MOMENTUM_FALLBACK_COLORS.dark : MOMENTUM_FALLBACK_COLORS.light,
       }),
     [homeTeamColor, awayTeamColor, c],
   );
+  // 主客两色必须一眼能分开:相近时整体退回兜底组合(青绿 vs 琥珀,永远可区分),
+  // 图例点与曲线使用同一份 shown,不会出现图例和曲线颜色对不上。
+  const shown = useMemo(
+    () =>
+      colorsDistinct(resolved.home, resolved.away)
+        ? resolved
+        : c.isDark
+          ? MOMENTUM_FALLBACK_COLORS.dark
+          : MOMENTUM_FALLBACK_COLORS.light,
+    [resolved, c],
+  );
   const effectiveColors: ChartColors = useMemo(
-    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
-    [c, resolved],
+    () => ({ ...c, teal: shown.home, navy: shown.away }),
+    [c, shown],
   );
 
   useEffect(() => {
@@ -216,12 +251,14 @@ export function MomentumChart({
         <>
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <i className={styles.homeDot} style={{ background: resolved.home }} />
+              <i className={styles.homeDot} style={{ background: shown.home }} />
               {homeName} 占优
+              <span className={styles.legendSide}>(主队 · 基线上方)</span>
             </span>
             <span className={styles.legendItem}>
-              <i className={styles.awayDot} style={{ background: resolved.away }} />
+              <i className={styles.awayDot} style={{ background: shown.away }} />
               {awayName} 占优
+              <span className={styles.legendSide}>(客队 · 基线下方)</span>
             </span>
           </div>
           <p className={styles.footNote}>

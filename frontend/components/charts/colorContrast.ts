@@ -134,3 +134,19 @@ export function nudgeForContrast(
   }
   return null;
 }
+
+/**
+ * 两个颜色是否"一眼能分开"(势头图主客配色用,2026-09-26)。
+ * 用 RGB 欧氏距离(0..441),阈值 100 ≈ 肉眼明确区分的下限:FotMob 已做过撞色规避,
+ * 但我们会对每个颜色再做对比度微调/回退品牌色,组合后仍可能出现两色相近,
+ * 此函数是最后一道保险。任一输入不是合法十六进制时返回 false(不冒险)。
+ */
+export const MIN_TEAM_COLOR_DISTANCE = 100;
+
+export function colorsDistinct(aHex: string, bHex: string): boolean {
+  if (!isValidHexColor(aHex) || !isValidHexColor(bHex)) return false;
+  const a = hexToRgb(aHex);
+  const b = hexToRgb(bHex);
+  const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  return d >= MIN_TEAM_COLOR_DISTANCE;
+}

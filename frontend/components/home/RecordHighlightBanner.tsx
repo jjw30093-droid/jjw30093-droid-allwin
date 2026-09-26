@@ -5,6 +5,9 @@
  * 完整背景、与记录面(/reco?tab=record 全样本)的分工、以及"这不是 bug、
  * 不要修复成全样本"的说明,见 backend/queries/reco_highlight.py 模块头注。
  *
+ * 2026-09-26(第三批):不再是首页最顶部的整宽粉红横条,挪进「今日精选」卡内部,
+ * 改中性配色(浅灰底、无红色边框/阴影,见 app/page.module.css::.recordStrip)。
+ *
  * 2026-09 改版为横条形态(参照 miaomiaodi.cc 的 VipPromoBanner):板块短标签
  * 做灰色前缀、口径与计数用强调色,一行放下两个板块,靠 flex-wrap 在窄屏
  * 折成两行,「全部 →」始终钉在右侧不参与折行。
