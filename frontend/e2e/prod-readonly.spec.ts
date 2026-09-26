@@ -248,6 +248,9 @@ test("登录页:一句话副标题、账号密码表单、忘记密码提示,没
   await page.goto("/login");
   // 扫码登录开放(WECHAT_AUTH_ENABLED)时标题会随环境变化(如"扫码登录"),都含"登录"
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/登录/);
+  // 顶栏与内容的留白 16px:/login 的这项检查放在这里,不放进下面多页用例——Cloudflare 对
+  // /login 单独有更严的限流(线上实测返回 429 / Error 1015),整份 e2e 里只访问 /login 一次
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector("body > main")!).paddingTop)).toBe("16px");
   await expect(page.getByText("登录后可以收藏比赛、查看每日精选。比赛数据不用登录也能看。")).toBeVisible();
   // 账号密码表单:扫码未开放时是常驻主卡片,开放时收在折叠项里——两种形态都要能用
   const username = page.getByLabel("用户名");
@@ -324,11 +327,12 @@ test("旧链接 /track-record 仍可访问,访问时「精选」保持高亮;精
 
 test("各页面顶部栏与第一块内容之间的留白统一为 16px(手机)", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ["/", "/matches", "/leagues", "/league/47/standings", "/reco", "/pricing", "/login"]) {
+  // 不含 /login(见上面登录页用例:/login 在线上有更严的限流,只访问一次)
+  for (const path of ["/", "/matches", "/leagues", "/league/47/standings", "/reco", "/pricing"]) {
     await page.goto(path);
     const pad = await page.evaluate(() => getComputedStyle(document.querySelector("body > main")!).paddingTop);
     expect(pad, `${path} main padding-top`).toBe("16px");
-    // 一条用例里连续打开 7 个页面,对线上域名会触发 Cloudflare 1015 限流(页面变成
+    // 一条用例里连续打开多个页面,对线上域名会触发 Cloudflare 1015 限流(页面变成
     // 没有 <main> 的错误页)——每次 goto 之间留 1 秒
     await page.waitForTimeout(1000);
   }
