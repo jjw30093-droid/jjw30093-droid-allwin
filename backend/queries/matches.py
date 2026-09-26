@@ -11,6 +11,7 @@ from backend.queries.teams import (
     provider_name_for_team,
     team_display_for,
     team_display_map,
+    team_recent_brand_color,
 )
 
 
@@ -354,7 +355,14 @@ def match_by_id(conn: sqlite3.Connection, match_id: int) -> dict | None:
     if r is None:
         return None
     display = team_display_for(conn, {r["Home_Team_ID"], r["Away_Team_ID"]})
-    return {**_row_to_summary(r, display), **_venue_weather_referee(r), **_team_colors(r)}
+    return {
+        **_row_to_summary(r, display),
+        **_venue_weather_referee(r),
+        **_team_colors(r),
+        # 第二级取色:该队近期代表色(本场配色缺失/校验不过时前端退到这里)
+        "home_team_brand_color": team_recent_brand_color(conn, r["Home_Team_ID"]),
+        "away_team_brand_color": team_recent_brand_color(conn, r["Away_Team_ID"]),
+    }
 
 
 def recent_form(

@@ -130,6 +130,47 @@ def team_brand_color_map(
     return colors
 
 
+def team_recent_brand_color(
+    conn: sqlite3.Connection, team_id: int | None
+) -> dict[str, str] | None:
+    """该队**最近一场**有配色的比赛的一组代表色(浅/深各一个十六进制值),不限联赛/赛季。
+
+    2026-09-26(第四批):比赛详情图表取色顺序的第二级——本场 FotMob 配色缺失(2026-08-24
+    之前的老比赛没有回填)或校验不过时,退到"这支队最近一场的配色"(前端 resolveMatchColors
+    仍会对它再做对比度与主客可区分检查)。语义同 team_brand_color_map:配对级结果、非球队
+    固定色,只取"看得出是哪支队"的代表值;只认深浅两个变体都齐、都是合法十六进制的行,
+    不跨主题借用。没有任何有色比赛 / 列不存在(旧库)返回 None,前端退到兜底组合。
+    """
+    if team_id is None:
+        return None
+    try:
+        rows = conn.execute(
+            """SELECT light, dark FROM (
+                   SELECT Home_Team_Color_Light AS light, Home_Team_Color_Dark AS dark,
+                          COALESCE(kickoff_at_utc, Date) AS ts
+                     FROM dim_match
+                    WHERE Home_Team_ID=?
+                      AND Home_Team_Color_Light IS NOT NULL AND Home_Team_Color_Dark IS NOT NULL
+                   UNION ALL
+                   SELECT Away_Team_Color_Light, Away_Team_Color_Dark,
+                          COALESCE(kickoff_at_utc, Date)
+                     FROM dim_match
+                    WHERE Away_Team_ID=?
+                      AND Away_Team_Color_Light IS NOT NULL AND Away_Team_Color_Dark IS NOT NULL
+               ) ORDER BY ts DESC LIMIT 5""",
+            (team_id, team_id),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    for row in rows:
+        light, dark = row["light"], row["dark"]
+        if not isinstance(light, str) or not isinstance(dark, str):
+            continue
+        if _HEX_RE.fullmatch(light.strip()) and _HEX_RE.fullmatch(dark.strip()):
+            return {"light": light.strip(), "dark": dark.strip()}
+    return None
+
+
 def team_display_for(
     conn: sqlite3.Connection, team_ids: set[int]
 ) -> dict[int, dict[str, str | None]]:

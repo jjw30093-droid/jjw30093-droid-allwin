@@ -219,6 +219,10 @@ class MatchDetailSummary(MatchSummary):
     venue_country: Optional[str] = None
     home_team_color: Optional[TeamColorPair] = None
     away_team_color: Optional[TeamColorPair] = None
+    # 第二级取色(2026-09-26):该队最近一场有配色的比赛的代表色,本场配色缺失(2026-08-24
+    # 之前的老比赛)或前端校验不过时使用;缺失为 null,前端退到兜底组合。
+    home_team_brand_color: Optional[TeamBrandColor] = None
+    away_team_brand_color: Optional[TeamBrandColor] = None
     # ── 场地明细/天气枚举/裁判信息卡(2026-08-24,migrations/core/0010)──
     # venue_capacity/venue_surface:infoBox.Stadium 的 capacity/surface;
     # surface 是来源原文小写英文("grass"/"artificial turf"),中文翻译在

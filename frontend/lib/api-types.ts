@@ -2574,6 +2574,8 @@ export interface components {
             venue_country?: string | null;
             home_team_color?: components["schemas"]["TeamColorPair"] | null;
             away_team_color?: components["schemas"]["TeamColorPair"] | null;
+            home_team_brand_color?: components["schemas"]["TeamBrandColor"] | null;
+            away_team_brand_color?: components["schemas"]["TeamBrandColor"] | null;
             /** Venue Capacity */
             venue_capacity?: number | null;
             /** Venue Surface */
