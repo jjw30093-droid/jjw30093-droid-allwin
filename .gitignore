@@ -37,5 +37,6 @@ backend/studio/content_scripts/fonts/
 # （player_h2h_chart.py / attack_defense_series.py 的输出），同样是生成物不是源。
 backend/studio/content_scripts/*.png
 
-# marketing/research/mobile_audit/：手机端体验审计的截图产物（约 29MB），本地留档不入库。
-marketing/research/mobile_audit/
+# marketing/research/：研究产物目录（手机端审计截图 mobile_audit/、球员中文名盘点
+# zh_inventory/、issue 草稿 issue_drafts/ 等），本地留档不入库。
+marketing/research/
