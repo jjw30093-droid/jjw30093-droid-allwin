@@ -5,11 +5,14 @@
 no-store 缓存、与模型 track-record 的分离。
 """
 
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_rw
+from backend.db.util import utc_now
 
 from .authflow import wechat_scan_login
 
@@ -67,9 +70,18 @@ def _prov_leg(match_desc, market, selection, odds, match_id, *, snapshot_ref=Non
     }
 
 
-def _create_slip(admin, slip_date="2026-08-10", title="测试二串一", legs=None, board=None):
+def _days_ago(n: int) -> str:
+    """相对当前时间的日期(YYYY-MM-DD)。精选/公推/战绩的查询窗口都是"当前时间往前 N 天"
+    (queries/reco.py 用 utc_now() - timedelta),测试里写死的日期迟早会落出窗口——
+    2026-09-09 起写死的 2026-08-10 越过 30 天窗口,一批用例开始失败(2026-09-26 诊断)。
+    所以造数一律用相对日期。"""
+    return (utc_now() - timedelta(days=n)).strftime("%Y-%m-%d")
+
+
+def _create_slip(admin, slip_date=None, title="测试二串一", legs=None, board=None):
     """board=None(默认)不下发,后端 RecoSlipCreateBody.board 自己落
     daily_pick——既有调用方不需要感知每日公推(2026-09 新增)的存在。"""
+    slip_date = slip_date or _days_ago(10)
     legs = legs or [
         _prov_leg("A vs B", "1x2", "主胜", 1.9, 910101),
         _prov_leg("C vs D", "ou", "大2.5", 1.8, 910102),
@@ -164,7 +176,7 @@ class TestVisibilityMatrix:
     def test_non_admin_cannot_write(self, app, data_dir, fresh_ip):
         p = _paid_client(app, fresh_ip, openid="reco-paid-w")
         r = p.post("/api/v1/admin/reco/slips", headers=_csrf(p),
-                   json={"slip_date": "2026-08-10", "title": "x",
+                   json={"slip_date": _days_ago(10), "title": "x",
                          "legs": [{"match_desc": "a", "market": "1x2", "selection": "主胜", "odds": 1.5}]})
         assert r.status_code == 403
 
@@ -213,9 +225,9 @@ class TestContentBoundaries:
 
     def test_daily_window_30_days(self, app, data_dir, fresh_ip):
         admin = _admin_client(app, data_dir, fresh_ip)
-        old_id = _create_slip(admin, slip_date="2026-06-01", title="窗口外旧单")
+        old_id = _create_slip(admin, slip_date=_days_ago(60), title="窗口外旧单")
         _publish(admin, old_id)
-        new_id = _create_slip(admin, slip_date="2026-08-10", title="窗口内新单")
+        new_id = _create_slip(admin, slip_date=_days_ago(10), title="窗口内新单")
         _publish(admin, new_id)
         p = _paid_client(app, f"{fresh_ip}-p", openid="reco-b4")
         body = p.get("/api/v1/reco/daily").json()
@@ -292,13 +304,13 @@ class TestHkOddsContractBugRepro:
         r = admin.post(
             "/api/v1/admin/reco/slips", headers=_csrf(admin),
             json={
-                "slip_date": "2026-08-16", "title": "港盘复现", "note": None,
+                "slip_date": _days_ago(10), "title": "港盘复现", "note": None,
                 "legs": [{
                     "match_desc": "X vs Y", "market": "ou", "selection": "大2.75",
                     "odds": 1.03, "match_id": 990001,
                     "source_odds": 1.03, "odds_format": "hk",
                     "provider": "nowgoal", "company_id": "8", "company_name": "Bet365",
-                    "snapshot_ref": "555001", "observed_at": "2026-08-15T12:00:00Z",
+                    "snapshot_ref": "555001", "observed_at": f"{_days_ago(11)}T12:00:00Z",
                     "line": 2.75, "side": "over", "payload_hash": "deadbeef",
                 }],
             },
@@ -357,7 +369,7 @@ class TestQuarterLineSettleMath:
 
         with tx(conn):
             sid = cmd.create_slip(
-                conn, slip_date="2026-08-16", title="quarter-line test",
+                conn, slip_date=_days_ago(10), title="quarter-line test",
                 legs=leg_inputs, note=None, actor=actor,
             )
             cmd.publish_slip(conn, sid, actor=actor)
@@ -377,7 +389,7 @@ class TestQuarterLineSettleMath:
                 match_desc="X vs Y", market="ah", selection="受让0.25",
                 odds=1.83, match_id=990002,
                 source_odds=0.83, odds_format="hk", provider="nowgoal",
-                snapshot_ref="555002", observed_at="2026-08-15T12:00:00Z",
+                snapshot_ref="555002", observed_at=f"{_days_ago(11)}T12:00:00Z",
                 line=-0.25, side="home", payload_hash="beadfeed",
             )
             sid, leg_ids = self._slip_with_legs(conn, actor, [leg])
@@ -796,11 +808,11 @@ class TestAdminSlipsListFilters:
 
     def test_date_range_filter(self, app, data_dir, fresh_ip):
         admin = _admin_client(app, data_dir, fresh_ip)
-        old_id = _create_slip(admin, slip_date="2026-01-01", title="旧单-filter")
-        new_id = _create_slip(admin, slip_date="2026-08-10", title="新单-filter")
+        old_id = _create_slip(admin, slip_date=_days_ago(200), title="旧单-filter")
+        new_id = _create_slip(admin, slip_date=_days_ago(10), title="新单-filter")
 
         body = admin.get(
-            "/api/v1/admin/reco/slips?date_from=2026-08-01&date_to=2026-08-31"
+            f"/api/v1/admin/reco/slips?date_from={_days_ago(15)}&date_to={_days_ago(5)}"
         ).json()
         ids = {s["id"] for s in body["slips"]}
         assert new_id in ids

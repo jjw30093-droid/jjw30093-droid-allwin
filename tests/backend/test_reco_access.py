@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from backend.commands.subscriptions import grant_subscription
 from backend.db.connections import connect_rw
 
-from .test_reco import _admin_client, _create_slip, _csrf, _member_client, _prov_leg, _publish
+from .test_reco import _admin_client, _create_slip, _csrf, _days_ago, _member_client, _prov_leg, _publish
 
 
 def _grant(admin, user_id, slip_id, note=None):
@@ -108,7 +108,7 @@ class TestUnauthorizedMemberNoLeak:
         assert "列表泄漏检测标题" not in r.text
         assert "主胜" not in r.text
         # 存在性 + 状态本身允许出现
-        assert item["slip_date"] == "2026-08-10"
+        assert item["slip_date"] == _days_ago(10)
         assert item["status"] == "published"
 
     def test_detail_404_for_nonexistent_slip(self, app, data_dir, fresh_ip):

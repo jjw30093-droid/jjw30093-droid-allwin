@@ -2,9 +2,13 @@ import { test, expect } from "@playwright/test";
 import { API, seedMatchId } from "./helpers";
 
 /**
- * 匿名浏览:首页/比赛列表/详情/信任页。
+ * 匿名浏览(**本地种子版**):首页/详情/象限图等依赖 e2e 种子数据的用例。
  * 核心断言:免费层只有最高一项概率(种子 48%),另两项(27%/25%)
  * 不出现在页面,也不出现在匿名 API 响应体里(物理省略,非 CSS 遮挡)。
+ *
+ * 只能对本地种子环境跑(读 data/e2e/seed_info.txt、断言种子里的固定数值)。
+ * 不依赖种子、可对线上域名只读运行的结构与关键文案用例在 prod-readonly.spec.ts
+ * (2026-09-26 拆分)。象限图用例仍留在这里:象限图在 feat/quadrant-v2 分支上还会变。
  */
 
 test("首页匿名可浏览", async ({ page }) => {
@@ -102,161 +106,6 @@ test("首页匿名可浏览", async ({ page }) => {
   ).toBeLessThanOrEqual(390);
   await expect(page.getByText("27%")).toHaveCount(0);
   await expect(page.getByText("25%")).toHaveCount(0);
-});
-
-test("明暗模式可切换并在刷新后保持", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-
-  const toggle = page.getByTestId("theme-toggle");
-  await expect(toggle).toBeVisible();
-  await toggle.click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("allwin-theme")))
-    .toBe("dark");
-
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth),
-  ).toBeLessThanOrEqual(390);
-
-  await page.getByTestId("theme-toggle").click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-});
-
-for (const viewport of [
-  { width: 360, height: 800 },
-  { width: 430, height: 932 },
-  { width: 1280, height: 800 },
-]) {
-  test(`首页响应式 ${viewport.width}×${viewport.height}`, async ({ page }) => {
-    await page.setViewportSize(viewport);
-    await page.goto("/");
-
-    const featured = page.getByTestId("featured-match-card");
-    await expect(featured.getByText("主胜")).toBeVisible();
-    await expect(featured.getByRole("link", { name: /查看.+完整分析/ })).toBeVisible();
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-    ).toBeLessThanOrEqual(viewport.width);
-
-    const bottomNav = page.getByTestId("mobile-bottom-nav");
-    if (viewport.width <= 640) {
-      await expect(bottomNav).toBeVisible();
-    } else {
-      await expect(bottomNav).toBeHidden();
-    }
-  });
-}
-
-test("页脚公众号二维码(桌面)常驻:真实图片解码成功、深浅色都可扫", async ({ page }) => {
-  // 手机(<768px)页脚折叠成一行"品牌名 + 关注公众号",二维码在点开的面板里(见下一条);
-  // 桌面继续是常驻大卡片。
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/");
-  const footer = page.getByTestId("site-footer");
-  await expect(footer).toBeVisible();
-
-  // 私域转化是站长商业链路的最后一跳(短视频 → 网站 → 公众号 → 私域),
-  // 此前全站没有页脚、也没有任何常驻的关注入口。
-  const qr = footer.getByRole("img", { name: /公众号二维码/ });
-  await expect(qr).toBeVisible();
-  // 必须是真的解码出来的图 —— src 404 时 <img> 仍在 DOM 里但 naturalWidth=0,
-  // 页面看起来"有二维码"实际是破图,扫不出来。
-  await expect
-    .poll(() => qr.evaluate((el) => (el as HTMLImageElement).naturalWidth))
-    .toBeGreaterThan(0);
-
-  // 深色模式下二维码必须保留白底,否则深色卡面上的黑色码块对比度不足扫不出
-  await page.evaluate(() => {
-    document.documentElement.dataset.theme = "dark";
-  });
-  const bg = await qr.evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(bg).toBe("rgb(255, 255, 255)");
-});
-
-test("页脚公众号入口(手机):折叠成一行,普通浏览器给名称 + 复制 + 保存二维码", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const footer = page.getByTestId("site-footer");
-  await footer.scrollIntoViewIfNeeded();
-  // 桌面那张大卡片在手机上不显示
-  await expect(footer.getByRole("img", { name: /公众号二维码/ })).toHaveCount(0);
-  await footer.getByRole("button", { name: "关注公众号" }).click();
-  const dialog = page.getByRole("dialog", { name: "关注公众号" });
-  await expect(dialog).toContainText("喵弟数据研究室");
-  await expect(dialog.getByRole("button", { name: "复制公众号名称" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "保存二维码到相册" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-});
-
-test.describe("页脚公众号入口(手机,微信内置浏览器 UA)", () => {
-  test.use({
-    userAgent:
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.44 NetType/WIFI Language/zh_CN",
-  });
-
-  test("面板里是真实解码的二维码 + 长按识别提示", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    const footer = page.getByTestId("site-footer");
-    await footer.scrollIntoViewIfNeeded();
-    await footer.getByRole("button", { name: "关注公众号" }).click();
-    const dialog = page.getByRole("dialog", { name: "关注公众号" });
-    const qr = dialog.getByRole("img", { name: /公众号二维码/ });
-    await expect(qr).toBeVisible();
-    await expect
-      .poll(() => qr.evaluate((el) => (el as HTMLImageElement).naturalWidth))
-      .toBeGreaterThan(0);
-    await expect(dialog).toContainText("长按识别二维码关注");
-    await expect(dialog.getByRole("button", { name: "复制公众号名称" })).toHaveCount(0);
-  });
-});
-
-test("联赛速览四图 + xG 运气榜:此前零消费的银层/xg 档真的渲染出来", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-
-  // ① 速览 tab(联赛页新默认落点):四张图消费的四张银层表此前前端零消费,
-  //    三个公开联赛页 EChart import 数是 0。
-  await page.goto("/league/47/overview");
-  await expect(page.getByRole("heading", { name: /赛季速览/ })).toBeVisible();
-  for (const title of ["主平客分布", "进球时段分布", "大小球命中率", "常见比分"]) {
-    await expect(page.getByText(title, { exact: true })).toBeVisible();
-  }
-  // 图必须真的挂上 ECharts,不是空壳标题
-  await expect
-    .poll(() => page.locator("canvas").count(), { timeout: 20_000 })
-    .toBeGreaterThanOrEqual(4);
-
-  // ② xG 运气榜:fact_league_table 的 xg 档(695 行)此前 100% 不可见
-  //    (standings 硬编码 table_type='all')。
-  await page.goto("/league/47/standings?table_type=xg");
-  await expect(page.getByRole("heading", { name: /xG 运气榜/ })).toBeVisible();
-  await expect
-    .poll(() => page.locator("canvas").count(), { timeout: 20_000 })
-    .toBeGreaterThan(0);
-  // 必须写明是数据源官方 xG 口径,不能被读成"本站模型算的"
-  await expect(page.getByText(/不是本站模型输出/)).toBeVisible();
-
-  // ③ 两个切换器互相带着走:切榜别不丢赛季,切赛季不掉回总榜。
-  //    赛季切换器 2026-09-15 改下拉(不再是 <a href> chip),用 <select> 交互
-  //    真实触发一次 onChange 后校验最终 URL,而不是读某个链接的 href。
-  await page.goto("/league/47/standings?season=2024%2F2025&table_type=xg");
-  const homeChip = page.getByTestId("table-type-chip").nth(1);
-  await expect(homeChip).toHaveAttribute("href", /season=2024/);
-  const seasonSelect = page.getByLabel("选择赛季");
-  await expect(seasonSelect).toHaveValue("2024/2025");
-  await seasonSelect.selectOption("2023/2024");
-  await expect(page).toHaveURL(/table_type=xg/);
-  await expect(page).toHaveURL(/season=2023/);
 });
 
 test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用而不是补 0", async ({ page }) => {
@@ -390,17 +239,6 @@ test("赛前市场卡:数据倾向 + 折叠归因(赛前之墙唯一的比赛特
   await expect(foulsRow).toBeVisible();
 });
 
-test("关于我们页面承接平台介绍和合作入口", async ({ page }) => {
-  await page.goto("/about");
-  await expect(page.getByRole("heading", { name: "关于我们" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "合作联系" })).toBeVisible();
-});
-
-test("比赛列表渲染真实数据", async ({ page }) => {
-  await page.goto("/matches");
-  await expect(page.locator(`a[href*="/matches/"]`).first()).toBeVisible();
-});
-
 test("详情页免费概率投影(API 层)+ 本场看点不渲染任何概率(UI 层)", async ({
   page,
   request,
@@ -467,35 +305,3 @@ test("队徽走同源媒体路由:Web 源必须与 API 源返回同一张 PNG", 
   expect((await viaWeb.body()).equals(await viaApi.body())).toBe(true);
 });
 
-test("公开战绩/模型说明/定价页可访问且诚实", async ({ page }) => {
-  await page.goto("/track-record");
-  await expect(page.getByText(/正式|口径/).first()).toBeVisible();
-
-  await page.goto("/about-model");
-  await expect(page.getByText(/Dixon|校准|RPS/).first()).toBeVisible();
-
-  await page.goto("/reco");
-  // 每日精选:匿名只有登录引导(无任何战绩数字),登录按钮带返回路径
-  await expect(
-    page.getByText("登录后可免费查看全部历史战绩").first(),
-  ).toBeVisible();
-  const recoLogin = page.getByRole("link", { name: "免费登录查看战绩" });
-  await expect(recoLogin).toHaveAttribute("href", "/login?next=/reco");
-  await expect(page.getByRole("link", { name: "先看公开比赛资料" })).toBeVisible();
-
-  await page.goto("/pricing");
-  // 三层权限说明:游客/免费账号/精选授权;不得再出现付费套餐时代的
-  // Pro/Premium 残留文案,也不得暴露内部 entitlement 键值。
-  await expect(page.getByRole("heading", { name: "会员与权限" })).toBeVisible();
-  await expect(page.getByText("免费账号").first()).toBeVisible();
-  // 三步开通指引在最上面
-  await expect(page.locator("#how-to-unlock li")).toHaveText([
-    "登录账号",
-    "通过公众号联系我们开通",
-    "回到「精选」页查看",
-  ]);
-  await expect(page.getByText("精选授权用户").first()).toBeVisible();
-  await expect(page.getByText("Pro", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Premium", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/league:|reco:|odds:|prediction:/)).toHaveCount(0);
-});

@@ -384,7 +384,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from .coreseed import insert_match, seed_core_schema  # noqa: E402
 from backend.db.connections import connect_rw  # noqa: E402
 from .test_reco import (  # noqa: E402
-    _admin_client, _create_slip, _csrf, _prov_leg, _publish,
+    _admin_client, _create_slip, _csrf, _days_ago, _prov_leg, _publish,
 )
 
 
@@ -400,8 +400,9 @@ class TestHighlightEndpoint:
     def _seed_core(self, match_id, league_id=47):
         conn = connect_rw("core")
         seed_core_schema(conn)
-        insert_match(conn, match_id, league_id=league_id, date="2026-09-01",
-                     status="Finish", kickoff_at_utc="2026-09-01T12:00:00Z")
+        day = _days_ago(10)  # 与 _create_slip 默认日期一致,相对当前时间
+        insert_match(conn, match_id, league_id=league_id, date=day,
+                     status="Finish", kickoff_at_utc=f"{day}T12:00:00Z")
         conn.commit()
         conn.close()
 
