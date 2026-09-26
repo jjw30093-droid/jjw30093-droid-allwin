@@ -36,3 +36,12 @@ backend/studio/content_scripts/fonts/
 # backend/studio/content_scripts/*.png：脚本直接写在脚本同级目录的成品图
 # （player_h2h_chart.py / attack_defense_series.py 的输出），同样是生成物不是源。
 backend/studio/content_scripts/*.png
+
+# .claude/launch.json：本地预览服务器配置（含本机路径与本地端口，每人不同），不入库。
+# 注意：该文件此前已被 git 跟踪，忽略规则对已跟踪文件不生效——本机用
+# `git update-index --skip-worktree .claude/launch.json` 隐藏本地改动；
+# 若要彻底取消跟踪需另行提交 `git rm --cached .claude/launch.json`。
+.claude/launch.json
+
+# marketing/research/mobile_audit/：手机端体验审计的截图产物（约 29MB），本地留档不入库。
+marketing/research/mobile_audit/
