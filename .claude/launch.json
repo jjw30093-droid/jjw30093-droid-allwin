@@ -87,6 +87,26 @@
       "port": 3002
     },
     {
+      "name": "frontend-prodapi",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3010"],
+      "port": 3010,
+      "env": {
+        "INTERNAL_API_BASE": "https://miaomiaodi.vip",
+        "NEXT_PUBLIC_API_BASE": "https://miaomiaodi.vip"
+      }
+    },
+    {
+      "name": "frontend-localapi",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3011"],
+      "port": 3011,
+      "env": {
+        "INTERNAL_API_BASE": "http://127.0.0.1:8000",
+        "NEXT_PUBLIC_API_BASE": "http://127.0.0.1:8000"
+      }
+    },
+    {
       "name": "video-preview",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
