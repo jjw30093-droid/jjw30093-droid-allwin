@@ -41,6 +41,7 @@ from pathlib import Path
 from backend.db.connections import connect_ro, connect_rw, tx
 from backend.db.util import new_uuid, utc_now_iso
 from backend.ingest.odds_snapshots import (
+    ingest_general_snapshot,
     ingest_lineup_snapshot,
     ingest_sideline_snapshot,
     record_source_health,
@@ -54,6 +55,7 @@ from backend.ingest.poll_windows import (
 )
 from backend.providers.fotmob_snapshots import (
     MATCH_DETAILS_COLUMNS,
+    extract_general_snapshot,
     extract_lineup_snapshot,
     extract_prematch_details,
     extract_sideline_snapshot,
@@ -98,7 +100,19 @@ def _snapshot_one(
     (--write-match-details,见模块 docstring)。
     """
     mid = int(match_row["Match_ID"])
-    counts = {"inserted": 0, "skipped": 0, "match_details_written": False}
+    counts = {
+        "inserted": 0,
+        "skipped": 0,
+        "match_details_written": False,
+        # general 子树 bronze 单独计数,不并入 inserted/skipped(那两个口径是阵容+伤停快照)
+        "general_inserted": 0,
+        "general_skipped": 0,
+    }
+    general = extract_general_snapshot(payload)
+    if general is not None:
+        g = ingest_general_snapshot(conn_odds, mid, general, observed_at, poll_run_id)
+        counts["general_inserted"] += g["inserted"]
+        counts["general_skipped"] += g["skipped"]
     lineup = extract_lineup_snapshot(payload)
     r = ingest_lineup_snapshot(conn_odds, mid, lineup, observed_at, poll_run_id)
     counts["inserted"] += r["inserted"]
@@ -143,6 +157,7 @@ def run_snapshot_poll(
         "out_of_window_skipped": 0,
         "snapshots_inserted": 0,
         "snapshots_skipped": 0,
+        "general_snapshots_inserted": 0,
         "match_details_written": 0,
         "failures": [],
     }
@@ -207,6 +222,7 @@ def run_snapshot_poll(
                 )
                 summary["snapshots_inserted"] += counts["inserted"]
                 summary["snapshots_skipped"] += counts["skipped"]
+                summary["general_snapshots_inserted"] += counts["general_inserted"]
                 if counts["match_details_written"]:
                     summary["match_details_written"] += 1
             except Exception as exc:  # noqa: BLE001 — 采集边界:单场失败继续其余

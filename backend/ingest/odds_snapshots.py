@@ -108,6 +108,38 @@ def ingest_lineup_snapshot(
     return {"inserted": 1, "skipped": 0}
 
 
+def ingest_general_snapshot(
+    conn_odds: sqlite3.Connection,
+    fotmob_match_id: int,
+    general: dict,
+    observed_at: str,
+    poll_run_id: str | None,
+) -> dict:
+    """match_details 的 general 子树 bronze 落库(序列键:fotmob_match_id),同 hash-diff 模式。
+
+    原样留存(canonical JSON,不裁剪),供以后重新解析新增字段用;见
+    backend/migrations/odds/0013_fm_general_snap.sql。"""
+    payload_json = canonical_payload_json(general)
+    payload_hash = sha256_hex(payload_json)
+    with tx(conn_odds):
+        last = _last_hash(
+            conn_odds,
+            """SELECT payload_hash FROM bronze_fm_general_snap
+               WHERE fotmob_match_id=? ORDER BY observed_at DESC, id DESC LIMIT 1""",
+            (fotmob_match_id,),
+        )
+        if last == payload_hash:
+            return {"inserted": 0, "skipped": 1}
+        conn_odds.execute(
+            """INSERT INTO bronze_fm_general_snap
+               (fotmob_match_id, payload_json, payload_hash, source_updated_at,
+                observed_at, ingested_at, poll_run_id)
+               VALUES (?, ?, ?, NULL, ?, ?, ?)""",
+            (fotmob_match_id, payload_json, payload_hash, observed_at, utc_now_iso(), poll_run_id),
+        )
+    return {"inserted": 1, "skipped": 0}
+
+
 def ingest_sideline_snapshot(
     conn_odds: sqlite3.Connection,
     fotmob_match_id: int,

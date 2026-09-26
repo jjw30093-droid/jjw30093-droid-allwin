@@ -105,6 +105,36 @@ def _upsert_match_details(conn, dim: dict) -> None:
     )
 
 
+def _store_general_bronze(match_id: int, page_props: dict) -> None:
+    """把这次抓到的 general 子树原样存入 odds.db 的 bronze_fm_general_snap(hash-diff)。
+
+    第四批 C(2026-09-26):match_details 抓取此前只解析后丢弃原始响应。这里在关键字段
+    闸门通过之后、写 core 之前落 bronze。bronze 是留存副本,写失败不应让整场明细入库失败
+    (core 落库才是这个函数的职责),但必须大声告警到 stderr,不静默吞掉。"""
+    from backend.db.connections import connect_rw
+    from backend.db.util import new_uuid, utc_now_iso
+    from backend.ingest.odds_snapshots import ingest_general_snapshot
+    from backend.providers.fotmob_snapshots import extract_general_snapshot
+
+    general = extract_general_snapshot(page_props)
+    if general is None:
+        return
+    try:
+        conn_odds = connect_rw("odds")
+        try:
+            ingest_general_snapshot(conn_odds, match_id, general, utc_now_iso(), new_uuid())
+        finally:
+            conn_odds.close()
+    except Exception as exc:  # noqa: BLE001 — bronze 留存失败不阻断 core 入库,但必须可见
+        import sys
+
+        print(
+            f"WARNING match_id={match_id}: general 子树写入 bronze_fm_general_snap 失败: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+
+
 def ingest_match(match_id: int, league_id: int = None, date: str = None) -> None:
     """抓取单场明细并落库。不再接受 season 参数(2026-08-25,CLAUDE.md §6.3):
 
@@ -142,6 +172,7 @@ def ingest_match(match_id: int, league_id: int = None, date: str = None) -> None
         raise ValueError(
             f"match_id={match_id} 关键字段缺失 {missing}，疑似页面结构漂移，拒绝写入"
         )
+    _store_general_bronze(match_id, page_props)
     shots = client.parse_shotmap_records(page_props, match_id)
     team_stats = client.parse_team_stats_records(page_props, match_id)
     player_stats = client.parse_player_stats_records(page_props, match_id)

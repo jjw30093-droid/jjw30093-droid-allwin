@@ -51,6 +51,16 @@ def _coach_brief(c) -> dict | None:
     return {"id": c.get("id"), "name": name}
 
 
+def extract_general_snapshot(match_details_payload: dict) -> dict | None:
+    """match_details pageProps 的 general 子树,**原样**(不裁剪、不改写)。
+
+    供 bronze_fm_general_snap 留存(2026-09-26,第四批 C):以后要加字段(如
+    teamColors 的文字色)可直接重解析,不必再全量重抓。payload 缺 general 或它不是
+    dict 时返回 None(如实"这次没抓到",调用方跳过,不落空对象)。"""
+    general = (match_details_payload or {}).get("general")
+    return general if isinstance(general, dict) and general else None
+
+
 def extract_lineup_snapshot(match_details_payload: dict) -> dict:
     """从 match_details 的 pageProps 提取阵容最小 canonical 子集。
 

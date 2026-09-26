@@ -31,9 +31,12 @@ import sys
 import time
 
 from backend.db.connections import connect_ro, connect_rw
+from backend.db.util import new_uuid, utc_now_iso
 from backend.cli.poll_fotmob_snapshots import _write_match_details
+from backend.ingest.odds_snapshots import ingest_general_snapshot
 from backend.providers.fotmob_snapshots import (
     MATCH_DETAILS_COLUMNS,
+    extract_general_snapshot,
     extract_prematch_details,
     fetch_match_payload,
 )
@@ -45,7 +48,6 @@ _MISSING_COND = (
     "(Venue_Name IS NULL AND Home_Team_Color_Light IS NULL"
     " AND Referee_Stats_Json IS NULL)"
 )
-
 
 def _select_targets(args) -> list[dict]:
     cond = ["1=1"]
@@ -66,7 +68,11 @@ def _select_targets(args) -> list[dict]:
         params.append(args.date_to)
     if args.finished_only:
         cond.append("status = 'Finish'")
-    if args.only_missing:
+    if getattr(args, "missing_colors", False):
+        # 显式按配色缺失选场,取代默认的"三样全空"判据(也不受 --include-filled 放宽:
+        # 这是用户明确要求的选场条件)。写库仍是 COALESCE 只填空值,其余逻辑不变。
+        cond.append(_MISSING_COLORS_COND)
+    elif args.only_missing:
         cond.append(_MISSING_COND)
     sql = (
         "SELECT Match_ID, Date, status, Home_Team_Name, Away_Team_Name"
@@ -115,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     conn_rw = connect_rw("core")
+    conn_odds = connect_rw("odds")
+    poll_run_id = new_uuid()
     ok = wrote_nothing = failed = 0
     failures: list[tuple[int, str]] = []
     try:
@@ -122,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
             mid = int(t["Match_ID"])
             try:
                 payload = fetch_match_payload(mid)
+                # 这次重新抓到的 general 子树顺手留存 bronze(第四批 C;只存本次新抓取的响应)
+                general = extract_general_snapshot(payload)
+                if general is not None:
+                    ingest_general_snapshot(conn_odds, mid, general, utc_now_iso(), poll_run_id)
                 details = extract_prematch_details(payload, mid)
                 if _write_match_details(conn_rw, mid, details):
                     ok += 1
@@ -139,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(args.interval)
     finally:
         conn_rw.close()
+        conn_odds.close()
 
     print(f"[backfill_match_details] 完成: 回填 {ok},来源无数据 {wrote_nothing},失败 {failed}")
     for mid, err in failures:
