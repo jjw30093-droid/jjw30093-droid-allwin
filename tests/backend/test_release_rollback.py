@@ -88,6 +88,8 @@ def _base_env(app_root: Path, tmp_path: Path | None = None, **overrides) -> dict
         ALLWIN_APP_ROOT=str(app_root),
         RELEASE_SH_SOURCE_ONLY="1",
         MIN_FREE_DISK_MB="1",
+        # 开发/CI 机磁盘可能本来就 >85%,基础环境放开使用率上限;专门的用例再覆盖
+        MAX_DISK_USED_PERCENT="100",
         PATH=f"{fake_bin}:{os.environ['PATH']}",
     )
     env.update(overrides)
@@ -173,6 +175,52 @@ class TestPreflight:
         r = _run(f'{SOURCE_RELEASE}; preflight', env)
         assert r.returncode != 0
         assert "磁盘" in r.stderr
+
+    # ── 2026-09-27:磁盘使用率超过 85% 中止发布 ──────────────────────────
+
+    def _fake_df(self, tmp_path, used_pct: int) -> Path:
+        """假 df:固定给出指定使用率 + 充足的绝对剩余空间(不触发 MIN_FREE_DISK_MB 检查)。"""
+        bindir = tmp_path / "_fake_df_bin"
+        bindir.mkdir(exist_ok=True)
+        (bindir / "df").write_text(
+            "#!/bin/sh\n"
+            "echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'\n"
+            f"echo '/dev/fake 100000000 {used_pct * 1000000} {(100 - used_pct) * 1000000} {used_pct}% /'\n"
+        )
+        (bindir / "df").chmod(0o755)
+        return bindir
+
+    def _preflight_with_disk(self, tmp_path, used_pct, **env_over):
+        app_root = _setup_app_root(tmp_path)
+        bindir = self._fake_df(tmp_path, used_pct)
+        base = _base_env(app_root, **env_over)
+        base["PATH"] = f"{bindir}:{base['PATH']}"
+        return _run(f'{SOURCE_RELEASE}; preflight', base)
+
+    def test_disk_usage_above_85_percent_aborts_with_cleanup_hints(self, tmp_path):
+        r = self._preflight_with_disk(tmp_path, 86, MAX_DISK_USED_PERCENT="85")
+        assert r.returncode != 0
+        assert "磁盘使用率 86%" in r.stderr and "85%" in r.stderr
+        assert "backup_maintenance" in r.stderr and "清理提示" in r.stderr
+
+    def test_disk_usage_at_or_below_limit_passes(self, tmp_path):
+        for pct in (85, 84, 60):
+            r = self._preflight_with_disk(tmp_path / f"p{pct}", pct, MAX_DISK_USED_PERCENT="85")
+            assert r.returncode == 0, f"{pct}% 不应中止: {r.stderr}"
+
+    def test_default_limit_is_85_and_overridable(self, tmp_path):
+        script = RELEASE_SH.read_text()
+        assert 'MAX_DISK_USED_PERCENT="${MAX_DISK_USED_PERCENT:-85}"' in script
+        # 用假 df 给 90%:不设上限覆盖(从 unset 的基础环境去掉)→ 默认 85 → 中止;覆盖成 95 → 通过
+        app_root = _setup_app_root(tmp_path / "a")
+        bindir = self._fake_df(tmp_path / "a", 90)
+        env = _base_env(app_root)
+        env.pop("MAX_DISK_USED_PERCENT")
+        env["PATH"] = f"{bindir}:{env['PATH']}"
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0 and "磁盘使用率 90%" in r.stderr
+        env["MAX_DISK_USED_PERCENT"] = "95"
+        assert _run(f'{SOURCE_RELEASE}; preflight', env).returncode == 0
 
     def test_missing_model_artifact_rejected(self, tmp_path):
         """2026-08-17 真实发现:模型二进制不进 Git(CLAUDE.md §14.1),此前所有
@@ -721,6 +769,57 @@ cleanup_old_releases
 '''
             r = _run(script, _base_env(app_root))
             assert r.returncode != 0, f"KEEP_RELEASES={bad!r} 应被拒绝"
+
+
+class TestBackupRetentionInRelease:
+    """2026-09-27:备份分级保留/压缩放在发布成功之后;release 备份带 trigger=release。"""
+
+    def _main_body(self) -> str:
+        text = RELEASE_SH.read_text()
+        start = text.index("\nmain() {")
+        return text[start:text.index("\n}\n", start)]
+
+    def test_default_keep_releases_is_three(self):
+        assert 'KEEP_RELEASES="${KEEP_RELEASES:-3}"' in RELEASE_SH.read_text()
+
+    def test_backup_step_marks_release_trigger_and_defers_maintenance(self):
+        text = RELEASE_SH.read_text()
+        assert "BACKUP_TRIGGER=release BACKUP_SKIP_MAINTENANCE=1" in text
+
+    def test_old_backup_cleanup_runs_only_after_release_success(self):
+        body = self._main_body()
+        i_smoke = body.index("business_smoke")
+        i_rel = body.index("cleanup_old_releases")
+        i_bak = body.index("cleanup_old_backups")
+        i_done = body.index("发布完成")
+        assert i_smoke < i_rel < i_bak < i_done
+        # 回滚分支(rollback)在两次冒烟失败时就 die,不会走到清理
+        assert body.index("rollback") < i_rel
+
+    def test_cleanup_old_backups_invokes_maintenance_with_data_dir(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        rel = app_root / "releases" / "sha1"
+        (rel / ".venv" / "bin").mkdir(parents=True)
+        log = tmp_path / "maint.log"
+        py = rel / ".venv" / "bin" / "python"
+        py.write_text(f'#!/bin/sh\necho "ARGS=$@ DATA=$ALLWIN_DATA_DIR" >> "{log}"\nexit 0\n')
+        py.chmod(0o755)
+        r = _run(f'{SOURCE_RELEASE}; RELEASE_DIR="{rel}"; cleanup_old_backups', _base_env(app_root))
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        line = log.read_text().strip()
+        assert "-m backend.cli.backup_maintenance" in line
+        assert f"DATA={app_root}/shared/data" in line
+
+    def test_cleanup_old_backups_failure_only_warns(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        rel = app_root / "releases" / "sha1"
+        (rel / ".venv" / "bin").mkdir(parents=True)
+        py = rel / ".venv" / "bin" / "python"
+        py.write_text("#!/bin/sh\nexit 2\n")
+        py.chmod(0o755)
+        r = _run(f'{SOURCE_RELEASE}; RELEASE_DIR="{rel}"; cleanup_old_backups; echo AFTER', _base_env(app_root))
+        assert r.returncode == 0, "清理失败不能让已成功的发布判失败"
+        assert "AFTER" in r.stdout and "警告:旧备份清理/压缩未完全成功" in r.stdout
 
 
 class TestMarkerNotInjectable:

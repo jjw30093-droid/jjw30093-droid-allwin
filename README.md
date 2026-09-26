@@ -82,8 +82,9 @@ npm install
 | `ALLWIN_ADMIN_PASSWORD` | (可选)create_admin 非交互模式的密码来源;交互模式走 getpass |
 | `S3_BACKUP_BUCKET` | (可选)备份 S3 桶;未配置时备份脚本只做本地备份 |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_DEFAULT_REGION` | (可选)不用 EC2 instance role 时的 AWS 凭证 |
-| `BACKUP_KEEP` | 本地保留备份份数(默认 14,必须为正整数) |
-| `KEEP_RELEASES` | release.sh 保留最近几个 release 目录(默认 5;current/previous 永不清理) |
+| `BACKUP_DAILY_KEEP_DAYS` / `BACKUP_RELEASE_KEEP` | 备份分级保留:每日备份保留天数(默认 7)/ 发布前备份保留份数(默认 3);超过 24 小时的备份 zstd 压缩(`BACKUP_KEEP` 已废弃) |
+| `KEEP_RELEASES` | release.sh 保留最近几个 release 目录(默认 3;current/previous 永不清理) |
+| `MAX_DISK_USED_PERCENT` | release.sh preflight 的磁盘使用率上限(默认 85,超过则中止发布) |
 | `MIN_FREE_DISK_MB` | release.sh preflight 的磁盘可用空间下限(默认 2048) |
 | `OPS_DISK_WARN_PCT` / `OPS_DISK_CRITICAL_PCT` | `ops_check` 磁盘告警/严重阈值(默认 70/85) |
 | `OPS_BACKUP_STALE_HOURS` / `OPS_JOB_STUCK_MINUTES` / `OPS_JOB_STALE_HOURS` / `OPS_SOURCE_STALE_HOURS` | `ops_check` 备份新鲜度/任务卡住/任务过期/数据源过期阈值 |

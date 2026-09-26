@@ -16,8 +16,13 @@
 # 不静默成功、不互相覆盖。
 #
 # 用法:bash deploy/scripts/backup_sqlite.sh
-# 环境变量:ALLWIN_DATA_DIR(默认 <repo>/data)、BACKUP_KEEP(默认 14,必须为正整数)、
-#           S3_BACKUP_BUCKET(可选)
+# 环境变量:ALLWIN_DATA_DIR(默认 <repo>/data)、S3_BACKUP_BUCKET(可选)、
+#   BACKUP_TRIGGER(daily|release|manual,默认 daily;写进 backup_metadata.json 的 trigger 字段,
+#     保留策略按它分级:daily 保留 7 天、release 保留最近 3 份;release.sh 传 release)、
+#   BACKUP_SKIP_MAINTENANCE=1(不在本脚本末尾做清理/压缩;release.sh 在发布成功之后再单独调
+#     python -m backend.cli.backup_maintenance)。
+# 保留与压缩的实现见 backend/cli/backup_maintenance.py(2026-09-27:取代此前的
+# "保留最近 BACKUP_KEEP=14 份",那会让 14×1.5GB 的备份占满磁盘)。
 
 set -euo pipefail
 umask 077   # 备份/manifest/metadata 默认不允许组或其他用户读取
@@ -26,7 +31,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DATA_DIR="${ALLWIN_DATA_DIR:-$ROOT/data}"
 BACKUP_ROOT="$DATA_DIR/backups"
 MANIFEST_ROOT="$BACKUP_ROOT/manifests"
-KEEP="${BACKUP_KEEP:-14}"
+TRIGGER="${BACKUP_TRIGGER:-daily}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 STAGING="$BACKUP_ROOT/.incomplete-$TS-$$"
 DEST="$BACKUP_ROOT/$TS"
@@ -53,11 +58,14 @@ _pid_alive() {
 command -v sqlite3 >/dev/null || die "找不到 sqlite3 CLI"
 [ -d "$DATA_DIR" ] || die "数据目录不存在: $DATA_DIR"
 
-# BACKUP_KEEP 必须是正整数,防止空/非法值进入后续清理逻辑(rm -rf 的边界安全)
-case "$KEEP" in
-  ''|*[!0-9]*) die "BACKUP_KEEP 必须是正整数,当前值: '$KEEP'" ;;
+# BACKUP_TRIGGER 只接受白名单值(它会写进元数据并决定保留策略分级)
+case "$TRIGGER" in
+  daily|release|manual) ;;
+  *) die "BACKUP_TRIGGER 必须是 daily|release|manual,当前值: '$TRIGGER'" ;;
 esac
-[ "$KEEP" -ge 1 ] || die "BACKUP_KEEP 必须 >= 1,当前值: $KEEP"
+if [ -n "${BACKUP_KEEP:-}" ]; then
+  echo "[backup] 警告:BACKUP_KEEP 已废弃(改为 daily 保留 7 天 / release 保留 3 份,见 backup_maintenance.py),忽略" >&2
+fi
 
 mkdir -p "$BACKUP_ROOT"
 
@@ -139,18 +147,19 @@ for name in "${REQUIRED_DBS[@]}"; do
 done
 
 # ── 写完整性元数据(JSON 由 Python 生成,避免手拼字符串转义问题) ────────
-"$PY" - "$STAGING" "$TS" "${META_ARGS[@]}" <<'PYEOF'
+"$PY" - "$STAGING" "$TS" "$TRIGGER" "${META_ARGS[@]}" <<'PYEOF'
 import json
 import sys
 
-staging, ts = sys.argv[1], sys.argv[2]
-rest = sys.argv[3:]
+staging, ts, trigger = sys.argv[1], sys.argv[2], sys.argv[3]
+rest = sys.argv[4:]
 databases = {}
 for i in range(0, len(rest), 4):
     name, size, sha, check = rest[i], int(rest[i + 1]), rest[i + 2], rest[i + 3]
     databases[name] = {"size": size, "sha256": sha, "integrity_check": check}
 meta = {
     "created_at": ts,
+    "trigger": trigger,
     "databases": databases,
     "complete": len(databases) == 3 and all(v["integrity_check"] == "ok" for v in databases.values()),
 }
@@ -215,39 +224,6 @@ ops_check 可能读不到这份备份(备份本身完整)" >&2
   done
 fi
 
-# ── 保留最近 KEEP 份(只 prune 完整备份目录,不误删 .incomplete-*/manifests) ──
-#
-# 2026-08-25 真实生产发现:旧备份目录可能由不同用户创建(如 systemd 定时器以
-# allwin 用户跑的日常备份,umask 077 → 700 权限),本脚本换一个用户手动/由
-# release.sh 触发执行时对那些目录没有删除权限,plain `rm -rf` 会返回非零、
-# 在 set -euo pipefail 下直接杀死整个备份脚本——此时三库 .backup 已经全部
-# 成功且 integrity_check=ok,只是"清理旧备份"这一步失败,却被上游 release.sh
-# 误判成"备份失败,不执行 migration"。先尝试 plain rm(本地测试/同用户场景不
-# 需要 sudo、不触发交互式密码提示),失败了再退避到 sudo rm(同 release.sh::
-# cleanup_old_releases() 既有先例);两者都失败也只是警告,不让单个 prune
-# 失败拖垮整个备份脚本的退出码。
-prune() {
-  local root="$1" label="$2"
-  [ -d "$root" ] || return 0
-  local dirs total
-  dirs="$(cd "$root" && ls -1 2>/dev/null | grep -E "$TS_PATTERN" | sort || true)"
-  total="$(printf '%s\n' "$dirs" | grep -c . || true)"
-  if [ "$total" -gt "$KEEP" ]; then
-    printf '%s\n' "$dirs" | head -n "$((total - KEEP))" | while read -r d; do
-      [ -n "$d" ] || continue
-      if rm -rf "${root:?}/$d" 2>/dev/null || sudo -n rm -rf "${root:?}/$d" 2>/dev/null; then
-        echo "-- $label: 清理旧备份 $d(保留最近 $KEEP 份)"
-      else
-        echo "-- $label: 警告:清理旧备份 $d 失败(不影响本次备份结果)" >&2
-      fi
-    done
-  else
-    echo "-- $label: 当前 $total 份 ≤ 保留上限 $KEEP,无需清理"
-  fi
-}
-prune "$BACKUP_ROOT" "db"
-prune "$MANIFEST_ROOT" "manifests"
-
 # ── S3 上传(只上传已原子发布、验证过的完整备份;未配置明确 LOCAL_ONLY) ──
 if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
   command -v aws >/dev/null || die "配置了 S3_BACKUP_BUCKET 但找不到 aws CLI,上传失败"
@@ -264,4 +240,16 @@ if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
   echo "== S3: 已上传到 s3://$S3_BACKUP_BUCKET/{db,manifests}/$TS/ =="
 else
   echo "== S3: LOCAL_ONLY(S3_BACKUP_BUCKET 未配置,仅本地备份)=="
+fi
+
+# ── 旧备份的分级保留与压缩(2026-09-27) ────────────────────────────────
+# 放在备份成功创建(及 S3 上传)之后:daily 保留 7 天、release 保留最近 3 份,超过 24 小时的
+# 备份 zstd 压缩(校验后才删原文件)。失败只告警,不让清理/压缩问题拖垮一次已经成功的备份。
+# release.sh 传 BACKUP_SKIP_MAINTENANCE=1,改为发布成功之后再统一清理。
+if [ "${BACKUP_SKIP_MAINTENANCE:-0}" != "1" ]; then
+  if ! ( cd "$ROOT" && "$PY" -m backend.cli.backup_maintenance --data-dir "$DATA_DIR" ); then
+    echo "[backup] 警告:旧备份清理/压缩未完全成功(不影响本次备份结果)" >&2
+  fi
+else
+  echo "-- 旧备份清理/压缩:BACKUP_SKIP_MAINTENANCE=1,留给调用方在成功之后执行"
 fi

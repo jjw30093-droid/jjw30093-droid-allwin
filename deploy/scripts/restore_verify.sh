@@ -85,7 +85,13 @@ FAIL=0
 
 for name in "${REQUIRED_DBS[@]}"; do
   db="$SRC/$name"
-  if [ ! -f "$db" ]; then
+  # 超过 24 小时的备份会被 backup_maintenance 压成 <db>.zst(2026-09-27);metadata 里的
+  # size/sha256 始终是未压缩文件的值,所以压缩备份解压到临时目录后照旧比对,不降低任何校验。
+  if [ ! -f "$db" ] && [ -f "$db.zst" ]; then
+    command -v zstd >/dev/null 2>&1 || die "备份是 zstd 压缩的($name.zst),但找不到 zstd 命令"
+    zstd -q -d -c "$db.zst" > "$TMP/$name" || { echo "-- $name: zstd 解压失败(备份损坏)" >&2; FAIL=1; continue; }
+    echo "-- $name: 从 $name.zst 解压"
+  elif [ ! -f "$db" ]; then
     echo "-- $name: 备份目录缺失该库文件(不完整,拒绝)" >&2
     FAIL=1
     continue
@@ -100,7 +106,7 @@ for name in "${REQUIRED_DBS[@]}"; do
     continue
   fi
 
-  cp "$db" "$TMP/$name"
+  [ -f "$db" ] && cp "$db" "$TMP/$name"
 
   actual_size="$(wc -c < "$TMP/$name" | tr -d ' ')"
   actual_sha="$(_sha256 "$TMP/$name")"

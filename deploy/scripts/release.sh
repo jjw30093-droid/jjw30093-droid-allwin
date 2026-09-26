@@ -37,8 +37,11 @@ CURRENT_LINK="$APP_ROOT/current"
 SMOKE_PORT="${SMOKE_PORT:-8001}"
 LIVE_API_PORT="${LIVE_API_PORT:-8000}"
 LIVE_WEB_PORT="${LIVE_WEB_PORT:-3000}"
-KEEP_RELEASES="${KEEP_RELEASES:-5}"
+KEEP_RELEASES="${KEEP_RELEASES:-3}"   # 2026-09-27:5 → 3(current + 最近 2 个旧 release 供回滚)
 MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-2048}"
+# 磁盘使用率上限(百分比):发布前超过则中止(2026-09-27;此前 89% 才被人工发现,CLAUDE.md §14.3
+# 规定 85% 严重告警)。可用 MAX_DISK_USED_PERCENT 覆盖。
+MAX_DISK_USED_PERCENT="${MAX_DISK_USED_PERCENT:-85}"
 
 # 2026-08-23 首页信息架构重排后,FreshnessBlock 默认态文案从"赛程更新
 # {时间}"改成"数据更新:赛程 {时间} · 赔率 {时间}"("赛程更新"四字连续只在
@@ -77,6 +80,11 @@ _free_disk_mb() {
   df -Pk "$APP_ROOT" 2>/dev/null | tail -n 1 | awk '{print int($4/1024)}'
 }
 
+# df -P 第 5 列是 "89%";取整数百分比,取不到返回空(空则跳过该项检查,不误杀)
+_disk_used_percent() {
+  df -Pk "$APP_ROOT" 2>/dev/null | tail -n 1 | awk '{gsub(/%/, "", $5); print $5}'
+}
+
 # ── 阶段 1:preflight(在任何构建/备份/migration/切换之前) ────────────
 preflight() {
   log "preflight 检查"
@@ -97,6 +105,22 @@ preflight() {
   if [ -n "$free_mb" ] && [ "$free_mb" -lt "$MIN_FREE_DISK_MB" ]; then
     die "磁盘可用空间不足: ${free_mb}MB < 下限 ${MIN_FREE_DISK_MB}MB(MIN_FREE_DISK_MB 可覆盖)"
   fi
+
+  local used_pct
+  used_pct="$(_disk_used_percent)"
+  case "$used_pct" in
+    ''|*[!0-9]*) ;;
+    *)
+      if [ "$used_pct" -gt "$MAX_DISK_USED_PERCENT" ]; then
+        die "磁盘使用率 ${used_pct}% 超过上限 ${MAX_DISK_USED_PERCENT}%,中止发布(MAX_DISK_USED_PERCENT 可覆盖)。
+清理提示:
+  1) 旧备份:python -m backend.cli.backup_maintenance --dry-run(先看计划;去掉 --dry-run 执行,daily 留 7 天、release 留 3 份、>24h 压缩)
+  2) 旧 release:ls -t $RELEASES_DIR(除 current 与最近 2 个外可 sudo rm -rf)
+  3) 日志:sudo du -h --max-depth=1 /var/log;journalctl --vacuum-size=200M
+  4) 占用排查:sudo du -xh --max-depth=2 / | sort -h | tail -30"
+      fi
+      ;;
+  esac
 
   # current/previous 软链形状必须合法:不存在,或指向 RELEASES_DIR 下的目录
   if [ -e "$CURRENT_LINK" ]; then
@@ -238,7 +262,8 @@ do_backup_and_migrate() {
   log "migration 前备份三库(缺一律失败,不带病迁移)"
   ( cd "$RELEASE_DIR" \
     && set -a && . "$SHARED_DIR/.env" && set +a \
-    && ALLWIN_DATA_DIR="$SHARED_DIR/data" bash deploy/scripts/backup_sqlite.sh ) \
+    && ALLWIN_DATA_DIR="$SHARED_DIR/data" BACKUP_TRIGGER=release BACKUP_SKIP_MAINTENANCE=1 \
+       bash deploy/scripts/backup_sqlite.sh ) \
     || die "备份失败,不执行 migration,current 未切换,线上不受影响"
 
   log "python -m backend.db.migrate --all"
@@ -403,6 +428,23 @@ cleanup_old_releases() {
     done )
 }
 
+# ── 收尾:旧备份的分级保留与压缩(发布成功之后才做) ─────────────────
+# daily 保留 7 天、release 保留最近 3 份、超过 24 小时的备份 zstd 压缩(校验通过才删原文件)。
+# 备份目录属主是服务用户(backup_sqlite.sh 会 chown),所以换用户执行(sudo -n -u,同
+# cleanup_old_releases 的 sudo 先例)。失败只警告:发布已经成功,不能因清理问题判失败。
+cleanup_old_backups() {
+  local service_user="${ALLWIN_SERVICE_USER:-allwin}" runner=()
+  if [ "$(id -un)" != "$service_user" ] && id -u "$service_user" >/dev/null 2>&1; then
+    runner=(sudo -n -u "$service_user")
+  fi
+  log "旧备份分级保留与压缩(daily 7 天 / release 3 份 / >24h zstd)"
+  if ! ( cd "$RELEASE_DIR" && set -a && . "$SHARED_DIR/.env" && set +a \
+         && ${runner[@]+"${runner[@]}"} env ALLWIN_DATA_DIR="$SHARED_DIR/data" \
+            "$RELEASE_DIR/.venv/bin/python" -m backend.cli.backup_maintenance ); then
+    log "警告:旧备份清理/压缩未完全成功(不影响本次发布结果;可手动 python -m backend.cli.backup_maintenance --dry-run 检查)"
+  fi
+}
+
 main() {
   preflight
   do_build
@@ -423,6 +465,7 @@ main() {
   fi
 
   cleanup_old_releases
+  cleanup_old_backups
 
   log "发布完成: current -> $RELEASE_DIR"
   log "提醒:Cloudflare purge 静态缓存 + 隐私模式核验(CLAUDE.md §10);"

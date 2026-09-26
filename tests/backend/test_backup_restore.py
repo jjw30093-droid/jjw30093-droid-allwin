@@ -239,28 +239,45 @@ def _rewrite_metadata_for(backup_dir: Path) -> None:
     meta_path.write_text(json.dumps(meta))
 
 
-class TestBackupKeepValidation:
-    def test_non_numeric_backup_keep_rejected(self, migrated_data_dir):
+class TestBackupTriggerAndRetention:
+    """2026-09-27:取代旧的 BACKUP_KEEP(保留最近 N 份)。备份元数据记录 trigger,
+    分级保留/压缩由 backend/cli/backup_maintenance.py 负责(细节见 test_backup_maintenance.py)。"""
+
+    def test_default_trigger_is_daily_and_recorded_in_metadata(self, migrated_data_dir):
+        r = _run_backup(migrated_data_dir)
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        meta = json.loads((_backup_dirs(migrated_data_dir)[0] / "backup_metadata.json").read_text())
+        assert meta["trigger"] == "daily"
+
+    def test_release_trigger_recorded_and_maintenance_skipped_on_request(self, migrated_data_dir):
+        r = _run_backup(migrated_data_dir, {"BACKUP_TRIGGER": "release", "BACKUP_SKIP_MAINTENANCE": "1"})
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        meta = json.loads((_backup_dirs(migrated_data_dir)[0] / "backup_metadata.json").read_text())
+        assert meta["trigger"] == "release"
+        assert "BACKUP_SKIP_MAINTENANCE=1" in r.stdout
+
+    def test_invalid_trigger_rejected(self, migrated_data_dir):
+        r = _run_backup(migrated_data_dir, {"BACKUP_TRIGGER": "whatever"})
+        assert r.returncode != 0
+        assert _backup_dirs(migrated_data_dir) == []
+
+    def test_deprecated_backup_keep_only_warns(self, migrated_data_dir):
         r = _run_backup(migrated_data_dir, {"BACKUP_KEEP": "abc"})
-        assert r.returncode != 0
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        assert "BACKUP_KEEP 已废弃" in r.stderr
 
-    def test_zero_backup_keep_rejected(self, migrated_data_dir):
-        r = _run_backup(migrated_data_dir, {"BACKUP_KEEP": "0"})
-        assert r.returncode != 0
-
-    def test_negative_backup_keep_rejected(self, migrated_data_dir):
-        r = _run_backup(migrated_data_dir, {"BACKUP_KEEP": "-3"})
-        assert r.returncode != 0
-
-    def test_backup_keep_prunes_old_complete_backups_only(self, migrated_data_dir):
-        """连续多次备份(每次跨秒边界),只保留最近 KEEP 份;.incomplete-* 与
-        manifests 目录不应被误当成一份数据库备份计数。"""
-        for _ in range(4):
-            r = _run_backup(migrated_data_dir, {"BACKUP_KEEP": "2"})
-            assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
-            time.sleep(1.1)   # 保证下一次 UTC 秒级时间戳不同
-        dirs = _backup_dirs(migrated_data_dir)
-        assert len(dirs) == 2, f"BACKUP_KEEP=2 应只保留 2 份,实际 {len(dirs)}: {dirs}"
+    def test_maintenance_runs_after_backup_and_prunes_old_daily(self, migrated_data_dir):
+        """默认(不跳过 maintenance)时,备份成功之后顺手把超过 7 天的 daily 清掉。"""
+        old_name = "20200101T000000Z"
+        old = migrated_data_dir / "backups" / old_name
+        old.mkdir(parents=True)
+        (old / "backup_metadata.json").write_text(
+            json.dumps({"complete": True, "created_at": old_name, "trigger": "daily", "databases": {}})
+        )
+        r = _run_backup(migrated_data_dir)
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        assert not old.exists()
+        assert len(_backup_dirs(migrated_data_dir)) == 1
 
 
 class TestConcurrentBackups:

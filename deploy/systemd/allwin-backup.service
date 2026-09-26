@@ -9,7 +9,7 @@ Type=oneshot
 User=allwin
 Group=allwin
 WorkingDirectory=/opt/allwin/current
-# .env 里可配 S3_BACKUP_BUCKET / BACKUP_KEEP / AWS 凭证(或用 EC2 instance role)
+# .env 里可配 S3_BACKUP_BUCKET / BACKUP_DAILY_KEEP_DAYS / BACKUP_RELEASE_KEEP / AWS 凭证(或用 EC2 instance role)
 EnvironmentFile=/opt/allwin/shared/.env
 ExecStart=/bin/bash /opt/allwin/current/deploy/scripts/backup_sqlite.sh
 TimeoutStartSec=1800

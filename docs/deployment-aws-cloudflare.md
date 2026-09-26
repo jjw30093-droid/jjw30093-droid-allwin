@@ -273,8 +273,13 @@ HIT/BYPASS 行为的验证——本轮未实际登录 AWS/Cloudflare 控制台�
   - `umask 077`:备份文件/`backup_metadata.json`/manifest 导出默认不允许组或
     其他用户读取;
   - prediction manifest 导出单独落 `data/backups/manifests/<UTC时间戳>/`(与库备份分开目录);
-  - 本地保留最近 `BACKUP_KEEP`(默认 14,必须为正整数)份**完整**备份;
-    `.incomplete-*`/manifests 目录不计入这个计数;
+  - 本地分级保留(2026-09-27,取代旧的 `BACKUP_KEEP=14`):备份元数据 `backup_metadata.json`
+    记录 `trigger`(`daily` 定时器 / `release` 发布前 / `manual` 人工);`daily` 保留 7 天、
+    `release` 保留最近 3 份、`manual` 不自动删;无 trigger 字段的历史备份按 daily;最新一份完整
+    备份永不删。创建超过 24 小时的备份三库压成 `.zst`(zstd),`zstd -t` + sha256 + `integrity_check`
+    全部通过才删原文件;`restore_verify.sh` 会自动解压压缩备份并照旧校验。实现见
+    `backend/cli/backup_maintenance.py`(`--dry-run` 先看计划);release.sh 在**发布成功之后**才调用;
+    `.incomplete-*`/manifests 目录不计入;
   - 配置了 `S3_BACKUP_BUCKET` + AWS 凭证才 `aws s3 cp`(只上传已原子发布、
     `complete=true` 的备份);未配置明确打印 `LOCAL_ONLY`;aws CLI 缺失或上传
     失败都是发布失败(非静默降级)。
@@ -301,7 +306,7 @@ HIT/BYPASS 行为的验证——本轮未实际登录 AWS/Cloudflare 控制台�
 
 ## 6. 磁盘与告警
 
-- SQLite 主库 ~400MB 且随赛季增长,加上本地 14 份备份,**磁盘是单机最先耗尽的资源**;
+- SQLite 主库 ~400MB 且随赛季增长,加上本地分级保留的备份(daily 7 天 + release 3 份,旧备份 zstd 压缩),**磁盘是单机最先耗尽的资源**;release.sh preflight 在磁盘使用率 >85% 时中止发布(`MAX_DISK_USED_PERCENT` 可覆盖);
 - 告警阈值:used ≥ **70%** 提醒(清老备份/扩容排期),≥ **85%** 紧急(立即扩 EBS;
   SQLite 写满盘会直接报错,WAL 无法 checkpoint);阈值现在有真实实现:
   `python -m backend.cli.ops_check`(见 §11),环境变量 `OPS_DISK_WARN_PCT`/
@@ -352,7 +357,7 @@ source_health 等外部数据源健康状况塞进公网 readiness 判定——�
 ALLWIN_DATA_DIR=/opt/allwin/shared/data   # SQLite 数据目录(release 之间共享)
 ALLWIN_MEDIA_DIR=/var/lib/allwin/media    # 队徽 manifest/PNG 持久缓存,不随 release 删除
 S3_BACKUP_BUCKET=                          # 可选:备份 S3 bucket 名;为空则仅本地备份
-BACKUP_KEEP=14                             # 本地保留备份份数
+# 备份保留:BACKUP_KEEP 已废弃;daily 7 天 / release 3 份,可用 BACKUP_DAILY_KEEP_DAYS / BACKUP_RELEASE_KEEP 覆盖
 # AWS_ACCESS_KEY_ID= / AWS_SECRET_ACCESS_KEY= / AWS_DEFAULT_REGION=ap-northeast-1
 #   —— 仅在不用 EC2 instance role 时需要
 
