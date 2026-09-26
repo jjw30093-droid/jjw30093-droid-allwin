@@ -401,7 +401,12 @@ for (const section of ["team-stats", "players"] as const) {
     const second = tabs.nth(1);
     const label = (await second.innerText()).trim();
     await second.click();
-    const heading = page.getByRole("heading", { name: label, exact: true });
+    // 球队数据页每组有可见 <h2>;球员页分组名由吸顶条给出、不重复标题(整页不增高),
+    // 分组本身是带 aria-label 的 region
+    const heading =
+      section === "players"
+        ? page.getByRole("region", { name: label, exact: true })
+        : page.getByRole("heading", { name: label, exact: true });
     await expect(heading).toBeVisible();
     await expect
       .poll(async () => {
