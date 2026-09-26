@@ -328,6 +328,9 @@ test("各页面顶部栏与第一块内容之间的留白统一为 16px(手机)"
     await page.goto(path);
     const pad = await page.evaluate(() => getComputedStyle(document.querySelector("body > main")!).paddingTop);
     expect(pad, `${path} main padding-top`).toBe("16px");
+    // 一条用例里连续打开 7 个页面,对线上域名会触发 Cloudflare 1015 限流(页面变成
+    // 没有 <main> 的错误页)——每次 goto 之间留 1 秒
+    await page.waitForTimeout(1000);
   }
 });
 
