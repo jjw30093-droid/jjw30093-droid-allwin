@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .dy-content {
+    position: absolute; left: 64px; top: 330px; width: 816px; height: 1070px;
+    display: flex; flex-direction: column;
+  }
+  .title-row { height: 64px; display: flex; align-items: center; }
+  .hero-row { height: 190px; display: flex; align-items: center; gap: 28px; }
+  .hero-num { font-size: 150px; font-weight: 900; color: var(--red); line-height: 1; }
+  .hero-side { display: flex; flex-direction: column; gap: 8px; }
+  .hero-side .headline { font-size: 28px; font-weight: 700; color: var(--ink); }
+  .hero-side .line2 { font-size: 24px; font-weight: 400; color: var(--ink3); }
+  .hero-side .line3 { font-size: 24px; font-weight: 700; color: var(--gold); }
+
+  .chart-zone { height: 620px; position: relative; display: flex; flex-direction: column; margin-top: 4px; }
+  .legend { font-size: 22px; font-weight: 400; color: var(--ink3); margin-bottom: 10px; }
+  .legend .x-sample {
+    display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+    border-radius: 50%; background: var(--red); color: #fff; font-size: 22px; font-weight: 900;
+    margin-right: 6px; vertical-align: middle;
+  }
+
+  .cols { flex: 1; display: flex; gap: 4px; position: relative; margin-top: 56px; }
+  .col { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; }
+  .col.hl { background: rgba(210,59,44,0.08); border-radius: 14px; }
+  .stack-zone {
+    flex: 1; display: flex; flex-direction: column-reverse; align-items: center;
+    justify-content: flex-start; gap: 6px; padding-bottom: 8px;
+  }
+  .x-icon {
+    width: 88px; height: 88px; border-radius: 50%; background: var(--red);
+    color: #fff; font-size: 46px; font-weight: 900; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .pen-icon {
+    width: 88px; height: 88px; border-radius: 50%; background: transparent; border: 4px solid var(--red);
+    color: var(--red); font-size: 30px; font-weight: 900; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .dash-icon { width: 40px; height: 6px; border-radius: 3px; background: var(--gray); flex-shrink: 0; }
+
+  .col-labels { padding-top: 10px; text-align: center; height: 112px; }
+  .opp-side { font-size: 22px; font-weight: 400; color: var(--ink3); }
+  .opp-name { display: block; white-space: nowrap; font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1.4; }
+  .ucl-tag { display:inline-block; margin-top:4px; font-size: 22px; font-weight:700; color:#fff; background: var(--gold); border-radius: 4px; padding: 1px 6px; }
+  {# 816px 只有小红书 952px 的 86%，8 列球队名不换行会挤到邻列——抖音版
+     允许球队名换到 2 行，靠自身列宽换行，不会横向侵入邻列。 #}
+  .dy-content .opp-name { white-space: normal; word-break: break-all; }
+  .dy-content .col-labels { height: 130px; }
+
+  .bubble {
+    position: absolute; top: -6px; left: 50%; transform: translate(-50%, -100%);
+    background: var(--red); color: #fff; font-size: 22px; font-weight: 700;
+    padding: 8px 14px; border-radius: 10px; white-space: nowrap; z-index: 2;
+  }
+  .bubble::after {
+    content: ""; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 7px solid var(--red);
+  }
+
+  .top5-zone { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+  .top5-title { font-size: 24px; font-weight: 700; color: var(--ink); margin-bottom: 20px; }
+  .top5-row { height: 150px; display: flex; align-items: flex-end; justify-content: space-around; gap: 12px; }
+  .top5-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .top5-item img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2px solid #ffffff; box-shadow: 0 3px 8px rgba(17,24,32,0.16); filter: grayscale(100%); opacity: 0.7; }
+  .top5-item.mbappe img { width: 88px; height: 88px; border: 4px solid var(--gold); filter: none; opacity: 1; }
+  .top5-item .v { font-size: 22px; font-weight: 700; color: var(--ink2); }
+  .top5-item.mbappe .v { color: var(--gold); font-weight: 900; font-size: 26px; }
+</style>
+</head>
+<body>
+{% macro core_body(top5_visible) %}
+    <div class="title-row"><div class="page-title" style="font-size:52px;">进得不少，丢得更多</div></div>
+
+    <div class="hero-row">
+      <div class="hero-num">{{ avg_bcm }}</div>
+      <div class="hero-side">
+        <div class="headline">场均浪费大机会</div>
+        {% if is_top1 %}<div class="line3">西甲前场最多。同期亚马尔：{{ yamal_avg_bcm }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="chart-zone" {% if platform == 'douyin' %}style="flex:1; height:auto;"{% endif %}>
+      {% if platform != 'douyin' %}{{ chrome.watermark(logo_path, 476, 300) }}{% endif %}
+      <div class="legend"><span class="x-sample">✕</span>= 一次大机会没进</div>
+      <div class="cols">
+        {% for m in matches %}
+        <div class="col {{ 'hl' if m.highlight else '' }}">
+          {% if m.highlight %}<div class="bubble">这场 4 次大机会 + 1 个点球，一个没进</div>{% endif %}
+          <div class="stack-zone">
+            {% if m.bcm == 0 %}
+            <div class="dash-icon"></div>
+            {% else %}
+              {% for i in range(m.bcm) %}<div class="x-icon">✕</div>{% endfor %}
+              {% if m.highlight %}<div class="pen-icon">点</div>{% endif %}
+            {% endif %}
+          </div>
+          <div class="col-labels">
+            <span class="opp-side">{{ m.side_zh }}</span>
+            <span class="opp-name">{{ m.opp }}</span>
+            {% if m.league == '欧冠' %}<div class="ucl-tag">欧冠</div>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if top5_visible %}
+    <div class="top5-zone">
+      <div class="top5-title">西甲谁最浪费？他第一</div>
+      <div class="top5-row">
+        {% for t in top5 %}
+        <div class="top5-item {{ 'mbappe' if t.is_mbappe else '' }}">
+          <img src="{{ t.avatar }}" alt="{{ t.name_zh }}">
+          <div class="v">{{ '%.2f'|format(t.val) }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+{% endmacro %}
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+  <div class="dy-content">
+    {{ core_body(false) }}
+  </div>
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+  <div class="content">
+    {{ core_body(true) }}
+  </div>
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-row { flex-shrink: 0; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+  .title-row .page-title { font-size: 42px; }
+  .id-row { flex-shrink: 0; margin-top: 6px; }
+  .ghost-note { flex-shrink: 0; margin-top: 10px; font-size: 24px; font-weight: 700; color: #9AA1A9; }
+  .pct-pill { flex-shrink: 0; margin-top: 8px; display: inline-block; background: #D23B2C; color: #fff;
+              font-size: 22px; font-weight: 900; padding: 6px 18px; border-radius: 20px; align-self: flex-start; }
+
+  .scatter-wrap { flex-shrink: 0; margin-top: 22px; position: relative; }
+
+  .axis-label { font-size: 22px; fill: var(--ink3); }
+  .name-label { font-size: 22px; font-weight: 700; fill: var(--ink); }
+  .team-label { font-size: 22px; font-weight: 400; fill: var(--ink3); }
+  .arrow-label { font-size: 22px; font-weight: 900; fill: #ffffff; }
+  .ahead-big { font-size: 26px; font-weight: 900; color: #D23B2C; text-align: right; }
+  .ahead-big .sub { display: block; font-size: 22px; font-weight: 400; color: #9AA1A9; margin-top: 2px; }
+
+  .strip-row { flex-shrink: 0; margin-top: 16px; }
+  .strip-row .strip-title { font-size: 22px; font-weight: 700; color: #111820; margin-bottom: 10px; }
+  .strip-row .avatars { display: flex; align-items: flex-start; gap: 16px; flex-wrap: nowrap; overflow: hidden; }
+  .strip-item { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .strip-item .label { font-size: 22px; font-weight: 700; color: var(--ink); white-space: nowrap; margin-top: 4px; }
+  .strip-rest { font-size: 22px; font-weight: 700; color: var(--ink3); white-space: nowrap; align-self: center; }
+</style>
+</head>
+<body>
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row">
+      <div class="page-title">{{ page_title }}</div>
+      <div class="ahead-big">两项都比他强：{{ ahead_count }} 人<span class="sub">上赛季 {{ ahead_count_ref }} 人</span></div>
+    </div>
+    <div class="id-row">{{ chrome.identity_bar(bruno_avatar, bruno_badge, bruno_age) }}</div>
+    <div class="ghost-note">上赛季：关键传球英超第一，比第二名多出近{{ over_cheng }}成</div>
+    <div class="pct-pill">关键传球{{ pct_cc }}% · xA{{ pct_xa }}%</div>
+
+    <div class="scatter-wrap" style="width:{{ scatter_w }}px; height:{{ scatter_h }}px;">
+      <svg viewBox="0 0 {{ scatter_w }} {{ scatter_h }}" width="{{ scatter_w }}" height="{{ scatter_h }}">
+        <defs>
+          <filter id="grayscale"><feColorMatrix type="saturate" values="0"></feColorMatrix></filter>
+          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+            <polygon points="0 0, 10 5, 0 10" fill="#D23B2C"></polygon>
+          </marker>
+          <clipPath id="clip-bruno-cur"><circle cx="{{ bruno_cur_x }}" cy="{{ bruno_cur_y }}" r="{{ bruno_cur_r }}"></circle></clipPath>
+          <clipPath id="clip-bruno-ref"><circle cx="{{ bruno_ref_x }}" cy="{{ bruno_ref_y }}" r="55"></circle></clipPath>
+          <clipPath id="clip-badge-bruno-cur"><circle cx="{{ bruno_cur_x + bruno_cur_r*0.72 }}" cy="{{ bruno_cur_y + bruno_cur_r*0.72 }}" r="{{ bruno_cur_r*0.38 }}"></circle></clipPath>
+          {% for a in labeled %}
+          <clipPath id="clip-{{ a.pid }}"><circle cx="{{ a.x }}" cy="{{ a.y }}" r="{{ a.r }}"></circle></clipPath>
+          <clipPath id="clip-badge-{{ a.pid }}"><circle cx="{{ a.x + a.r*0.72 }}" cy="{{ a.y + a.r*0.72 }}" r="{{ a.r*0.38 }}"></circle></clipPath>
+          {% endfor %}
+        </defs>
+
+        <line x1="{{ px0 }}" y1="{{ py1 }}" x2="{{ scatter_w }}" y2="{{ py1 }}" stroke="var(--border)" stroke-width="1"></line>
+        <line x1="{{ px0 }}" y1="0" x2="{{ px0 }}" y2="{{ py1 }}" stroke="var(--border)" stroke-width="1"></line>
+        {% for t in x_ticks %}
+        <line x1="{{ t.x }}" y1="{{ py1 }}" x2="{{ t.x }}" y2="{{ py1+6 }}" stroke="var(--border)" stroke-width="1"></line>
+        <text x="{{ t.x }}" y="{{ py1+26 }}" text-anchor="middle" class="axis-label">{{ t.label }}</text>
+        {% endfor %}
+        {% for t in y_ticks %}
+        <line x1="{{ px0-6 }}" y1="{{ t.y }}" x2="{{ px0 }}" y2="{{ t.y }}" stroke="var(--border)" stroke-width="1"></line>
+        <text x="{{ px0-12 }}" y="{{ t.y+5 }}" text-anchor="end" class="axis-label">{{ t.label }}</text>
+        {% endfor %}
+        <text x="{{ scatter_w-4 }}" y="{{ py1-8 }}" text-anchor="end" class="axis-label">场均关键传球→</text>
+        <text x="{{ px0+6 }}" y="14" class="axis-label">↑场均预期助攻</text>
+
+        {% for d in gray_dots %}
+        <circle cx="{{ d.x }}" cy="{{ d.y }}" r="4" fill="#D5D8DC"></circle>
+        {% endfor %}
+
+        <line x1="{{ bruno_ref_x }}" y1="{{ bruno_ref_y }}" x2="{{ bruno_cur_x }}" y2="{{ bruno_cur_y }}"
+              stroke="#D23B2C" stroke-width="6" marker-end="url(#arrowhead)" opacity="0.85"></line>
+        {# 这个标签不管钉在残影上方多高、往左挪多少，只要吉布斯-怀特等
+           三人头像的真实坐标恰好落在附近就会被压住——反复试过好几个offset
+           都只是把"压住谁"换了一个人。跟残影旁注同一个教训：数据驱动的
+           图表内部没有真正"绝对安全"的角落，挪到图表外的固定HTML行。 #}
+
+        <circle cx="{{ bruno_ref_x }}" cy="{{ bruno_ref_y }}" r="57" fill="none" stroke="#9AA1A9" stroke-width="3" stroke-dasharray="6 5"></circle>
+        <g opacity="0.35" filter="url(#grayscale)">
+          <image href="{{ bruno_avatar_big }}" x="{{ bruno_ref_x-55 }}" y="{{ bruno_ref_y-55 }}" width="110" height="110" clip-path="url(#clip-bruno-ref)" preserveAspectRatio="xMidYMid slice"></image>
+        </g>
+        <text x="{{ scatter_w - 8 }}" y="{{ bruno_ref_y+80 }}" text-anchor="end" class="axis-label">上赛季的他</text>
+
+        {% for a in labeled %}
+        {% if a.moved %}<line x1="{{ a.true_x }}" y1="{{ a.true_y }}" x2="{{ a.x }}" y2="{{ a.y }}" stroke="#9AA1A9" stroke-width="1.5"></line>{% endif %}
+        <circle cx="{{ a.x }}" cy="{{ a.y }}" r="{{ a.r+2 }}" fill="#ffffff" stroke="#D23B2C" stroke-width="2"></circle>
+        <image href="{{ a.avatar }}" x="{{ a.x-a.r }}" y="{{ a.y-a.r }}" width="{{ a.r*2 }}" height="{{ a.r*2 }}" clip-path="url(#clip-{{ a.pid }})" preserveAspectRatio="xMidYMid slice"></image>
+        <circle cx="{{ a.x + a.r*0.72 }}" cy="{{ a.y + a.r*0.72 }}" r="{{ a.r*0.38+2 }}" fill="#ffffff"></circle>
+        <image href="{{ a.badge }}" x="{{ a.x + a.r*0.72 - a.r*0.38 }}" y="{{ a.y + a.r*0.72 - a.r*0.38 }}" width="{{ a.r*0.76 }}" height="{{ a.r*0.76 }}" clip-path="url(#clip-badge-{{ a.pid }})" preserveAspectRatio="xMidYMid slice"></image>
+        {% endfor %}
+        {% for a in labeled %}
+        {% if a.label_side == 'below' %}
+        <text x="{{ a.x }}" y="{{ a.y + a.r + 20 }}" text-anchor="middle" class="name-label">{{ a.label }}</text>
+        <text x="{{ a.x }}" y="{{ a.y + a.r + 40 }}" text-anchor="middle" class="team-label">{{ a.team_zh }}</text>
+        {% elif a.label_side == 'above' %}
+        <text x="{{ a.x }}" y="{{ a.y - a.r - 26 }}" text-anchor="middle" class="name-label">{{ a.label }}</text>
+        <text x="{{ a.x }}" y="{{ a.y - a.r - 6 }}" text-anchor="middle" class="team-label">{{ a.team_zh }}</text>
+        {% elif a.label_side == 'left' %}
+        <text x="{{ a.x - a.r - 12 }}" y="{{ a.y - 2 }}" text-anchor="end" class="name-label">{{ a.label }}</text>
+        <text x="{{ a.x - a.r - 12 }}" y="{{ a.y + 18 }}" text-anchor="end" class="team-label">{{ a.team_zh }}</text>
+        {% else %}
+        <text x="{{ a.x + a.r + 12 }}" y="{{ a.y - 2 }}" text-anchor="start" class="name-label">{{ a.label }}</text>
+        <text x="{{ a.x + a.r + 12 }}" y="{{ a.y + 18 }}" text-anchor="start" class="team-label">{{ a.team_zh }}</text>
+        {% endif %}
+        {% endfor %}
+
+        {% if bruno_cur_label_side == 'below' %}
+        <text x="{{ bruno_cur_x }}" y="{{ bruno_cur_y + bruno_cur_r + 22 }}" text-anchor="middle" class="name-label">B费</text>
+        {% elif bruno_cur_label_side == 'above' %}
+        <text x="{{ bruno_cur_x }}" y="{{ bruno_cur_y - bruno_cur_r - 8 }}" text-anchor="middle" class="name-label">B费</text>
+        {% elif bruno_cur_label_side == 'left' %}
+        <text x="{{ bruno_cur_x - bruno_cur_r - 12 }}" y="{{ bruno_cur_y + 7 }}" text-anchor="end" class="name-label">B费</text>
+        {% else %}
+        <text x="{{ bruno_cur_x + bruno_cur_r + 12 }}" y="{{ bruno_cur_y + 7 }}" text-anchor="start" class="name-label">B费</text>
+        {% endif %}
+        <circle cx="{{ bruno_cur_x }}" cy="{{ bruno_cur_y }}" r="{{ bruno_cur_r+2 }}" fill="#D23B2C"></circle>
+        <image href="{{ bruno_avatar_big }}" x="{{ bruno_cur_x-bruno_cur_r }}" y="{{ bruno_cur_y-bruno_cur_r }}" width="{{ bruno_cur_r*2 }}" height="{{ bruno_cur_r*2 }}" clip-path="url(#clip-bruno-cur)" preserveAspectRatio="xMidYMid slice"></image>
+        <circle cx="{{ bruno_cur_x + bruno_cur_r*0.72 }}" cy="{{ bruno_cur_y + bruno_cur_r*0.72 }}" r="{{ bruno_cur_r*0.38+2 }}" fill="#ffffff"></circle>
+        <image href="{{ bruno_badge_big }}" x="{{ bruno_cur_x + bruno_cur_r*0.72 - bruno_cur_r*0.38 }}" y="{{ bruno_cur_y + bruno_cur_r*0.72 - bruno_cur_r*0.38 }}" width="{{ bruno_cur_r*0.76 }}" height="{{ bruno_cur_r*0.76 }}" clip-path="url(#clip-badge-bruno-cur)" preserveAspectRatio="xMidYMid slice"></image>
+      </svg>
+    </div>
+
+    <div class="strip-row">
+      <div class="strip-title">关键传球 · 本季第{{ cc_rank_cur }}，排在他前面：</div>
+      <div class="avatars">
+        {% for s in cc_strip %}
+        <div class="strip-item">
+          {{ chrome.player_badge_avatar(s.avatar, s.badge, 56) }}
+          <div class="label">{{ s.label }}</div>
+        </div>
+        {% endfor %}
+        {% if cc_rest > 0 %}<div class="strip-rest">等{{ cc_rest }}人</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="strip-row">
+      <div class="strip-title">预期助攻 · 本季第{{ xa_rank_cur }}，排在他前面：</div>
+      <div class="avatars">
+        {% for s in xa_strip %}
+        <div class="strip-item">
+          {{ chrome.player_badge_avatar(s.avatar, s.badge, 56) }}
+          <div class="label">{{ s.label }}</div>
+        </div>
+        {% endfor %}
+        {% if xa_rest > 0 %}<div class="strip-rest">等{{ xa_rest }}人</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+</body>
+</html>

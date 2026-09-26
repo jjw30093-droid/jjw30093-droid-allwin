@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .content { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 90px; }
+  .dy-content {
+    position: absolute; left: 64px; top: 330px; width: 816px; height: 1070px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 60px;
+  }
+  .vote-btn .sub { font-size: 26px; font-weight: 700; color: #ffffff; margin-top: -4px; }
+
+  .question { text-align: center; font-size: 96px; font-weight: 900; line-height: 1.15; color: var(--ink); }
+  .question .red { color: var(--red); display: block; }
+
+  .avatar-stack { position: relative; width: 288px; height: 288px; }
+  .avatar-photo {
+    width: 288px; height: 288px; border-radius: 50%;
+    border: 6px solid var(--gold); box-shadow: 0 12px 28px rgba(17,24,32,0.20);
+    object-fit: cover; background: #ffffff; display: block;
+  }
+  .avatar-badge {
+    position: absolute; right: -6px; bottom: -6px; width: 90px; height: 90px;
+    border-radius: 50%; background: #ffffff; border: 4px solid #ffffff;
+    box-shadow: 0 6px 16px rgba(17,24,32,0.22);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .avatar-badge img { width: 66px; height: 66px; object-fit: contain; }
+
+  .vote-row { display: flex; gap: 24px; width: 100%; justify-content: center; }
+  .vote-btn {
+    flex: 0 0 46%; height: 260px; border-radius: 32px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+  }
+  .vote-btn.yes { background: var(--gold); }
+  .vote-btn.no { background: var(--red); }
+  .vote-btn .big { font-size: 120px; font-weight: 900; color: #ffffff; line-height: 1; }
+
+  .hint { text-align: center; font-size: 28px; font-weight: 400; color: var(--ink3); }
+</style>
+</head>
+<body>
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-content">
+    <div class="question">金球奖，<span class="red">姆巴配吗？</span></div>
+
+    <div class="avatar-stack">
+      <img class="avatar-photo" src="{{ avatar_path }}" alt="姆巴佩">
+      <div class="avatar-badge"><img src="{{ badge_path }}" alt="皇家马德里"></div>
+    </div>
+
+    <div class="vote-row">
+      <div class="vote-btn yes">
+        <div class="big">配</div>
+        <div class="sub">评论区扣 1</div>
+      </div>
+      <div class="vote-btn no">
+        <div class="big">不配</div>
+        <div class="sub">评论区扣 2</div>
+      </div>
+    </div>
+
+    <div class="hint">下期给谁体检？评论区点名</div>
+  </div>
+
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="question">金球奖，<span class="red">姆巴配吗？</span></div>
+
+    <div class="avatar-stack">
+      <img class="avatar-photo" src="{{ avatar_path }}" alt="姆巴佩">
+      <div class="avatar-badge"><img src="{{ badge_path }}" alt="皇家马德里"></div>
+    </div>
+
+    <div class="vote-row">
+      <div class="vote-btn yes">
+        <div class="big">配</div>
+      </div>
+      <div class="vote-btn no">
+        <div class="big">不配</div>
+      </div>
+    </div>
+
+    <div class="hint">下期给谁体检？评论区点名</div>
+  </div>
+
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

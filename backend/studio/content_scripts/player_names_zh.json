@@ -1,0 +1,53 @@
+{
+  "names": {
+    "Álvaro Garcia": "阿尔瓦罗·加西亚",
+    "Lucas Boyé": "卢卡斯·博耶",
+    "Iñigo Vicente": "伊尼戈·维森特",
+    "Fer Niño": "费尔·尼诺",
+    "Ante Budimir": "安特·布迪米尔",
+    "Miguel Sierra": "米格尔·安赫尔·西埃拉",
+    "Antony": "安东尼",
+    "Martín Satriano": "马丁·萨特里亚诺",
+    "Pierre-Emerick Aubameyang": "奥巴梅扬",
+    "Chupe": "丘佩",
+    "Enes Ünal": "埃内斯·于纳尔",
+    "Roberto Fernández": "罗伯托·费尔南德斯",
+    "Javi Hernández": "哈维·埃尔南德斯",
+    "Sergio Camello": "塞尔吉奥·卡梅洛",
+    "Mikel Oyarzabal": "米克尔·奥亚尔萨巴尔",
+    "Lamine Yamal": "亚马尔",
+    "Raphinha": "拉菲尼亚",
+    "Vinícius Júnior": "维尼修斯",
+    "Arnaut Danjuma": "阿尔诺·丹朱马",
+    "Kylian Mbappé": "姆巴佩"
+  },
+  "short_names": {
+    "Álvaro Garcia": "加西亚",
+    "Lucas Boyé": "博耶",
+    "Iñigo Vicente": "维森特",
+    "Fer Niño": "尼诺",
+    "Ante Budimir": "布迪米尔",
+    "Miguel Sierra": "西埃拉",
+    "Antony": "安东尼",
+    "Martín Satriano": "萨特里亚诺",
+    "Pierre-Emerick Aubameyang": "奥巴梅扬",
+    "Chupe": "丘佩",
+    "Enes Ünal": "于纳尔",
+    "Roberto Fernández": "费尔南德斯",
+    "Javi Hernández": "埃尔南德斯",
+    "Sergio Camello": "卡梅洛",
+    "Mikel Oyarzabal": "奥亚尔萨巴尔",
+    "Lamine Yamal": "亚马尔",
+    "Raphinha": "拉菲尼亚",
+    "Vinícius Júnior": "维尼修斯",
+    "Arnaut Danjuma": "丹朱马",
+    "Kylian Mbappé": "姆巴佩"
+  },
+  "unverified_sources": {
+    "Chupe": "项目 dim_player_i18n 无记录，本次按通用译名规则音译（原名 Carlos Ruiz Rubio，绰号 Chupe/Chupete），未经项目 i18n 流程校验",
+    "Javi Hernández": "项目 dim_player_i18n 无记录，本次按通用译名规则音译，未经项目 i18n 流程校验"
+  },
+  "verification_notes": {
+    "Miguel Sierra": "核对结果：dim_player_i18n 的 全名'米格尔·安赫尔·西埃拉' 是准确的，对应真实全名 Miguel Ángel Sierra Ortega（WebSearch 核实，Sevilla 2004年生边锋），此前列表里显示成'米格尔·安赫尔…'是因为CSS省略号截断了'西埃拉'，不是映射错误。short字段用'西埃拉'（媒体/首发阵容通用简称）。"
+  }
+}

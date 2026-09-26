@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  /* base.css 的 .content 默认就是 flex-direction:column，不设 align-items
+     意味着子元素默认 stretch 撑满宽度——report-card 需要这个撑满宽度的
+     行为；"内容区统一左对齐"靠各文字元素自身默认的 text-align:left 达成，
+     不需要（也不能）用 align-items:flex-start，那样会把 report-card 的
+     宽度从"撑满"改成"收缩到内容宽度"，导致卡片变窄、右侧口径说明行
+     甚至可能和卡片重叠。 */
+  /* 报告单下方 20px、与底部品牌通栏之间 24px——只在这一页覆盖共享的
+     .caveat-row 间距，不改 base.css，不影响 P2-P4 现有版式。 */
+  .caveat-row { margin-top: 20px; margin-bottom: 24px; height: auto; }
+
+  .title-block { flex-shrink: 0; }
+  /* 不用 .title-block .t1 这种父级限定写法——douyin 分支复用同一批 .t1/.t2/
+     div 子元素，但外层容器是 .dy-title/.dy-subtitle 不是 .title-block/
+     .subtitle-block，限定选择器在那个分支完全不命中，字号(font-size 靠
+     inline style 单独给)以外的样式(粗细/行高/颜色)会静默retreat到浏览器
+     默认值——这正是抖音版标题一度把副标题和报告单都压穿的根因：默认
+     line-height 比 1.05 宽得多，2 行 150/170px 大字直接从预期的 336px
+     量高到实测 453px。改成不限定父级，两个分支共用同一份规则。 */
+  .t1 { font-weight: 900; line-height: 1.05; color: #111820; }
+  .t2 { font-weight: 900; line-height: 1.05; color: #D23B2C; }
+
+  .subtitle-block { flex-shrink: 0; margin-top: 20px; }
+  .subtitle-block div, .dy-subtitle div { font-size: 34px; font-weight: 400; color: #5B6470; line-height: 1.3; }
+
+  .report-card {
+    flex: 1; margin-top: 28px; background: #ffffff; border: 1px solid #E3E5E0; border-radius: 24px;
+    padding: 40px; display: flex; flex-direction: column; position: relative;
+  }
+
+  .report-header { display: flex; align-items: center; gap: 28px; position: relative; }
+  .scope-text { position: absolute; right: 0; top: -4px; font-size: 22px; font-weight: 400; color: #9AA1A9; }
+  .id-photo-wrap { position: relative; width: 180px; height: 180px; flex-shrink: 0; }
+  .id-photo { width: 180px; height: 180px; border-radius: 16px; object-fit: cover; display: block; }
+  .id-badge {
+    position: absolute; right: -10px; bottom: -10px; width: 64px; height: 64px; border-radius: 50%;
+    background: #ffffff; box-shadow: 0 4px 10px rgba(17,24,32,0.18);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .id-badge img { width: 48px; height: 48px; object-fit: contain; }
+  .id-name { font-size: 56px; font-weight: 900; color: #111820; line-height: 1.1; }
+  .id-sub { font-size: 28px; font-weight: 400; color: #5B6470; margin-top: 8px; }
+
+  .divider-thick { height: 2px; background: #111820; margin-top: 18px; }
+
+  .col-header { display: flex; margin-top: 12px; font-size: 22px; font-weight: 400; color: #9AA1A9; }
+  .col-item { flex: 0 0 300px; }
+  .dy-card .col-item { flex: 0 0 200px; }
+  .col-result { flex: 1; }
+  .col-verdict { flex: 0 0 220px; text-align: right; }
+  .dy-card .col-verdict { flex: 0 0 170px; }
+
+  .report-rows { flex: 1; display: flex; flex-direction: column; }
+  .report-row { flex: 1; display: flex; align-items: center; border-top: 1px dashed #D5D8DC; }
+  .report-row:first-child { border-top: none; }
+  .row-item { flex: 0 0 300px; font-size: 30px; }
+  .dy-card .row-item { flex: 0 0 200px; font-size: 28px; }
+  .row-result-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+  .row-result { font-size: 56px; line-height: 1; }
+  .dy-card .row-result { font-size: 46px; }
+  .row-sub { font-size: 20px; font-weight: 400; color: #9AA1A9; }
+  .row-verdict { flex: 0 0 220px; display: flex; justify-content: flex-end; }
+  .dy-card .row-verdict { flex: 0 0 170px; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 8px 20px; border-radius: 20px; font-size: 26px; font-weight: 700; }
+
+  .row.normal .row-item { color: #9AA1A9; font-weight: 400; }
+  .row.normal .row-result { color: #9AA1A9; font-weight: 700; }
+  .row.normal .pill { background: #E3E5E8; color: #9AA1A9; }
+  .row.bad .row-item { color: #111820; font-weight: 700; }
+  .row.bad .row-result { color: #D23B2C; font-weight: 900; }
+  .row.bad .pill { background: #D23B2C; color: #ffffff; }
+
+  .stamp {
+    position: absolute; width: 170px; height: 170px;
+    border-radius: 50%; border: 5px solid #D23B2C; background: rgba(255,255,255,0.82);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transform: rotate(-12deg); color: #D23B2C; opacity: 0.9;
+  }
+  .stamp .l1 { font-size: 30px; font-weight: 900; line-height: 1.3; }
+  .stamp .l2 { font-size: 24px; font-weight: 700; margin-top: 2px; }
+
+  /* ---- 抖音：三块独立绝对定位区域，不走小红书那套 masthead+content(flex)+
+     footer-band 的文档流版式——抖音没有页眉/页脚通栏，品牌条和口径说明是
+     叠在安全区顶/底的两行文字，标题/副标题/报告单三块各自卡在 spec 给的
+     y 区间，用 position:absolute 直接摆比硬凑 flex 流可靠。 ---- */
+  .dy-title { position: absolute; left: 64px; top: 300px; width: 816px; }
+  .dy-subtitle { position: absolute; left: 64px; top: 640px; width: 816px; }
+  .dy-subtitle div { font-size: 34px; font-weight: 400; color: #5B6470; line-height: 1.3; margin-top: 6px; }
+  {# 副标题实测 2 行到 740.375px 才结束，比 spec 给的报告单起点 720px 晚，
+     卡片顶部往下挪到 748px 让开(底部仍钉在 1400px，跟 spec 的 y 区间上限
+     对齐，只是压缩了卡片自身高度)。 #}
+  .dy-card { position: absolute; left: 64px; top: 748px; width: 816px; height: 652px; }
+  {# 卡片矮了(652px vs 小红书的~730px)，170px 印章按最后一行行高(~84px)算
+     会吃进上面"点球"那一行的结论胶囊——缩到 150px，紧贴最后一行走。文字
+     不跌破抖音版全局最小字号 28px 这条硬规则，circle 缩小但文字不缩。 #}
+  .dy-card .stamp { width: 168px; height: 168px; right: 4px; bottom: 4px; }
+  .dy-card .stamp .l1 { font-size: 28px; }
+  .dy-card .stamp .l2 { font-size: 28px; }
+</style>
+</head>
+<body>
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title">
+    <div class="t1" style="font-size: {{ title1_fs_dy }}px;">{{ title1 }}</div>
+    <div class="t2" style="font-size: {{ title2_fs_dy }}px;">{{ title2 }}</div>
+  </div>
+
+  <div class="dy-subtitle">
+    {% for line in subtitle_lines %}<div>{{ line }}</div>{% endfor %}
+  </div>
+
+  <div class="dy-card">
+    <div class="report-card" style="margin-top:0; height:100%;">
+      <div class="report-header">
+        <div class="scope-text">{{ scope_text }}</div>
+        <div class="id-photo-wrap">
+          <img class="id-photo" src="{{ avatar_path }}" alt="姆巴佩">
+          <div class="id-badge"><img src="{{ badge_path }}" alt="皇家马德里"></div>
+        </div>
+        <div>
+          <div class="id-name">姆巴佩</div>
+          <div class="id-sub">皇家马德里 · 10 号 · 前锋</div>
+        </div>
+      </div>
+
+      <div class="divider-thick"></div>
+
+      <div class="col-header">
+        <div class="col-item">项目</div>
+        <div class="col-result">结果</div>
+        <div class="col-verdict">结论</div>
+      </div>
+
+      <div class="report-rows">
+        {% for r in report_rows %}
+        <div class="report-row row {{ 'normal' if r.normal else 'bad' }}">
+          <div class="row-item">{{ r.item }}</div>
+          <div class="row-result-wrap">
+            <div class="row-result">{{ r.result }}</div>
+            {% if r.sub %}<div class="row-sub">{{ r.sub }}</div>{% endif %}
+          </div>
+          <div class="row-verdict"><span class="pill">{{ r.verdict }}{{ r.arrow }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="stamp"><div class="l1">喵弟体检</div><div class="l2">{{ issue_no }}</div></div>
+    </div>
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-block">
+      <div class="t1" style="font-size: {{ title1_fs }}px;">{{ title1 }}</div>
+      <div class="t2" style="font-size: {{ title2_fs }}px;">{{ title2 }}</div>
+    </div>
+
+    <div class="subtitle-block">
+      {% for line in subtitle_lines %}<div>{{ line }}</div>{% endfor %}
+    </div>
+
+    <div class="report-card">
+      <div class="report-header">
+        <div class="scope-text">{{ scope_text }}</div>
+        <div class="id-photo-wrap">
+          <img class="id-photo" src="{{ avatar_path }}" alt="姆巴佩">
+          <div class="id-badge"><img src="{{ badge_path }}" alt="皇家马德里"></div>
+        </div>
+        <div>
+          <div class="id-name">姆巴佩</div>
+          <div class="id-sub">皇家马德里 · 10 号 · 前锋</div>
+        </div>
+      </div>
+
+      <div class="divider-thick"></div>
+
+      <div class="col-header">
+        <div class="col-item">项目</div>
+        <div class="col-result">结果</div>
+        <div class="col-verdict">结论</div>
+      </div>
+
+      <div class="report-rows">
+        {% for r in report_rows %}
+        <div class="report-row row {{ 'normal' if r.normal else 'bad' }}">
+          <div class="row-item">{{ r.item }}</div>
+          <div class="row-result-wrap">
+            <div class="row-result">{{ r.result }}</div>
+            {% if r.sub %}<div class="row-sub">{{ r.sub }}</div>{% endif %}
+          </div>
+          <div class="row-verdict"><span class="pill">{{ r.verdict }}{{ r.arrow }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="stamp" style="right:-24px; bottom:-24px;"><div class="l1">喵弟体检</div><div class="l2">{{ issue_no }}</div></div>
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

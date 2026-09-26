@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-row { flex-shrink: 0; height: 84px; display: flex; align-items: center; }
+  .cards-row { flex-shrink: 0; display: flex; gap: 16px; margin-top: 12px; }
+  .card { flex: 1; min-width: 0; border-radius: 18px; padding: 18px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+  .card.hl { background: #ffffff; border: 2px solid var(--red); box-shadow: 0 6px 16px rgba(210,59,44,0.15); }
+  .card.gray { background: #ECEAE3; border: 2px solid transparent; }
+  .card .date { font-size: 18px; font-weight: 400; color: var(--ink3); }
+  .card .opp { font-size: 24px; font-weight: 700; color: var(--ink); }
+  .card.gray .opp { color: var(--ink2); }
+  .card .score { font-size: 20px; font-weight: 400; color: var(--ink3); }
+  .card .stat-line { font-size: 22px; font-weight: 900; }
+  .card.hl .stat-line { color: var(--red); }
+  .card.gray .stat-line { color: var(--ink3); font-weight: 700; }
+  .card .extra { font-size: 18px; font-weight: 700; color: var(--gold); }
+
+  .fill-row { flex: 1; }
+
+  .vote-row { flex-shrink: 0; display: flex; gap: 24px; margin-top: 40px; margin-bottom: 8px; }
+  .vote-btn { flex: 1; height: 140px; border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  .vote-btn.yes { background: var(--gold); }
+  .vote-btn.no { background: var(--red); }
+  .vote-btn .big { font-size: 40px; font-weight: 900; color: #fff; }
+  .vote-btn .sub { font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.9); }
+
+  .dy-title { position: absolute; left: 64px; top: 300px; width: 816px; }
+  .dy-title .page-title { font-size: 48px; }
+  .dy-cards { position: absolute; left: 64px; top: 430px; width: 816px; display: flex; flex-direction: column; gap: 14px; }
+  .dy-cards .card { flex-direction: row; justify-content: space-between; text-align: left; padding: 16px 24px; }
+  .dy-cards .card .left { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .dy-cards .card .right { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .dy-vote { position: absolute; left: 64px; top: 1230px; width: 816px; display: flex; gap: 24px; }
+  .dy-vote .vote-btn { height: 150px; }
+  .dy-vote .vote-btn .big { font-size: 44px; }
+  .dy-vote .vote-btn .sub { font-size: 24px; }
+</style>
+</head>
+<body>
+{% macro card_content(m) %}
+  <div class="date">{{ m.date }}</div>
+  <div class="opp">{{ m.opp_zh }}</div>
+  <div class="score">{{ m.score }}</div>
+  {% if m.highlight %}
+    <div class="stat-line">{{ m.goals }}球 {{ m.assists }}助 {{ m.chances_created }}关键传球</div>
+  {% else %}
+    <div class="stat-line">0球0助</div>
+    {% if m.extra %}<div class="extra">{{ m.extra }}</div>{% endif %}
+  {% endif %}
+{% endmacro %}
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title"><div class="page-title">{{ page_title }}</div></div>
+
+  <div class="dy-cards">
+    {% for m in matches %}
+    <div class="card {{ 'hl' if m.highlight else 'gray' }}">
+      <div class="left">
+        <div class="date">{{ m.date }} · {{ m.opp_zh }}</div>
+        <div class="score">{{ m.score }}</div>
+      </div>
+      <div class="right">
+        {% if m.highlight %}
+          <div class="stat-line">{{ m.goals }}球 {{ m.assists }}助 {{ m.chances_created }}关键传球</div>
+        {% else %}
+          <div class="stat-line">0球0助</div>
+          {% if m.extra %}<div class="extra">{{ m.extra }}</div>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="dy-vote">
+    <div class="vote-btn yes"><div class="big">还是核心</div><div class="sub">评论区扣 1</div></div>
+    <div class="vote-btn no"><div class="big">不是了</div><div class="sub">评论区扣 2</div></div>
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title">{{ page_title }}</div></div>
+
+    <div class="cards-row">
+      {% for m in matches %}
+      <div class="card {{ 'hl' if m.highlight else 'gray' }}">
+        {{ card_content(m) }}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="fill-row"></div>
+
+    <div class="vote-row">
+      <div class="vote-btn yes"><div class="big">还是核心</div><div class="sub">评论区扣 1</div></div>
+      <div class="vote-btn no"><div class="big">不是了</div><div class="sub">评论区扣 2</div></div>
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

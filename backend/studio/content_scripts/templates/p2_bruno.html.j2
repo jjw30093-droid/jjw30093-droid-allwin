@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-row { flex-shrink: 0; height: 66px; display: flex; align-items: center; }
+  .panels-row { flex-shrink: 0; display: flex; gap: 32px; margin-top: 12px; }
+  .panel { display: flex; flex-direction: column; min-width: 0; }
+  .panel-head { flex-shrink: 0; height: 36px; display: flex; justify-content: space-between; align-items: baseline; }
+  .panel-season { font-size: 26px; font-weight: 900; color: var(--ink); }
+  .panel-note-top { font-size: 20px; font-weight: 700; color: var(--red); text-align: right; max-width: 60%; }
+  .panel-scatter { flex-shrink: 0; position: relative; }
+  .panel-foot { flex-shrink: 0; height: 32px; font-size: 22px; font-weight: 900; text-align: center; }
+  .panel-foot.zero { color: var(--ink3); }
+  .panel-foot.some { color: var(--red); }
+
+  .dot-gray { fill: #D5D8DC; }
+  .name-label { font-size: 15px; font-weight: 700; fill: var(--ink); }
+  .avatar-ring { stroke: var(--red); stroke-width: 3; fill: none; }
+
+  .rank-bar { flex-shrink: 0; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: var(--ink); gap: 4px; margin-top: 8px; }
+  .rank-bar .sep { color: var(--ink3); font-weight: 400; margin: 0 10px; }
+  .rank-bar .hl { color: var(--red); font-weight: 900; }
+
+  .dy-title { position: absolute; left: 64px; top: 300px; width: 816px; }
+  .dy-title .page-title { font-size: 46px; }
+  {# height 故意不写死——两个 .panel 子元素高度都是 Python 算好、内联写死
+     的固定值（36+376+32=444，两个+16 gap=904px），让 flexbox 按内容自然
+     撑高（904px），不留一个可能对不上、还会触发 flex-shrink 静默压缩子
+     元素的外层固定高度。#}
+  .dy-panels { position: absolute; left: 64px; top: 400px; width: 816px; display: flex; flex-direction: column; gap: 16px; }
+  .dy-rank-bar { position: absolute; left: 64px; top: 1330px; width: 816px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: var(--ink); }
+  .dy-rank-bar .sep { color: var(--ink3); font-weight: 400; margin: 0 10px; }
+  .dy-rank-bar .hl { color: var(--red); font-weight: 900; }
+</style>
+</head>
+<body>
+{% macro panel_svg(p) %}
+<svg viewBox="0 0 {{ p.w }} {{ p.h }}" width="{{ p.w }}" height="{{ p.h }}">
+  <line x1="0" y1="{{ p.y0 }}" x2="{{ p.w }}" y2="{{ p.y0 }}" stroke="var(--border)" stroke-width="1"></line>
+  <line x1="{{ p.x0 }}" y1="0" x2="{{ p.x0 }}" y2="{{ p.h }}" stroke="var(--border)" stroke-width="1"></line>
+  <text x="{{ p.w - 4 }}" y="{{ p.h - 6 }}" text-anchor="end" font-size="14" fill="var(--ink3)">关键传球→</text>
+  <text x="{{ p.x0 + 6 }}" y="12" font-size="14" fill="var(--ink3)">↑xA</text>
+  {% for d in p.gray_dots %}
+  <circle cx="{{ d.x }}" cy="{{ d.y }}" r="4" class="dot-gray"></circle>
+  {% endfor %}
+  {% for d in p.plain_dots %}
+  <circle cx="{{ d.x }}" cy="{{ d.y }}" r="5" fill="#9AA1A9"></circle>
+  {% endfor %}
+  {% for a in p.avatars %}
+  {% if a.moved %}<circle cx="{{ a.true_x }}" cy="{{ a.true_y }}" r="3" fill="#9AA1A9"></circle>
+  <line x1="{{ a.true_x }}" y1="{{ a.true_y }}" x2="{{ a.x }}" y2="{{ a.y }}" stroke="#9AA1A9" stroke-width="1.5"></line>{% endif %}
+  <circle cx="{{ a.x }}" cy="{{ a.y }}" r="{{ a.r + 2 }}" fill="{{ '#D23B2C' if a.is_bruno else '#ffffff' }}"></circle>
+  <clipPath id="clip-{{ p.id }}-{{ a.pid }}"><circle cx="{{ a.x }}" cy="{{ a.y }}" r="{{ a.r }}"></circle></clipPath>
+  <image href="{{ a.avatar }}" x="{{ a.x - a.r }}" y="{{ a.y - a.r }}" width="{{ a.r*2 }}" height="{{ a.r*2 }}" clip-path="url(#clip-{{ p.id }}-{{ a.pid }})" preserveAspectRatio="xMidYMid slice"></image>
+  {% endfor %}
+  {# 姓名标签单独一个后置循环，保证画在全部头像圆之上——头像按碰撞检测
+     被推挤到彼此紧邻时，若标签跟头像同一轮画，后画的头像白圆会盖住前一个
+     头像下方的标签文字（实测"吉布斯-怀特"被切成"布斯-怀特"，前置圆形背景
+     盖掉了最左边的"吉"字）。 #}
+  {% for a in p.avatars %}
+  <text x="{{ a.x }}" y="{{ a.y + a.r + 17 }}" text-anchor="middle" class="name-label">{{ a.label }}</text>
+  {% endfor %}
+</svg>
+{% endmacro %}
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title"><div class="page-title">{{ page_title }}</div></div>
+
+  <div class="dy-panels">
+    {% for p in panels %}
+    <div class="panel" style="width:{{ p.w }}px;">
+      <div class="panel-head">
+        <div class="panel-season">{{ p.season_label }}</div>
+        <div class="panel-note-top">{{ p.note_top }}</div>
+      </div>
+      <div class="panel-scatter" style="width:{{ p.w }}px; height:{{ p.h }}px;">{{ panel_svg(p) }}</div>
+      <div class="panel-foot {{ 'zero' if p.ahead_count == 0 else 'some' }}">两项都比他强：{{ p.ahead_count }}人</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="dy-rank-bar">
+    关键传球 {{ rank_cc_ref }}<span class="hl">→{{ rank_cc_cur }}</span><span class="sep">·</span>xA {{ rank_xa_ref }}<span class="hl">→{{ rank_xa_cur }}</span><span class="sep">·</span><span class="hl">助攻 {{ rank_ast_ref }}→{{ rank_ast_cur }}</span>
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title">{{ page_title }}</div></div>
+
+    <div class="panels-row">
+      {% for p in panels %}
+      <div class="panel" style="width:{{ p.w }}px;">
+        <div class="panel-head">
+          <div class="panel-season">{{ p.season_label }}</div>
+          <div class="panel-note-top">{{ p.note_top }}</div>
+        </div>
+        <div class="panel-scatter" style="width:{{ p.w }}px; height:{{ p.h }}px;">{{ panel_svg(p) }}</div>
+        <div class="panel-foot {{ 'zero' if p.ahead_count == 0 else 'some' }}">两项都比他强：{{ p.ahead_count }}人</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="rank-bar">
+      关键传球 {{ rank_cc_ref }}<span class="hl">→{{ rank_cc_cur }}</span><span class="sep">·</span>xA {{ rank_xa_ref }}<span class="hl">→{{ rank_xa_cur }}</span><span class="sep">·</span><span class="hl">助攻 {{ rank_ast_ref }}→{{ rank_ast_cur }}</span>
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

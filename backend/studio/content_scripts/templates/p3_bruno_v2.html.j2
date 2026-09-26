@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-row { flex-shrink: 0; height: 62px; display: flex; align-items: center; }
+  .title-row .page-title { font-size: 46px; }
+  .id-row { flex-shrink: 0; margin-top: 4px; }
+
+  .main-chart { flex-shrink: 0; margin-top: 16px; height: 560px; }
+  .bar-val { font-size: 22px; font-weight: 700; }
+  .bar-season { font-size: 22px; font-weight: 400; fill: var(--ink3); }
+  .callout { font-size: 24px; font-weight: 700; fill: var(--red); }
+  .best-tag { font-size: 24px; font-weight: 700; fill: var(--gold); }
+  .bracket-pct { font-size: 80px; font-weight: 900; fill: #D23B2C; }
+
+  .mini-row { flex-shrink: 0; display: flex; gap: 24px; margin-top: 20px; }
+  .mini-box { flex: 1; border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; }
+  .mini-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .mini-title { font-size: 22px; font-weight: 700; color: var(--ink2); }
+  .mini-pct { font-size: 32px; font-weight: 900; color: #D23B2C; }
+
+  .conclusion-row { flex-shrink: 0; margin-top: 24px; font-size: 30px; font-weight: 700; color: #111820; }
+</style>
+</head>
+<body>
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title">{{ page_title }}</div></div>
+    <div class="id-row">{{ chrome.identity_bar(bruno_avatar, bruno_badge, bruno_age) }}</div>
+
+    <div class="main-chart">
+      {# viewBox 高度必须是 main_svg_h(560，含季节标签行)，不能用 chart_h(500，
+         只到柱顶基线)——之前用 chart_h 当 viewBox 高度，柱下方 chart_h+26 的
+         季节标签整行都落在 viewBox 之外，被 SVG 默认 overflow:hidden 整体裁掉，
+         肉眼看是"标签没画"，其实是画了但被裁——跟迷你图同一类 bug。 #}
+      <svg viewBox="0 0 680 {{ main_svg_h }}" width="100%" height="100%">
+        <line x1="0" y1="{{ dashed_y }}" x2="680" y2="{{ dashed_y }}" stroke="#D23B2C" stroke-width="2" stroke-dasharray="8 6"></line>
+        {% for b in main_bars %}
+        <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="6" fill="{{ b.color }}"></rect>
+        {% if not b.is_best %}<text x="{{ b.x + b.w/2 }}" y="{{ b.val_y }}" text-anchor="middle" class="bar-val" fill="{{ b.color }}">{{ b.val }}</text>{% endif %}
+        <text x="{{ b.x + b.w/2 }}" y="{{ chart_h + 26 }}" text-anchor="middle" class="bar-season" fill="{{ b.season_color or 'var(--ink3)' }}" font-weight="{{ 900 if b.season_color else 400 }}">{{ b.season_short }}</text>
+        {% if b.dot %}<circle cx="{{ b.x + b.w/2 }}" cy="{{ dashed_y }}" r="7" fill="#ffffff" stroke="{{ b.color }}" stroke-width="3"></circle>{% endif %}
+        {% endfor %}
+        {# 回声柱(20/21等)自己的数值标签会被顶到 dashed_y-18，"打回原形"
+           标签原来贴在 dashed_y-12 只比它低6px，两行文字几乎完全叠在一起
+           (实测 20/21 的 2.57 被完全盖住)——挪到更高、明确清出一截空当。 #}
+        <text x="8" y="{{ dashed_y - 52 }}" text-anchor="start" class="callout">打回原形</text>
+        <text x="{{ best_bar.x }}" y="{{ best_bar.y - 40 }}" class="best-tag">生涯最佳 {{ best_val }}</text>
+
+        <!-- 下降括号 -->
+        {% set bracket_y = [best_bar.y, cur_bar.y]|min - 90 %}
+        <path d="M {{ best_bar.x + best_bar.w/2 }} {{ bracket_y+18 }} L {{ best_bar.x + best_bar.w/2 }} {{ bracket_y }} L {{ cur_bar.x + cur_bar.w/2 }} {{ bracket_y }} L {{ cur_bar.x + cur_bar.w/2 }} {{ bracket_y+18 }}"
+              fill="none" stroke="#D23B2C" stroke-width="3"></path>
+        <text x="{{ (best_bar.x + cur_bar.x)/2 + best_bar.w/2 }}" y="{{ bracket_y - 16 }}" text-anchor="middle" class="bracket-pct">{{ pct_cc }}%</text>
+      </svg>
+    </div>
+
+    <div class="mini-row">
+      <div class="mini-box">
+        <div class="mini-head"><div class="mini-title">场均xA · 20/21→26/27</div><div class="mini-pct">{{ pct_xa }}%</div></div>
+        <svg viewBox="0 0 400 {{ xa_svg_h }}" width="100%" height="{{ xa_svg_h }}">
+          {% for b in xa_bars %}
+          <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="4" fill="{{ b.color }}"></rect>
+          {% if b.color != '#D5D8DC' %}<text x="{{ b.x + b.w/2 }}" y="{{ b.y - 8 }}" text-anchor="middle" font-size="22" font-weight="700" fill="{{ b.color }}">{{ b.val }}</text>{% endif %}
+          {% if b.is_best %}
+          <text x="{{ b.x + b.w - 2 }}" y="{{ xa_h + 18 }}" text-anchor="end" font-size="20" font-weight="900" fill="{{ b.season_color }}">{{ b.season_short }}</text>
+          {% elif b.is_cur %}
+          <text x="{{ b.x + 2 }}" y="{{ xa_h + 18 }}" text-anchor="start" font-size="20" font-weight="900" fill="{{ b.season_color }}">{{ b.season_short }}</text>
+          {% else %}
+          <line x1="{{ b.x + b.w/2 }}" y1="{{ xa_h + 2 }}" x2="{{ b.x + b.w/2 }}" y2="{{ xa_h + 10 }}" stroke="var(--border)" stroke-width="2"></line>
+          {% endif %}
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="mini-box">
+        <div class="mini-head"><div class="mini-title">场均助攻 · 20/21→26/27</div><div class="mini-pct">{{ pct_ast }}%</div></div>
+        <svg viewBox="0 0 400 {{ ast_svg_h }}" width="100%" height="{{ ast_svg_h }}">
+          {% for b in ast_bars %}
+          <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="4" fill="{{ b.color }}"></rect>
+          {% if b.color != '#D5D8DC' %}<text x="{{ b.x + b.w/2 }}" y="{{ b.y - 8 }}" text-anchor="middle" font-size="22" font-weight="700" fill="{{ b.color }}">{{ b.val }}</text>{% endif %}
+          {% if b.is_best %}
+          <text x="{{ b.x + b.w - 2 }}" y="{{ ast_h + 18 }}" text-anchor="end" font-size="20" font-weight="900" fill="{{ b.season_color }}">{{ b.season_short }}</text>
+          {% elif b.is_cur %}
+          <text x="{{ b.x + 2 }}" y="{{ ast_h + 18 }}" text-anchor="start" font-size="20" font-weight="900" fill="{{ b.season_color }}">{{ b.season_short }}</text>
+          {% else %}
+          <line x1="{{ b.x + b.w/2 }}" y1="{{ ast_h + 2 }}" x2="{{ b.x + b.w/2 }}" y2="{{ ast_h + 10 }}" stroke="var(--border)" stroke-width="2"></line>
+          {% endif %}
+          {% endfor %}
+        </svg>
+      </div>
+    </div>
+
+    <div class="conclusion-row">{{ conclusion }}</div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  {# masthead 到 308 结束，标题原来 296 起会压到 masthead 文字（跟P2同一类
+     bug）——往下挪；下游 id-row/chart 跟着顺延，chart 高度相应压缩，保持
+     底部对齐 conclusion-row 不动。 #}
+  .dy-title { position: absolute; left: 64px; top: 318px; width: 816px; }
+  .dy-title .page-title { font-size: 44px; }
+  .dy-id-row { position: absolute; left: 64px; top: 384px; }
+
+  .dy-chart { position: absolute; left: 64px; top: 466px; width: 816px; height: 730px; }
+  .bar-val { font-size: 28px; font-weight: 700; }
+  .bar-season { font-size: 28px; font-weight: 400; fill: var(--ink3); }
+  .callout { font-size: 30px; font-weight: 700; fill: var(--red); }
+  .best-tag { font-size: 28px; font-weight: 700; fill: var(--gold); }
+  .bracket-pct { font-size: 120px; font-weight: 900; fill: #D23B2C; }
+
+  .conclusion-row { position: absolute; left: 64px; top: 1220px; width: 816px; font-size: 36px; font-weight: 700; color: #111820; }
+</style>
+</head>
+<body>
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title"><div class="page-title">{{ page_title }}</div></div>
+  <div class="dy-id-row">{{ chrome.identity_bar(bruno_avatar, bruno_badge, bruno_age) }}</div>
+
+  <div class="dy-chart">
+    <svg viewBox="0 0 816 {{ main_svg_h }}" width="816" height="{{ main_svg_h }}">
+      <line x1="0" y1="{{ dashed_y }}" x2="816" y2="{{ dashed_y }}" stroke="#D23B2C" stroke-width="2" stroke-dasharray="8 6"></line>
+      {% for b in main_bars %}
+      <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="8" fill="{{ b.color }}"></rect>
+      {% if not b.is_best %}<text x="{{ b.x + b.w/2 }}" y="{{ b.val_y }}" text-anchor="middle" class="bar-val" fill="{{ b.color }}">{{ b.val }}</text>{% endif %}
+      <text x="{{ b.x + b.w/2 }}" y="{{ chart_h + 34 }}" text-anchor="middle" class="bar-season" fill="{{ b.season_color or 'var(--ink3)' }}" font-weight="{{ 900 if b.season_color else 400 }}">{{ b.season_short }}</text>
+      {% if b.dot %}<circle cx="{{ b.x + b.w/2 }}" cy="{{ dashed_y }}" r="8" fill="#ffffff" stroke="{{ b.color }}" stroke-width="3"></circle>{% endif %}
+      {% endfor %}
+      <text x="8" y="30" text-anchor="start" class="callout">打回原形</text>
+      <text x="{{ best_bar.x }}" y="{{ best_bar.y - 44 }}" class="best-tag">生涯最佳 {{ best_val }}</text>
+
+      {% set bracket_y = [best_bar.y, cur_bar.y]|min - 130 %}
+      <path d="M {{ best_bar.x + best_bar.w/2 }} {{ bracket_y+20 }} L {{ best_bar.x + best_bar.w/2 }} {{ bracket_y }} L {{ cur_bar.x + cur_bar.w/2 }} {{ bracket_y }} L {{ cur_bar.x + cur_bar.w/2 }} {{ bracket_y+20 }}"
+            fill="none" stroke="#D23B2C" stroke-width="4"></path>
+      <text x="{{ (best_bar.x + cur_bar.x)/2 + best_bar.w/2 }}" y="{{ bracket_y - 20 }}" text-anchor="middle" class="bracket-pct">{{ pct_cc }}%</text>
+    </svg>
+  </div>
+
+  <div class="conclusion-row">{{ conclusion }}</div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+</body>
+</html>

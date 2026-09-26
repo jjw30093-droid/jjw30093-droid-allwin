@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-row { flex-shrink: 0; height: 84px; display: flex; align-items: center; }
+  .chart-row { flex: 1; display: flex; gap: 24px; min-height: 0; }
+  .main-box { flex: 1; position: relative; }
+  .mini-box { flex: 0 0 230px; border: 1px solid var(--border); border-radius: 16px; padding: 20px 16px; display: flex; flex-direction: column; }
+  .mini-title { font-size: 22px; font-weight: 700; color: var(--ink2); margin-bottom: 12px; }
+  .mini-svg-wrap { flex: 1; }
+
+  .bar-val { font-size: 22px; font-weight: 700; }
+  .bar-season { font-size: 20px; font-weight: 400; fill: var(--ink3); }
+  .callout { font-size: 24px; font-weight: 700; fill: var(--red); }
+  .best-tag { font-size: 22px; font-weight: 700; fill: var(--gold); }
+
+  .dy-title { position: absolute; left: 64px; top: 300px; width: 816px; }
+  .dy-title .page-title { font-size: 48px; }
+  .dy-chart { position: absolute; left: 64px; top: 420px; width: 816px; height: 620px; }
+  .dy-mini { position: absolute; left: 64px; top: 1080px; width: 816px; height: 300px; border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title"><div class="page-title">{{ page_title }}</div></div>
+
+  <div class="dy-chart">
+    <svg viewBox="0 0 816 620" width="816" height="620">
+      <line x1="0" y1="{{ dashed_y_dy }}" x2="816" y2="{{ dashed_y_dy }}" stroke="#D23B2C" stroke-width="2" stroke-dasharray="8 6"></line>
+      <text x="8" y="{{ dashed_y_dy - 12 }}" text-anchor="start" class="callout">打回原形</text>
+      {% for b in bars_dy %}
+      <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="6" fill="{{ b.color }}"></rect>
+      <text x="{{ b.x + b.w/2 }}" y="{{ b.y - 10 }}" text-anchor="middle" class="bar-val" fill="{{ b.color }}">{{ b.val_label }}</text>
+      <text x="{{ b.x + b.w/2 }}" y="{{ chart_h_dy + 26 }}" text-anchor="middle" class="bar-season">{{ b.season_short }}</text>
+      {% if b.tag %}<text x="{{ b.x + b.w/2 }}" y="{{ b.y - 34 }}" text-anchor="middle" class="{{ 'best-tag' if b.tag_gold else 'callout' }}">{{ b.tag }}</text>{% endif %}
+      {% if b.dot %}<circle cx="{{ b.x + b.w/2 }}" cy="{{ dashed_y_dy }}" r="7" fill="#ffffff" stroke="{{ b.color }}" stroke-width="3"></circle>{% endif %}
+      {% endfor %}
+    </svg>
+  </div>
+
+  <div class="dy-mini">
+    <div class="mini-title">场均xA · 7季（20/21→26/27）</div>
+    <div class="mini-svg-wrap">
+      <svg viewBox="0 0 776 210" width="776" height="210">
+        {% for b in mini_bars_dy %}
+        <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="4" fill="{{ b.color }}"></rect>
+        {% if b.color != '#D5D8DC' %}<text x="{{ b.x + b.w/2 }}" y="{{ b.y - 8 }}" text-anchor="middle" font-size="16" font-weight="700" fill="{{ b.color }}">{{ b.val_label }}</text>{% endif %}
+        {% endfor %}
+      </svg>
+    </div>
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title">{{ page_title }}</div></div>
+
+    <div class="chart-row">
+      <div class="main-box">
+        <svg viewBox="0 0 680 {{ chart_h }}" width="100%" height="100%">
+          <line x1="0" y1="{{ dashed_y }}" x2="680" y2="{{ dashed_y }}" stroke="#D23B2C" stroke-width="2" stroke-dasharray="8 6"></line>
+          <text x="8" y="{{ dashed_y - 12 }}" text-anchor="start" class="callout">打回原形</text>
+          {% for b in bars %}
+          <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="6" fill="{{ b.color }}"></rect>
+          <text x="{{ b.x + b.w/2 }}" y="{{ b.y - 10 }}" text-anchor="middle" class="bar-val" fill="{{ b.color }}">{{ b.val_label }}</text>
+          <text x="{{ b.x + b.w/2 }}" y="{{ chart_h + 26 }}" text-anchor="middle" class="bar-season">{{ b.season_short }}</text>
+          {% if b.tag %}<text x="{{ b.x + b.w/2 }}" y="{{ b.y - 34 }}" text-anchor="middle" class="{{ 'best-tag' if b.tag_gold else 'callout' }}">{{ b.tag }}</text>{% endif %}
+          {% if b.dot %}<circle cx="{{ b.x + b.w/2 }}" cy="{{ dashed_y }}" r="7" fill="#ffffff" stroke="{{ b.color }}" stroke-width="3"></circle>{% endif %}
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="mini-box">
+        <div class="mini-title">场均xA · 7季（20/21→26/27）</div>
+        <div class="mini-svg-wrap">
+          <svg viewBox="0 0 190 {{ mini_h }}" width="100%" height="100%">
+            {% for b in mini_bars %}
+            <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="4" fill="{{ b.color }}"></rect>
+            {% if b.color != '#D5D8DC' %}<text x="{{ b.x + b.w/2 }}" y="{{ b.y - 8 }}" text-anchor="middle" font-size="13" font-weight="700" fill="{{ b.color }}">{{ b.val_label }}</text>{% endif %}
+            {% endfor %}
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

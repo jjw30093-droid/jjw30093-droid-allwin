@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  {# 安全区顶部 240-308 是品牌条(chrome.douyin_brand)占用的，标题/副标题
+     不能从 240 起排，要让开；副标题最多两行，往下预留够——散点图起点因此
+     从 spec 给的 380 顺延到 470，底部仍钉在 1200 不变(高度相应从 820
+     压到 730，SCATTER_H 在 render_series.py 里同步改了)。 #}
+  .dy-top { position: absolute; left: 64px; top: 320px; width: 816px; }
+  .dy-scatter { position: absolute; left: 64px; top: 470px; width: 816px; height: 730px; }
+  .dy-teammate { position: absolute; left: 64px; top: 1210px; width: 816px; height: 180px; display: flex; }
+  {# 竖排(头像叠数字)在 180px 高的模块里放不下——改成横排(头像+数字并排
+     一行)，省纵向空间不省字号，"mt"标题和数字都保持 ≥28px 不跌破抖音版
+     最小字号。 #}
+  .module.teammate.compact { padding: 16px 22px; }
+  .module.teammate.compact .mt { margin-bottom: 10px; }
+  .module.teammate.compact .teammate-row2 { flex: none; }
+  .module.teammate.compact .teammate-item { flex-direction: row; gap: 12px; }
+  .module.teammate.compact .teammate-item img { width: 56px; height: 56px; }
+  .module.teammate.compact .teammate-item .big { font-size: 34px; }
+  .module.teammate.compact .raw-inline { display: none; }
+  .title-row { height: 64px; display: flex; align-items: center; }
+  .subtitle-row { font-size: 28px; font-weight: 400; color: var(--ink2); line-height: 1.4; }
+
+  .scatter-zone { height: 640px; flex-shrink: 0; position: relative; }
+  .scatter-zone svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+
+  .pt {
+    position: absolute; border-radius: 50%; object-fit: cover; background: #ffffff;
+    border: 3px solid #ffffff; box-shadow: 0 3px 8px rgba(17,24,32,0.18); transform: translate(-50%, -50%);
+  }
+  .pt.dim { filter: grayscale(100%); opacity: 0.7; }
+  .pt-label {
+    position: absolute; transform: translate(-50%, -100%); font-size: 22px; font-weight: 700;
+    color: #A50044; white-space: nowrap;
+  }
+  .mb-avatar {
+    position: absolute; border-radius: 50%; object-fit: cover; background: #ffffff;
+    border: 6px solid var(--gold); box-shadow: 0 8px 20px rgba(17,24,32,0.24); transform: translate(-50%, -50%);
+  }
+  .mb-badge {
+    position: absolute; width: 44px; height: 44px; border-radius: 50%; background: #ffffff;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  }
+  .mb-badge img { width: 32px; height: 32px; object-fit: contain; }
+  .axis-tick-label { font-size: 22px; fill: var(--ink3); }
+
+  .modules-row { flex: 1; display: flex; gap: 24px; margin-top: 16px; }
+  .module { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 20px 22px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  /* 同站位模块要横排 7 个 72px 头像，比"队友对比"(只有2个头像)天然需要更宽的
+     卡片，不做 1:1 对分——否则 7 个 72px 头像在半宽卡片里物理放不下，
+     只能要么缩小头像跌破 72px 的要求，要么溢出卡片边界，两者都不接受。 */
+  .module.same-pos { flex: 0 0 68%; }
+  .module.teammate { flex: 1; }
+  .module .mt { font-size: 26px; font-weight: 700; color: var(--ink); margin-bottom: 14px; }
+
+  .avatar-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .avatar-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .avatar-item img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #ffffff; box-shadow: 0 3px 6px rgba(17,24,32,0.16); }
+  .avatar-item.mbappe img { width: 96px; height: 96px; border: 4px solid var(--gold); }
+  .avatar-item .v { font-size: 22px; font-weight: 700; color: var(--ink2); }
+  .avatar-item.mbappe .v { color: var(--gold); font-weight: 900; }
+
+  .teammate-row2 { flex: 1; display: flex; align-items: center; justify-content: space-around; }
+  .teammate-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .teammate-item img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff; box-shadow: 0 4px 10px rgba(17,24,32,0.18); }
+  .teammate-item.mbappe img { border: 5px solid var(--gold); }
+  .teammate-item .big { font-size: 40px; font-weight: 900; color: var(--ink); }
+  .teammate-item.mbappe .big { color: var(--gold); }
+  .teammate-item .unit { font-size: 22px; color: var(--ink3); font-weight: 400; }
+  .teammate-item .raw { font-size: 22px; color: var(--ink3); }
+</style>
+</head>
+<body>
+{% macro scatter_svg() %}
+      <svg viewBox="0 0 {{ scatter_w }} {{ scatter_h }}" xmlns="http://www.w3.org/2000/svg">
+        <line x1="{{ ax.x0 }}" y1="{{ ax.y0 }}" x2="{{ ax.x0 }}" y2="{{ ax.y1 }}" stroke="#D5D8DC" stroke-width="2"/>
+        <line x1="{{ ax.x0 }}" y1="{{ ax.y1 }}" x2="{{ ax.x1 }}" y2="{{ ax.y1 }}" stroke="#D5D8DC" stroke-width="2"/>
+        {% for t in ax.ticks %}
+        <line x1="{{ t.x }}" y1="{{ ax.y1 }}" x2="{{ t.x }}" y2="{{ ax.y1 + 8 }}" stroke="#9AA1A9" stroke-width="2"/>
+        <text x="{{ t.x }}" y="{{ ax.y1 + 32 }}" class="axis-tick-label" text-anchor="middle">{{ t.label }}</text>
+        {% endfor %}
+        {% for t in ax.y_ticks %}
+        <line x1="{{ ax.x0 - 8 }}" y1="{{ t.y }}" x2="{{ ax.x0 }}" y2="{{ t.y }}" stroke="#9AA1A9" stroke-width="2"/>
+        <text x="{{ ax.x0 - 16 }}" y="{{ t.y + 7 }}" class="axis-tick-label" text-anchor="end">{{ t.label }}</text>
+        {% endfor %}
+        <text x="{{ rm_label.x }}" y="{{ rm_label.y }}" font-size="22" font-weight="700" fill="var(--gold)" text-anchor="middle">{{ rm_label.text }}</text>
+        <text x="{{ barca_label.x }}" y="{{ barca_label.y }}" font-size="22" font-weight="700" fill="#A50044" text-anchor="middle">{{ barca_label.text }}</text>
+        <text x="{{ (ax.x0 + ax.x1) / 2 }}" y="{{ x_axis_title_y }}" font-size="22" font-weight="700" fill="var(--ink2)" text-anchor="middle">球队控球率</text>
+        <text x="{{ ax.x0 - 56 }}" y="{{ (ax.y0 + ax.y1) / 2 }}" font-size="22" font-weight="700" fill="var(--ink2)" text-anchor="middle"
+              transform="rotate(-90 {{ ax.x0 - 56 }} {{ (ax.y0 + ax.y1) / 2 }})">抢断+拦截（每场）</text>
+
+        <line x1="{{ trend.x0 }}" y1="{{ trend.y0 }}" x2="{{ trend.x1 }}" y2="{{ trend.y1 }}"
+              stroke="#C7CBD1" stroke-width="3" stroke-dasharray="10 8"/>
+
+        {% for p in others %}
+          {% if p.moved %}
+          <line x1="{{ p.true_x }}" y1="{{ p.true_y }}" x2="{{ p.x }}" y2="{{ p.y }}" stroke="#C7CBD1" stroke-width="1"/>
+          {% endif %}
+        {% endfor %}
+
+        <!-- 趋势线预测值：实心灰点（皇马控球率处），红色竖虚线连到姆巴佩头像。
+             标注文字背后垫一块不透明白底——散点图头像位置由防碰撞算法算出，
+             不能保证某次重跑后文字底下恰好没有头像，垫底比赌"这次没挡上"更稳。 -->
+        <circle cx="{{ mb.x }}" cy="{{ mb.trend_y }}" r="6" fill="#9AA1A9"/>
+        <rect x="{{ mb.x + 14 }}" y="{{ mb.trend_y - 18 }}" width="{{ mb.trend_text_w }}" height="26" rx="6" fill="var(--bg)" opacity="0.92"/>
+        <text x="{{ mb.x + 20 }}" y="{{ mb.trend_y + 6 }}" font-size="22" font-weight="700" fill="var(--ink2)">{{ mb.trend_text }}</text>
+
+        <line x1="{{ mb.x }}" y1="{{ mb.trend_y + 8 }}" x2="{{ mb.x }}" y2="{{ mb.y - mb.size / 2 - 6 }}"
+              stroke="var(--red)" stroke-width="3" stroke-dasharray="6 5"/>
+        <rect x="{{ mb.x + 14 }}" y="{{ (mb.trend_y + mb.y) / 2 - 18 }}" width="{{ mb.actual_text_w }}" height="26" rx="6" fill="var(--bg)" opacity="0.92"/>
+        <text x="{{ mb.x + 20 }}" y="{{ (mb.trend_y + mb.y) / 2 }}" font-size="22" font-weight="700" fill="var(--red)">{{ mb.actual_text }}</text>
+      </svg>
+{% endmacro %}
+
+{% macro scatter_avatars() %}
+      {% for p in others %}
+      <img class="pt {{ '' if p.show_label else 'dim' }}" src="{{ p.avatar }}" style="left:{{ p.x }}px; top:{{ p.y }}px; width:{{ p.size }}px; height:{{ p.size }}px;">
+      {% if p.show_label %}
+      <div class="pt-label" style="left:{{ p.x }}px; top:{{ p.y - p.size/2 - 4 }}px;">{{ p.name_zh }}</div>
+      {% endif %}
+      {% endfor %}
+
+      <img class="mb-avatar" src="{{ mb.avatar }}" style="left:{{ mb.x }}px; top:{{ mb.y }}px; width:{{ mb.size }}px; height:{{ mb.size }}px;">
+      <div class="mb-badge" style="left:{{ mb.x + mb.size/2 - 36 }}px; top:{{ mb.y + mb.size/2 - 36 }}px;"><img src="{{ mb.badge }}"></div>
+{% endmacro %}
+
+{% macro same_pos_module() %}
+      <div class="module same-pos">
+        <div class="mt">跟他站同一个位置的 {{ same_pos_n }} 个人里，他最少</div>
+        <div class="avatar-row">
+          {% for g in same_pos_group %}
+          <div class="avatar-item {{ 'mbappe' if g.is_mbappe else '' }}">
+            <img src="{{ g.avatar }}" alt="{{ g.name_zh }}">
+            <div class="v">{{ '%.2f'|format(g.val) }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+{% endmacro %}
+
+{% macro teammate_module(compact=false) %}
+      <div class="module teammate {{ 'compact' if compact else '' }}">
+        <div class="mt">
+          {% if ratio_ok %}同队的维尼修斯，抢回球权快是他的 2 倍{% else %}同队的维尼修斯，抢回球权快是他的 {{ vini_mbappe_ratio }} 倍{% endif %}
+        </div>
+        <div class="teammate-row2">
+          <div class="teammate-item">
+            <img src="{{ teammate.vini_avatar }}" alt="维尼修斯">
+            <div class="big">{{ '%.2f'|format(teammate.vini_val) }}</div>
+            {% if not compact %}
+            <div class="unit">每90分钟</div>
+            <div class="raw">{{ teammate.vini_raw }}</div>
+            {% endif %}
+          </div>
+          <div class="teammate-item mbappe">
+            <img src="{{ teammate.mbappe_avatar }}" alt="姆巴佩">
+            <div class="big">{{ '%.2f'|format(teammate.mbappe_val) }}</div>
+            {% if not compact %}
+            <div class="unit">每90分钟</div>
+            <div class="raw">{{ teammate.mbappe_raw }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% if compact %}<div class="raw-inline">{{ teammate.vini_raw }} vs {{ teammate.mbappe_raw }}</div>{% endif %}
+      </div>
+{% endmacro %}
+
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-top">
+    <div class="title-row"><div class="page-title" style="font-size:52px;">别拿控球率洗了</div></div>
+    <div class="subtitle-row">球队控球越多，前锋防守机会越少，这没错。但皇马控球才 {{ rm_possession_text }}，和马拉加、埃尔切差不多。</div>
+  </div>
+
+  <div class="dy-scatter">
+    {{ scatter_svg() }}
+    {{ scatter_avatars() }}
+  </div>
+
+  {# 抖音安全区 y1220-1420 只够放一个模块，按 spec 的兜底方案只留"队友对比"，
+     删除"同站位"——两个模块一起放会物理挤不下，7 个头像的那个尤其挤。 #}
+  <div class="dy-teammate">
+    {{ teammate_module(true) }}
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title" style="font-size:52px;">别拿控球率洗了</div></div>
+    <div class="subtitle-row">球队控球越多，前锋防守机会越少，这没错。但皇马控球才 {{ rm_possession_text }}，和马拉加、埃尔切差不多。</div>
+
+    <div class="scatter-zone">
+      {{ chrome.watermark(logo_path, 700, 250) }}
+      {{ scatter_svg() }}
+      {{ scatter_avatars() }}
+    </div>
+
+    <div class="modules-row">
+      {{ same_pos_module() }}
+      {{ teammate_module() }}
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

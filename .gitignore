@@ -17,3 +17,22 @@ node_modules/
 *.bin
 *.pkl
 *.pickle
+
+# backend/studio/content_scripts/*：一次性内容脚本直连生产库/生产 API 拉的
+# 缓存数据（球员聚合、球队队色等），脚本本身进仓库，缓存不进（会过期、
+# 体积也会越攒越大，且本来就能从生产环境重新拉取）。
+backend/studio/content_scripts/_cache/
+
+# backend/studio/content_scripts/_out/：HTML/CSS+Playwright 系列图的截图中间
+# 产物和最终 PNG，跟上面的 _cache/ 同理，都是生成物不是源。fonts/ 是从
+# Google Fonts 官方仓库（google/fonts，OFL 协议）一次性下载的 Noto Sans SC
+# 可变字体二进制（17MB+），不适合进仓库体积；换机器跑这个脚本前需要手动
+# 用同一条 curl 命令重新下载到 fonts/NotoSansSC-Variable.ttf（命令见
+# backend/studio/content_scripts/render_series.py 头注释/开发记录，脚本本身
+# 目前不会自动下载，缺文件会在 @font-face 加载失败、渲染出无中文字体的图）。
+backend/studio/content_scripts/_out/
+backend/studio/content_scripts/fonts/
+
+# backend/studio/content_scripts/*.png：脚本直接写在脚本同级目录的成品图
+# （player_h2h_chart.py / attack_defense_series.py 的输出），同样是生成物不是源。
+backend/studio/content_scripts/*.png

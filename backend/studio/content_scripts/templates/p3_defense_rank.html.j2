@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .dy-content {
+    position: absolute; left: 64px; top: 330px; width: 816px; height: 1070px;
+    display: flex; flex-direction: column;
+  }
+  .dy-list-zone { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .bar-row-dy { display: flex; align-items: center; height: 46px; }
+  .bar-row-dy .rk { width: 40px; font-size: 26px; color: #9AA1A9; text-align: right; margin-right: 10px; flex-shrink: 0; }
+  .bar-row-dy .nm { width: 170px; font-size: 26px; color: #9AA1A9; white-space: nowrap; flex-shrink: 0; }
+  .bar-row-dy .nm.bold { font-weight: 700; color: var(--ink); }
+  .bar-row-dy .val { width: 76px; font-size: 26px; font-weight: 700; color: var(--ink3); flex-shrink: 0; }
+  .bar-row-dy .track { flex: 1; height: 100%; display: flex; align-items: center; }
+  .bar-row-dy .fill { height: 44%; border-radius: 5px; background: #E3E5E8; }
+  .ellipsis-row { display: flex; align-items: center; height: 46px; gap: 14px; }
+  .ellipsis-row .dots { font-size: 30px; font-weight: 700; color: #9AA1A9; width: 40px; text-align: right; margin-right: 10px; }
+  .ellipsis-row .note { font-size: 22px; font-weight: 400; color: #9AA1A9; }
+  .title-row { height: 64px; display: flex; align-items: center; }
+  .subtitle-row { height: 38px; font-size: 28px; font-weight: 400; color: var(--ink2); }
+
+  .list-zone { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; position: relative; }
+  .bar-row { display: flex; align-items: center; }
+  .bar-row .rk { width: 34px; font-size: 24px; color: #9AA1A9; text-align: right; margin-right: 10px; flex-shrink: 0; }
+  .bar-row .nm { width: 180px; font-size: 24px; color: #9AA1A9; white-space: nowrap; flex-shrink: 0; }
+  .bar-row .nm.bold { font-weight: 700; color: var(--ink); }
+  .bar-row .track { flex: 1; height: 100%; display: flex; align-items: center; }
+  .bar-row .fill { height: 44%; border-radius: 5px; background: #E3E5E8; }
+  .bar-row .val { width: 66px; text-align: right; font-size: 22px; font-weight: 700; color: var(--ink3); margin-left: 10px; flex-shrink: 0; }
+
+  .last-row { height: 52px; display: flex; align-items: center; gap: 10px; color: var(--red); font-size: 26px; font-weight: 700; }
+  .last-row .arrow { font-size: 30px; }
+
+  .mbappe-card {
+    height: 340px; background: var(--gold); border-radius: 24px; color: #ffffff;
+    display: flex; flex-direction: column; padding: 22px 0; margin-top: 6px; position: relative; overflow: hidden;
+  }
+  .mbappe-top { display: flex; align-items: center; gap: 24px; padding: 0 28px 14px 28px; }
+  .mbappe-avatar-wrap { position: relative; width: 112px; height: 112px; flex-shrink: 0; }
+  .mbappe-avatar-wrap img.photo { width: 112px; height: 112px; border-radius: 50%; border: 4px solid #ffffff; object-fit: cover; }
+  .mbappe-avatar-wrap .corner-badge {
+    position: absolute; right: -8px; bottom: -8px; width: 42px; height: 42px; border-radius: 50%;
+    background: #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  }
+  .mbappe-avatar-wrap .corner-badge img { width: 30px; height: 30px; object-fit: contain; }
+  .mbappe-mid { flex: 1; }
+  .mbappe-mid .nm { font-size: 40px; font-weight: 900; }
+  .mbappe-mid .metric { font-size: 24px; font-weight: 400; opacity: 0.92; margin-top: 4px; }
+  .mbappe-val { font-size: 84px; font-weight: 900; line-height: 1; }
+
+  .card-bar-row { display: flex; align-items: center; height: 34px; margin-top: 4px; }
+  .card-bar-row .rk { width: 34px; margin-right: 10px; flex-shrink: 0; }
+  .card-bar-row .nm { width: 180px; flex-shrink: 0; }
+  .card-bar-row .track { flex: 1; height: 100%; display: flex; align-items: center; }
+  .card-bar-row .fill { height: 60%; border-radius: 5px; background: #ffffff; }
+
+  .squares-title { font-size: 24px; font-weight: 700; color: #ffffff; margin: 12px 28px 10px 28px; }
+  .squares-row { display: flex; gap: 10px; height: 100px; padding: 0 28px; }
+  .sq {
+    flex: 1; background: #ffffff; border-radius: 12px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .sq .v { font-size: 34px; font-weight: 900; color: var(--gold); }
+  .sq.zero .v { color: var(--red); }
+  .sq .opp { font-size: 22px; font-weight: 400; color: var(--ink3); margin-top: 2px; }
+</style>
+</head>
+<body>
+{% macro mbappe_card() %}
+    <div class="mbappe-card">
+      {% if platform != 'douyin' %}{{ chrome.watermark(logo_path, 780, 230) }}{% endif %}
+      <div class="mbappe-top">
+        <div class="mbappe-avatar-wrap">
+          <img class="photo" src="{{ mbappe.avatar }}" alt="姆巴佩">
+          <div class="corner-badge"><img src="{{ mbappe.badge }}" alt="皇马"></div>
+        </div>
+        <div class="mbappe-mid">
+          <div class="nm">{{ mbappe.rank }}　姆巴佩</div>
+          <div class="metric">抢断+拦截 每90分钟</div>
+        </div>
+        <div class="mbappe-val">{{ '%.2f'|format(mbappe.val) }}</div>
+      </div>
+      <div class="card-bar-row">
+        <div class="rk"></div>
+        <div class="nm"></div>
+        <div class="track"><div class="fill" style="width: {{ mbappe.pct }}%;"></div></div>
+      </div>
+      <div class="squares-title">{{ n_matches }} 场里有 {{ zero_count }} 场，一次都没有</div>
+      <div class="squares-row">
+        {% for w in weekly %}
+        <div class="sq {{ 'zero' if w.defact == 0 else '' }}">
+          <div class="v">{{ w.defact }}</div>
+          <div class="opp">{{ w.opp }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+{% endmacro %}
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-content">
+    <div class="title-row"><div class="page-title" style="font-size:52px;">回防？不存在的</div></div>
+    <div class="subtitle-row">西甲前场 20 人比抢断 + 拦截，他垫底</div>
+
+    <div class="dy-list-zone">
+      {% for r in ranked_dy_top %}
+      <div class="bar-row-dy">
+        <div class="rk">{{ r.rank }}</div>
+        <div class="nm {{ 'bold' if r.bold else '' }}">{{ r.name_zh }}</div>
+        <div class="val">{{ '%.2f'|format(r.val) }}</div>
+        <div class="track"><div class="fill" style="width: {{ r.pct }}%;"></div></div>
+      </div>
+      {% endfor %}
+      <div class="ellipsis-row"><span class="dots">…</span><span class="note">中间 {{ dy_omitted_count }} 人省略</span></div>
+      {% for r in ranked_dy_bottom %}
+      <div class="bar-row-dy">
+        <div class="rk">{{ r.rank }}</div>
+        <div class="nm {{ 'bold' if r.bold else '' }}">{{ r.name_zh }}</div>
+        <div class="val">{{ '%.2f'|format(r.val) }}</div>
+        <div class="track"><div class="fill" style="width: {{ r.pct }}%;"></div></div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {{ mbappe_card() }}
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title" style="font-size:52px;">回防？不存在的</div></div>
+    <div class="subtitle-row">西甲前场 20 人比抢断 + 拦截，他垫底</div>
+
+    <div class="list-zone">
+      {% for r in ranked %}
+      <div class="bar-row" style="height: 40px;">
+        <div class="rk">{{ r.rank }}</div>
+        <div class="nm {{ 'bold' if r.bold else '' }}">{{ r.name_zh }}</div>
+        <div class="track"><div class="fill" style="width: {{ r.pct }}%;"></div></div>
+        <div class="val">{{ '%.2f'|format(r.val) }}</div>
+      </div>
+      {% endfor %}
+      <div class="last-row"><span class="arrow">↓</span></div>
+    </div>
+
+    {{ mbappe_card() }}
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

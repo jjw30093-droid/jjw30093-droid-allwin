@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  {# 标题原来只给520px宽,13字38px就顶到了520,被浏览器折成2行,又跟下面
+     身份条同一块空间——标题改成占满816全宽单行,"两项都比他强"移到跟身份条
+     同一行的右侧,不再跟标题抢位置。 #}
+  {# masthead(douyin_brand)固定在 top:260,height:48,到 308 结束——标题原来
+     顶在288，跟masthead自己的文字行重叠(实测"去年英超独一档"压在"喵弟球员
+     体检·NO.02"上)，往下挪到 masthead 结束之后再留一点间距。 #}
+  .dy-title { position: absolute; left: 64px; top: 318px; width: 816px; }
+  .dy-title .page-title { font-size: 42px; line-height: 1.2; }
+  .dy-id-row { position: absolute; left: 64px; top: 388px; }
+  .ahead-big { position: absolute; right: 64px; top: 392px; width: 300px; text-align: right;
+               font-size: 28px; font-weight: 900; color: #D23B2C; }
+  .ahead-big .sub { display: block; font-size: 26px; font-weight: 400; color: #9AA1A9; margin-top: 4px; }
+
+  {# scatter-wrap 的 CSS 高度必须跟 Python 传入的 scatter_h(680) 完全一致——
+     之前 scatter_h 从730改成680时忘了同步改这里的height:730px,容器比
+     viewBox 内容实际需要的空间多出50px，SVG width/height都是百分比会被
+     等比拉伸放大，残影旁注(锚定在viewBox底部)因此被拉到了真实容器的
+     更下方，一路压到下面的头像横排标题上。 #}
+  {# 残影旁注("上赛季：关键传球英超第一...")不管放在SVG图表里的哪个角落
+     都会撞上某条坐标轴刻度或某个头像——这张图本身留白已经很紧张。改成
+     图表上方单独一行纯HTML文字，20字28px一行(560px)在816宽度内绰绰
+     有余，不用在图表内部挤占空间。 #}
+  .ghost-note { position: absolute; left: 64px; top: 478px; width: 816px; font-size: 28px; font-weight: 700; color: #9AA1A9; }
+  .scatter-wrap { position: absolute; left: 64px; top: 512px; width: 816px; height: 568px; }
+
+  .axis-label { font-size: 28px; fill: var(--ink3); }
+  .name-label { font-size: 28px; font-weight: 700; fill: var(--ink); }
+  .team-label { font-size: 24px; font-weight: 400; fill: var(--ink3); }
+  .ghost-tag { font-size: 28px; font-weight: 700; fill: #9AA1A9; }
+  .arrow-label { font-size: 28px; font-weight: 900; fill: #ffffff; }
+
+  .strip-row { position: absolute; left: 64px; width: 816px; }
+  .strip-row .strip-title { font-size: 28px; font-weight: 700; color: #111820; margin-bottom: 8px; }
+  .strip-row .avatars { display: flex; align-items: flex-start; gap: 16px; flex-wrap: nowrap; }
+  .strip-item { display: flex; flex-direction: column; align-items: center; }
+  .strip-item .label { font-size: 28px; font-weight: 700; color: var(--ink); white-space: nowrap; margin-top: 4px; }
+  .strip-rest { font-size: 28px; font-weight: 700; color: var(--ink3); white-space: nowrap; align-self: center; }
+</style>
+</head>
+<body>
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title"><div class="page-title">{{ page_title }}</div></div>
+  <div class="ahead-big">两项都比他强：{{ ahead_count }} 人<span class="sub">上赛季 0 人</span></div>
+  <div class="dy-id-row">{{ chrome.identity_bar(bruno_avatar, bruno_badge, bruno_age) }}</div>
+
+  <div class="ghost-note">上赛季：关键传球英超第一，比第二名多出近{{ over_cheng }}成</div>
+
+  <div class="scatter-wrap">
+    <svg viewBox="0 0 {{ scatter_w }} {{ scatter_h }}" width="100%" height="100%">
+      <defs>
+        <filter id="grayscale"><feColorMatrix type="saturate" values="0"></feColorMatrix></filter>
+        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+          <polygon points="0 0, 10 5, 0 10" fill="#D23B2C"></polygon>
+        </marker>
+        <clipPath id="clip-bruno-cur"><circle cx="{{ bruno_cur_x }}" cy="{{ bruno_cur_y }}" r="{{ bruno_cur_r }}"></circle></clipPath>
+        <clipPath id="clip-bruno-ref"><circle cx="{{ bruno_ref_x }}" cy="{{ bruno_ref_y }}" r="55"></circle></clipPath>
+        <clipPath id="clip-badge-bruno-cur"><circle cx="{{ bruno_cur_x + bruno_cur_r*0.72 }}" cy="{{ bruno_cur_y + bruno_cur_r*0.72 }}" r="{{ bruno_cur_r*0.38 }}"></circle></clipPath>
+        {% for a in labeled %}
+        <clipPath id="clip-{{ a.pid }}"><circle cx="{{ a.x }}" cy="{{ a.y }}" r="{{ a.r }}"></circle></clipPath>
+        <clipPath id="clip-badge-{{ a.pid }}"><circle cx="{{ a.x + a.r*0.72 }}" cy="{{ a.y + a.r*0.72 }}" r="{{ a.r*0.38 }}"></circle></clipPath>
+        {% endfor %}
+      </defs>
+
+      <line x1="{{ px0 }}" y1="{{ py1 }}" x2="{{ scatter_w }}" y2="{{ py1 }}" stroke="var(--border)" stroke-width="1"></line>
+      <line x1="{{ px0 }}" y1="0" x2="{{ px0 }}" y2="{{ py1 }}" stroke="var(--border)" stroke-width="1"></line>
+      {% for t in x_ticks %}
+      <line x1="{{ t.x }}" y1="{{ py1 }}" x2="{{ t.x }}" y2="{{ py1+6 }}" stroke="var(--border)" stroke-width="1"></line>
+      <text x="{{ t.x }}" y="{{ py1+30 }}" text-anchor="middle" class="axis-label">{{ t.label }}</text>
+      {% endfor %}
+      {% for t in y_ticks %}
+      <line x1="{{ px0-6 }}" y1="{{ t.y }}" x2="{{ px0 }}" y2="{{ t.y }}" stroke="var(--border)" stroke-width="1"></line>
+      <text x="{{ px0-10 }}" y="{{ t.y+8 }}" text-anchor="end" class="axis-label">{{ t.label }}</text>
+      {% endfor %}
+      <text x="{{ scatter_w-4 }}" y="{{ py1-10 }}" text-anchor="end" class="axis-label">场均关键传球→</text>
+      <text x="{{ px0+4 }}" y="54" class="axis-label">↑场均预期助攻</text>
+
+      {% for d in gray_dots %}
+      <circle cx="{{ d.x }}" cy="{{ d.y }}" r="5" fill="#D5D8DC"></circle>
+      {% endfor %}
+
+      <line x1="{{ bruno_ref_x }}" y1="{{ bruno_ref_y }}" x2="{{ bruno_cur_x }}" y2="{{ bruno_cur_y }}"
+            stroke="#D23B2C" stroke-width="7" marker-end="url(#arrowhead)" opacity="0.85"></line>
+      {# 箭头几何中点正好落在头像簇上(跟箭头标签同款老问题)——挪到残影
+         正上方，那里在所有真实数据下都是空的(残影是纵轴最高点)。 #}
+      <rect x="{{ scatter_w - 280 }}" y="{{ bruno_ref_y - 100 }}" width="264" height="40" rx="10" fill="#D23B2C"></rect>
+      <text x="{{ scatter_w - 16 }}" y="{{ bruno_ref_y - 74 }}" text-anchor="end" class="arrow-label">关键传球 -{{ pct_cc|abs }}%</text>
+
+      <circle cx="{{ bruno_ref_x }}" cy="{{ bruno_ref_y }}" r="57" fill="none" stroke="#9AA1A9" stroke-width="3" stroke-dasharray="6 5"></circle>
+      <g opacity="0.35" filter="url(#grayscale)">
+        <image href="{{ bruno_avatar_big }}" x="{{ bruno_ref_x-55 }}" y="{{ bruno_ref_y-55 }}" width="110" height="110" clip-path="url(#clip-bruno-ref)" preserveAspectRatio="xMidYMid slice"></image>
+      </g>
+      {# 残影旁注挪到图表外的独立HTML行(.ghost-note)，这里不再画。 #}
+
+      {% for a in labeled %}
+      <circle cx="{{ a.x }}" cy="{{ a.y }}" r="{{ a.r+2 }}" fill="#ffffff" stroke="#D23B2C" stroke-width="2"></circle>
+      <image href="{{ a.avatar }}" x="{{ a.x-a.r }}" y="{{ a.y-a.r }}" width="{{ a.r*2 }}" height="{{ a.r*2 }}" clip-path="url(#clip-{{ a.pid }})" preserveAspectRatio="xMidYMid slice"></image>
+      <circle cx="{{ a.x + a.r*0.72 }}" cy="{{ a.y + a.r*0.72 }}" r="{{ a.r*0.38+2 }}" fill="#ffffff"></circle>
+      <image href="{{ a.badge }}" x="{{ a.x + a.r*0.72 - a.r*0.38 }}" y="{{ a.y + a.r*0.72 - a.r*0.38 }}" width="{{ a.r*0.76 }}" height="{{ a.r*0.76 }}" clip-path="url(#clip-badge-{{ a.pid }})" preserveAspectRatio="xMidYMid slice"></image>
+      {% endfor %}
+      {% for a in labeled %}
+      {% if a.label_side == 'below' %}
+      <text x="{{ a.x }}" y="{{ a.y + a.r + 26 }}" text-anchor="middle" class="name-label">{{ a.label }}</text>
+      {% elif a.label_side == 'above' %}
+      <text x="{{ a.x }}" y="{{ a.y - a.r - 10 }}" text-anchor="middle" class="name-label">{{ a.label }}</text>
+      {% elif a.label_side == 'left' %}
+      <text x="{{ a.x - a.r - 12 }}" y="{{ a.y + 9 }}" text-anchor="end" class="name-label">{{ a.label }}</text>
+      {% else %}
+      <text x="{{ a.x + a.r + 12 }}" y="{{ a.y + 9 }}" text-anchor="start" class="name-label">{{ a.label }}</text>
+      {% endif %}
+      {% endfor %}
+
+      <circle cx="{{ bruno_cur_x }}" cy="{{ bruno_cur_y }}" r="{{ bruno_cur_r+2 }}" fill="#D23B2C"></circle>
+      <image href="{{ bruno_avatar_big }}" x="{{ bruno_cur_x-bruno_cur_r }}" y="{{ bruno_cur_y-bruno_cur_r }}" width="{{ bruno_cur_r*2 }}" height="{{ bruno_cur_r*2 }}" clip-path="url(#clip-bruno-cur)" preserveAspectRatio="xMidYMid slice"></image>
+      <circle cx="{{ bruno_cur_x + bruno_cur_r*0.72 }}" cy="{{ bruno_cur_y + bruno_cur_r*0.72 }}" r="{{ bruno_cur_r*0.38+2 }}" fill="#ffffff"></circle>
+      <image href="{{ bruno_badge_big }}" x="{{ bruno_cur_x + bruno_cur_r*0.72 - bruno_cur_r*0.38 }}" y="{{ bruno_cur_y + bruno_cur_r*0.72 - bruno_cur_r*0.38 }}" width="{{ bruno_cur_r*0.76 }}" height="{{ bruno_cur_r*0.76 }}" clip-path="url(#clip-badge-bruno-cur)" preserveAspectRatio="xMidYMid slice"></image>
+      {% if bruno_cur_label_side == 'below' %}
+      <text x="{{ bruno_cur_x }}" y="{{ bruno_cur_y + bruno_cur_r + 26 }}" text-anchor="middle" class="name-label">B费</text>
+      {% elif bruno_cur_label_side == 'above' %}
+      <text x="{{ bruno_cur_x }}" y="{{ bruno_cur_y - bruno_cur_r - 10 }}" text-anchor="middle" class="name-label">B费</text>
+      {% elif bruno_cur_label_side == 'left' %}
+      <text x="{{ bruno_cur_x - bruno_cur_r - 12 }}" y="{{ bruno_cur_y + 9 }}" text-anchor="end" class="name-label">B费</text>
+      {% else %}
+      <text x="{{ bruno_cur_x + bruno_cur_r + 12 }}" y="{{ bruno_cur_y + 9 }}" text-anchor="start" class="name-label">B费</text>
+      {% endif %}
+    </svg>
+  </div>
+
+  <div class="strip-row" style="top:1096px;">
+    <div class="strip-title">关键传球 · 本季第{{ cc_rank_cur }}，排在他前面：</div>
+    <div class="avatars">
+      {% for s in cc_strip %}
+      <div class="strip-item">
+        {{ chrome.player_badge_avatar(s.avatar, s.badge, 48) }}
+        <div class="label">{{ s.label }}</div>
+      </div>
+      {% endfor %}
+      {% if cc_rest > 0 %}<div class="strip-rest">等{{ cc_rest }}人</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="strip-row" style="top:1250px;">
+    <div class="strip-title">预期助攻 · 本季第{{ xa_rank_cur }}，排在他前面：</div>
+    <div class="avatars">
+      {% for s in xa_strip %}
+      <div class="strip-item">
+        {{ chrome.player_badge_avatar(s.avatar, s.badge, 48) }}
+        <div class="label">{{ s.label }}</div>
+      </div>
+      {% endfor %}
+      {% if xa_rest > 0 %}<div class="strip-rest">等{{ xa_rest }}人</div>{% endif %}
+    </div>
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+</body>
+</html>

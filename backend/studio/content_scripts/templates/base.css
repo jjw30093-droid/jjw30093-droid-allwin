@@ -1,0 +1,153 @@
+/* attack_defense_series 图文系列共用样式 + 品牌系统。字体用本地打包的
+   Noto Sans SC 可变字体（fonts/NotoSansSC-Variable.ttf），不依赖本机是否
+   装了系统字体——这样脚本在任何机器上跑效果都一致，不会静默回退到系统
+   默认字体。
+
+   品牌系统（页眉/页脚通栏/水印/印章）写在这里 + templates/_chrome.html.j2
+   的宏里，是"以后所有图文系列复用"的公共层，不是这一套姆巴佩系列专属。 */
+@font-face {
+  font-family: "Noto Sans SC";
+  src: url("__FONT_ABS_PATH__") format("truetype-variations");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+:root {
+  --bg: #F6F4EF;
+  --ink: #111820;
+  --ink2: #5B6470;
+  --ink3: #9AA1A9;
+  --gold: #C8961E;
+  --red: #D23B2C;
+  --gray: #D5D8DC;
+  --card: #FFFFFF;
+  --border: #E4E1D8;
+  --band: #111820;
+  --pad: 64px;
+  --gap: 48px;
+  /* 画布宽高默认小红书 1080x1440；抖音页面在 <html style="..."> 上覆盖成
+     1080x1920（见 render_series.py 的 render_page，platform=douyin 时注入）。
+     小红书/抖音共用同一份 base.css 和同一批模板，靠这两个变量 + 模板里的
+     {% if platform == 'douyin' %} 分支来适配，不是两份模板。 */
+  --canvas-w: 1080px;
+  --canvas-h: 1440px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Noto Sans SC", sans-serif;
+  overflow: hidden;
+}
+
+.page {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* ---- 抖音安全区自查遮罩：只在 --debug-safezone 时渲染，半透明红色标出
+   三块遮挡区，方便肉眼核对内容有没有落进去；正式输出不带这一层。 ---- */
+.safezone-debug {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 999;
+}
+.safezone-debug .zone {
+  position: absolute; background: rgba(210, 59, 44, 0.28);
+  border: 2px dashed rgba(210, 59, 44, 0.7);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+/* ---- 品牌页眉：左 logo+栏目名，右期号。栏目名/期号是模板参数 ---- */
+.masthead {
+  padding: 0 var(--pad);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 68px;
+  flex-shrink: 0;
+}
+.masthead .brand-id { display: flex; align-items: center; gap: 12px; }
+.masthead .brand-id img { width: 48px; height: 48px; border-radius: 12px; }
+.masthead .brand-id span { font-size: 26px; font-weight: 700; color: var(--ink); }
+.masthead .issue-no { font-size: 22px; font-weight: 400; color: var(--ink3); }
+
+/* ---- 页面主内容区：所有页面特定内容放在这里，左右 64px 内边距 ---- */
+.content {
+  padding: 0 var(--pad);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ---- 数据口径说明：通栏上方一行，不放进通栏里 ---- */
+.caveat-row {
+  padding: 0 var(--pad);
+  height: 34px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.caveat-row .note {
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--ink3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ---- 品牌通栏：贴底边、全宽、固定深色，不随球队主题变化 ---- */
+.footer-band {
+  width: 100%;
+  height: 96px;
+  background: var(--band);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  flex-shrink: 0;
+}
+.footer-band .fb-left { display: flex; align-items: center; gap: 14px; }
+.footer-band .fb-logo {
+  width: 56px; height: 56px; border-radius: 50%; background: #ffffff;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.footer-band .fb-logo img { width: 44px; height: 44px; object-fit: contain; }
+.footer-band .fb-name { font-size: 30px; font-weight: 900; color: #ffffff; }
+.footer-band .fb-slogan { font-size: 22px; font-weight: 400; color: var(--ink3); }
+.footer-band .fb-page { font-size: 22px; font-weight: 400; color: #ffffff; }
+
+/* ---- 防盗水印：logo 半透明，放在内容层下面（DOM 里排在最前，后面的内容
+   自然盖在它上面，不需要额外 z-index） ---- */
+.watermark {
+  position: absolute;
+  width: 280px; height: 280px;
+  opacity: 0.07;
+  object-fit: contain;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* ---- 通用文字 ---- */
+.huge-num { font-size: 180px; font-weight: 900; line-height: 1; }
+.page-title { font-size: 60px; font-weight: 900; line-height: 1.15; }
+.section-title { font-size: 34px; font-weight: 700; }
+.body-text { font-size: 28px; font-weight: 400; color: var(--ink2); }
+.small-text { font-size: 22px; font-weight: 400; color: var(--ink3); }
+
+.gold { color: var(--gold); }
+.red { color: var(--red); }
+.gray-text { color: var(--gray); }

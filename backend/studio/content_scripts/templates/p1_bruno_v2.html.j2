@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-block { flex-shrink: 0; margin-top: 6px; }
+  .t1 { font-weight: 900; line-height: 1.05; color: #111820; }
+  .t2 { font-weight: 900; line-height: 1.05; color: #D23B2C; }
+
+  .id-row { flex-shrink: 0; margin-top: 18px; }
+
+  .subtitle-row { flex-shrink: 0; margin-top: 16px; font-size: 32px; font-weight: 400; color: #5B6470; line-height: 1.35; }
+
+  .report-card {
+    flex: 1; margin-top: 24px; background: #ffffff; border: 1px solid #E3E5E0; border-radius: 24px;
+    padding: 36px; display: flex; flex-direction: column; position: relative; min-height: 0;
+  }
+  .report-header { display: flex; align-items: center; gap: 24px; position: relative; }
+  .scope-text { position: absolute; right: 0; top: -2px; font-size: 22px; font-weight: 400; color: #9AA1A9; text-align: right; max-width: 260px; }
+  .id-name { font-size: 48px; font-weight: 900; color: #111820; line-height: 1.1; }
+  .id-sub { font-size: 26px; font-weight: 400; color: #5B6470; margin-top: 6px; }
+
+  .divider-thick { height: 2px; background: #111820; margin-top: 16px; }
+
+  .col-header { display: flex; margin-top: 14px; font-size: 22px; font-weight: 400; color: #9AA1A9; }
+  .col-item { flex: 0 0 210px; }
+  .col-trans { flex: 0 0 240px; }
+  .col-change { flex: 0 0 180px; text-align: center; }
+  .col-verdict { flex: 1; text-align: right; }
+
+  .report-rows { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .report-row { flex: 1; display: flex; align-items: center; border-top: 1px dashed #D5D8DC; }
+  .report-row:first-child { border-top: none; }
+  .row-item { flex: 0 0 210px; display: flex; flex-direction: column; gap: 2px; }
+  .row-item .name { font-size: 28px; font-weight: 700; }
+  .row-item .sub { font-size: 22px; font-weight: 400; color: #9AA1A9; }
+  .row-trans { flex: 0 0 240px; display: flex; flex-direction: column; gap: 2px; }
+  .row-trans .trans-main { font-size: 30px; font-weight: 700; color: #111820; }
+  .row-trans .trans-rank { font-size: 24px; font-weight: 400; color: #5B6470; }
+  .row-trans .trans-rank .n { color: #D23B2C; font-weight: 700; }
+  .row-change { flex: 0 0 180px; text-align: center; font-size: 56px; font-weight: 900; }
+  .row-change.red { color: #D23B2C; }
+  .row-change.gray { color: #9AA1A9; font-size: 34px; }
+  .row-verdict { flex: 1; display: flex; justify-content: flex-end; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 8px 20px; border-radius: 20px; font-size: 26px; font-weight: 700; }
+
+  .row.normal .row-item .name { color: #9AA1A9; font-weight: 400; }
+  .row.normal .pill { background: #E3E5E8; color: #9AA1A9; }
+  .row.bad .row-item .name { color: #111820; font-weight: 700; }
+  .row.bad .pill { background: #D23B2C; color: #ffffff; }
+
+  .stamp {
+    position: absolute; right: 14px; top: 44px; width: 128px; height: 128px;
+    border-radius: 50%; border: 4px solid #D23B2C; background: rgba(255,255,255,0.9);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transform: rotate(-12deg); color: #D23B2C; opacity: 0.92;
+  }
+  .stamp .l1 { font-size: 22px; font-weight: 900; line-height: 1.3; }
+  .stamp .l2 { font-size: 22px; font-weight: 700; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-block">
+      <div class="t1" style="font-size: {{ title1_fs }}px;">{{ title1 }}</div>
+      <div class="t2" style="font-size: {{ title2_fs }}px;">{{ title2 }}</div>
+    </div>
+
+    <div class="subtitle-row">{{ subtitle }}</div>
+
+    <div class="report-card">
+      <div class="report-header">
+        <div class="scope-text">{{ scope_text }}</div>
+        {{ chrome.player_badge_avatar(bruno_avatar, bruno_badge, 220) }}
+        <div>
+          <div class="id-name">B费</div>
+          <div class="id-sub">曼联队长 · 中场 · {{ bruno_age }} 岁</div>
+        </div>
+      </div>
+
+      <div class="divider-thick"></div>
+
+      <div class="col-header">
+        <div class="col-item">项目</div>
+        <div class="col-trans">上赛季 → 本赛季</div>
+        <div class="col-change">变化</div>
+        <div class="col-verdict">结论</div>
+      </div>
+
+      <div class="report-rows">
+        {% for r in report_rows %}
+        <div class="report-row row {{ 'normal' if r.normal else 'bad' }}">
+          <div class="row-item">
+            <div class="name">{{ r.item }}</div>
+            {% if r.sub %}<div class="sub">{{ r.sub }}</div>{% endif %}
+          </div>
+          <div class="row-trans">
+            <div class="trans-main">{{ r.trans }}</div>
+            {% if r.rank %}<div class="trans-rank">英超第1 → 第<span class="n">{{ r.rank }}</span></div>{% endif %}
+          </div>
+          <div class="row-change {{ 'red' if r.change_red else 'gray' }}">{{ r.change }}</div>
+          <div class="row-verdict"><span class="pill">{{ r.verdict }}{{ r.arrow }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="stamp"><div class="l1">喵弟体检</div><div class="l2">{{ issue_no }}</div></div>
+    </div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-block { flex-shrink: 0; margin-top: 8px; }
+  .t1 { font-weight: 900; line-height: 1.05; color: #111820; }
+  .t2 { font-weight: 900; line-height: 1.05; color: #D23B2C; }
+
+  .hero-row { flex-shrink: 0; margin-top: 36px; display: flex; align-items: center; gap: 40px; }
+  .avatar-wrap { position: relative; width: 220px; height: 220px; flex-shrink: 0; }
+  .avatar-wrap img.face { width: 220px; height: 220px; border-radius: 24px; object-fit: cover; display: block; box-shadow: 0 8px 20px rgba(17,24,32,0.18); }
+  .avatar-wrap .badge { position: absolute; right: -10px; bottom: -10px; width: 64px; height: 64px; border-radius: 50%; background: #fff; box-shadow: 0 4px 10px rgba(17,24,32,0.2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .avatar-wrap .badge img { width: 48px; height: 48px; object-fit: contain; }
+  .transition { display: flex; align-items: baseline; gap: 18px; }
+  .transition .num { font-size: 150px; font-weight: 900; line-height: 1; }
+  .transition .n3 { color: #111820; }
+  .transition .arrow { font-size: 64px; font-weight: 900; color: #9AA1A9; }
+  .transition .n0 { color: #D23B2C; }
+
+  .ranks-row { flex-shrink: 0; margin-top: 40px; font-size: 32px; font-weight: 700; color: #111820; }
+  .ranks-row .sep { color: #9AA1A9; font-weight: 400; margin: 0 14px; }
+  .ranks-row .drop { color: #D23B2C; }
+
+  .subtitle-block { flex-shrink: 0; margin-top: 32px; }
+  .subtitle-block div, .dy-subtitle div { font-size: 34px; font-weight: 400; color: #5B6470; line-height: 1.35; }
+
+  .filler { flex: 1; }
+
+  /* ---- 抖音：绝对定位三块，避开安全区顶/底 ---- */
+  .dy-title { position: absolute; left: 64px; top: 300px; width: 816px; }
+  .dy-hero { position: absolute; left: 64px; top: 600px; width: 816px; display: flex; align-items: center; gap: 32px; }
+  .dy-hero .avatar-wrap { width: 180px; height: 180px; }
+  .dy-hero .avatar-wrap img.face { width: 180px; height: 180px; border-radius: 20px; }
+  .dy-hero .transition .num { font-size: 120px; }
+  .dy-hero .transition .arrow { font-size: 52px; }
+  .dy-ranks { position: absolute; left: 64px; top: 880px; width: 816px; font-size: 30px; font-weight: 700; color: #111820; }
+  .dy-ranks .sep { color: #9AA1A9; font-weight: 400; margin: 0 12px; }
+  .dy-ranks .drop { color: #D23B2C; }
+  .dy-subtitle { position: absolute; left: 64px; top: 960px; width: 816px; }
+</style>
+</head>
+<body>
+{% if platform == 'douyin' %}
+<div class="page">
+  {{ chrome.douyin_bg_bottom() }}
+  {{ chrome.douyin_brand(logo_path, column_name, issue_no, page_no) }}
+
+  <div class="dy-title">
+    <div class="t1" style="font-size: {{ title1_fs_dy }}px;">{{ title1 }}</div>
+    <div class="t2" style="font-size: {{ title2_fs_dy }}px;">{{ title2 }}</div>
+  </div>
+
+  <div class="dy-hero">
+    <div class="avatar-wrap">
+      <img class="face" src="{{ avatar_path }}" alt="B费">
+      <div class="badge"><img src="{{ badge_path }}" alt="曼联"></div>
+    </div>
+    <div class="transition"><span class="num n3">3</span><span class="arrow">→</span><span class="num n0">0</span></div>
+  </div>
+
+  <div class="dy-ranks">
+    关键传球 {{ rank_cc_ref }}<span class="drop">→{{ rank_cc_cur }}</span><span class="sep">·</span>xA {{ rank_xa_ref }}<span class="drop">→{{ rank_xa_cur }}</span><span class="sep">·</span>助攻 {{ rank_ast_ref }}<span class="drop">→{{ rank_ast_cur }}</span>
+  </div>
+
+  <div class="dy-subtitle">
+    <div>{{ subtitle }}</div>
+  </div>
+
+  {{ chrome.douyin_caveat(footer_note) }}
+  {{ chrome.safezone_debug(safezone if debug_safezone else None) }}
+</div>
+{% else %}
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-block">
+      <div class="t1" style="font-size: {{ title1_fs }}px;">{{ title1 }}</div>
+      <div class="t2" style="font-size: {{ title2_fs }}px;">{{ title2 }}</div>
+    </div>
+
+    <div class="hero-row">
+      <div class="avatar-wrap">
+        <img class="face" src="{{ avatar_path }}" alt="B费">
+        <div class="badge"><img src="{{ badge_path }}" alt="曼联"></div>
+      </div>
+      <div class="transition"><span class="num n3">3</span><span class="arrow">→</span><span class="num n0">0</span></div>
+    </div>
+
+    <div class="ranks-row">
+      关键传球 {{ rank_cc_ref }}<span class="drop">→{{ rank_cc_cur }}</span><span class="sep">·</span>xA {{ rank_xa_ref }}<span class="drop">→{{ rank_xa_cur }}</span><span class="sep">·</span>助攻 {{ rank_ast_ref }}<span class="drop">→{{ rank_ast_cur }}</span>
+    </div>
+
+    <div class="subtitle-block">
+      <div>{{ subtitle }}</div>
+    </div>
+
+    <div class="filler"></div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+{% endif %}
+</body>
+</html>

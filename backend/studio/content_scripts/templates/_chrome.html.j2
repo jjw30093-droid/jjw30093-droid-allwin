@@ -1,0 +1,96 @@
+{# 公共页眉/页脚通栏/水印宏 —— 4+1 张图共用，以后新的图文系列也从这里 import。
+   参数：logo_path(猫头小图标，页眉/通栏用) column_name(栏目名) issue_no(期号)
+   page_no(如 "1 / 5") slogan(通栏中间 slogan，默认"用数据看懂足球") #}
+
+{% macro masthead(logo_path, column_name, issue_no) %}
+<div class="masthead">
+  <div class="brand-id">
+    <img src="{{ logo_path }}" alt="喵弟">
+    <span>{{ column_name }}</span>
+  </div>
+  <div class="issue-no">{{ issue_no }}</div>
+</div>
+{% endmacro %}
+
+{% macro footer_band(logo_path, page_no, slogan="只看数据，不看名气") %}
+<div class="footer-band">
+  <div class="fb-left">
+    <div class="fb-logo"><img src="{{ logo_path }}" alt="喵弟"></div>
+    <span class="fb-name">喵弟数据研究室</span>
+  </div>
+  <div class="fb-slogan">{{ slogan }}</div>
+  <div class="fb-page">{{ page_no }}</div>
+</div>
+{% endmacro %}
+
+{% macro caveat(note) %}
+<div class="caveat-row"><div class="note">{{ note }}</div></div>
+{% endmacro %}
+
+{% macro watermark(logo_path, left, top) %}
+<img class="watermark" src="{{ logo_path }}" style="left:{{ left }}px; top:{{ top }}px;" alt="">
+{% endmacro %}
+
+{# 通用"圆形头像 + 右下角队徽角标"宏：HTML(div+img)版，用于文档流布局
+   (身份条、报告单表头)——散点图那种需要按像素坐标摆放的场景走 SVG，
+   不能复用这个宏(SVG 里没有 <div>)，各自在模板里单独画 circle+image。
+   队徽直径固定=头像的 38%，白底 + 2px 白描边，跟 B 费 NO.02 v2 规格一致。 #}
+{% macro player_badge_avatar(avatar, badge, size, extra_style="") %}
+<div style="position:relative; width:{{ size }}px; height:{{ size }}px; flex-shrink:0; {{ extra_style }}">
+  <img src="{{ avatar }}" style="width:{{ size }}px; height:{{ size }}px; border-radius:50%; object-fit:cover; display:block;" alt="">
+  <div style="position:absolute; right:-2px; bottom:-2px; width:{{ (size*0.38)|round|int }}px; height:{{ (size*0.38)|round|int }}px; border-radius:50%; background:#ffffff; border:2px solid #ffffff; box-shadow:0 2px 6px rgba(17,24,32,0.2); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+    <img src="{{ badge }}" style="width:74%; height:74%; object-fit:contain;" alt="">
+  </div>
+</div>
+{% endmacro %}
+
+{% macro identity_bar(avatar, badge, age) %}
+<div style="display:flex; align-items:center; gap:16px; flex-shrink:0;">
+  {{ player_badge_avatar(avatar, badge, 72) }}
+  <span style="font-size:28px; font-weight:700; color:var(--ink);">B费 · 曼联队长 · {{ age }} 岁</span>
+</div>
+{% endmacro %}
+
+{# ============ 抖音专用：品牌不用页眉/页脚通栏，通栏会被抖音自带的
+   关注按钮/@账号名/文案遮住。改成安全区顶部一行内联品牌条 + 安全区底部
+   一行口径说明，都用绝对定位精确卡在 spec 给的 y 坐标上，不依赖文档流。 ============ #}
+
+{% macro douyin_brand(logo_path, column_name, issue_no, page_no) %}
+<div style="position:absolute; left:64px; top:260px; right:64px; height:48px;
+            display:flex; align-items:center; justify-content:space-between;">
+  <div style="display:flex; align-items:center; gap:12px;">
+    <img src="{{ logo_path }}" alt="喵弟" style="width:48px; height:48px; border-radius:12px;">
+    <span style="font-size:28px; font-weight:700; color:var(--ink);">{{ column_name }} · {{ issue_no }}</span>
+  </div>
+  <div style="font-size:26px; font-weight:400; color:var(--ink3);">{{ page_no }}</div>
+</div>
+{% endmacro %}
+
+{% macro douyin_caveat(note) %}
+{# right:200px 不是 right:64px——安全区右边界在页面 x=880，不是页面自身
+   右内边距的 x=1016。用 right:64px 算出来的盒子宽度会有一截伸进右侧按钮
+   遮挡区(x900-1080)，即使文字本身没那么长、肉眼看不出来，元素自身的
+   boundingBox 用来跑碰撞检测时还是会命中——碰撞检测按盒子而不是按看得见
+   的字形判定，这里就得让盒子本身也收在安全区内。 #}
+<div style="position:absolute; left:64px; top:1400px; right:200px; font-size:22px; font-weight:400; color:var(--ink3);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ note }}</div>
+{% endmacro %}
+
+{% macro douyin_bg_bottom() %}
+{# 底部遮挡区(1440-1920)延续背景色 + 一条很淡的渐变，避免看起来像是留白出错 #}
+<div style="position:absolute; left:0; top:1440px; width:100%; height:480px;
+            background:linear-gradient(180deg, var(--bg) 0%, #EEEBE3 100%);"></div>
+{% endmacro %}
+
+{% macro safezone_debug(safezone) %}
+{% if safezone %}
+<div class="safezone-debug">
+  <div class="zone" style="left:{{ safezone.top[0] }}px; top:{{ safezone.top[1] }}px;
+       width:{{ safezone.top[2]-safezone.top[0] }}px; height:{{ safezone.top[3]-safezone.top[1] }}px;">顶部遮挡 0–240</div>
+  <div class="zone" style="left:{{ safezone.bottom[0] }}px; top:{{ safezone.bottom[1] }}px;
+       width:{{ safezone.bottom[2]-safezone.bottom[0] }}px; height:{{ safezone.bottom[3]-safezone.bottom[1] }}px;">底部遮挡 1440–1920</div>
+  <div class="zone" style="left:{{ safezone.right[0] }}px; top:{{ safezone.right[1] }}px;
+       width:{{ safezone.right[2]-safezone.right[0] }}px; height:{{ safezone.right[3]-safezone.right[1] }}px;">右侧按钮列</div>
+</div>
+{% endif %}
+{% endmacro %}

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html style="--canvas-w:{{ canvas_w }}px; --canvas-h:{{ canvas_h }}px;">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+{% import "_chrome.html.j2" as chrome %}
+<style>
+  .title-row { flex-shrink: 0; height: 84px; display: flex; align-items: center; }
+  .title-row .page-title { font-size: 44px; }
+  .id-row { flex-shrink: 0; margin-top: 2px; margin-bottom: 14px; }
+
+  .cards-col { flex-shrink: 0; display: flex; flex-direction: column; gap: 18px; margin-top: 6px; }
+  .card { display: flex; align-items: stretch; border-radius: 16px; overflow: hidden; background: #ECEAE3; height: 118px; }
+  .card.highlight { background: #ffffff; box-shadow: 0 4px 14px rgba(210,59,44,0.18); border: 2px solid #D23B2C; }
+  .result-block { flex: 0 0 64px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 26px; font-weight: 900; }
+  .card-mid { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-left: 20px; gap: 2px; min-width: 0; }
+  .card-mid .date-row { display: flex; align-items: center; gap: 8px; font-size: 22px; color: var(--ink3); }
+  .card-mid .promoted-tag { display: inline-block; background: var(--gold); color: #fff; font-size: 22px; font-weight: 700; padding: 0px 8px; border-radius: 4px; }
+  .card-mid .hattrick-tag { display: inline-block; background: #D23B2C; color: #fff; font-size: 22px; font-weight: 700; padding: 0px 8px; border-radius: 4px; }
+  .card-mid .opp-row { display: flex; align-items: center; gap: 10px; }
+  .card-mid .opp-row img { width: 28px; height: 28px; object-fit: contain; }
+  .card-mid .opp-name { font-size: 26px; font-weight: 700; color: var(--ink); }
+  .card-mid .opp-name.derby { color: #D23B2C; }
+  .card-mid .score-text { font-size: 22px; color: var(--ink3); }
+  .card-right { flex: 0 0 260px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; padding-right: 24px; gap: 2px; }
+  .card-right .stat-main { font-size: 24px; font-weight: 900; color: var(--ink); }
+  .card.highlight .card-right .stat-main { color: #D23B2C; }
+  .card-right .stat-sub { font-size: 22px; font-weight: 700; color: #D23B2C; }
+
+  .zero-line { flex-shrink: 0; margin-top: 40px; font-size: 40px; font-weight: 900; color: #111820; line-height: 1.4; }
+
+  .vote-row { flex-shrink: 0; display: flex; gap: 24px; margin-top: 56px; margin-bottom: 8px; }
+  .vote-btn { flex: 1; height: 128px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  .vote-btn.yes { background: var(--gold); }
+  .vote-btn.no { background: var(--red); }
+  .vote-btn .big { font-size: 36px; font-weight: 900; color: #fff; }
+  .vote-btn .sub { font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.9); }
+  .prev-issue { flex-shrink: 0; margin-top: 12px; font-size: 22px; font-weight: 400; color: var(--ink3); }
+</style>
+</head>
+<body>
+<div class="page">
+  {{ chrome.masthead(logo_path, column_name, issue_no) }}
+
+  <div class="content">
+    <div class="title-row"><div class="page-title">{{ page_title }}</div></div>
+    <div class="id-row">{{ chrome.identity_bar(bruno_avatar, bruno_badge, bruno_age) }}</div>
+
+    <div class="cards-col">
+      {% for c in cards %}
+      <div class="card {{ 'highlight' if c.is_hattrick else '' }}">
+        <div class="result-block" style="background:{{ c.result_color }};">{{ c.result }}</div>
+        <div class="card-mid">
+          <div class="date-row">
+            <span>{{ c.date }}</span>
+            {% if c.promoted %}<span class="promoted-tag">升班马</span>{% endif %}
+            {% if c.is_hattrick %}<span class="hattrick-tag">帽子戏法</span>{% endif %}
+          </div>
+          <div class="opp-row">
+            <img src="{{ c.opp_badge }}" alt="">
+            <span class="opp-name {{ 'derby' if c.is_derby else '' }}">{{ '曼市德比' if c.is_derby else c.opp_zh }}</span>
+            <span class="score-text">{{ c.home_zh }} {{ c.score }} {{ c.away_zh }}</span>
+          </div>
+        </div>
+        <div class="card-right">
+          {% if c.is_derby %}
+          <div class="stat-main">{{ c.goals }}球 {{ c.assists }}助</div>
+          <div class="stat-sub">全场只有{{ c.chances_created }}次关键传球</div>
+          {% else %}
+          <div class="stat-main">{{ c.goals }}球 {{ c.assists }}助 {{ c.chances_created }}关键传球</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="zero-line">{{ zero_matches_line }}</div>
+
+        <div class="vote-row">
+      <div class="vote-btn yes"><div class="big">还是核心</div><div class="sub">评论区扣 1</div></div>
+      <div class="vote-btn no"><div class="big">不是了</div><div class="sub">评论区扣 2</div></div>
+    </div>
+    <div class="prev-issue">往期：NO.01 姆巴佩</div>
+  </div>
+
+  {{ chrome.caveat(footer_note) }}
+  {{ chrome.footer_band(logo_path, page_no) }}
+</div>
+</body>
+</html>
