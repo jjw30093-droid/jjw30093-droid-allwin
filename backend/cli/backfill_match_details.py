@@ -22,6 +22,7 @@ match_details 原始 payload(bronze_fm_* 只存 lineup/sidelined 裁剪子树),
   .venv/bin/python -m backend.cli.backfill_match_details --season 2026 --limit 5 --commit
   .venv/bin/python -m backend.cli.backfill_match_details --season 2026/2027 --league 55 --commit
   .venv/bin/python -m backend.cli.backfill_match_details --date-from 2026-08-01 --date-to 2026-08-24 --commit
+  .venv/bin/python -m backend.cli.backfill_match_details --league 47 --season 2025/2026 --missing-colors --commit
 """
 
 from __future__ import annotations
@@ -48,6 +49,15 @@ _MISSING_COND = (
     "(Venue_Name IS NULL AND Home_Team_Color_Light IS NULL"
     " AND Referee_Stats_Json IS NULL)"
 )
+
+# --missing-colors 判据(2026-09-26,第四批):四个配色列**任一**为空。默认判据(上面
+# 三样代表列同时为空)会漏掉"场馆/裁判统计已有值、但配色为空"的场次——生产实测
+# 英超 2025/26 有 378 场缺配色,默认判据只选出 279 场。
+_MISSING_COLORS_COND = (
+    "(Home_Team_Color_Light IS NULL OR Home_Team_Color_Dark IS NULL"
+    " OR Away_Team_Color_Light IS NULL OR Away_Team_Color_Dark IS NULL)"
+)
+
 
 def _select_targets(args) -> list[dict]:
     cond = ["1=1"]
@@ -103,6 +113,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--include-filled", dest="only_missing", action="store_false", default=True,
         help="默认跳过已回填场次(断点续跑);带此开关强制全部重抓",
+    )
+    ap.add_argument(
+        "--missing-colors", action="store_true",
+        help="只选四个配色列(主客 × 浅深)任一为空的比赛,取代默认的「三样全空」判据;"
+             "写库仍是 COALESCE 只填空值",
     )
     ap.add_argument("--commit", action="store_true", help="真正抓取并写库;缺省 dry-run")
     args = ap.parse_args(argv)

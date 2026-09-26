@@ -95,3 +95,67 @@ def test_dry_run_makes_no_requests_and_exits_zero(seeded, capsys):
     out = capsys.readouterr().out
     assert "目标场次: 1" in out
     assert "dry-run" in out
+
+
+# ── --missing-colors(2026-09-26,第四批):按四个配色列任一为空选场 ──
+
+
+@pytest.fixture
+def seeded_colors(data_dir):
+    conn = connect_rw("core")
+    # (id, venue, hl, hd, al, ad, status)
+    rows = [
+        (11, None, None, None, None, None, "Finish"),          # 全空 → 选
+        (12, "Arena", None, None, None, None, "Finish"),       # 有场馆但缺配色 → 默认判据漏掉、本参数选中
+        (13, "Arena", "#111111", "#222222", "#333333", "#444444", "Finish"),  # 四色齐全 → 不选
+        (14, "Arena", "#111111", "#222222", "#333333", None, "Finish"),       # 缺一个 → 选
+        (15, None, None, None, None, None, "NotStarted"),      # 未完赛 → 默认不选
+    ]
+    for mid, venue, hl, hd, al, ad, status in rows:
+        conn.execute(
+            "INSERT INTO dim_match (Match_ID, Season, League_ID, Date, status,"
+            " Home_Team_ID, Away_Team_ID, Home_Team_Name, Away_Team_Name, Venue_Name,"
+            " Home_Team_Color_Light, Home_Team_Color_Dark, Away_Team_Color_Light, Away_Team_Color_Dark)"
+            " VALUES (?, '2026', 59, '2026-08-01', ?, 1, 2, 'H', 'A', ?, ?, ?, ?, ?)",
+            (mid, status, venue, hl, hd, al, ad),
+        )
+    conn.commit()
+    yield conn
+    conn.close()
+
+
+def test_missing_colors_selects_any_null_color_column(seeded_colors):
+    ids = sorted(t["Match_ID"] for t in _select_targets(_args(season="2026", missing_colors=True)))
+    assert ids == [11, 12, 14]  # 13(四色齐全)与 15(未完赛)不选
+
+
+def test_default_criterion_misses_rows_that_have_venue_but_no_colors(seeded_colors):
+    # 对照:默认判据(三样全空)漏掉 12、14——这正是新增本参数的原因
+    ids = sorted(t["Match_ID"] for t in _select_targets(_args(season="2026")))
+    assert ids == [11]
+
+
+def test_missing_colors_still_respects_status_and_scope_filters(seeded_colors):
+    ids = sorted(
+        t["Match_ID"]
+        for t in _select_targets(_args(season="2026", missing_colors=True, finished_only=False))
+    )
+    assert ids == [11, 12, 14, 15]
+    assert _select_targets(_args(season="2099", missing_colors=True)) == []
+    assert _select_targets(_args(season="2026", league=47, missing_colors=True)) == []
+
+
+def test_missing_colors_not_widened_by_include_filled(seeded_colors):
+    # --include-filled(only_missing=False)与 --missing-colors 同用:仍只选配色缺失的
+    ids = sorted(
+        t["Match_ID"]
+        for t in _select_targets(_args(season="2026", missing_colors=True, only_missing=False))
+    )
+    assert ids == [11, 12, 14]
+
+
+def test_missing_colors_dry_run_via_main(seeded_colors, capsys):
+    rc = main(["--season", "2026", "--missing-colors"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "目标场次: 3" in out and "dry-run" in out
