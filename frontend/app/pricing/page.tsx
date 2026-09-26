@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { serverGet, type GetJson } from "@/lib/api-v1";
 import styles from "./pricing.module.css";
@@ -6,7 +7,7 @@ import styles from "./pricing.module.css";
 export const metadata: Metadata = {
   title: "访问权限说明",
   description:
-    "足球数据免费:登录即可查看全部联赛数据、模型完整概率与完整赔率时间线;赛前每日精选由站长为账号开通授权。",
+    "足球数据免费:登录即可查看全部联赛数据、胜平负概率与完整赔率时间线;赛前每日精选按场为账号开通授权。",
 };
 
 /* 类型从 OpenAPI 生成类型派生(Pydantic 单一真源,宪法 §10.3);
@@ -35,15 +36,16 @@ const PLAN_PRESENTATION: Record<
     title: "游客",
     how: "无需登录",
     lines: [
-      "全部联赛的完整比赛资料与模型概率",
+      "全部联赛的完整比赛资料与胜平负概率",
       "完整赔率时间线",
       "每日公推的全部内容",
       "每日精选与公推的历史战绩(不用登录)",
     ],
   },
   member: {
-    title: "注册用户",
-    how: "免费登录即可,无需付费",
+    // 当前没有自助注册:免费账号靠公众号申请开通,文案必须与实际一致(2026-09-26)
+    title: "免费账号",
+    how: "通过公众号申请开通，无需付费",
     lines: [
       "收藏关注的比赛",
       "查询本账号的每日精选授权状态",
@@ -51,9 +53,9 @@ const PLAN_PRESENTATION: Record<
   },
   daily_picks: {
     title: "精选授权用户",
-    how: "由站长按场为账号开通",
+    how: "按场为你的账号开通",
     lines: [
-      "包含注册用户的全部内容",
+      "包含免费账号的全部内容",
       "已获授权那场比赛的赛前每日精选",
     ],
   },
@@ -144,22 +146,38 @@ export default function PricingPage() {
   return (
     <main className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>访问权限说明</h1>
+        <h1 className={styles.title}>会员与权限</h1>
       </div>
+
+      {/* 「如何获得精选授权」放最上面,写成三步(/reco 的「怎么开通」按钮跳到这里) */}
+      <section id="how-to-unlock" className={styles.noticeCard} aria-labelledby="how-to-unlock-title">
+        <h2 id="how-to-unlock-title" className={styles.stepsTitle}>
+          如何获得精选授权
+        </h2>
+        <ol className={styles.steps}>
+          <li>
+            <span>
+              <Link href="/login">登录账号</Link>
+            </span>
+          </li>
+          <li>
+            <span>通过公众号联系我们开通</span>
+          </li>
+          <li>
+            <span>
+              回到「<Link href="/reco">精选</Link>」页查看
+            </span>
+          </li>
+        </ol>
+      </section>
+
       <p className={styles.subtitle}>
-        比赛数据、赔率、概率都不用登录，匿名打开就是完整的。登录只用来收藏、看历史
-        战绩和管账号。只有赛前的<strong>每日精选</strong>，要站长按场给你的账号开通。
+        比赛数据、赔率、概率都不用登录，匿名打开就是完整的。登录只用来收藏、看历史战绩和管账号。只有赛前的<strong>每日精选</strong>，要按场给你的账号开通。
       </p>
 
       <Suspense fallback={<Skeleton />}>
         <AccessTiers />
       </Suspense>
-
-      <h2 className={styles.sectionTitle}>如何获得精选授权</h2>
-      <div className={styles.noticeCard}>
-        当前未接入线上支付:通过<strong>公众号联系站长</strong>为账号开通。
-        授权生效后「每日精选」页会自动显示内容,无需重新注册。
-      </div>
     </main>
   );
 }

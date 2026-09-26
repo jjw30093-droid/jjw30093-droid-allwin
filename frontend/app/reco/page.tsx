@@ -56,6 +56,7 @@ type TrackResp = GetJson<"/api/v1/reco/track-record">;
 // 每日公推(2026-09 新增,board='daily_public'):完全公开、匿名可见,
 // 响应形状同 RecoSlipDTO——直接复用既有 SlipCard,不新造投影/组件。
 type PublicResp = GetJson<"/api/v1/reco/public">;
+type MyAccessResponse = GetJson<"/api/v1/reco/my-access">;
 
 // 每日精选未授权状态固定文案:未登录时是列表级别的说明,不针对某一场,
 // 不用"本场";已登录时改成针对具体这一场的措辞。
@@ -97,6 +98,8 @@ function RecoBody() {
   const [trackErr, setTrackErr] = useState<string | null>(null);
   const [pub, setPub] = useState<PublicResp | null>(null);
   const [pubErr, setPubErr] = useState<string | null>(null);
+  // 当前账号是否有任何 active 授权;null = 还没查到(此时不放"怎么开通"按钮,避免闪一下)
+  const [hasGrant, setHasGrant] = useState<boolean | null>(null);
 
   // 历史战绩(2026-08-16 起匿名可见):不依赖登录态,挂载后直接拉取。
   useEffect(() => {
@@ -144,6 +147,22 @@ function RecoBody() {
     };
   }, []);
 
+  // 授权状态(个人功能,要求登录):决定顶部放"怎么开通"还是什么都不放
+  useEffect(() => {
+    if (me === "loading" || !me?.authenticated) return;
+    let cancelled = false;
+    clientFetch<MyAccessResponse>("/api/v1/reco/my-access")
+      .then((r) => {
+        if (!cancelled) setHasGrant(r.grants.some((g) => g.status === "active"));
+      })
+      .catch(() => {
+        // 查不到就当作"未知",不放按钮(不能因为接口失败就告诉用户"你没开通")
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me]);
+
   // 今日精选列表:仅登录后才请求(未登录该端点 401)。每一条按 slip 分别
   // 授权投影,不存在任何"全局已解锁"判断。
   useEffect(() => {
@@ -165,6 +184,7 @@ function RecoBody() {
 
   const authed = me !== "loading" && Boolean(me?.authenticated);
   const summary = track?.summary;
+  const noAccess = hasGrant === false;
 
   // 显式 ?tab= 优先;否则默认落在完全公开的「每日公推」(2026-09 起,站长
   // 明确要求:导航栏"每日精选"入口点进来直接看到公推,不需要登录门槛——
@@ -178,9 +198,23 @@ function RecoBody() {
   return (
     <main className={styles.page}>
       <h1 className={styles.title}>每日精选</h1>
-      <p className={styles.subtitle}>
-        每天人工出的推荐。中了没中都留在这儿，作废的也照样列出来。这是个人分析，判断会错。
-      </p>
+      <p className={styles.subtitle}>每天人工精选，开通后在这里查看。</p>
+      {/* 入口(2026-09-26):未登录 → 登录;已登录但还没有任何授权 → 怎么开通;
+          已开通或还没查到授权状态时不放按钮 */}
+      {me !== "loading" && !authed && (
+        <div className={`${styles.btnRow} ${styles.entryRow}`}>
+          <Link className={styles.btnPrimary} href="/login?next=/reco">
+            登录
+          </Link>
+        </div>
+      )}
+      {authed && noAccess && (
+        <div className={`${styles.btnRow} ${styles.entryRow}`}>
+          <Link className={styles.btnPrimary} href="/pricing#how-to-unlock">
+            怎么开通
+          </Link>
+        </div>
+      )}
 
       <nav className={styles.tabs} aria-label="精选内容切换">
         <Link
@@ -258,9 +292,6 @@ function RecoBody() {
         <section>
           {pubErr && <p className={styles.errText}>{pubErr}</p>}
           <h2 className={styles.sectionTitle}>近 {pub?.window_days ?? 7} 天公推</h2>
-          <p className={styles.archiveNote}>
-            不需要登录，任何人都能看到全部内容。中没中都留着，作废的也照样列出来。
-          </p>
           {!pub && !pubErr ? (
             <div className={styles.card} aria-busy="true">
               <div className={styles.skeleton} />

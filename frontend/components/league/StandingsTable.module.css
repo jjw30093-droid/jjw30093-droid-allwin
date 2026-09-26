@@ -41,9 +41,14 @@
   white-space: nowrap;
 }
 
-.table thead th:nth-child(1),
-.table thead th:nth-child(2) {
+.table thead th.cRank,
+.table thead th.cTeam {
   text-align: left;
+}
+
+/* 积分/净胜在 DOM 里各有两份(见 StandingsTable.tsx::Row 注释):桌面藏手机那份 */
+.mOnly {
+  display: none;
 }
 
 .table tbody td {
@@ -58,10 +63,12 @@
   border-bottom: none;
 }
 
-.rank {
+/* 选择器要带 .table tbody td(特异性 0,1,2),否则会被上面的 text-align:right 盖掉——
+   这正是此前球队名"挤到格子右边、与名次之间一大段空白"的原因 */
+.table tbody td.rank {
   text-align: left;
   position: relative;
-  padding-left: 18px !important;
+  padding-left: 18px;
 }
 
 .qualStripe {
@@ -72,7 +79,7 @@
   width: 4px;
 }
 
-.team {
+.table tbody td.team {
   text-align: left;
 }
 
@@ -115,19 +122,24 @@
   color: var(--gold-300);
 }
 
+/* 底色用 background-color 垫一层实色:手机端名次/球队两列是 sticky 的,
+   半透明渐变会让横向滚过去的数字透出来 */
 .championRow td {
-  background: linear-gradient(
+  background-color: var(--surface);
+  background-image: linear-gradient(
     90deg,
     rgba(237, 193, 99, 0.1) 0%,
     rgba(237, 193, 99, 0.02) 60%
   );
 }
 
+/* 冠军是"单独一种颜色"(金),与资格区色带区分;深色字压金色底,两个主题都 ≥ 7:1 */
 .championBadge {
   margin-left: 8px;
   font-size: 11px;
-  color: #fff;
-  background: var(--gold-grad);
+  color: #3a2a00;
+  background: var(--brand-gold);
+  vertical-align: middle;
   border-radius: var(--r-pill);
   padding: 2px 8px;
   font-weight: 700;
@@ -150,58 +162,103 @@
   margin-right: 6px;
 }
 
-/* 移动端主动砍列(DESIGN.md §4):<640px 隐藏胜/平/负与进失球列 */
-@media (max-width: 640px) {
+/* 手机(<768px):首屏同时看到 名次/球队/积分/场次/净胜,名次+球队左侧固定,
+   胜/平/负/进/失放在后面横向滚动;行高压到约 30px(原 54px,徽章 24px 撑住,故取 30px),20 队不超过 2.5 屏。
+   列顺序:名次 球队 积分 场次 净胜 | 胜 平 负 进 失(积分/净胜用 mOnly/dOnly 两份切换) */
+@media (max-width: 767px) {
   .scrollHint {
     display: block;
+    padding: 8px 12px 6px;
   }
 
+  .mOnly {
+    display: table-cell;
+  }
+
+  .dOnly {
+    display: none;
+  }
+
+  /* 不再拉伸到容器宽度:列宽由内容决定,球队名紧跟队徽,不出现大段空白 */
   .table {
-    min-width: 520px;
+    width: max-content;
+    min-width: 100%;
   }
 
-  .wdl {
-    display: none;
+  .table thead th {
+    padding: 6px 8px;
+    font-size: 12px;
+    letter-spacing: 0.02em;
   }
 
-  .gf,
-  .ga,
-  .table thead th:nth-child(7),
-  .table thead th:nth-child(8) {
-    display: none;
-  }
-
-  .table thead th,
   .table tbody td {
-    padding-inline: 10px;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 14px;
   }
 
-  .rank,
-  .table thead th:first-child {
+  .points {
+    font-size: 14px;
+  }
+
+  /* 名次:固定宽度,球队列的 sticky left 必须与它逐像素相等 */
+  .cRank {
     position: sticky;
     left: 0;
     z-index: 2;
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    padding-left: 12px !important;
     background: var(--surface);
   }
 
-  .team,
-  .table thead th:nth-child(2) {
+  .cTeam {
     position: sticky;
-    left: 48px;
+    left: 36px;
     z-index: 2;
+    width: 118px;
+    min-width: 118px;
+    max-width: 118px;
     background: var(--surface);
+    /* 固定列与滚动列之间的分隔,提示右侧还能滑 */
+    box-shadow: 1px 0 0 var(--border);
   }
 
-  .table thead th:first-child,
-  .table thead th:nth-child(2) {
+  .table thead th.cRank,
+  .table thead th.cTeam {
     z-index: 3;
     background: var(--bg-2);
   }
 
+  .championRow .cRank,
+  .championRow .cTeam {
+    background-color: var(--surface);
+  }
+
+  .teamIdentity {
+    gap: 6px;
+    max-width: 100%;
+    vertical-align: middle;
+  }
+
   .teamNameZh {
     display: inline-block;
-    max-width: 116px;
+    max-width: 78px;
     overflow: hidden;
     text-overflow: ellipsis;
+    vertical-align: middle;
+  }
+
+  /* 冠军徽章:手机上缩小并让名字先省略(格子固定 118px,徽章不能被挤出去) */
+  .championBadge {
+    margin-left: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .championRow .teamNameZh {
+    max-width: 44px;
   }
 }

@@ -468,6 +468,41 @@ def _extra_num(raw, key: str):
     return value if isinstance(value, (int, float)) else None
 
 
+# 赛季"已结束"的状态映射(2026-09-26,站长指定)。dim_match.status 的写侧词表是
+# 封闭四值 Finish / NotStarted / InPlay / Cancelled(backend/known_values.py::
+# DIM_MATCH_STATUS);生产实测(2026-09-26)只出现 Finish 14,950 / NotStarted
+# 3,518 / Cancelled 2 三种。Awarded(裁定胜负)与 Postponed(推迟)目前写侧不会
+# 产生,但按站长口径登记进映射,避免将来来源新增值时凭空落进"未知"。
+SEASON_ENDED_STATUSES = frozenset({"Finish", "Cancelled", "Awarded"})
+SEASON_NOT_ENDED_STATUSES = frozenset({"NotStarted", "InPlay", "Postponed"})
+
+
+def season_finished(conn: sqlite3.Connection, league_id: int, season: str | None) -> bool:
+    """该联赛该赛季是否已结束。
+
+    规则:至少一场 Finish,且**不存在**任何"没结束"的比赛。已结束 =
+    Finish / Cancelled / Awarded;没结束 = NotStarted / InPlay / Postponed,
+    以及任何**未登记的值和 NULL**(fail closed:宁可赛季真的结束了暂时不显示
+    "冠军",也不在赛季进行中把榜首标成冠军)。只有取消场次、没有一场 Finish 的
+    赛季不算结束。
+    数据不全(如中途接入联赛缺未来赛程)的风险同样存在,见质量门 G15。
+    """
+    if not season:
+        return False
+    ended = ",".join("?" for _ in SEASON_ENDED_STATUSES)
+    try:
+        row = conn.execute(
+            f"""SELECT SUM(CASE WHEN status='Finish' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN status IS NULL OR status NOT IN ({ended}) THEN 1 ELSE 0 END)
+                  FROM dim_match WHERE League_ID=? AND Season=?""",
+            (*sorted(SEASON_ENDED_STATUSES), league_id, season),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    finished, not_ended = row[0] or 0, row[1] or 0
+    return finished >= 1 and not_ended == 0
+
+
 def standings(
     conn: sqlite3.Connection,
     league_id: int,
@@ -506,7 +541,7 @@ def standings(
     except sqlite3.OperationalError:
         season_rows = []
     if not season_rows:
-        return {"season": season, "available_seasons": [], "rows": []}
+        return {"season": season, "available_seasons": [], "rows": [], "season_finished": False}
     played_seasons = [r[0] for r in season_rows if (r[1] or 0) > 0]
     seasons = played_seasons or [r[0] for r in season_rows]
     if season is None or season not in seasons:
@@ -532,6 +567,7 @@ def standings(
     return {
         "season": season,
         "available_seasons": seasons,
+        "season_finished": season_finished(conn, league_id, season),
         "rows": [
             {k: r[k] for k in r.keys() if k not in ("table_type", "extra_json")}
             | {

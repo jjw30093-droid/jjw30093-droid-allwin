@@ -274,3 +274,13 @@ a {
     transition: none;
   }
 }
+
+/* 手机端:各页 .page 的 padding-bottom 原本都用 --bottom-nav-clearance 给吸底导航让位,
+   但页面后面还紧跟着页脚,页脚自己已经让出了导航的高度——两份叠在一起,正文和页脚之间
+   出现 130px 以上的大段空白(2026-09-26 审计)。在 <main> 上把这个变量收成 16px:
+   只影响 main 自己的 padding-bottom,页脚(不在 main 里)照常保留完整的让位高度。 */
+@media (max-width: 767px) {
+  body > main {
+    --bottom-nav-clearance: 16px;
+  }
+}

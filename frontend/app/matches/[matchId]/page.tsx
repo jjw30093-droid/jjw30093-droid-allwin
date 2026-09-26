@@ -41,7 +41,7 @@ export async function generateMetadata({
   const m = detail.match;
   return {
     title: `${m.home.name} vs ${m.away.name}`,
-    description: `${m.season} ${LEAGUE_ZH[m.league_id] ?? ""} 赛前分析:数据、模型概率与不确定性`,
+    description: `${m.season} ${LEAGUE_ZH[m.league_id] ?? ""} 赛前分析:数据与基于市场数据计算的胜平负概率`,
   };
 }
 

@@ -16986,6 +16986,11 @@
        }
       ],
       "title": "Empty Reason"
+     },
+     "season_finished": {
+      "type": "boolean",
+      "title": "Season Finished",
+      "default": false
      }
     },
     "type": "object",

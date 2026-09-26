@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { WECHAT_MP_NAME } from "@/lib/wechat-mp";
 import styles from "./about.module.css";
 
 export const metadata: Metadata = {
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 
 /** 与页脚 WechatFollowCard 同一张固定二维码,不走从未配置过的 NEXT_PUBLIC_* 变量。 */
 const WECHAT_QR_SRC = "/brand/wechat-mp-qr.png";
-const WECHAT_MP_NAME = "喵弟数据研究室";
+
 
 export default function AboutPage() {
   return (
@@ -77,7 +78,7 @@ export default function AboutPage() {
             不用零值补齐。
           </p>
           <p>
-            胜率由 bet365 赔率折算得出，页面会直接标注来源。
+            胜平负概率基于市场数据计算。
           </p>
         </div>
       </section>
@@ -103,7 +104,7 @@ export default function AboutPage() {
       </section>
 
       <p className={styles.boundary}>
-        本站内容为数据研究和内容创作素材，不构成投注建议；模型概率存在不确定性，
+        本站内容为数据研究和内容创作素材，不构成投注建议；胜平负概率存在不确定性，
         历史表现不代表未来。
       </p>
     </main>

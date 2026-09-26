@@ -108,7 +108,7 @@ export default async function StandingsPage({
         tableType === "xg" ? (
           <XgLuckChart rows={data.rows} />
         ) : (
-          <StandingsTable rows={data.rows} />
+          <StandingsTable rows={data.rows} seasonFinished={data.season_finished} leagueId={id} />
         )
       ) : (
         <MemberLeagueSection kind="standings" leagueId={id} season={seasonParam} />

@@ -4688,6 +4688,11 @@ export interface components {
             rows: components["schemas"]["StandingRow"][];
             /** Empty Reason */
             empty_reason?: string | null;
+            /**
+             * Season Finished
+             * @default false
+             */
+            season_finished: boolean;
         };
         /**
          * StudioBundleDTO

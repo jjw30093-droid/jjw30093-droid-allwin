@@ -28,13 +28,10 @@
 
 import { useState } from "react";
 import type { WinProbability } from "@/lib/api-v1";
+import { roundWdlPct } from "@/lib/format";
 import styles from "./WinProbabilityBar.module.css";
 
 type Outcome = "home" | "draw" | "away";
-
-function pct(p: number): number {
-  return Math.round(p * 100);
-}
 
 export function WinProbabilityBar({
   probability,
@@ -52,9 +49,11 @@ export function WinProbabilityBar({
 
   if (!probability) return null;
   const { p_home, p_draw, p_away } = probability;
-  const home = pct(p_home);
-  const draw = pct(p_draw);
-  const away = pct(p_away);
+  // 三项取整后合计必须恰好 100%(最大余数法,见 lib/format.ts::roundToHundred);
+  // 数值无效(缺项/负数/合计为 0)就不画,与"没有才没有"的口径一致
+  const rounded = roundWdlPct(p_home, p_draw, p_away);
+  if (!rounded) return null;
+  const [home, draw, away] = rounded;
   const label = `胜平负概率:主胜 ${home}%,平局 ${draw}%,客胜 ${away}%`;
 
   function toggle(outcome: Outcome, e: React.MouseEvent) {

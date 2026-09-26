@@ -23,3 +23,41 @@ export function formatOdds(v: number): string {
 export function formatXg(v: number, digits: 1 | 2 = 2): string {
   return v.toFixed(digits);
 }
+
+/**
+ * 一组互斥、合计为 1 的概率 → 整数百分比,合计**恒等于 100**(最大余数法,
+ * 2026-09-26)。逐项四舍五入会出现合计 99/101(线上真实例子:0.3866/0.3067/
+ * 0.3067 各自取整是 39/31/31,合计 101)。做法:先按比例换成百分数并各自向下
+ * 取整,把差额(100 − 取整之和)逐个补给小数部分最大的那几项;小数部分相同则
+ * 原值大的优先,再相同按下标靠前。
+ *
+ * - 输入先按合计归一化:去水后的概率四位小数取整,合计可能是 0.9999/1.0001。
+ * - 任一项不是有限数、为负,或合计 ≤ 0 → 返回 null,调用方不画(不补 0、不猜)。
+ * - 浮点误差:33.3+33.3+33.4 这类刚好落在整数边界的值,用 1e-9 容差比较。
+ * 全站所有"三项概率同时展示"的地方必须走这个函数,不许各自 Math.round。
+ */
+export function roundToHundred(probs: number[]): number[] | null {
+  if (!probs.length || probs.some((p) => !Number.isFinite(p) || p < 0)) return null;
+  const total = probs.reduce((a, b) => a + b, 0);
+  if (!(total > 0)) return null;
+  const EPS = 1e-9;
+  const exact = probs.map((p) => (p / total) * 100);
+  const floors = exact.map((x) => Math.floor(x + EPS));
+  let deficit = 100 - floors.reduce((a, b) => a + b, 0);
+  const order = exact
+    .map((x, i) => ({ i, frac: x - Math.floor(x + EPS), x }))
+    .sort((a, b) => (Math.abs(b.frac - a.frac) > EPS ? b.frac - a.frac : b.x !== a.x ? b.x - a.x : a.i - b.i));
+  const out = [...floors];
+  for (const o of order) {
+    if (deficit <= 0) break;
+    out[o.i] += 1;
+    deficit -= 1;
+  }
+  return out;
+}
+
+/** 胜平负三项 → [主胜, 平局, 客胜] 整数百分比,合计恒为 100;无效输入返回 null。 */
+export function roundWdlPct(pHome: number, pDraw: number, pAway: number): [number, number, number] | null {
+  const r = roundToHundred([pHome, pDraw, pAway]);
+  return r ? [r[0], r[1], r[2]] : null;
+}

@@ -310,10 +310,6 @@ function OddsGroup({
           <summary className={styles.metaSummary}>数据来源与说明</summary>
           <dl className={styles.metaList}>
             <div>
-              <dt>模型版本</dt>
-              <dd>{analysis?.model_version ?? "暂无已发布预测"}</dd>
-            </div>
-            <div>
               <dt>数据更新于</dt>
               <dd>
                 {analysis?.data_cutoff_at ? <LocalTime iso={analysis.data_cutoff_at} /> : "—"}
@@ -343,7 +339,6 @@ function OddsGroup({
                   <b className="num">
                     {m.home_score}–{m.away_score}
                   </b>
-                  ;正式预测的赛后评估见「模型公开记录」页
                 </dd>
               </div>
             )}

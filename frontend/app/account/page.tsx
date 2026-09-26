@@ -267,7 +267,7 @@ export default function AccountPage() {
           <span className={styles.accessName}>完整足球数据</span>
           <span className={`${styles.accessState} ${styles.accessOn}`}>已开放</span>
           <span className={styles.accessHint}>
-            全部联赛资料、模型完整概率与完整赔率时间线
+            全部联赛资料、胜平负概率与完整赔率时间线
           </span>
         </div>
         <div className={styles.accessCard}>
@@ -296,7 +296,7 @@ export default function AccountPage() {
             <>
               <span className={`${styles.accessState} ${styles.accessOff}`}>暂无授权场次</span>
               <span className={styles.accessHint}>
-                由站长按场为账号开通,<Link href="/pricing">查看权限说明</Link>
+                按场为账号开通,<Link href="/pricing">查看权限说明</Link>
               </span>
             </>
           )}

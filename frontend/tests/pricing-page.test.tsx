@@ -38,18 +38,45 @@ describe("/pricing:不得再把普通比赛内容描述成登录/会员独占权
     mockProductsFetch();
     render(await AccessTiers());
 
-    expect(screen.getByText("注册用户")).not.toBeNull();
+    // 2026-09-26:当前没有自助注册,"注册用户"改称"免费账号",开通方式写成"通过公众号申请"
+    expect(screen.getByText("免费账号")).not.toBeNull();
+    expect(screen.queryByText("注册用户")).toBeNull();
+    expect(screen.getByText("通过公众号申请开通，无需付费")).not.toBeNull();
+    expect(screen.getByText("按场为你的账号开通")).not.toBeNull();
     expect(screen.queryByText(/浏览部分公开联赛/)).toBeNull();
     expect(screen.queryByText(/每场比赛的最高一项模型概率/)).toBeNull();
     expect(screen.queryByText(/延迟赔率概要/)).toBeNull();
   });
 
-  it("注册用户卡片不得声称'完整胜平负三项概率''赔率时间轴'是登录后才解锁的足球数据", async () => {
+  it("免费账号卡片不得声称'完整胜平负三项概率''赔率时间轴'是登录后才解锁的足球数据", async () => {
     mockProductsFetch();
     render(await AccessTiers());
 
     expect(screen.queryByText(/完整胜平负三项概率与比分矩阵/)).toBeNull();
     expect(screen.queryByText(/赔率时间轴与变化记录/)).toBeNull();
     expect(screen.queryByText(/全部联赛的完整足球数据/)).toBeNull();
+  });
+});
+
+describe("/pricing 页面文案与入口(2026-09-26)", () => {
+  it("标题是'会员与权限',三步开通指引在最上面(标题之后、套餐卡之前)", async () => {
+    const { default: PricingPage } = await import("@/app/pricing/page");
+    const { container } = render(<PricingPage />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("会员与权限");
+    const guide = container.querySelector("#how-to-unlock")!;
+    expect(guide).not.toBeNull();
+    const steps = [...guide.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(steps).toEqual(["登录账号", "通过公众号联系我们开通", "回到「精选」页查看"]);
+    // 三步指引在概述段落之前
+    const subtitle = container.querySelector("p")!;
+    expect(guide.compareDocumentPosition(subtitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("页面上没有'站长'、没有'看历史 战绩'式的多余空格", async () => {
+    const { default: PricingPage } = await import("@/app/pricing/page");
+    const { container } = render(<PricingPage />);
+    expect(container.textContent).not.toContain("站长");
+    expect(container.textContent).toContain("看历史战绩");
+    expect(container.textContent).not.toContain("历史 战绩");
   });
 });

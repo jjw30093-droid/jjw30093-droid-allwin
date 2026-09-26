@@ -7,6 +7,8 @@
  */
 
 import Link from "next/link";
+import { FooterDisclaimer } from "@/components/FooterDisclaimer";
+import { MobileFollowBar } from "@/components/trust/MobileFollowBar";
 import { WechatFollowCard } from "@/components/trust/WechatFollowCard";
 import styles from "./SiteFooter.module.css";
 
@@ -21,17 +23,21 @@ export function SiteFooter() {
   return (
     <footer className={styles.footer} data-testid="site-footer">
       <div className={styles.inner}>
-        <WechatFollowCard variant="block" hasQr={HAS_WECHAT_QR} />
+        {/* 桌面:大卡片(含二维码);手机:折叠成一行"品牌名 + 关注公众号",点开底部面板 */}
+        <div className={styles.desktopOnly}>
+          <WechatFollowCard variant="block" hasQr={HAS_WECHAT_QR} />
+        </div>
+        <MobileFollowBar />
 
         <nav className={styles.links} aria-label="页脚导航">
           <Link href="/about">关于我们</Link>
-          <Link href="/pricing">权限说明</Link>
+          <Link href="/pricing">会员与权限</Link>
         </nav>
 
-        <p className={styles.disclaimer}>
-          我们只做足球数据和分析，不给投注建议，不代购彩票，也不往任何博彩平台导流。
-          每块数据的来源和更新时间都标在页面上。模型算的是概率，会错，怎么用你自己判断。
-        </p>
+        <FooterDisclaimer
+          first="我们只做足球数据和分析，不给投注建议，不代购彩票，也不往任何博彩平台导流。"
+          rest="数据仅供参考，怎么用你自己判断。"
+        />
       </div>
     </footer>
   );

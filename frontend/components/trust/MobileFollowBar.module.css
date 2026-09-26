@@ -1,0 +1,175 @@
+/* 手机端页脚公众号入口:一行 + 底部弹出面板。≥768px 整块隐藏(桌面继续用大卡片)。 */
+
+.bar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.logo {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.brandName {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.followBtn,
+.primary,
+.ghost {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.followBtn,
+.primary {
+  background: var(--brand-teal);
+  color: #fff;
+}
+
+.followBtn {
+  min-height: 40px;
+  flex-shrink: 0;
+}
+
+.ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+/* ── 底部弹出面板 ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000; /* 高于吸底导航(z-index 60) */
+  display: flex;
+  align-items: flex-end;
+  background: rgba(13, 32, 41, 0.45);
+}
+
+.sheet {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 16px 20px calc(24px + env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18);
+  animation: sheetUp 0.22s ease-out;
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sheetTitle {
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.closeBtn {
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.qrWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qr {
+  width: 220px;
+  height: 220px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.namePanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.mpName {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+  user-select: all;
+}
+
+.actions {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+}
+
+.toast {
+  min-height: 20px;
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-2);
+}

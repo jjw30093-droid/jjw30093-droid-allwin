@@ -20,13 +20,18 @@
  * <details>;整页改 flex+gap 纵向堆叠,不再用 margin 堆叠。SSR 水合前(env===null)
  * 的骨架直接复用 ScanLoginCard 自己的卡片外壳,不再是单独两条骨架横条。
  *
+ * 2026-09-26 手机端体验修复:去掉标题旁大 logo(顶栏已有品牌区);副标题改成
+ * 一句话;"扫码登录还在开通中"整张卡片与页尾"短信邮箱还没接"整段删除——扫码入口
+ * 只在后端明确告知微信登录已开放(/auth/methods 的 wechat_enabled === true,即
+ * WECHAT_AUTH_ENABLED 配置开关)时才渲染,默认关闭、拉不到也按关闭处理;登录页
+ * 不再有页面中部的二维码(公众号二维码只在页脚,见 SiteFooter)。
+ *
  * 2026-08-23 修复(P1,生产实测普通用户无法注册登录):删除"登录后可免费查看"
  * 三条假卖点(内容早已全站免费,"模型完整概率"功能不存在),与 pricing 页口径
  * 对齐;删除英文 eyebrow 装饰;微信登录未开放态补充公众号关注入口作为过渡。
  */
 
 import { Suspense, useEffect, useState } from "react";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   apiErrorMessage,
@@ -38,7 +43,6 @@ import {
 } from "@/lib/api-v1";
 import { ENV_TITLE, ScanLoginCard, useEnv } from "@/components/auth/ScanLoginCard";
 import scanStyles from "@/components/auth/ScanLoginCard.module.css";
-import followStyles from "@/components/trust/WechatFollowCard.module.css";
 import styles from "./login.module.css";
 
 /** 与后端 service.is_safe_next_path 同规则:仅本站相对路径。 */
@@ -117,6 +121,7 @@ function PasswordLoginSection({
       <button type="submit" className={styles.btnPrimary} disabled={busy}>
         {busy ? "登录中…" : "登录"}
       </button>
+      <p className={styles.forgotHint}>忘记密码？通过公众号联系我们</p>
     </form>
   );
 
@@ -124,9 +129,6 @@ function PasswordLoginSection({
     return (
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>账号密码登录</h2>
-        <p className={styles.note}>
-          扫码登录还没开放,现在用站长开给你的账号密码登录。
-        </p>
         {form}
       </section>
     );
@@ -136,7 +138,7 @@ function PasswordLoginSection({
     <details className={styles.pwDetails}>
       <summary className={styles.pwSummary}>账号密码登录</summary>
       {form}
-      <p className={styles.note}>账号由站长开通,没有的话走上面的扫码登录。</p>
+      <p className={styles.note}>账号由我们开通,没有的话走上面的扫码登录。</p>
     </details>
   );
 }
@@ -173,7 +175,8 @@ function LoginBody() {
 
   const env = useEnv();
   const [me, setMe] = useState<MeResponse | null>(null);
-  // null=未知(按可用渲染),false=后端明确告知微信登录未开放(AUTH_DISABLED 三态)
+  // 配置开关(后端 WECHAT_AUTH_ENABLED):只有明确 true 才显示扫码入口;
+  // null=还没拉到、false=未开放,两者都不显示(默认关闭,拉不到也不冒出入口)
   const [wechatEnabled, setWechatEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -190,32 +193,22 @@ function LoginBody() {
         if (!cancelled) setWechatEnabled(r.wechat_enabled);
       })
       .catch(() => {
-        // 拉不到 methods 时不阻塞登录入口(按可用渲染,端点自身仍会 503)
+        // 拉不到 methods:按"扫码未开放"处理,账号密码登录照常可用
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const pageTitle = wechatEnabled === false ? "登录" : env ? ENV_TITLE[env] : "登录";
+  const scanOn = wechatEnabled === true;
+  const pageTitle = scanOn && env ? ENV_TITLE[env] : "登录";
 
   return (
     <main className={styles.page}>
       <div className={styles.titleGroup}>
-        <Image
-          src="/brand/logo-badge-256.png"
-          alt=""
-          width={48}
-          height={48}
-          className={styles.titleLogo}
-        />
         <div className={styles.titleCopy}>
           <h1 className={styles.title}>{pageTitle}</h1>
-          <p className={styles.note}>
-            {wechatEnabled === false
-              ? "用站长开给你的账号密码登录。登完自动回到你刚才那页。"
-              : "第一次扫码会自动建号，不用填手机号。登完自动回到你刚才那页。"}
-          </p>
+          <p className={styles.note}>登录后可以收藏比赛、查看每日精选。比赛数据不用登录也能看。</p>
         </div>
       </div>
 
@@ -235,54 +228,12 @@ function LoginBody() {
         </section>
       )}
 
-      {/* 微信没开放时,密码登录是唯一能用的方式,必须排在"开通中"那张卡上面
-          ——用户第一眼要看到的是能走通的路,不是走不通的路。 */}
-      {wechatEnabled === false && (
-        <PasswordLoginSection nextPath={nextPath} standalone />
-      )}
+      {/* 扫码没开放时,密码登录是唯一能用的方式,渲染成常驻主卡片 */}
+      {!scanOn && <PasswordLoginSection nextPath={nextPath} standalone />}
 
-      {wechatEnabled === false ? (
-        <section className={styles.card}>
-          <h2 className={styles.cardTitle}>扫码登录还在开通中</h2>
-          <p className={styles.note}>
-            公众号那边的配置还没走完，暂时登不了。这段时间比赛数据、赔率、历史战绩都不用登录，
-            照常看。配好之后这页会直接出二维码。
-          </p>
-          <p className={styles.note}>想在扫码开放时第一时间收到通知，可以先关注公众号。</p>
-          <div className={followStyles.qrBox}>
-            <Image
-              src="/brand/wechat-mp-qr.png"
-              alt="喵弟数据研究室 公众号二维码"
-              width={160}
-              height={160}
-              className={followStyles.qr}
-              unoptimized
-            />
-            <span className={followStyles.qrHint}>微信扫码关注</span>
-          </div>
-        </section>
-      ) : env === null ? (
-        <ScanCardSkeleton />
-      ) : (
-        <ScanLoginCard nextPath={nextPath} env={env} />
-      )}
+      {scanOn && (env === null ? <ScanCardSkeleton /> : <ScanLoginCard nextPath={nextPath} env={env} />)}
 
-      <section className={styles.perksBlock}>
-        <p className={styles.perksTitle}>
-          登录只用于收藏、关注和每日精选授权。比赛数据、赔率和赛果不登录也能看全。
-        </p>
-        <p className={styles.perksFoot}>比赛数据、赔率、概率都不用登录，直接看。</p>
-      </section>
-
-      {wechatEnabled !== false && (
-        <PasswordLoginSection nextPath={nextPath} standalone={false} />
-      )}
-
-      <p className={styles.footNote}>
-        短信和邮箱还没接，也就没有备用的找回方式：用微信登录的话微信号别丢，
-        用账号密码的话密码别忘，忘了找站长重置。
-        微信登录后我们只存一个内部账号 ID 跟你的微信对应，不读昵称和头像。
-      </p>
+      {scanOn && <PasswordLoginSection nextPath={nextPath} standalone={false} />}
     </main>
   );
 }
@@ -293,18 +244,10 @@ export default function LoginPage() {
       fallback={
         <main className={styles.page}>
           <div className={styles.titleGroup}>
-            <Image
-              src="/brand/logo-badge-256.png"
-              alt=""
-              width={48}
-              height={48}
-              className={styles.titleLogo}
-            />
             <div className={styles.titleCopy}>
               <h1 className={styles.title}>登录</h1>
             </div>
           </div>
-          <ScanCardSkeleton />
         </main>
       }
     >

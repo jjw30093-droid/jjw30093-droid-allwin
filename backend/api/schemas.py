@@ -348,6 +348,10 @@ class StandingsResponse(BaseModel):
     available_seasons: list[str]
     rows: list[StandingRow]
     empty_reason: Optional[str] = None
+    # 该联赛该赛季在 dim_match 里的**所有**比赛状态都是完赛(且至少有一场)。
+    # 前端据此才敢显示"冠军":赛季进行中榜首只是"目前领先",不是冠军
+    # (2026-09-26 站长发现 2026/2027 才踢 5 轮曼城就被标了"冠军")。
+    season_finished: bool = False
 
 
 # ── 联赛球队/球员赛季统计(免费字段投影,CLAUDE.md §3) ──────

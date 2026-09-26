@@ -523,3 +523,8 @@
   color: var(--ink-2);
   background: transparent;
 }
+
+/* 标题下一句话下面的入口按钮(登录 / 怎么开通),与下方标签页之间留出间距 */
+.entryRow {
+  margin: 0 0 16px;
+}

@@ -116,7 +116,7 @@ export function summarize(spec: ChartSpec): string {
   const d = spec.data;
   if (spec.type === "probability_bar") {
     const label =
-      d.probability_source === "MARKET_BASELINE" ? "赔率折算概率" : "模型概率";
+      d.probability_source === "MARKET_BASELINE" ? "赔率折算概率" : "胜平负概率";
     return `${label}:主胜 ${Math.round(Number(d.home) * 100)}%,平局 ${Math.round(Number(d.draw) * 100)}%,客胜 ${Math.round(Number(d.away) * 100)}%`;
   }
   if (spec.type === "xg_compare")

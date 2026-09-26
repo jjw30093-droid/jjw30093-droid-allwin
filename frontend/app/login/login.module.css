@@ -140,51 +140,6 @@
   color: var(--brand-teal);
 }
 
-/* 权益块 */
-.perksBlock {
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--brand-gold);
-  border-radius: 12px;
-  padding: 13px 14px;
-}
-
-.perksTitle {
-  font-size: 13.5px;
-  font-weight: 900;
-  margin: 0 0 8px;
-  color: var(--ink);
-}
-
-.perks {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.perks li {
-  font-size: 13px;
-  color: var(--ink-2);
-  line-height: 1.5;
-  padding-left: 14px;
-  position: relative;
-}
-.perks li::before {
-  content: "·";
-  position: absolute;
-  left: 0;
-  color: var(--brand-teal);
-  font-weight: 900;
-}
-
-.perksFoot {
-  margin: 0;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-
 /* 管理员密码登录:降级为纯文字入口,顶部一条分隔线,不再是卡片 */
 .pwDetails {
   border-top: 1px solid var(--border);
@@ -230,4 +185,12 @@
 
 .input:focus {
   border-color: var(--brand-teal);
+}
+
+/* 登录按钮下方的小字(不小于 12px) */
+.forgotHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
 }

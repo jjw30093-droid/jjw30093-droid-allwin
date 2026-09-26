@@ -156,8 +156,10 @@ for (const viewport of [
   });
 }
 
-test("页脚公众号二维码常驻:真实图片解码成功、深浅色都可扫", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test("页脚公众号二维码(桌面)常驻:真实图片解码成功、深浅色都可扫", async ({ page }) => {
+  // 手机(<768px)页脚折叠成一行"品牌名 + 关注公众号",二维码在点开的面板里(见下一条);
+  // 桌面继续是常驻大卡片。
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   const footer = page.getByTestId("site-footer");
   await expect(footer).toBeVisible();
@@ -178,6 +180,45 @@ test("页脚公众号二维码常驻:真实图片解码成功、深浅色都可�
   });
   const bg = await qr.evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).toBe("rgb(255, 255, 255)");
+});
+
+test("页脚公众号入口(手机):折叠成一行,普通浏览器给名称 + 复制 + 保存二维码", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const footer = page.getByTestId("site-footer");
+  await footer.scrollIntoViewIfNeeded();
+  // 桌面那张大卡片在手机上不显示
+  await expect(footer.getByRole("img", { name: /公众号二维码/ })).toHaveCount(0);
+  await footer.getByRole("button", { name: "关注公众号" }).click();
+  const dialog = page.getByRole("dialog", { name: "关注公众号" });
+  await expect(dialog).toContainText("喵弟数据研究室");
+  await expect(dialog.getByRole("button", { name: "复制公众号名称" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "保存二维码到相册" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+test.describe("页脚公众号入口(手机,微信内置浏览器 UA)", () => {
+  test.use({
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.44 NetType/WIFI Language/zh_CN",
+  });
+
+  test("面板里是真实解码的二维码 + 长按识别提示", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const footer = page.getByTestId("site-footer");
+    await footer.scrollIntoViewIfNeeded();
+    await footer.getByRole("button", { name: "关注公众号" }).click();
+    const dialog = page.getByRole("dialog", { name: "关注公众号" });
+    const qr = dialog.getByRole("img", { name: /公众号二维码/ });
+    await expect(qr).toBeVisible();
+    await expect
+      .poll(() => qr.evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
+    await expect(dialog).toContainText("长按识别二维码关注");
+    await expect(dialog.getByRole("button", { name: "复制公众号名称" })).toHaveCount(0);
+  });
 });
 
 test("联赛速览四图 + xG 运气榜:此前零消费的银层/xg 档真的渲染出来", async ({ page }) => {
@@ -443,10 +484,16 @@ test("公开战绩/模型说明/定价页可访问且诚实", async ({ page }) =
   await expect(page.getByRole("link", { name: "先看公开比赛资料" })).toBeVisible();
 
   await page.goto("/pricing");
-  // 三层权限说明:游客/注册用户/精选授权;不得再出现付费套餐时代的
+  // 三层权限说明:游客/免费账号/精选授权;不得再出现付费套餐时代的
   // Pro/Premium 残留文案,也不得暴露内部 entitlement 键值。
-  await expect(page.getByRole("heading", { name: "访问权限说明" })).toBeVisible();
-  await expect(page.getByText("注册用户").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "会员与权限" })).toBeVisible();
+  await expect(page.getByText("免费账号").first()).toBeVisible();
+  // 三步开通指引在最上面
+  await expect(page.locator("#how-to-unlock li")).toHaveText([
+    "登录账号",
+    "通过公众号联系我们开通",
+    "回到「精选」页查看",
+  ]);
   await expect(page.getByText("精选授权用户").first()).toBeVisible();
   await expect(page.getByText("Pro", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Premium", { exact: true })).toHaveCount(0);

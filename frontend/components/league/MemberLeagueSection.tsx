@@ -141,7 +141,7 @@ export function MemberLeagueSection({
       return (
         <>
           {switcher}
-          <StandingsTable rows={data.body.rows} />
+          <StandingsTable rows={data.body.rows} seasonFinished={data.body.season_finished} leagueId={leagueId} />
         </>
       );
     case "fixtures":
