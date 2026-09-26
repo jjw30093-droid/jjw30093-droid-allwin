@@ -93,7 +93,7 @@ function niceStep(raw: number): number {
  */
 export function niceAxisRange(
   values: number[],
-  opts: { pad?: number; targetTicks?: number } = {},
+  opts: { pad?: number; targetTicks?: number; snap?: boolean } = {},
 ): AxisRange {
   const pad = opts.pad ?? 0.14;
   const targetTicks = opts.targetTicks ?? 5;
@@ -107,6 +107,14 @@ export function niceAxisRange(
   const hi = hi0 + pad * span;
   const step = niceStep((hi - lo) / targetTicks);
   const d = decimalsOf(step);
+  // snap:false(2026-09-26,球队象限图"两端只留 pad 比例余量"):端点就是数据范围
+  // 外扩 pad,不再吸附到 nice 刻度——吸附会把 8% 的余量撑成 15%~25%。刻度间隔仍取
+  // nice 值;端点处 ECharts 会多出一个非整刻度的标签,由调用方的 axisLabel.formatter
+  // 隐藏。像素映射仍是 min/max 的线性变换,布局数学不受影响。
+  if (opts.snap === false) {
+    const clean = (v: number) => Number(v.toPrecision(8));
+    return { min: clean(lo), max: clean(hi), interval: step };
+  }
   const min = Number((Math.floor(lo / step) * step).toFixed(d));
   const max = Number((Math.ceil(hi / step) * step).toFixed(d));
   return { min, max: max > min ? max : Number((min + step).toFixed(d)), interval: step };
@@ -331,4 +339,46 @@ export function resolveLabelVisibility(
     }
     return true;
   });
+}
+
+export type Rect = { left: number; top: number; right: number; bottom: number };
+export type Circle = { cx: number; cy: number; radius: number };
+
+/** 矩形与圆是否相交(margin 让圆向外多算一圈,给标签留呼吸空间)。 */
+export function rectHitsCircle(r: Rect, c: Circle, margin = 0): boolean {
+  const nx = Math.max(r.left, Math.min(c.cx, r.right));
+  const ny = Math.max(r.top, Math.min(c.cy, r.bottom));
+  return Math.hypot(c.cx - nx, c.cy - ny) < c.radius + margin;
+}
+
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+/**
+ * 在若干候选矩形里挑位置:优先第一个"不压队徽、不压已放好的其它标签"的;没有完全
+ * 干净的,挑"压得最少"的(压队徽计 1、压已放好的标签计 10,同分取靠前),而不是
+ * 无脑退回首选——密集的手机端 20 队常常没有完全空的位置,此时压最少的比压最多的好。
+ * 2026-09-26:象限名/均值线标注是固定位置的文字,极端球队恰好落在角落或均值线端点
+ * 时会被队徽盖住(线上实测"门将救主"被布莱顿队徽遮成"门_主"),所以放置前先做碰撞检测。
+ */
+export function firstClearRect(
+  candidates: Rect[],
+  circles: Circle[],
+  obstacles: Rect[] = [],
+  margin = 2,
+): number {
+  let best = 0;
+  let bestScore = Infinity;
+  for (let k = 0; k < candidates.length; k++) {
+    const r = candidates[k];
+    const score =
+      circles.filter((c) => rectHitsCircle(r, c, margin)).length + 10 * obstacles.filter((o) => rectsOverlap(r, o)).length;
+    if (score === 0) return k;
+    if (score < bestScore) {
+      bestScore = score;
+      best = k;
+    }
+  }
+  return best;
 }

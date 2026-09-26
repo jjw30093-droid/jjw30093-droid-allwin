@@ -47,17 +47,32 @@
 import type { EChartsOption } from "echarts";
 import { hexToRgba, type ChartColors } from "@/components/charts/useChartColors";
 import { scaleGrid, tokensFor, type ChartMode } from "@/components/charts/chartMode";
+import { hexToRgb, isValidHexColor } from "@/components/charts/colorContrast";
 import {
   CREST,
   crestSymbol,
+  estimateLabelWidth,
+  firstClearRect,
   hitSizeFor,
   resolveLabelVisibility,
+  toPixel,
   type AxisRange,
+  type Circle,
   type CrestLayout,
   type Grid,
   type LabelCandidate,
+  type Rect,
 } from "@/components/charts/crestQuadrantLayout";
-import { axisLabel, dirsOf, fmt, quadrantOf, type AxisLike, type Pt } from "./quadrantViews";
+import {
+  axisHint,
+  axisTitle,
+  dirsOf,
+  fmt,
+  quadrantOf,
+  type AxisCopy,
+  type AxisLike,
+  type Pt,
+} from "./quadrantViews";
 
 /** 2026-09-15 起泛型化,球队/球员象限图共用同一个 option 构造器(零行为
  *  变化,好过复制这 286 行):`P` 是渲染的点类型(球队用现有 Pt,球员用
@@ -67,11 +82,14 @@ import { axisLabel, dirsOf, fmt, quadrantOf, type AxisLike, type Pt } from "./qu
  *  (ViewLike),不要求完整 View/MetricDef.value(那部分是取数逻辑,
  *  option 构造器从不调用它)。 */
 export type QuadrantPoint = { key: string; name: string; x: number; y: number; mp?: number | null };
+type AxisSemantic = { semantic?: "performance" | "style" | "outcome_variance"; axisName?: string };
 export type ViewLike = {
   title: string;
-  x: AxisLike;
-  y: AxisLike;
+  x: AxisLike & AxisSemantic;
+  y: AxisLike & AxisSemantic;
   quadrants: [string, string, string, string];
+  /** 可选:轴标题大白话/方向角色(球队象限图传入;球员象限图不传,输出不变) */
+  axisCopy?: { x?: AxisCopy; y?: AxisCopy };
 };
 
 export type QuadrantOptionArgs<P extends QuadrantPoint = Pt> = {
@@ -96,7 +114,48 @@ export type QuadrantOptionArgs<P extends QuadrantPoint = Pt> = {
    *  默认读 `(p as Pt).crestUrl`——球队侧调用点不用传,球员侧必传
    *  `(p) => p.avatarUrl`。 */
   symbolUrlOf?: (p: P) => string | null | undefined;
+  /** opt-in:在两根轴的端点画"往哪边读是好"的方向提示(graphic 文字,
+   *  位置靠 grid 内边距,所以调用方要给足 top/bottom 空间)。默认关,
+   *  球员象限图与比赛页象限图输出逐字节不变。 */
+  axisHints?: boolean;
+  /** opt-in(2026-09-26 "看得清"):均值线标注、象限按好坏语义铺底色(仅两根轴
+   *  都是 performance 时)、放大象限名、均值临界带、隐藏非整刻度的端点标签。
+   *  bandX/bandY 是临界带半宽(数据单位)。不传 = 与改造前逐字节一致。 */
+  /** opt-in:自动标注球队的图上序号前缀(队名 → "①"),标签宽度与碰撞检测都按带前缀的文字算 */
+  badges?: Record<string, string>;
+  enhance?: {
+    meanLabel: string;
+    bandX: number;
+    bandY: number;
+    /** 图表容器尺寸;拿到后象限名与均值线标注改成像素定位并做队徽碰撞检测,
+     *  没测得(首帧)时退回旧的数据坐标角标、不画均值线标注。 */
+    box: { width: number; height: number } | null;
+  };
 };
+
+/** snap:false 的轴端点不在整刻度上,而 ECharts 的刻度是从 min 起按 interval 累加的
+ *  ——刻度会落在 0.7/1.2/1.7 这种数上。这里自己算出落在 interval 整数倍上的刻度值,
+ *  经 customValues 交给标签/刻度线/网格线,端点两侧不再有零碎标签。 */
+export function niceTickValues(r: { min: number; max: number; interval: number }): number[] {
+  const out: number[] = [];
+  const first = Math.ceil(r.min / r.interval - 1e-9);
+  for (let k = first; k * r.interval <= r.max + 1e-9; k++) out.push(Number((k * r.interval).toPrecision(10)));
+  return out;
+}
+
+/** 把 color 朝 toward 混合 t 比例(十六进制输入;非法输入原样返回)。象限名压在
+ *  0.08 的绿/红底色上,原色只有 4.4:1(见 tests/team-quadrant-readability.test.ts),
+ *  朝 --ink 混 25% 后两个主题都 ≥ 4.5:1;图例里的象限名仍用原色。 */
+/** 象限名文字朝 ink 混合的比例 */
+export const LABEL_INK_MIX = 0.25;
+
+export function mixToward(color: string, toward: string, t: number): string {
+  if (!isValidHexColor(color) || !isValidHexColor(toward)) return color;
+  const a = hexToRgb(color);
+  const b = hexToRgb(toward);
+  const hex = (n: number) => Math.round(n).toString(16).padStart(2, "0");
+  return "#" + [0, 1, 2].map((i) => hex(a[i] * (1 - t) + b[i] * t)).join("");
+}
 
 export function quadColors(c: ChartColors): [string, string, string, string] {
   // 0(两项都好)= 绿, 2(两项都差)= 红, 1/3(一好一差)= 青
@@ -107,6 +166,8 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
   args: QuadrantOptionArgs<P>,
 ): EChartsOption {
   const { view, pts, mx, my, colors: c, labelled, crestSize, layout, xr, yr, selectedIndexes } = args;
+  const badges = args.badges ?? {};
+  const labelOf = (name: string) => `${badges[name] ?? ""}${name}`;
   const symbolUrlOf = args.symbolUrlOf ?? ((p: P) => (p as unknown as Pt).crestUrl);
   const mode = args.mode ?? "interactive";
   const tk = tokensFor(mode);
@@ -114,11 +175,46 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
   const dirs = dirsOf(view);
   const lowY = dirs.y === true;
   const quad = (p: P) => quadrantOf(p, mx, my, dirs);
-  const QUAD_COLOR = quadColors(c);
+  const enhance = args.enhance;
+  // 两根轴都能分好坏才敢用"绿=两项都好/红=两项都差":风格轴/结果记录轴不代表
+  // 强弱,涂绿涂红等于暗示优劣(CLAUDE.md §8 精神;视角注释里"两轴都是 style,
+  // 一律中性命名")。不满足时象限色统一为青,底色不分好坏。
+  const judged = view.x.semantic === "performance" && view.y.semantic === "performance";
+  const QUAD_COLOR: [string, string, string, string] =
+    enhance && !judged ? [c.teal, c.teal, c.teal, c.teal] : quadColors(c);
   const hasSelection = selectedIndexes.length > 0;
   const isSelected = (i: number) => selectedIndexes.includes(i);
   const offsetOf = (i: number): [number, number] => layout?.offset[i] ?? [0, 0];
   const showAllLabels = mode === "export";
+  // 轴标题:有大白话主标签时画成"主标签 + 副标签"两段富文本,否则与改造前一致
+  const xTitle = axisTitle(view.x, view.axisCopy?.x);
+  const yTitle = axisTitle(view.y, view.axisCopy?.y);
+  const titleRich = {
+    m: { color: c.ink, fontSize: tk.axisFont + 1, fontWeight: 600 as const },
+    s: { color: c.ink2, fontSize: tk.axisFont },
+  };
+  const titleText = (t: { main: string; sub?: string }) => (t.sub ? `{m|${t.main}}  {s|${t.sub}}` : t.main);
+  const hintStyle = { fill: c.ink2, fontSize: tk.axisFont, fontWeight: 600 as const };
+  const hintGraphic = args.axisHints
+    ? [
+        {
+          type: "text" as const,
+          silent: true,
+          z: 100,
+          right: grid.right,
+          bottom: 6,
+          style: { ...hintStyle, text: axisHint(view.x, "x", view.axisCopy?.x), textAlign: "right" as const },
+        },
+        {
+          type: "text" as const,
+          silent: true,
+          z: 100,
+          left: 8,
+          top: 6,
+          style: { ...hintStyle, text: axisHint(view.y, "y", view.axisCopy?.y), textAlign: "left" as const },
+        },
+      ]
+    : undefined;
 
   // 队名标签会不会盖住旁边的队徽?只有拿到真实布局(layout 非空)时才能算——
   // 首帧宽度尚未测得时退回"想显示就显示",反正只持续一帧,不是错误状态。
@@ -133,7 +229,7 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
             cx: base.px + dx,
             cy: base.py + dy,
             radius: (sel ? crestSize * CREST.SELECTED_SCALE : crestSize) / 2,
-            text: want ? p.name : null,
+            text: want ? labelOf(p.name) : null,
           };
         });
         const visible = resolveLabelVisibility(candidates, { fontSize: tk.labelFont });
@@ -189,6 +285,153 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
 
   const series: NonNullable<EChartsOption["series"]> = [];
 
+  // enhance + 已测得容器尺寸:象限名与均值线标注画成像素定位的 graphic 文字,
+  // 放置前对每个候选位置做"矩形 vs 队徽圆"碰撞检测(见 firstClearRect)。
+  // 固定角落的文字会被极端球队的队徽盖住(线上实测"门将救主"被遮成"门_主"),
+  // 所以象限名可以在本象限内向内挪;均值线标注在线两端的上/下侧里挑不压队徽的。
+  const overlays: object[] = [];
+  const placedOverlays = (() => {
+    if (!enhance || !enhance.box || !layout) return false;
+    const box = { width: enhance.box.width, height: enhance.box.height, grid };
+    const plot: Rect = {
+      left: grid.left,
+      top: grid.top,
+      right: box.width - grid.right,
+      bottom: box.height - grid.bottom,
+    };
+    const toPx = (x: number, y: number) => toPixel({ x, y }, box, xr, yr, lowY);
+    const circles: Circle[] = pts.map((_, i) => {
+      const [dx, dy] = offsetOf(i);
+      return {
+        cx: layout.base[i].px + dx,
+        cy: layout.base[i].py + dy,
+        radius: (isSelected(i) ? crestSize * CREST.SELECTED_SCALE : crestSize) / 2,
+      };
+    });
+    const obstacles: Rect[] = [];
+    // 队名标签(挂在队徽正上方,与下面 crest series 的 label 配置一致)也是障碍:
+    // 象限名/均值标注不能压在它们上面。位置按 resolveLabelVisibility 的同一几何估算。
+    const nameH = tk.labelFont * 1.4;
+    pts.forEach((p, i) => {
+      if (!safeLabelled.has(p.name)) return;
+      const w = estimateLabelWidth(labelOf(p.name), tk.labelFont);
+      const bottom = circles[i].cy - circles[i].radius - 5;
+      obstacles.push({ left: circles[i].cx - w / 2, right: circles[i].cx + w / 2, top: bottom - nameH, bottom });
+    });
+    const center = toPx(mx, my);
+
+    // 1) 四个象限名
+    const cf = tk.axisFont + 3;
+    const ch = cf * 1.4;
+    for (const [cornerX, cornerY] of [
+      [xr.max, yr.max],
+      [xr.min, yr.max],
+      [xr.min, yr.min],
+      [xr.max, yr.min],
+    ] as const) {
+      const idx = quadrantOf({ x: cornerX, y: cornerY }, mx, my, dirs);
+      const text = view.quadrants[idx];
+      const w = estimateLabelWidth(text, cf) + 2;
+      const corner = toPx(cornerX, cornerY);
+      const atRight = corner.px > center.px;
+      const atTop = corner.py < center.py;
+      const mk = (shiftX: number, shiftY: number): Rect => {
+        const left = (atRight ? plot.right - 8 - w : plot.left + 8) + (atRight ? -shiftX : shiftX);
+        const top = (atTop ? plot.top + 6 : plot.bottom - 6 - ch) + (atTop ? shiftY : -shiftY);
+        return { left, top, right: left + w, bottom: top + ch };
+      };
+      // 候选:原角落 → 沿 x 向内 → 沿 y 向内 → 两者;不得越过均值线进入别的象限
+      const inQuadrant = (r: Rect) =>
+        (atRight ? r.left > center.px + 4 : r.right < center.px - 4) &&
+        (atTop ? r.bottom < center.py - 4 : r.top > center.py + 4);
+      // 候选按位移由小到大排:x 方向 0/0.5/1/1.5 个字宽,y 方向 0~3 行高,
+      // 越靠近原角落越优先;越过均值线(进入别的象限)的候选剔除
+      const steps: [number, number][] = [];
+      for (const sx of [0, 0.5, 1, 1.5]) for (const sy of [0, 0.5, 1, 1.5, 2, 3]) steps.push([sx, sy]);
+      steps.sort((a, b) => a[0] * (w + 14) + a[1] * (ch + 12) - (b[0] * (w + 14) + b[1] * (ch + 12)));
+      const cands = steps.map(([sx, sy]) => mk(sx * (w + 14), sy * (ch + 12))).filter((r, k) => k === 0 || inQuadrant(r));
+      const rect = cands[firstClearRect(cands, circles, obstacles)];
+      obstacles.push(rect);
+      overlays.push({
+        type: "text",
+        silent: true,
+        z: 0,
+        left: rect.left,
+        top: rect.top,
+        style: {
+          text,
+          fill: mixToward(QUAD_COLOR[idx], c.ink, LABEL_INK_MIX),
+          fontSize: cf,
+          fontWeight: 700,
+          textAlign: "left",
+          textVerticalAlign: "top",
+        },
+      });
+    }
+
+    // 2) 均值线标注(带半透明底,万一挤不出空位也读得清)
+    const lf = tk.labelFont;
+    const lh = lf * 1.4 + 4;
+    const meanText = (v: number, a: AxisLike) => `${enhance.meanLabel} ${fmt(v, a)}`;
+    const pushMean = (text: string, cands: Rect[]) => {
+      const rect = cands[firstClearRect(cands, circles, obstacles)];
+      obstacles.push(rect);
+      overlays.push({
+        type: "text",
+        silent: true,
+        z: 4,
+        left: rect.left,
+        top: rect.top,
+        style: {
+          text,
+          fill: c.ink,
+          fontSize: lf,
+          fontWeight: 600,
+          backgroundColor: hexToRgba(c.surface, 0.85),
+          padding: [2, 4],
+          borderRadius: 3,
+          textAlign: "left",
+          textVerticalAlign: "top",
+        },
+      });
+    };
+    // 水平线(y 均值):右/左端 × 线上方/下方
+    {
+      const text = meanText(my, view.y);
+      const w = estimateLabelWidth(text, lf) + 8;
+      // 沿线的位置:右端、左端,再是线上 90%/10%/75%/25%/50% 处;每处先线上方后线下方
+      const rectAt = (leftEdge: number, above: boolean): Rect => {
+        const left = Math.max(plot.left + 4, Math.min(plot.right - 4 - w, leftEdge));
+        const top = above ? center.py - 3 - lh : center.py + 3;
+        return { left, top, right: left + w, bottom: top + lh };
+      };
+      const plotW = plot.right - plot.left;
+      const lefts = [plot.right - 6 - w, plot.left + 6, ...[0.9, 0.1, 0.75, 0.25, 0.5].map((f) => plot.left + f * plotW - w / 2)];
+      pushMean(
+        text,
+        lefts.flatMap((l) => [rectAt(l, true), rectAt(l, false)]),
+      );
+    }
+    // 竖直线(x 均值):绘图区顶部/底部 × 线右侧/左侧
+    {
+      const text = meanText(mx, view.x);
+      const w = estimateLabelWidth(text, lf) + 8;
+      // 沿线的位置:顶端、底端,再是线上 25%/50%/75% 处;每处先右侧后左侧
+      const rectAt = (topEdge: number, right: boolean): Rect => {
+        const left = right ? center.px + 5 : center.px - 5 - w;
+        const top = Math.max(plot.top + 4, Math.min(plot.bottom - 4 - lh, topEdge));
+        return { left, top, right: left + w, bottom: top + lh };
+      };
+      const plotH = plot.bottom - plot.top;
+      const tops = [plot.top + 4, plot.bottom - 4 - lh, ...[0.25, 0.5, 0.75].map((f) => plot.top + f * plotH - lh / 2)];
+      pushMean(
+        text,
+        tops.flatMap((t) => [rectAt(t, true), rectAt(t, false)]),
+      );
+    }
+    return true;
+  })();
+
   // 四象限名直接画在图上(2026-09-16 真实反馈:站长看完"门将出球"视角说
   // "并没有在象限图中看到有说明,例如是什么类型的门将"——四象限名此前只在
   // tooltip/图例列表/点击后的详情面板里出现,不看图上任何一个具体点、
@@ -219,26 +462,28 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
         formatter: view.quadrants[idx],
         color: QUAD_COLOR[idx],
         fontWeight: 700 as const,
-        fontSize: tk.axisFont,
+        fontSize: enhance ? tk.axisFont + 3 : tk.axisFont,
         align,
         verticalAlign,
       },
     };
   });
-  series.push({
-    id: "quadrant-labels",
-    name: "quadrant-labels",
-    type: "scatter",
-    silent: true,
-    tooltip: { show: false },
-    z: 0,
-    // symbol:'none' 在部分 ECharts 版本里会连带压掉数据点自己的 label——
-    // 用 symbolSize:0(而不是 symbol:'none')保留点位机制,只是尺寸为零,
-    // 这样每个点自带的 label 仍然正常渲染。
-    symbol: "circle",
-    symbolSize: 0,
-    data: cornerLabelData,
-  });
+  if (!placedOverlays) {
+    series.push({
+      id: "quadrant-labels",
+      name: "quadrant-labels",
+      type: "scatter",
+      silent: true,
+      tooltip: { show: false },
+      z: 0,
+      // symbol:'none' 在部分 ECharts 版本里会连带压掉数据点自己的 label——
+      // 用 symbolSize:0(而不是 symbol:'none')保留点位机制,只是尺寸为零,
+      // 这样每个点自带的 label 仍然正常渲染。
+      symbol: "circle",
+      symbolSize: 0,
+      data: cornerLabelData,
+    });
+  }
 
   if (mode === "interactive") {
     series.push({
@@ -300,7 +545,7 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
       fontSize: tk.labelFont,
       formatter: (p: unknown) => {
         const d = (p as { data: { pt: Pt } }).data.pt;
-        return safeLabelled.has(d.name) ? d.name : "";
+        return safeLabelled.has(d.name) ? labelOf(d.name) : "";
       },
     },
     // safeLabelled 已经排除了"会压住别的队徽"的标签;这里的 moveOverlap/
@@ -313,54 +558,92 @@ export function buildQuadrantOption<P extends QuadrantPoint = Pt>(
     markLine: {
       silent: true,
       symbol: "none",
-      lineStyle: { color: c.ink2, type: "dashed", opacity: 0.45 },
+      lineStyle: enhance
+        ? { color: c.ink2, type: "dashed", width: 1.5, opacity: 0.8 }
+        : { color: c.ink2, type: "dashed", opacity: 0.45 },
       label: { show: false, color: c.ink, fontSize: tk.labelFont },
-      data: [{ xAxis: mx }, { yAxis: my }, ...dropLines] as never,
+      data: (enhance
+        ? [{ xAxis: mx }, { yAxis: my }, ...dropLines]
+        : [{ xAxis: mx }, { yAxis: my }, ...dropLines]) as never,
     },
-    // 四象限底色:纯视觉棋盘格,不挂任何"好/坏"语义(颜色只取 c.ink 的极低
-    // 透明度,两个主题下都是"比背景略深一点"而不是某种判断色)——只是让
-    // "这一条是四个区"这件事一眼可辨,不用靠脑内延长两条虚线。对角两块上色,
-    // 另外对角两块透明,像棋盘格一样纯粹分区,不隐含"这个角比那个角好"。
+    // 四象限底色。默认(球员象限图/比赛页):纯视觉棋盘格,只取 c.ink 的极低
+    // 透明度,不挂"好/坏"语义。enhance(球队象限图)且两轴都是 performance 时:
+    // "两项都好"象限铺绿、"两项都差"铺红(透明度 0.08),其余中性;风格视角仍是
+    // 中性棋盘格。反转轴时好象限不一定在右上,所以用 quadrantOf 在每块的中心点上
+    // 判断,不凭位置猜。随后叠均值临界带(更淡的 ink)。
     markArea: {
       silent: true,
       itemStyle: { color: hexToRgba(c.ink, 0.035) },
-      data: [
-        [{ coord: [xr.min, yr.min] }, { coord: [mx, my] }],
-        [{ coord: [mx, my] }, { coord: [xr.max, yr.max] }],
-      ] as never,
+      data: (enhance
+        ? [
+            ...(judged
+              ? ([
+                  [xr.min, mx, yr.min, my],
+                  [mx, xr.max, yr.min, my],
+                  [xr.min, mx, my, yr.max],
+                  [mx, xr.max, my, yr.max],
+                ] as const).flatMap(([x0, x1, y0, y1]) => {
+                  const idx = quadrantOf({ x: (x0 + x1) / 2, y: (y0 + y1) / 2 }, mx, my, dirs);
+                  const tint = idx === 0 ? c.win : idx === 2 ? c.loss : null;
+                  return tint
+                    ? [[{ coord: [x0, y0], itemStyle: { color: hexToRgba(tint, 0.08) } }, { coord: [x1, y1] }]]
+                    : [];
+                })
+              : [
+                  [{ coord: [xr.min, yr.min] }, { coord: [mx, my] }],
+                  [{ coord: [mx, my] }, { coord: [xr.max, yr.max] }],
+                ]),
+            [
+              { coord: [mx - enhance.bandX, yr.min], itemStyle: { color: hexToRgba(c.ink, 0.05) } },
+              { coord: [mx + enhance.bandX, yr.max] },
+            ],
+            [
+              { coord: [xr.min, my - enhance.bandY], itemStyle: { color: hexToRgba(c.ink, 0.05) } },
+              { coord: [xr.max, my + enhance.bandY] },
+            ],
+          ]
+        : [
+            [{ coord: [xr.min, yr.min] }, { coord: [mx, my] }],
+            [{ coord: [mx, my] }, { coord: [xr.max, yr.max] }],
+          ]) as never,
     },
   });
 
   return {
     grid,
+    graphic: hintGraphic || overlays.length ? [...(hintGraphic ?? []), ...overlays] : undefined,
     xAxis: {
       type: "value",
-      name: axisLabel(view.x),
+      name: titleText(xTitle),
       nameLocation: "middle",
       nameGap: 26,
-      nameTextStyle: { color: c.ink2, fontSize: tk.axisFont },
+      nameTextStyle: xTitle.sub ? { rich: titleRich } : { color: c.ink2, fontSize: tk.axisFont },
       // 显式 nice 端点 + interval:刻度干净且像素可复算(见 crestQuadrantLayout.ts 头注释)
       min: xr.min,
       max: xr.max,
       interval: xr.interval,
-      axisLabel: { color: c.ink2, fontSize: tk.axisFont },
-      splitLine: { lineStyle: { opacity: 0.1 } },
+      axisLabel: { color: c.ink2, fontSize: tk.axisFont, ...(enhance ? { customValues: niceTickValues(xr) } : {}) },
+      ...(enhance ? { axisTick: { customValues: niceTickValues(xr) } } : {}),
+      splitLine: { lineStyle: { opacity: 0.1 }, ...(enhance ? { customValues: niceTickValues(xr) } : {}) },
     },
     yAxis: {
       type: "value",
-      name: axisLabel(view.y),
+      name: titleText(yTitle),
       // inverse 会把轴的 end 翻到底部,和 x 轴名撞在一起 —— 反转时改用 start,
       // 让轴名永远停在图的左上角。
       nameLocation: lowY ? "start" : "end",
-      nameGap: 12,
-      nameTextStyle: { color: c.ink2, fontSize: tk.axisFont, align: "left" },
+      nameGap: args.axisHints ? 14 : 12,
+      nameTextStyle: yTitle.sub
+        ? { rich: titleRich, align: "left" }
+        : { color: c.ink2, fontSize: tk.axisFont, align: "left" },
       // 预期失球越少越好 → 反转,让"好"永远在上方
       inverse: lowY,
       min: yr.min,
       max: yr.max,
       interval: yr.interval,
-      axisLabel: { color: c.ink2, fontSize: tk.axisFont },
-      splitLine: { lineStyle: { opacity: 0.1 } },
+      axisLabel: { color: c.ink2, fontSize: tk.axisFont, ...(enhance ? { customValues: niceTickValues(yr) } : {}) },
+      ...(enhance ? { axisTick: { customValues: niceTickValues(yr) } } : {}),
+      splitLine: { lineStyle: { opacity: 0.1 }, ...(enhance ? { customValues: niceTickValues(yr) } : {}) },
     },
     tooltip: {
       confine: true,

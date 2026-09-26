@@ -30,14 +30,20 @@ import type { TeamSeasonStatRow } from "@/lib/api-v1";
 import { teamKey, windowScaleFor } from "./teamMetrics";
 import { buildQuadrantOption } from "./quadrantOption";
 import {
+  ANNOTATION_BADGES,
   VIEWS,
   VIEW_GROUPS,
   dirsOf,
   filterWindowLabel,
   fmt,
   groupedViews,
+  buildConclusion,
   hiddenNote,
+  isSmallSample,
+  pickAnnotations,
   mean,
+  meanBandHalf,
+  nearMeanTeams,
   outlierNames,
   plotSet,
   quadrantOf,
@@ -91,12 +97,26 @@ function groupDisabledReason(groupViews: View[], plots: Map<string, PlotSet>, fi
     : "该联赛该赛季这一类视角样本达标的球队还不足 4 支，随着轮次增加会自动解锁";
 }
 
+/** 球队象限图自己的 grid:比共用的 QUADRANT_GRID 多留出上/下两行,
+ *  给轴端"往哪边读是好"的方向提示(见 quadrantOption.ts 的 axisHints)。
+ *  共用的 QUADRANT_GRID 不动——球员象限图与比赛页象限图不受影响。 */
+const TEAM_GRID = { ...QUADRANT_GRID, top: 58, bottom: 66 };
+
 /** 宽度变化小于这个像素数不重算布局,避免拖动窗口时反复重排 */
 const WIDTH_HYSTERESIS = 8;
 
-function chartHeightFor(n: number) {
-  // 球队越多越需要纵向空间给队徽错开,20 队 → 380
-  return Math.max(340, n * 19);
+/** 窄屏(<480)队徽最小 28px(2026-09-26),20 队塞进 300 宽的绘图区会很挤,
+ *  所以窄屏每队多给纵向空间。 */
+const NARROW_WIDTH = 480;
+const NARROW_CREST_MIN = 28;
+
+function chartHeightFor(n: number, narrow: boolean) {
+  // 球队越多越需要纵向空间给队徽错开,宽屏 20 队 → 380、窄屏 20 队 → 520;
+  // 另加 TEAM_GRID 比共用 grid 多出的上下留白
+  const perTeam = narrow ? 26 : 19;
+  return (
+    Math.max(340, n * perTeam) + (TEAM_GRID.top - QUADRANT_GRID.top) + (TEAM_GRID.bottom - QUADRANT_GRID.bottom)
+  );
 }
 
 export function TeamQuadrantChart({
@@ -139,6 +159,7 @@ export function TeamQuadrantChart({
     if (first) setViewId(first.id);
   };
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // 图表宽度:自己测(ShotMapChart 的既有范式),不依赖 EChart 暴露实例
   const boxRef = useRef<HTMLDivElement>(null);
@@ -190,26 +211,41 @@ export function TeamQuadrantChart({
     const my = mean(pts.map((p) => p.y));
     const dirs = dirsOf(view);
     const lowY = dirs.y === true;
-    const xr = niceAxisRange(pts.map((p) => p.x), { pad: 0.14 });
-    const yr = niceAxisRange(pts.map((p) => p.y), { pad: 0.16 });
-    const height = chartHeightFor(pts.length);
-    const box: PlotBox | null = width ? { width, height, grid: QUADRANT_GRID } : null;
-    const crestSize = box ? crestSizeFor(box, pts.length) : CREST.MIN + 6;
+    // 端点 = 数据范围两端各留 8% 余量,不吸附到刻度(见 niceAxisRange 的 snap)
+    const xr = niceAxisRange(pts.map((p) => p.x), { pad: 0.08, snap: false, targetTicks: 6 });
+    const yr = niceAxisRange(pts.map((p) => p.y), { pad: 0.08, snap: false, targetTicks: 6 });
+    const narrow = width != null && width < NARROW_WIDTH;
+    const height = chartHeightFor(pts.length, narrow);
+    const box: PlotBox | null = width ? { width, height, grid: TEAM_GRID } : null;
+    const crestSize = box
+      ? crestSizeFor(box, pts.length, narrow ? { min: NARROW_CREST_MIN } : undefined)
+      : CREST.MIN + 6;
+    // 均值临界带:均值线 ±5%,带内球队在名单里标"临界"
+    const bandX = meanBandHalf(mx, pts.map((p) => p.x));
+    const bandY = meanBandHalf(my, pts.map((p) => p.y));
     const layout = box
       ? layoutCrests({ pts, box, xr, yr, yInverse: lowY, radius: crestSize / 2 + CREST.PAD })
       : null;
-    return { mx, my, dirs, lowY, xr, yr, height, crestSize, layout };
+    const annotations = pickAnnotations(pts, view, mx, my);
+    return { mx, my, dirs, lowY, xr, yr, height, crestSize, layout, bandX, bandY, annotations };
   }, [view, pts, width]);
 
   const selected = useMemo(() => resolveSelectedTeams(pts, selectedKeys), [pts, selectedKeys]);
 
   const option = useMemo(() => {
     if (!view || !derived) return null;
-    const { mx, my, xr, yr, crestSize, layout } = derived;
+    const { mx, my, xr, yr, crestSize, layout, bandX, bandY, height: chartHeight, annotations } = derived;
     // 窄屏队名标签更容易压在相邻队徽上,只标最极端的 4 支;宽屏 6 支
     const labelled = outlierNames(pts, mx, my, width != null && width < 480 ? 4 : 6);
     for (const p of pts) if (!p.crestUrl) labelled.add(p.name);
     for (const p of selected) labelled.add(p.name);
+    // 自动标注的球队一律要求显示队名,并带序号前缀,与图下的标注列表对应
+    // (是否真的显示仍受队徽碰撞检测约束——压住别的队徽的标签宁可摘掉)
+    const badges: Record<string, string> = {};
+    for (const a of annotations) {
+      labelled.add(a.name);
+      badges[a.name] = ANNOTATION_BADGES[a.no - 1] ?? "";
+    }
     return buildQuadrantOption({
       view,
       pts,
@@ -221,10 +257,20 @@ export function TeamQuadrantChart({
       layout,
       xr,
       yr,
-      grid: QUADRANT_GRID,
+      grid: TEAM_GRID,
+      axisHints: true,
+      badges,
+      // 均值线标注:未筛选叫"联赛平均"(统计的是画出的球队,同本联赛本赛季);
+      // 筛了就换成窗口名,不能继续叫"联赛平均"却只统计了最近几场
+      enhance: {
+        meanLabel: filtered ? `${filterWindowLabel(recency, venue)}平均` : "联赛平均",
+        bandX,
+        bandY,
+        box: width ? { width, height: chartHeight } : null,
+      },
       selectedIndexes: selected.map((s) => pts.indexOf(s)),
     });
-  }, [view, derived, pts, selected, c, width]);
+  }, [view, derived, pts, selected, c, width, filtered, recency, venue]);
 
   if (!view || !derived || !option) {
     return (
@@ -234,8 +280,13 @@ export function TeamQuadrantChart({
     );
   }
 
-  const { mx, my, dirs, height } = derived;
+  const { mx, my, dirs, height, bandX, bandY } = derived;
   const quad = (p: Pt) => quadrantOf(p, mx, my, dirs);
+  const borderline = nearMeanTeams(pts, mx, my, bandX, bandY);
+  const { annotations } = derived;
+  const meanName = filtered ? `${filterWindowLabel(recency, venue)}平均` : "联赛平均";
+  const conclusion = buildConclusion(pts, view, mx, my, meanName);
+  const smallSample = isSmallSample(pts);
 
   const handleChartClick = (params: unknown) => {
     const key = resolveClickedKey(params, pts);
@@ -303,6 +354,12 @@ export function TeamQuadrantChart({
     `。共 ${pts.length} 支球队${sampleNote ? `，${sampleNote}` : ""}。` +
     (hiddenText ? `${hiddenText}` : "") +
     `参考线是联赛内部平均，不能拿来跨联赛比较。` +
+    `${conclusion}` +
+    (annotations.length ? `图上标注：${annotations.map((a) => `${a.name}（${a.reasons.join("；")}）`).join("；")}。` : "") +
+    (smallSample ? "样本较小，排位还会变。" : "") +
+    (borderline.size
+      ? `距均值线 5% 以内的临界球队：${pts.filter((p) => borderline.has(p.key)).map((p) => p.name).join("、")}。`
+      : "") +
     (selected.length
       ? `当前选中：${selected.map((p) => `${p.name}（${view.quadrants[quad(p)]}）`).join("、")}。`
       : "");
@@ -314,10 +371,16 @@ export function TeamQuadrantChart({
           <div>
             <h2 className={styles.title}>球队象限图</h2>
             <p className={styles.sub}>
-              {view.title} · 虚线为{windowLabel}平均
+              虚线为{windowLabel}平均
               {sampleNote ? ` · ${sampleNote}` : ""}
             </p>
           </div>
+        </div>
+
+        {/* 一句自动结论 + 样本偏小提示(2026-09-26"有结论"):结论纯由数据模板生成 */}
+        <div className={styles.verdict}>
+          <p className={styles.conclusion}>{conclusion}</p>
+          {smallSample && <span className={styles.smallSample}>样本较小，排位还会变</span>}
         </div>
 
         {/* 类别行是筛选器,不是第二层 tablist——role="group" + aria-pressed,
@@ -361,6 +424,47 @@ export function TeamQuadrantChart({
             );
           })}
         </div>
+
+        {/* 图上方只放一句话;操作说明与完整口径收进"?"提示(2026-09-26) */}
+        <div className={styles.summaryRow}>
+          <p className={styles.summary}>{view.summary}</p>
+          <button
+            type="button"
+            className={helpOpen ? styles.helpBtnOn : styles.helpBtn}
+            aria-expanded={helpOpen}
+            aria-controls="team-quadrant-help"
+            aria-label="查看操作说明与口径"
+            onClick={() => setHelpOpen((o) => !o)}
+          >
+            ?
+          </button>
+        </div>
+        {helpOpen && (
+          <div id="team-quadrant-help" className={styles.help} role="region" aria-label="操作说明与口径">
+            <p className={styles.note}>{view.note}</p>
+            <p className={styles.note}>
+              点击队徽或下方名单查看该队数值与联赛排名，再点一支可对比，按 Esc 或点空白处取消。
+              位置挤在一起的队徽会自动错开一点避免遮挡，精确数值以详情面板为准。
+            </p>
+            <p className={styles.note}>
+              图上均值线两侧的淡色带是均值 ±5% 的“临界带”；名单里标“临界”的球队至少有一项指标落在带内，
+              属于哪个象限很容易随几场比赛变化，不要过度解读。
+              轴上有负值的指标（如终结超额）按数据跨度的 5% 计算。
+            </p>
+            {(disabledViews.hasMissing || disabledViews.hasSample) && (
+              <p className={styles.note}>
+                {disabledViews.hasMissing && <>灰掉的视角是该联赛该赛季数据源没有提供对应指标，不是本站算不出来。</>}
+                {disabledViews.hasSample && (
+                  <>
+                    {" "}
+                    另有视角是数据源有，但样本达标的球队不足 4 支，暂不可用
+                    {filtered ? "，放宽筛选范围可能就有数据了" : ""}。
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+        )}
       </header>
 
       {outcomeVarianceBanner && <p className={styles.outcomeVarianceBanner}>{outcomeVarianceBanner}</p>}
@@ -394,6 +498,20 @@ export function TeamQuadrantChart({
         />
       </div>
 
+      {/* 图上标注:队名前的序号 ①②③ 与这里对应;文字全部由数据生成 */}
+      {annotations.length > 0 && (
+        <ol className={styles.annotations} aria-label="图上自动标注">
+          {annotations.map((a) => (
+            <li key={a.key} className={styles.annotation}>
+              <span className={styles.annotationNo}>{ANNOTATION_BADGES[a.no - 1]}</span>
+              <span>
+                <strong>{a.name}</strong>：{a.reasons.join("；")}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+
       <TeamQuadrantDetail
         view={view}
         rows={eligibleRows}
@@ -422,6 +540,11 @@ export function TeamQuadrantChart({
                     onClick={() => toggle(p.key)}
                   >
                     {p.name}
+                    {borderline.has(p.key) && (
+                      <span className={styles.borderlineTag} title="距均值线 5% 以内，归属的象限很容易随几场比赛变化">
+                        临界
+                      </span>
+                    )}
                   </button>
                 ))}
               </span>
@@ -429,25 +552,8 @@ export function TeamQuadrantChart({
           ))}
       </div>
 
-      <details className={styles.noteDetails}>
-        <summary className={styles.noteSummary}>视角说明</summary>
-        <p className={styles.note}>
-          {view.note} 图上每支球队用队徽表示，位置挤在一起的会自动错开一点避免遮挡；
-          精确数值以点击后的详情面板为准。点击队徽或上方名单查看该队数值与排名，
-          再点一支可对比，按 Esc 或点空白处取消。
-          {hiddenText && <> {hiddenText}</>}
-          {disabledViews.hasMissing && (
-            <> 灰掉的视角是该联赛该赛季数据源没有提供对应指标，不是本站算不出来。</>
-          )}
-          {disabledViews.hasSample && (
-            <>
-              {" "}
-              另有视角是数据源有，但样本达标的球队不足 4 支，暂不可用
-              {filtered ? "，放宽筛选范围可能就有数据了" : ""}。
-            </>
-          )}
-        </p>
-      </details>
+      {/* 藏了几支球队必须在可见区域说清楚,不能只放在折叠提示里 */}
+      {hiddenText && <p className={styles.hiddenNote}>{hiddenText}</p>}
     </section>
   );
 }

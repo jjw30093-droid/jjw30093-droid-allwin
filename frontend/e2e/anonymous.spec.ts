@@ -268,14 +268,14 @@ test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用
     .poll(() => page.locator("canvas").count(), { timeout: 20_000 })
     .toBeGreaterThan(0);
 
-  // 攻防视角的"攻守兼备"必须是真的攻守兼备(预期进球多 + 预期失球少)。
+  // 攻防视角的"两头都强"必须是真的两头都强(预期进球多 + 预期失球少)。
   // 这条断言守的是一个真实修过的 bug:quadrantOf 早先按数值高低命名,
-  // 预期失球越低越好的轴上,攻守兼备会被反着标成"对攻型"。
-  // (2026-09-09 术语校准把"两头都强"改名为"攻守兼备",这层保护原样保留。)
+  // 预期失球越低越好的轴上,两头都强会被反着标成"对攻型"。
+  // (2026-09-26 站长要求大白话,象限名由"攻守兼备"改回"两头都强",这层保护原样保留。)
   const summary = page.getByText(/预期进球 × 预期失球象限图/);
-  await expect(summary).toContainText("攻守兼备：");
+  await expect(summary).toContainText("两头都强：");
   for (const team of ["阿森纳", "曼城", "利物浦"]) {
-    await expect(summary).toContainText(new RegExp(`攻守兼备：[^；]*${team}`));
+    await expect(summary).toContainText(new RegExp(`两头都强：[^；]*${team}`));
   }
 
   // 2026-09-09 队徽坐标点 + 点击交互:点下方名单里的队名(真按钮)= 点队徽

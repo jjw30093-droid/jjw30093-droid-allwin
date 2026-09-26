@@ -458,6 +458,22 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(队徽当坐标
     expect(r.images).toBe(20);
   });
 
+  it("axisHints + 大白话轴标题(球队象限图新增,2026-09-26):不抛异常,方向提示与轴标题真的画出来", () => {
+    const a = { ...args(twenty), axisHints: true, grid: { ...QUADRANT_GRID, top: 58, bottom: 66 } };
+    const { svg } = renderSvg(buildLeagueQuadrantOption(a), SIZE);
+    expect(svg).toContain("进攻 → 越往右越好");
+    expect(svg).toContain("防守 ↑ 越往上越好");
+    expect(svg).toContain("场均创造的机会");
+    expect(svg).toContain("场均被对手创造的机会");
+    expect(svg).toContain("场均预期进球 xG"); // 副标签
+  });
+
+  it("不开 axisHints 时不出现方向提示(球员象限图/比赛页输出不变)", () => {
+    const { svg } = renderSvg(buildLeagueQuadrantOption(args(twenty)), SIZE);
+    expect(svg).not.toContain("越往右越好");
+    expect(svg).not.toContain("越往上越好");
+  });
+
   it("3 队缺队徽:<image> 仍然 17 个(圆点兜底不受标签摘除影响)", () => {
     // 2026-09-09:不再断言"缺队徽的队永远带名字"——那正是用户反馈的 bug 的
     // 根源假设(队名会压住旁边队徽时必须摘掉,见 crestQuadrantLayout.ts::
