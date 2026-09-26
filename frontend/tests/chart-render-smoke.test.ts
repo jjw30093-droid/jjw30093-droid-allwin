@@ -831,3 +831,21 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(球员头像当
     }
   });
 });
+
+describe("ShotMapChart.buildOption:深色球场底提亮后的空心圈浅色描边(2026-09-26)", () => {
+  const offTarget = [
+    shot({ minute: 5, is_home: true, outcome: "Miss", x: 88, y: 30 }),
+    shot({ minute: 9, is_home: false, outcome: "Miss", x: 92, y: 40 }),
+  ];
+  const circles = (svg: string) => (svg.match(/<circle/g) ?? []).length;
+
+  it("outline=true 时每个空心圈多画一圈 c.ink 细描边;默认不画", () => {
+    const base = renderSvg(buildShotMapOption(offTarget, "主队", "客队", COLORS, null), { width: 460, height: 300 });
+    const withOutline = renderSvg(
+      buildShotMapOption(offTarget, "主队", "客队", COLORS, null, { outline: true }),
+      { width: 460, height: 300 },
+    );
+    expect(circles(withOutline.svg)).toBe(circles(base.svg) + offTarget.length);
+    expect(withOutline.svg.toLowerCase()).toContain(COLORS.ink.toLowerCase());
+  });
+});

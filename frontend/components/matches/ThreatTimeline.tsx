@@ -25,8 +25,9 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import { tokensFor } from "@/components/charts/chartMode";
-import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
-import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
+import type { ChartColors } from "@/components/charts/useChartColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
+import { useMatchColors } from "@/components/charts/useMatchColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import styles from "./ThreatTimeline.module.css";
 
@@ -242,6 +243,8 @@ export function ThreatTimeline({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
   mode = "interactive",
   height,
 }: {
@@ -251,25 +254,18 @@ export function ThreatTimeline({
   /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  /** 该队近期代表色:本场配色缺失或校验不过时的第二级(见 charts/matchTeamColors.ts) */
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
   mode?: ChartMode;
   height?: number;
 }) {
   const [size, setSize] = useState<BucketSize>(5);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
-  const c = useChartColors();
-  const resolved = useMemo(
-    () =>
-      resolveMatchColors(homeTeamColor, awayTeamColor, {
-        isDark: c.isDark,
-        backgroundHex: c.surface,
-        fallback: { home: c.teal, away: c.navy },
-      }),
-    [homeTeamColor, awayTeamColor, c],
-  );
-  const effectiveColors: ChartColors = useMemo(
-    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
-    [c, resolved],
+  const { effectiveColors } = useMatchColors(
+    { homeTeamColor, awayTeamColor, homeTeamBrandColor, awayTeamBrandColor },
+    "surface",
   );
 
   useEffect(() => {

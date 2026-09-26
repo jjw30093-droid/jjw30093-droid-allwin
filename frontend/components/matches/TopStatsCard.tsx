@@ -14,8 +14,8 @@
  */
 
 import type { MatchReportResponse } from "@/lib/api-v1";
-import { useChartColors } from "@/components/charts/useChartColors";
-import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
+import { useMatchColors } from "@/components/charts/useMatchColors";
 import { TEAM_STAT_LABELS, formatTeamStat } from "@/components/matches/zh";
 import { useMatchTabSwitch } from "./MatchTabs";
 import styles from "./TopStatsCard.module.css";
@@ -45,6 +45,8 @@ export function TopStatsCard({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
 }: {
   homeStat: TeamStat | null;
   awayStat: TeamStat | null;
@@ -52,14 +54,15 @@ export function TopStatsCard({
   awayName: string;
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  /** 该队近期代表色:本场配色缺失或校验不过时的第二级(见 charts/matchTeamColors.ts) */
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
 }) {
-  const c = useChartColors();
   const switchTab = useMatchTabSwitch();
-  const resolved = resolveMatchColors(homeTeamColor, awayTeamColor, {
-    isDark: c.isDark,
-    backgroundHex: c.surface,
-    fallback: { home: c.teal, away: c.navy },
-  });
+  const { resolved } = useMatchColors(
+    { homeTeamColor, awayTeamColor, homeTeamBrandColor, awayTeamBrandColor },
+    "surface",
+  );
 
   const rows = TOP5_KEYS.map((key) => {
     const meta = LABEL_BY_KEY.get(key);

@@ -232,6 +232,8 @@ function DataGroup({
                   awayName={awayName}
                   homeTeamColor={m.home_team_color}
                   awayTeamColor={m.away_team_color}
+                  homeTeamBrandColor={m.home_team_brand_color}
+                  awayTeamBrandColor={m.away_team_brand_color}
                   windowNote={windowNote(homeName, awayName, preview.home_window, preview.away_window)}
                   crossLeague={preview.data_profile.comparison_mode === "cross_league_raw"}
                 />
@@ -394,6 +396,8 @@ function OverviewPanel({
             awayName={m.away.name}
             homeTeamColor={m.home_team_color}
             awayTeamColor={m.away_team_color}
+            homeTeamBrandColor={m.home_team_brand_color}
+            awayTeamBrandColor={m.away_team_brand_color}
           />
         </section>
       )}
@@ -407,6 +411,8 @@ function OverviewPanel({
             awayName={m.away.name}
             homeTeamColor={m.home_team_color}
             awayTeamColor={m.away_team_color}
+            homeTeamBrandColor={m.home_team_brand_color}
+            awayTeamBrandColor={m.away_team_brand_color}
           />
         </section>
       )}
@@ -522,6 +528,8 @@ export function MatchDetailBody({
               awayName={m.away.name}
               homeTeamColor={m.home_team_color}
               awayTeamColor={m.away_team_color}
+              homeTeamBrandColor={m.home_team_brand_color}
+              awayTeamBrandColor={m.away_team_brand_color}
               homeCrestUrl={m.home.crest_url}
               awayCrestUrl={m.away.crest_url}
               homeScore={m.home_score}

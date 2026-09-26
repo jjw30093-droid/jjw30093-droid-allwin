@@ -11,7 +11,7 @@
  */
 
 import type { MatchReportResponse } from "@/lib/api-v1";
-import type { TeamColorPair } from "@/components/charts/matchTeamColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
 import { ThreatTimeline } from "@/components/matches/ThreatTimeline";
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
 import { ShotMapChart } from "@/components/matches/ShotMapChart";
@@ -42,6 +42,8 @@ export function MatchShotsSection({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
   homeCrestUrl,
   awayCrestUrl,
   homeScore,
@@ -59,6 +61,8 @@ export function MatchShotsSection({
   /** 2026-08-24:真实球队配色,原样转发给下面各图表,组件内部各自回退。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
   homeCrestUrl?: string | null;
   awayCrestUrl?: string | null;
   homeScore?: number | null;
@@ -107,6 +111,8 @@ export function MatchShotsSection({
           awayName={awayName}
           homeTeamColor={homeTeamColor}
           awayTeamColor={awayTeamColor}
+          homeTeamBrandColor={homeTeamBrandColor}
+          awayTeamBrandColor={awayTeamBrandColor}
           homeCrestUrl={homeCrestUrl}
           awayCrestUrl={awayCrestUrl}
           shirtNumberByPlayerId={shirtNumberByPlayerId}
@@ -123,6 +129,8 @@ export function MatchShotsSection({
             awayName={awayName}
             homeTeamColor={homeTeamColor}
             awayTeamColor={awayTeamColor}
+            homeTeamBrandColor={homeTeamBrandColor}
+            awayTeamBrandColor={awayTeamBrandColor}
             byPeriod={zonesByPeriod}
           />
         </section>
@@ -136,6 +144,8 @@ export function MatchShotsSection({
           awayName={awayName}
           homeTeamColor={homeTeamColor}
           awayTeamColor={awayTeamColor}
+          homeTeamBrandColor={homeTeamBrandColor}
+          awayTeamBrandColor={awayTeamBrandColor}
         />
       </section>
 
@@ -147,6 +157,8 @@ export function MatchShotsSection({
           awayName={awayName}
           homeTeamColor={homeTeamColor}
           awayTeamColor={awayTeamColor}
+          homeTeamBrandColor={homeTeamBrandColor}
+          awayTeamBrandColor={awayTeamBrandColor}
           homeScore={homeScore}
           awayScore={awayScore}
         />

@@ -4,7 +4,8 @@
  */
 import * as echarts from "echarts";
 import { describe, expect, it } from "vitest";
-import { buildOption, MOMENTUM_FALLBACK_COLORS } from "@/components/matches/MomentumChart";
+import { buildOption } from "@/components/matches/MomentumChart";
+import { MATCH_FALLBACK_COLORS as MOMENTUM_FALLBACK_COLORS } from "@/components/charts/matchTeamColors";
 import {
   colorsDistinct,
   contrastRatioHex,

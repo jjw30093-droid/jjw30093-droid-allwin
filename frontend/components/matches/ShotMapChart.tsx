@@ -24,8 +24,8 @@ import type { EChartsOption, CustomSeriesRenderItemReturn } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
 import type { ChartColors } from "@/components/charts/useChartColors";
-import { useChartColors } from "@/components/charts/useChartColors";
-import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
+import { useMatchColors } from "@/components/charts/useMatchColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import { SHOT_OUTCOME_ZH, SHOT_SITUATION_ZH, SHOT_TYPE_ZH } from "@/components/matches/zh";
 import { FootballPitchBackground } from "./FootballPitchBackground";
@@ -330,6 +330,9 @@ export function buildOption(
   awayName: string,
   c: ChartColors,
   selected?: Shot | null,
+  /** 深色球场底上,球队色经过提亮(明度微调)后,给空心圈加一圈浅色细描边(c.ink,
+   * 深色主题下即浅色),让提亮后的色环在 #333 底上更稳;实心标记本来就有 c.ink 描边。 */
+  opts?: { outline?: boolean },
 ): EChartsOption {
   const ordered = orderShotsForRender(plotted);
   const markerSeries: EChartsOption["series"] = [
@@ -347,10 +350,22 @@ export function buildOption(
         const color = s.is_home ? c.teal : c.navy; // 已经过 resolveMatchColors
 
         if (kind === "off_target") {
-          return {
+          const ring = {
             type: "circle",
             shape: { cx, cy, r },
             style: { fill: "none", stroke: color, lineWidth: 2, opacity: 1 },
+          };
+          if (!opts?.outline) return ring as unknown as CustomSeriesRenderItemReturn;
+          return {
+            type: "group",
+            children: [
+              {
+                type: "circle",
+                shape: { cx, cy, r: r + 2 },
+                style: { fill: "none", stroke: c.ink, lineWidth: 1, opacity: 1 },
+              },
+              ring,
+            ],
           } as unknown as CustomSeriesRenderItemReturn;
         }
         if (kind === "on_target") {
@@ -483,6 +498,8 @@ export function ShotMapChart({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
   homeCrestUrl,
   awayCrestUrl,
   shirtNumberByPlayerId,
@@ -491,10 +508,12 @@ export function ShotMapChart({
   shots: MatchReport["shots"];
   homeName: string;
   awayName: string;
-  /** 2026-08-24:真实球队配色(FotMob 已做撞色规避的配对级结果);缺失或
-   * 对比度不达标时组件内部回退品牌青绿/蓝,调用方不需要自己判空。 */
+  /** 真实球队配色(FotMob 已做撞色规避的配对级结果);取色顺序与兜底见
+   * charts/matchTeamColors.ts,调用方不需要自己判空。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
   /** 2026-08-24:点击射门后的详情面板要用——队徽与球衣号映射表。 */
   homeCrestUrl?: string | null;
   awayCrestUrl?: string | null;
@@ -503,7 +522,12 @@ export function ShotMapChart({
   mode?: ChartMode;
 }) {
   const isExport = mode === "export";
-  const c = useChartColors();
+  // 真实球队配色对着射门图自己的真实背景(中性球场底 c.pitchBg,不是页面卡片背景)
+  // 算对比度;取色/兜底/主客区分检查全在 resolveMatchColors(见 charts/matchTeamColors.ts)
+  const { c, resolved, effectiveColors } = useMatchColors(
+    { homeTeamColor, awayTeamColor, homeTeamBrandColor, awayTeamBrandColor },
+    "pitch",
+  );
   const wrapRef = useRef<HTMLDivElement>(null);
   const [chartHeight, setChartHeight] = useState<number | null>(null);
   const [visible, setVisible] = useState(false);
@@ -555,16 +579,6 @@ export function ShotMapChart({
   );
   const filtered = plotted.length !== plottable.length;
 
-  // 2026-08-24:真实球队配色对着射门图自己的真实背景(中性球场底 c.pitchBg,
-  // 不是页面卡片背景)算对比度——缺失或不安全时回退品牌色,详见
-  // components/charts/matchTeamColors.ts 模块注释。
-  const resolved = resolveMatchColors(homeTeamColor, awayTeamColor, {
-    isDark: c.isDark,
-    backgroundHex: c.pitchBg,
-    fallback: { home: c.teal, away: c.navy },
-  });
-  const effectiveColors: ChartColors = { ...c, teal: resolved.home, navy: resolved.away };
-
   // 2026-08-24:摘要整句抽成纯函数 buildShotMapSummary(乌龙球按受益方计球、
   // 缺失 xG 不再静默当 0),组件只负责调用——聚合逻辑的正确性由
   // frontend/tests/shot-map-chart.test.ts 直接断言,不再只活在渲染路径里。
@@ -577,7 +591,9 @@ export function ShotMapChart({
   });
 
   const activeSelected = resolveSelectedShot(plotted, selected);
-  const option = buildOption(plotted, homeName, awayName, effectiveColors, activeSelected);
+  // 深色球场底 + 球队色被提亮过 → 空心圈加浅色细描边
+  const outline = c.isDark && (resolved.homeAdjusted || resolved.awayAdjusted);
+  const option = buildOption(plotted, homeName, awayName, effectiveColors, activeSelected, { outline });
 
   // Esc 关闭详情面板(2026-08-25,"无法清除选中"修复的键盘路径;鼠标路径
   // 是面板右上角的关闭按钮)。只在真的有选中时挂监听。

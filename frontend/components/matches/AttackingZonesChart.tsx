@@ -24,8 +24,8 @@
  */
 
 import { useState } from "react";
-import { useChartColors } from "@/components/charts/useChartColors";
-import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
+import { useMatchColors } from "@/components/charts/useMatchColors";
 import { hexToRgba } from "@/components/charts/useChartColors";
 import { FootballPitchBackground } from "./FootballPitchBackground";
 import {
@@ -59,6 +59,8 @@ export function AttackingZonesChart({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
   byPeriod,
 }: {
   /** 该时段的三分区占比;某侧缺失传 null(不补 0)。 */
@@ -68,6 +70,9 @@ export function AttackingZonesChart({
   awayName: string;
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  /** 该队近期代表色:本场配色缺失或校验不过时的第二级(见 charts/matchTeamColors.ts) */
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
   /** 上/下半场;缺失时组件不渲染时段切换器(同 MatchStatsSection 的
    * hasHalves 诚实模式)。 */
   byPeriod?: {
@@ -75,7 +80,11 @@ export function AttackingZonesChart({
     SecondHalf?: { home: AttackingZoneSplit | null; away: AttackingZoneSplit | null };
   };
 } ) {
-  const c = useChartColors();
+  // 取色/兜底/主客区分检查全在 resolveMatchColors(球场中性底为背景)
+  const { resolved } = useMatchColors(
+    { homeTeamColor, awayTeamColor, homeTeamBrandColor, awayTeamBrandColor },
+    "pitch",
+  );
   const [period, setPeriod] = useState<PeriodKey>("All");
   const hasHalves =
     !empty(byPeriod?.FirstHalf?.home ?? null, byPeriod?.FirstHalf?.away ?? null) ||
@@ -91,12 +100,6 @@ export function AttackingZonesChart({
           home: byPeriod?.[period]?.home ?? null,
           away: byPeriod?.[period]?.away ?? null,
         };
-
-  const resolved = resolveMatchColors(homeTeamColor, awayTeamColor, {
-    isDark: c.isDark,
-    backgroundHex: c.pitchBg,
-    fallback: { home: c.teal, away: c.navy },
-  });
 
   const summary = buildAttackingZonesSummary({
     home: active.home,

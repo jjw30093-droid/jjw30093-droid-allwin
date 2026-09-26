@@ -22,8 +22,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
-import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
+import type { ChartColors } from "@/components/charts/useChartColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
+import { useMatchColors } from "@/components/charts/useMatchColors";
 import {
   CREST,
   QUADRANT_GRID,
@@ -339,6 +340,8 @@ export function TeamStyleQuadrant({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
   windowNote,
   crossLeague = false,
 }: {
@@ -350,6 +353,9 @@ export function TeamStyleQuadrant({
   /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  /** 该队近期代表色:本场配色缺失或校验不过时的第二级(见 charts/matchTeamColors.ts) */
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
   /** 「近 5 场 · 2026-05-10 至 2026-08-09」——必须带真实日期区间(CLAUDE.md 措辞纪律) */
   windowNote: string;
   /** 欧战等跨联赛赛事:本图画的是"该联赛全部球队",两队分处不同联赛时这个
@@ -388,19 +394,9 @@ export function TeamStyleQuadrant({
     return () => window.removeEventListener("keydown", onKey);
   }, [isDefault, defaultPair]);
 
-  const c = useChartColors();
-  const resolved = useMemo(
-    () =>
-      resolveMatchColors(homeTeamColor, awayTeamColor, {
-        isDark: c.isDark,
-        backgroundHex: c.surface,
-        fallback: { home: c.teal, away: c.navy },
-      }),
-    [homeTeamColor, awayTeamColor, c],
-  );
-  const effectiveColors: ChartColors = useMemo(
-    () => ({ ...c, teal: resolved.home, navy: resolved.away }),
-    [c, resolved],
+  const { c, resolved, effectiveColors } = useMatchColors(
+    { homeTeamColor, awayTeamColor, homeTeamBrandColor, awayTeamBrandColor },
+    "surface",
   );
 
   const pts = useMemo(

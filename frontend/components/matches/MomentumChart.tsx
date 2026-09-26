@@ -23,27 +23,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { EChart } from "@/components/EChart";
 import type { ChartMode } from "@/components/charts/chartMode";
-import { useChartColors, type ChartColors } from "@/components/charts/useChartColors";
-import { resolveMatchColors, type TeamColorPair } from "@/components/charts/matchTeamColors";
-import { colorsDistinct } from "@/components/charts/colorContrast";
+import type { ChartColors } from "@/components/charts/useChartColors";
+import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
+import { useMatchColors } from "@/components/charts/useMatchColors";
 import type { MatchReportResponse } from "@/lib/api-v1";
 import styles from "./MomentumChart.module.css";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type MomentumPoint = MatchReport["momentum"][number];
-
-/**
- * 势头图的主客兜底配色(真实球队色缺失或对比度救不回来时使用)。
- *
- * 不能沿用全站的 teal/brand-blue 这一对:两者 RGB 距离只有约 32,并排画在同一条
- * 基线上下时几乎分不出谁是谁(2026-09-26 复核发现)。这里换成青绿 vs 琥珀——色相
- * 明确不同,且都不占用"红=真实错误"的语义;深浅两套主题各一份,对各自卡片底色
- * 对比度均 ≥3:1(见 tests/momentum-chart-baseline.test.ts)。
- */
-export const MOMENTUM_FALLBACK_COLORS = {
-  light: { home: "#087e78", away: "#b45309" },
-  dark: { home: "#45b9af", away: "#f5a524" },
-} as const;
 
 /** 按分钟排序(API 已经按 Minute 排,这里不信任调用方顺序)+ 算主客占优
  * 分钟数(用于文字摘要和"谁全场更占优"的粗略判断)。抽成纯函数便于测试——
@@ -157,49 +144,29 @@ export function MomentumChart({
   awayName,
   homeTeamColor,
   awayTeamColor,
+  homeTeamBrandColor,
+  awayTeamBrandColor,
   mode = "interactive",
   height,
 }: {
   momentum: MatchReport["momentum"];
   homeName: string;
   awayName: string;
-  /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
+  /** 真实球队配色;取色顺序与兜底见 charts/matchTeamColors.ts(唯一取色入口)。 */
   homeTeamColor?: TeamColorPair | null;
   awayTeamColor?: TeamColorPair | null;
+  homeTeamBrandColor?: TeamBrandColor | null;
+  awayTeamBrandColor?: TeamBrandColor | null;
   mode?: ChartMode;
   height?: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
-  const c = useChartColors();
-  // 势头图铺满卡片背景(--surface),不是中性球场底——每个图表对着自己的
-  // 真实渲染背景算对比度,见 components/charts/matchTeamColors.ts 模块注释。
-  // 包 useMemo:resolveMatchColors 有实际计算(十六进制校验+对比度数学),
-  // 不应该在 c 引用不变时(hook 自己已做主题不变则同引用的缓存)每次渲染
-  // 重算一遍,也不应该让下面 option 的 useMemo 因为新对象引用而失效。
-  const resolved = useMemo(
-    () =>
-      resolveMatchColors(homeTeamColor, awayTeamColor, {
-        isDark: c.isDark,
-        backgroundHex: c.surface,
-        fallback: c.isDark ? MOMENTUM_FALLBACK_COLORS.dark : MOMENTUM_FALLBACK_COLORS.light,
-      }),
-    [homeTeamColor, awayTeamColor, c],
-  );
-  // 主客两色必须一眼能分开:相近时整体退回兜底组合(青绿 vs 琥珀,永远可区分),
-  // 图例点与曲线使用同一份 shown,不会出现图例和曲线颜色对不上。
-  const shown = useMemo(
-    () =>
-      colorsDistinct(resolved.home, resolved.away)
-        ? resolved
-        : c.isDark
-          ? MOMENTUM_FALLBACK_COLORS.dark
-          : MOMENTUM_FALLBACK_COLORS.light,
-    [resolved, c],
-  );
-  const effectiveColors: ChartColors = useMemo(
-    () => ({ ...c, teal: shown.home, navy: shown.away }),
-    [c, shown],
+  // 势头图铺满卡片背景(--surface),不是中性球场底;取色/兜底/主客区分检查全在
+  // useMatchColors → resolveMatchColors 里,这里不再有任何取色逻辑。
+  const { resolved, effectiveColors } = useMatchColors(
+    { homeTeamColor, awayTeamColor, homeTeamBrandColor, awayTeamBrandColor },
+    "surface",
   );
 
   useEffect(() => {
@@ -251,12 +218,12 @@ export function MomentumChart({
         <>
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <i className={styles.homeDot} style={{ background: shown.home }} />
+              <i className={styles.homeDot} style={{ background: resolved.home }} />
               {homeName} 占优
               <span className={styles.legendSide}>(主队 · 基线上方)</span>
             </span>
             <span className={styles.legendItem}>
-              <i className={styles.awayDot} style={{ background: shown.away }} />
+              <i className={styles.awayDot} style={{ background: resolved.away }} />
               {awayName} 占优
               <span className={styles.legendSide}>(客队 · 基线下方)</span>
             </span>
