@@ -11,6 +11,8 @@
  */
 
 import { LeaderboardCard, type LeaderboardRow } from "@/components/LeaderboardCard";
+import { BoardSectionTabs } from "./BoardSectionTabs";
+import { boardSectionDomId } from "./boardSections";
 import type { TeamSeasonStatRow, TeamSourceBoard } from "@/lib/api-v1";
 import { boardTitle, formatBoardValue } from "./sourceBoardFormat";
 import {
@@ -96,13 +98,17 @@ export function TeamStatsSections({
     cards.sort((a, b) => weight(a) - weight(b));
   }
 
+  const present = SECTION_ORDER.filter((key) => bySection.get(key)!.length > 0);
+
+  // 榜单区域顶部的吸顶分组条(重点数据/进攻/防守/纪律,点击滚到对应分组)。
+  // 包一层容器:sticky 受父容器约束,榜单结束后吸顶条跟着滚走。
   return (
-    <>
-      {SECTION_ORDER.map((key) => {
+    <div>
+      <BoardSectionTabs sections={present.map((key) => ({ id: key, label: SECTION_TITLES[key] }))} />
+      {present.map((key) => {
         const cards = bySection.get(key)!;
-        if (cards.length === 0) return null;
         return (
-          <section key={key} className={styles.section}>
+          <section key={key} id={boardSectionDomId(key)} className={styles.section}>
             <h2 className={styles.sectionHeader}>{SECTION_TITLES[key]}</h2>
             <div className={styles.grid}>
               {cards.map((c) => (
@@ -112,6 +118,6 @@ export function TeamStatsSections({
           </section>
         );
       })}
-    </>
+    </div>
   );
 }

@@ -11,10 +11,11 @@
  *   (本报告匿名可见,SEO 有效),切换零重挂载;
  * - 射门图的 ECharts 懒挂载在 ShotMapChart 内部用 IntersectionObserver 自治,
  *   不依赖本组件传状态(避免跨插槽耦合);
- * - 视觉沿用 LeagueNav.module.css 的 .active/.link 惯例(金色下划线)。
+ * - 切换条用全站统一的 components/ui/Tabs(2026-09-26,底部粗线 + 主色文字,横向可滚动)。
  */
 
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { Tabs } from "@/components/ui/Tabs";
 import styles from "./MatchTabs.module.css";
 
 export type MatchTabKey =
@@ -88,38 +89,23 @@ export function MatchTabs({
       ?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const idx = TABS.findIndex((t) => t.key === active);
-    const next = e.key === "ArrowRight" ? (idx + 1) % TABS.length : (idx + TABS.length - 1) % TABS.length;
-    setActive(TABS[next].key);
-    (document.getElementById(`match-tab-${TABS[next].key}`) as HTMLElement | null)?.focus();
-  };
-
   const panels: Record<MatchTabKey, ReactNode> = {
     shots, stats, lineup, events, overview, analysis, odds,
   };
 
   return (
     <div className={styles.wrap}>
-      <div role="tablist" aria-label="比赛内容切换" className={styles.tablist} onKeyDown={onKeyDown}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            id={`match-tab-${t.key}`}
-            role="tab"
-            type="button"
-            aria-selected={active === t.key}
-            aria-controls={`match-panel-${t.key}`}
-            tabIndex={active === t.key ? 0 : -1}
-            className={active === t.key ? styles.active : styles.link}
-            onClick={() => setActive(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        ariaLabel="比赛内容切换"
+        activeKey={active}
+        onSelect={(k) => setActive(k as MatchTabKey)}
+        items={TABS.map((t) => ({
+          key: t.key,
+          label: t.label,
+          id: `match-tab-${t.key}`,
+          controls: `match-panel-${t.key}`,
+        }))}
+      />
       <MatchTabSwitchContext.Provider value={switchTo}>
         {TABS.map((t) => (
           <div

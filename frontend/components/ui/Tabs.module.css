@@ -1,0 +1,64 @@
+/* 页面级切换 Tabs:横向可滚动,选中态 = 底部粗线 + 主色文字(无下划线超链接样式) */
+
+.tabs {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.scroller {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.tab,
+.tabActive {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  text-decoration: none; /* 不是带下划线的超链接样式 */
+  cursor: pointer;
+  color: var(--ink-2);
+  transition: color 0.15s;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tabActive {
+  color: var(--brand-teal);
+  font-weight: 700;
+}
+
+/* 选中态底部粗线;与容器的 1px 分隔线重叠 */
+.tabActive::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--brand-teal);
+}
+
+.tab:focus-visible,
+.tabActive:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-teal) 42%, transparent);
+  outline-offset: -3px;
+}

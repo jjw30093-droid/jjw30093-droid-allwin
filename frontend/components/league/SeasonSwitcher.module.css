@@ -1,6 +1,6 @@
 /* 赛季切换器(标准/team-stats/players/matches 四页共用)+ 单赛季静态徽章
    (原来分散在 5 个页面模块里逐字节重复的 .seasonChip,统一收口到这里)。
-   token/断点与 app/matches/matches.module.css 的筛选 chip 保持一致。 */
+   (筛选类药丸已统一为 components/ui/Chip,本文件只保留赛季静态徽章与下拉控件。) */
 
 .chipRow {
   display: flex;
@@ -8,31 +8,6 @@
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 20px;
-}
-
-.chip,
-.chipActive {
-  font-size: 13px;
-  border-radius: var(--r-pill);
-  padding: 5px 14px;
-  text-decoration: none;
-  border: 1px solid var(--border);
-}
-
-.chip {
-  color: var(--ink-2);
-  background: var(--surface);
-}
-
-.chip:hover {
-  background: var(--surface-2);
-}
-
-.chipActive {
-  color: #fff;
-  background: var(--gold-grad);
-  font-weight: 700;
-  border-color: transparent;
 }
 
 .autoHint {
@@ -49,12 +24,6 @@
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
   padding: 6px 14px;
-}
-
-.chip:focus-visible,
-.chipActive:focus-visible {
-  outline: 2px solid var(--gold-700);
-  outline-offset: 2px;
 }
 
 /* 下拉筛选控件(2026-09-15,赛季 + 场次范围/主客场共用):原生 <select>,
@@ -112,10 +81,5 @@
     /* 窄屏下多个筛选行会堆叠(赛季 + 场次范围/主客场等),20px 的行距
        在手机上累积得太快——2026-09-15 收窄到 12px,不影响可点击区域。 */
     margin-bottom: 12px;
-  }
-
-  .chip,
-  .chipActive {
-    flex: 0 0 auto;
   }
 }

@@ -481,31 +481,6 @@
 
 /* ── 今日精选 / 历史战绩 标签页 ─────────────────────────── */
 
-.tabs {
-  display: flex;
-  gap: 8px;
-  margin: 0 0 18px;
-}
-
-.tab,
-.tabActive {
-  flex: 0 0 auto;
-  padding: 8px 18px;
-  border-radius: var(--r-control);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  background: var(--surface);
-}
-
-.tabActive {
-  background: var(--gold-grad);
-  border-color: transparent;
-  color: #fff;
-}
-
 .btnRow {
   display: flex;
   flex-wrap: wrap;

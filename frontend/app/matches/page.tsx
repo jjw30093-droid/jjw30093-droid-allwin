@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import {
   serverGet,
   type LeagueInfo,
@@ -15,6 +14,7 @@ import {
   type MatchStatusFilter,
   type MatchWindowFilter,
 } from "@/lib/match-filters";
+import { Tabs } from "@/components/ui/Tabs";
 import styles from "./matches.module.css";
 
 type SearchParams = Promise<{
@@ -83,23 +83,21 @@ function MatchModeSwitch({ filters }: { filters: Filters }) {
     ["finished", "赛果"],
   ] as const;
   return (
-    <div className={styles.modeSwitch} role="group" aria-label="赛程或赛果">
-      {modes.map(([value, label]) => (
-        <Link
-          key={value}
-          href={buildMatchesHref(filters, {
-            status: value,
-            window: defaultWindowFor(value),
-            date: undefined,
-            page: 1,
-          })}
-          aria-current={filters.status === value ? "page" : undefined}
-          className={filters.status === value ? styles.modeOn : styles.mode}
-        >
-          {label}
-        </Link>
-      ))}
-    </div>
+    <Tabs
+      ariaLabel="赛程或赛果"
+      className={styles.modeTabs}
+      activeKey={filters.status === "finished" || filters.status === "upcoming" ? filters.status : ""}
+      items={modes.map(([value, label]) => ({
+        key: value,
+        label,
+        href: buildMatchesHref(filters, {
+          status: value,
+          window: defaultWindowFor(value),
+          date: undefined,
+          page: 1,
+        }),
+      }))}
+    />
   );
 }
 
@@ -177,9 +175,7 @@ export default async function MatchesPage({
         <h1 className={styles.title}>{status === "finished" ? "赛果" : "比赛"}</h1>
         <MatchModeSwitch filters={filters} />
       </div>
-      <Link href="/leagues" className={styles.leagueDirectoryLink}>
-        浏览联赛排名与球队数据 →
-      </Link>
+      {/* 「浏览联赛排名与球队数据 →」已删除(2026-09-26):底部导航已有「联赛」入口 */}
 
       {/* 筛选栏、比赛行、翻页都在 MatchListLive 里:服务端渲染的是匿名口径
           (SSR 读不到会话 cookie),挂载后浏览器带 cookie 刷新一次,已登录且

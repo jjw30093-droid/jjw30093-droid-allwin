@@ -47,7 +47,8 @@ function board(over: Partial<TeamSourceBoard> = {}): TeamSourceBoard {
 }
 
 function sectionNamed(title: string) {
-  const h = screen.getByText(title);
+  // 分区标题是 <h2>;顶部吸顶分组条(BoardSectionTabs)里也有同名文字,所以按 heading 取
+  const h = screen.getByRole("heading", { name: title });
   return h.closest("section")!;
 }
 
@@ -126,9 +127,26 @@ describe("TeamStatsSections", () => {
     expect(titles).toEqual(["重点数据", "进攻"]); // 无防守/纪律数据
   });
 
-  it("全空时什么都不渲染,不摆空卡片墙", () => {
+  it("全空时什么都不渲染,不摆空卡片墙(也没有吸顶分组条)", () => {
     const { container } = render(<TeamStatsSections rows={[]} boards={[]} />);
-    expect(container.innerHTML).toBe("");
+    expect(container.querySelector("section")).toBeNull();
+    expect(container.querySelector("h2")).toBeNull();
+    expect(screen.queryByTestId("board-section-tabs")).toBeNull();
+  });
+
+  it("有 2 个以上分区时顶部有吸顶分组条,每一项对应一个分区的锚点", () => {
+    const { container } = render(
+      <TeamStatsSections
+        rows={[row("阿森纳", { avg_fouls: 9.1, avg_expected_goals_conceded: 0.8 })]}
+        boards={[board()]}
+      />
+    );
+    const bar = screen.getByTestId("board-section-tabs");
+    const labels = within(bar).getAllByRole("tab").map((t) => t.textContent);
+    expect(labels).toEqual(["重点数据", "进攻", "防守", "纪律"]);
+    for (const id of ["top", "attack", "defend", "discipline"]) {
+      expect(container.querySelector(`section#board-${id}`)).not.toBeNull();
+    }
   });
 
   it("补齐了此前一张卡都没渲染过的 DTO 字段(角球/零封/犯规/牌)", () => {

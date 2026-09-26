@@ -13,7 +13,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import styles from "./MatchDataTabs.module.css";
+import { Tabs } from "@/components/ui/Tabs";
 
 export type DataTabKey = "lineup" | "style" | "players" | "shots";
 
@@ -41,42 +41,19 @@ export function MatchDataTabs({
   const [active, setActive] = useState<DataTabKey>(tabs[0].key);
   const panels: Partial<Record<DataTabKey, ReactNode>> = { lineup, style, players, shots };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const idx = tabs.findIndex((t) => t.key === active);
-    const next =
-      e.key === "ArrowRight"
-        ? (idx + 1) % tabs.length
-        : (idx + tabs.length - 1) % tabs.length;
-    setActive(tabs[next].key);
-    document.getElementById(`match-datatab-${tabs[next].key}`)?.focus();
-  };
-
   return (
     <div>
-      <div
-        role="tablist"
-        aria-label="数据模块切换"
-        className={styles.tablist}
-        onKeyDown={onKeyDown}
-      >
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            id={`match-datatab-${t.key}`}
-            role="tab"
-            type="button"
-            aria-selected={active === t.key}
-            aria-controls={`match-datapanel-${t.key}`}
-            tabIndex={active === t.key ? 0 : -1}
-            className={active === t.key ? styles.pillOn : styles.pill}
-            onClick={() => setActive(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        ariaLabel="数据模块切换"
+        activeKey={active}
+        onSelect={(k) => setActive(k as DataTabKey)}
+        items={tabs.map((t) => ({
+          key: t.key,
+          label: t.label,
+          id: `match-datatab-${t.key}`,
+          controls: `match-datapanel-${t.key}`,
+        }))}
+      />
       {tabs.map((t) => (
         <div
           key={t.key}

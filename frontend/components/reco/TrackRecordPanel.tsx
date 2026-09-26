@@ -19,6 +19,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { GetJson } from "@/lib/api-v1";
 import { MARKET_ZH } from "@/components/matches/zh";
+import { LoadMoreList } from "@/components/reco/LoadMoreList";
 import styles from "@/app/reco/reco.module.css";
 
 type TrackResp = GetJson<"/api/v1/reco/track-record">;
@@ -287,7 +288,12 @@ export function TrackRecordPanel({
         // ——那是在把"取不到"说成"没有",两件事不一样。
         error ? null : <p className={styles.empty}>还没有结算完的单子。</p>
       ) : (
-        slips.map((s) => <SlipCard key={s.id} slip={s} />)
+        // 默认显示最近 10 条,底部「加载更多」每次再多 10 条(2026-09-26)
+        <LoadMoreList pageSize={10}>
+          {slips.map((s) => (
+            <SlipCard key={s.id} slip={s} />
+          ))}
+        </LoadMoreList>
       )}
     </section>
   );

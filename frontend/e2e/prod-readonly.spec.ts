@@ -246,11 +246,18 @@ test("会员与权限页:标题、三步开通指引在最上面,不暴露内部
 test("登录页:一句话副标题、账号密码表单、忘记密码提示,没有已删除的说明卡片", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/login");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("登录");
+  // 扫码登录开放(WECHAT_AUTH_ENABLED)时标题会随环境变化(如"扫码登录"),都含"登录"
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/登录/);
   await expect(page.getByText("登录后可以收藏比赛、查看每日精选。比赛数据不用登录也能看。")).toBeVisible();
-  await expect(page.getByLabel("用户名")).toBeVisible();
+  // 账号密码表单:扫码未开放时是常驻主卡片,开放时收在折叠项里——两种形态都要能用
+  const username = page.getByLabel("用户名");
+  if (!(await username.isVisible().catch(() => false))) {
+    await page.getByText("账号密码登录").click();
+  }
+  await expect(username).toBeVisible();
   await expect(page.getByText("忘记密码？通过公众号联系我们")).toBeVisible();
   await expect(page.getByText("扫码登录还在开通中")).toHaveCount(0);
+  await expect(page.getByText("短信和邮箱还没接")).toHaveCount(0);
 });
 
 test("面向用户的页面不出现已下线的措辞(Bet365 / 站长 / 模型概率 等)", async ({ page }) => {
@@ -261,3 +268,154 @@ test("面向用户的页面不出现已下线的措辞(Bet365 / 站长 / 模型�
     expect(text, `${path} 不应含已下线措辞`).not.toMatch(BANNED_COPY);
   }
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 手机端体验第二批(2026-09-26):导航 / 留白 / 折叠 / 控件统一 / 比赛列表
+// ─────────────────────────────────────────────────────────────────────────
+
+test("手机底部导航:首页/比赛/联赛/精选/我的;匿名时「我的」→ /login;没有「战绩」", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const nav = page.getByTestId("mobile-bottom-nav");
+  await expect(nav).toBeVisible();
+  await expect(nav.getByRole("link")).toHaveText(["首页", "比赛", "联赛", "精选", "我的"]);
+  await expect(nav.getByRole("link", { name: "联赛" })).toHaveAttribute("href", "/leagues");
+  await expect(nav.getByRole("link", { name: "我的" })).toHaveAttribute("href", "/login");
+  await expect(nav.getByText("战绩")).toHaveCount(0);
+});
+
+test("手机顶部栏:品牌副标题是联赛数量、没有黄色登录按钮、深色模式按钮 ≥44×44 且纯图标", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.locator("header").first().getByText(/^\d+ 个联赛的数据图表$/)).toBeVisible();
+  // 顶栏里不再有"登录"入口(手机)
+  await expect(page.locator("header").first().getByRole("link", { name: "登录" })).toBeHidden();
+  const toggle = page.getByTestId("theme-toggle");
+  const box = await toggle.boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(44);
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  // 纯图标:没有边框
+  expect(await toggle.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe("0px");
+});
+
+test("桌面主导航:没有「战绩」入口,「每日精选」在;桌面顶栏保留登录入口", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  const top = page.getByRole("navigation", { name: "主导航" });
+  await expect(top.getByRole("link", { name: "战绩" })).toHaveCount(0);
+  await expect(top.getByRole("link", { name: "每日精选" })).toBeVisible();
+  await expect(page.locator("header").first().getByRole("link", { name: "登录" })).toBeVisible();
+});
+
+test("旧链接 /track-record 仍可访问,访问时「精选」保持高亮;精选页有三个标签", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/track-record");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("历史战绩");
+  await expect(
+    page.getByTestId("mobile-bottom-nav").getByRole("link", { name: "精选" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.goto("/reco?tab=record");
+  const tabs = page.getByRole("navigation", { name: "精选内容切换" });
+  await expect(tabs.getByRole("link")).toHaveText(["每日公推", "今日精选", "历史战绩"]);
+  await expect(tabs.getByRole("link", { name: "历史战绩" })).toHaveAttribute("aria-current", "page");
+});
+
+test("各页面顶部栏与第一块内容之间的留白统一为 16px(手机)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/", "/matches", "/leagues", "/league/47/standings", "/reco", "/pricing", "/login"]) {
+    await page.goto(path);
+    const pad = await page.evaluate(() => getComputedStyle(document.querySelector("body > main")!).paddingTop);
+    expect(pad, `${path} main padding-top`).toBe("16px");
+  }
+});
+
+test("比赛详情(手机):没有旧的两个文字链接;顶栏有返回箭头,无来源时回 /matches", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matches?status=finished");
+  const first = page.locator('a[href^="/matches/"]').first();
+  await expect(first).toBeVisible();
+  const href = await first.getAttribute("href");
+  // 直接打开详情页(没有站内来源):返回箭头应回 /matches
+  await page.goto(href!.split("?")[0]);
+  await expect(page.getByText("返回当前筛选结果")).toHaveCount(0);
+  await expect(page.getByText("查看更多赛果")).toHaveCount(0);
+  await expect(page.getByText("查看本周其他比赛")).toHaveCount(0);
+  const back = page.getByTestId("header-back");
+  await expect(back).toBeVisible();
+  const box = await back.boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(44);
+  await back.click();
+  await expect(page).toHaveURL(/\/matches(\?|$)/);
+});
+
+test("比赛列表(手机):卡片只显示开球时间、没有联赛目录链接、筛选行右侧渐隐、「更多筛选」是带图标的小按钮", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matches");
+  await expect(page.getByText("浏览联赛排名与球队数据")).toHaveCount(0);
+  // 时间:卡片中央是 HH:mm(或"时间待定"),不是完整日期
+  const times = await page.locator('a[href^="/matches/"] time').allInnerTexts();
+  for (const t of times) expect(t).toMatch(/^\d{2}:\d{2}$/);
+  // 时间 / 联赛两排筛选:放不下时右侧有渐隐遮罩
+  const timeRow = page.getByRole("group", { name: "时间" });
+  const leagueRow = page.getByRole("group", { name: "联赛" });
+  await expect(timeRow).toBeVisible();
+  await expect(leagueRow).toBeVisible();
+  await expect(leagueRow.locator("[data-fade-right]")).toHaveAttribute("data-fade-right", "true");
+  // 更多筛选:summary 里有 svg 图标,触控区 ≥44px
+  const summary = page.locator("summary", { hasText: "更多筛选" });
+  await expect(summary.locator("svg")).toHaveCount(1);
+  expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+});
+
+test("页面级切换统一为 Tabs:联赛二级导航、排名榜别都是横向可滚动的 nav,选中态 aria-current", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/league/47/standings");
+  const leagueNav = page.getByRole("navigation", { name: "联赛导航" });
+  await expect(leagueNav.getByRole("link")).toHaveText(["速览", "排名", "赛程", "球队数据", "球员榜"]);
+  await expect(leagueNav.getByRole("link", { name: "排名" })).toHaveAttribute("aria-current", "page");
+  const types = page.getByRole("navigation", { name: "选择榜别" });
+  await expect(types.getByRole("link")).toHaveText(["总榜", "主场", "客场", "近期", "xG 榜"]);
+  // 选中态不是带下划线的超链接
+  const deco = await leagueNav
+    .getByRole("link", { name: "排名" })
+    .evaluate((el) => getComputedStyle(el).textDecorationLine);
+  expect(deco).toBe("none");
+});
+
+for (const section of ["team-stats", "players"] as const) {
+  test(`${section}:榜单默认前 3 名 + 「查看全部」,顶部有吸顶分组条,点击滚动到对应分组`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/league/47/${section}`);
+    const bar = page.getByTestId("board-section-tabs");
+    await expect(bar).toBeAttached();
+    const tabs = bar.getByRole("tab");
+    await expect(tabs.first()).toHaveText("重点数据");
+    // 每张榜卡默认只露 3 行:折叠区(第 4–10 名)不可见
+    const card = page.locator("details", { hasText: "查看全部" }).first();
+    await expect(card).toBeVisible();
+    expect(await card.locator("ol").first().locator("li").count()).toBe(3);
+    await expect(card.getByText("查看全部")).toBeVisible();
+    // 点第二个分组 → 该分组标题滚到吸顶条下面,不被吸顶条/顶栏盖住
+    const second = tabs.nth(1);
+    const label = (await second.innerText()).trim();
+    await second.click();
+    const heading = page.getByRole("heading", { name: label, exact: true });
+    await expect(heading).toBeVisible();
+    await expect
+      .poll(async () => {
+        const h = (await heading.boundingBox())!.y;
+        const barBottom = (await bar.boundingBox())!.y + (await bar.boundingBox())!.height;
+        return h >= barBottom - 1;
+      })
+      .toBe(true);
+    // 吸顶条不遮挡底部导航
+    const barBox = (await bar.boundingBox())!;
+    const navBox = (await page.getByTestId("mobile-bottom-nav").boundingBox())!;
+    expect(barBox.y + barBox.height).toBeLessThanOrEqual(navBox.y);
+    // 展开:点「查看全部」后最多 10 行
+    await card.locator("summary").click();
+    expect(await card.locator("li").count()).toBeLessThanOrEqual(10);
+  });
+}

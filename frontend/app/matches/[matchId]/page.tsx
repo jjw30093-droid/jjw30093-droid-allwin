@@ -13,7 +13,7 @@ import {
 } from "@/components/matches/MatchDetailBody";
 import { MemberMatchDetail } from "@/components/matches/MemberMatchDetail";
 import { LEAGUE_ZH } from "@/components/matches/zh";
-import { relatedMatchesQuery, returnLabelFor, sanitizeReturnTo } from "@/lib/match-links";
+import { relatedMatchesQuery } from "@/lib/match-links";
 import styles from "./match-detail.module.css";
 
 /**
@@ -45,20 +45,17 @@ export async function generateMetadata({
   };
 }
 
+// ?from= 仍由列表页写入(buildMatchHref),现在只被顶栏返回箭头读取
+// (components/SiteNav.tsx::BackArrow),本页不再自己渲染返回链接。
 export default async function MatchDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ matchId: string }>;
-  searchParams: Promise<{ from?: string }>;
 }) {
   const { matchId } = await params;
-  const { from } = await searchParams;
   const idNum = Number(matchId);
   if (!Number.isInteger(idNum) || idNum <= 0) notFound();
 
-  const returnTo = sanitizeReturnTo(from);
-  const returnLabel = returnLabelFor(returnTo);
 
   let detail: MatchDetailResponse | null = null;
   let loadError = false;
@@ -85,11 +82,7 @@ export default async function MatchDetailPage({
     // 交给客户端带 cookie 重试后三分:会员数据 / 升级引导 / 真实不存在。
     return (
       <main className={styles.page}>
-        <MemberMatchDetail
-          matchId={idNum}
-          returnTo={returnTo}
-          returnLabel={returnLabel}
-        />
+        <MemberMatchDetail matchId={idNum} />
       </main>
     );
   }
@@ -133,8 +126,6 @@ export default async function MatchDetailPage({
       analysis={analysis}
       report={report}
       preview={preview}
-      returnTo={returnTo}
-      returnLabel={returnLabel}
       previousMatch={previousMatch}
       nextMatch={nextMatch}
     />

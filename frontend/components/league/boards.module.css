@@ -11,11 +11,25 @@
  * 文字,就是一行贴在卡片组上方的小标题——出处差异是实现细节,读者不需要
  * 每段都读一遍免责声明。 */
 .section {
-  margin-top: 26px;
+  margin-top: 16px;
+  /* 点吸顶分组条跳转时,落点要让出顶栏 + 吸顶条(44px) + 余量,标题不被盖住 */
+  scroll-margin-top: calc(var(--site-header-h, 57px) + 52px);
 }
 
+/* 吸顶条紧贴其后的第一个分组:条本身已占 44px,这里只留一小段间距,
+ * 让加入吸顶条后整页不比原先更高(2026-09-26 站长要求) */
 .section:first-of-type {
+  margin-top: 8px;
+}
+
+/* 无可见标题的分组(球员页):分组名已由吸顶条给出,不再重复一行标题,
+ * 分组之间沿用卡片网格自身的 16px 间距,视觉上与原先的单一网格一致 */
+.sectionPlain {
   margin-top: 16px;
+}
+
+.sectionPlain:first-of-type {
+  margin-top: 4px;
 }
 
 .sectionHeader {

@@ -97,8 +97,24 @@ describe("LeaderboardCard 纵向 top-3 + 折叠", () => {
 
   it("summary 有简短的无障碍名,不会把三行内容连起来念", () => {
     render(<LeaderboardCard title="场均射门榜" rows={rows(10)} />);
-    const summary = screen.getByLabelText("场均射门榜,展开全部 10 名");
+    const summary = screen.getByLabelText("场均射门榜,查看全部 10 名");
     expect(summary).not.toBeNull();
+  });
+
+  it("有一行看得见的「查看全部」文字按钮,展开上限是 10 名(榜单再长也只展开到第 10)", () => {
+    const { container } = render(<LeaderboardCard title="长榜" rows={rows(20)} />);
+    expect(container.textContent).toContain("查看全部");
+    expect(container.textContent).toContain("收起");
+    const lists = container.querySelectorAll("ol");
+    // 折叠区是第 4–10 名共 7 行;第 11 名以后不渲染
+    const folded = lists[lists.length - 1];
+    expect(folded.querySelectorAll("li")).toHaveLength(7);
+    expect(container.querySelectorAll("li")).toHaveLength(10);
+  });
+
+  it("恰好 3 行时没有「查看全部」(没有更多可展开)", () => {
+    const { container } = render(<LeaderboardCard title="短榜" rows={rows(3)} />);
+    expect(container.textContent).not.toContain("查看全部");
   });
 });
 

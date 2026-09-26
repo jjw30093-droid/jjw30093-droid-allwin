@@ -93,12 +93,11 @@ test("首页匿名可浏览", async ({ page }) => {
 
   const bottomNav = page.getByTestId("mobile-bottom-nav");
   await expect(bottomNav).toBeVisible();
-  // "我的"2026-08-23 起恒定指向 /account(不论登录状态),由 /account 自己
-  // 处理匿名态展示(已验证该页面有 anonymous 分支,不是裸跳转/空白页),
-  // 不再是 authed ? "/account" : "/login" 这种在导航层判断认证状态的写法。
+  // "我的"(2026-09-26 起,手机端体验第二批):匿名 → /login,已登录 → /account
+  // (已登录分支在 e2e/auth.spec.ts 里验证)。此前(2026-08-23)曾恒定指向 /account。
   await expect(bottomNav.getByRole("link", { name: "我的" })).toHaveAttribute(
     "href",
-    "/account",
+    "/login",
   );
 
   expect(

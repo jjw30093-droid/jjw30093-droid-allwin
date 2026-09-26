@@ -100,8 +100,6 @@ function renderFinishedDetail() {
       analysis={null}
       report={reportFixture()}
       preview={null}
-      returnTo="/matches"
-      returnLabel="返回"
       previousMatch={null}
       nextMatch={null}
     />,

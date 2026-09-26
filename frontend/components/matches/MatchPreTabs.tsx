@@ -8,6 +8,7 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { Tabs } from "@/components/ui/Tabs";
 import styles from "./MatchTabs.module.css";
 
 export type MatchPreTabKey = "highlights" | "data" | "odds";
@@ -29,36 +30,21 @@ export function MatchPreTabs({
 }) {
   const [active, setActive] = useState<MatchPreTabKey>("highlights");
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const idx = TABS.findIndex((t) => t.key === active);
-    const next = e.key === "ArrowRight" ? (idx + 1) % TABS.length : (idx + TABS.length - 1) % TABS.length;
-    setActive(TABS[next].key);
-    (document.getElementById(`match-pretab-${TABS[next].key}`) as HTMLElement | null)?.focus();
-  };
-
   const panels: Record<MatchPreTabKey, ReactNode> = { highlights, data, odds };
 
   return (
     <div className={styles.wrap}>
-      <div role="tablist" aria-label="比赛内容切换" className={styles.tablistPre} onKeyDown={onKeyDown}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            id={`match-pretab-${t.key}`}
-            role="tab"
-            type="button"
-            aria-selected={active === t.key}
-            aria-controls={`match-prepanel-${t.key}`}
-            tabIndex={active === t.key ? 0 : -1}
-            className={active === t.key ? styles.active : styles.link}
-            onClick={() => setActive(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        ariaLabel="比赛内容切换"
+        activeKey={active}
+        onSelect={(k) => setActive(k as MatchPreTabKey)}
+        items={TABS.map((t) => ({
+          key: t.key,
+          label: t.label,
+          id: `match-pretab-${t.key}`,
+          controls: `match-prepanel-${t.key}`,
+        }))}
+      />
       {TABS.map((t) => (
         <div
           key={t.key}

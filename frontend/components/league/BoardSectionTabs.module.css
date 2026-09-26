@@ -1,0 +1,20 @@
+/* 吸顶条:贴在站点顶栏正下方。背景用页面底色,榜单卡片从它下面滚过去时不会透出来 */
+.bar {
+  position: sticky;
+  top: var(--site-header-h, 57px);
+  z-index: 40; /* 低于顶栏(50)与底部导航(60) */
+  margin-top: 0;
+  background: var(--bg);
+}
+
+/* Tabs 自带下边距/分隔线:吸顶条里要紧凑,固定 44px 高的一行(与 BoardSectionTabs.tsx 里的 BAR_H 对应) */
+.tabs {
+  margin-bottom: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.tabs > div {
+  width: 100%;
+}

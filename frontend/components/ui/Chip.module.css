@@ -1,0 +1,40 @@
+/* 筛选类 Chip:全站唯一样式 */
+
+.chip,
+.chipActive {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 5px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-family: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chip {
+  color: var(--ink-2);
+  background: var(--surface);
+}
+
+.chip:hover {
+  background: var(--surface-2);
+}
+
+.chipActive {
+  color: #fff;
+  background: var(--gold-grad);
+  font-weight: 700;
+  border-color: transparent;
+}
+
+.chip:focus-visible,
+.chipActive:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-teal) 42%, transparent);
+  outline-offset: 2px;
+}

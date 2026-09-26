@@ -7,10 +7,9 @@
 import Link from "next/link";
 import type { MatchSummary } from "@/lib/api-v1";
 import { buildMatchHref } from "@/lib/match-links";
-import { LocalTime } from "./LocalTime";
 import { WinProbabilityBar } from "./WinProbabilityBar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { STATUS_ZH } from "./zh";
+import { STATUS_ZH, formatBeijingHM } from "./zh";
 import styles from "./MatchRow.module.css";
 
 /**
@@ -33,6 +32,9 @@ export function MatchRow({
   returnTo?: string;
 }) {
   const finished = match.status === "Finish";
+  // 卡片内只显示开球时间(北京时间,如 18:00):日期已在分组标题里,不再重复。
+  // 来源只给了日期、没有精确开球时刻时写"时间待定",不拿日期顶替。
+  const kickoffHM = match.kickoff_at_utc ? formatBeijingHM(match.kickoff_at_utc) : null;
   const detailHref = buildMatchHref(match.match_id, returnTo);
   return (
     <Link href={detailHref} className={styles.row}>
@@ -51,10 +53,10 @@ export function MatchRow({
           </span>
         ) : (
           <span className={`${styles.date} num`}>
-            {match.kickoff_at_utc ? (
-              <LocalTime iso={match.kickoff_at_utc} fallback={match.date_utc} />
+            {match.kickoff_at_utc && kickoffHM ? (
+              <time dateTime={match.kickoff_at_utc}>{kickoffHM}</time>
             ) : (
-              match.date_utc
+              "时间待定"
             )}
           </span>
         )}

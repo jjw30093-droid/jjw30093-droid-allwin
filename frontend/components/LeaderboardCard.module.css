@@ -5,7 +5,7 @@
   padding: 16px 18px;
 }
 
-/* 原生 <details> 的默认三角要去掉,箭头由 .chevron 自己画 */
+/* 原生 <details> 的默认三角要去掉 */
 .summary {
   list-style: none;
   cursor: pointer;
@@ -20,7 +20,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 9px;
 }
 
 .title {
@@ -29,19 +29,32 @@
   font-size: 14.5px;
 }
 
-/* 右上角展开箭头:收起时指右,展开后转 90° 指下 */
-.chevron {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--ink-3);
-  border-bottom: 2px solid var(--ink-3);
-  transform: rotate(-45deg);
-  transition: transform 0.15s ease;
+/* 「查看全部 / 收起」:标题行右侧的文字链接。触控区 ≥44×44,但用负外边距
+ * 抵消多出来的高度(标题行本身约 21px,44px 的盒子上下各 -12px),不增加卡片高度 */
+.viewAll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -12px 0 -12px auto;
+  color: var(--brand-teal);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.card[open] .chevron {
-  transform: rotate(45deg);
+.viewAllClosed::after {
+  content: " ▾";
+}
+
+.viewAllOpen::after {
+  content: " ▴";
+}
+
+.card:not([open]) .viewAllOpen,
+.card[open] .viewAllClosed {
+  display: none;
 }
 
 .list {

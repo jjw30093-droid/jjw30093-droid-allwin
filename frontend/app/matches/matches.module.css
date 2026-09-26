@@ -32,38 +32,10 @@
  * 3px padding + 1px 边框会让这一行变成 52px,而移动端首屏"第一场比赛
  * y < 495px"的余量只有个位数(375px 实测:加切换器前 470px,52px 版本 489px,
  * 现在这版 481px)。 */
-.modeSwitch {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.mode,
-.modeOn {
-  font-size: 13px;
-  border-radius: var(--r-pill);
-  padding: 5px 18px;
-  text-decoration: none;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-}
-
-.mode {
-  color: var(--ink-2);
-  background: var(--surface);
-  border-color: var(--border);
-}
-
-.mode:hover {
-  background: var(--surface-2);
-}
-
-.modeOn {
-  color: #fff;
-  background: var(--gold-grad);
-  font-weight: 700;
+/* 赛程/赛果切换用全站统一的 Tabs,在标题右侧:去掉 Tabs 自带的分隔线与下边距 */
+.modeTabs {
+  margin: 0;
+  border-bottom: none;
 }
 
 .title {
@@ -72,15 +44,9 @@
   margin: 0;
 }
 
-.leagueDirectoryLink {
-  display: inline-block;
-  margin: -10px 0 18px;
-  color: var(--gold-300);
-  font-size: 13px;
-  text-decoration: none;
-}
-
 .countChip {
+  display: inline-block;
+  margin-bottom: 12px;
   font-size: 13px;
   color: var(--ink-2);
   background: var(--surface);
@@ -103,48 +69,10 @@
   margin-bottom: 20px;
 }
 
-.chipRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 .chipLabel {
   font-size: 12px;
   color: var(--ink-3);
   min-width: 32px;
-}
-
-.chip,
-.chipActive {
-  font-size: 13px;
-  border-radius: var(--r-pill);
-  padding: 5px 14px;
-  text-decoration: none;
-  border: 1px solid var(--border);
-  /* 触控区 ≥44×44px(CLAUDE.md §11.2):只靠 padding/最小高度撑开点击区,
-   * 不放大字号——chip 是筛选标签,不是正文。 */
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chip {
-  color: var(--ink-2);
-  background: var(--surface);
-}
-
-.chip:hover {
-  background: var(--surface-2);
-}
-
-.chipActive {
-  color: #fff;
-  background: var(--gold-grad);
-  font-weight: 700;
-  border-color: transparent;
 }
 
 .proBadge {
@@ -157,11 +85,6 @@
   border-radius: var(--r-pill);
   padding: 1px 6px;
   vertical-align: 1px;
-}
-
-.chipActive .proBadge {
-  color: #fff;
-  border-color: #fff;
 }
 
 .dateForm {
@@ -226,33 +149,54 @@
 /* 与 match-detail.module.css::metaDetails/metaSummary 同款折叠样式,
    保持全站折叠区块视觉一致。 */
 
+/* 「更多筛选」:收起时只是一个带图标的小按钮;展开后内容出现在它下方的卡片里 */
 .moreFilters {
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  padding: 10px 14px;
-  background: var(--surface);
+  align-self: flex-start;
 }
 
 .moreFiltersSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
+  list-style: none;
+  min-height: 44px; /* 触控区 ≥44px */
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
   font-size: 13px;
   font-weight: 700;
   color: var(--ink-2);
-  /* 折叠触发器本身的触控区 ≥44px 高;保留原生 <summary> 的
-   * display:list-item(不改成 flex),避免丢掉浏览器默认的折叠三角标记——
-   * 用 line-height 撑开单行文字的可点击高度即可。 */
-  min-height: 44px;
-  line-height: 44px;
+}
+
+.moreFiltersSummary::-webkit-details-marker {
+  display: none;
+}
+
+.moreFiltersIcon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
 }
 
 .moreFilters[open] .moreFiltersSummary {
-  margin-bottom: 10px;
+  color: var(--brand-teal);
+  border-color: var(--brand-teal);
 }
 
 .moreFiltersBody {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
 }
 
 /* ── 列表 ── */
@@ -385,16 +329,6 @@
     padding-inline: 12px;
   }
 
-  .chipRow {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 3px;
-  }
-
-  .chip,
-  .chipActive {
-    flex: 0 0 auto;
-  }
 }
 
 /* D1:默认时间窗自动放宽的如实提示 */

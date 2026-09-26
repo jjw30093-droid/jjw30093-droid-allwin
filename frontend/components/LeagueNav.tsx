@@ -1,5 +1,4 @@
-import Link from "next/link";
-import styles from "./LeagueNav.module.css";
+import { Tabs } from "@/components/ui/Tabs";
 
 const TABS = [
   // 速览排第一:四张图(进球时段/常见比分/大小球/主平客)全部来自银层表,
@@ -11,6 +10,7 @@ const TABS = [
   { key: "players", label: "球员榜", path: "players" },
 ] as const;
 
+/** 联赛二级导航:全站统一的 Tabs(链接形态,横向可滚动,选中态底部粗线 + 主色文字)。 */
 export function LeagueNav({
   leagueId,
   active,
@@ -21,21 +21,16 @@ export function LeagueNav({
   season?: string;
 }) {
   return (
-    <nav className={styles.nav}>
-      {TABS.map((t) => {
-        const href = season
+    <Tabs
+      ariaLabel="联赛导航"
+      activeKey={active}
+      items={TABS.map((t) => ({
+        key: t.key,
+        label: t.label,
+        href: season
           ? `/league/${leagueId}/${t.path}?season=${encodeURIComponent(season)}`
-          : `/league/${leagueId}/${t.path}`;
-        return (
-          <Link
-            key={t.key}
-            href={href}
-            className={t.key === active ? styles.active : styles.link}
-          >
-            {t.label}
-          </Link>
-        );
-      })}
-    </nav>
+          : `/league/${leagueId}/${t.path}`,
+      }))}
+    />
   );
 }

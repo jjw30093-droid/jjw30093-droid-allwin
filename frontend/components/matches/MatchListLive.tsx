@@ -55,6 +55,8 @@ import {
   defaultWindowFor,
   type MatchFilters as Filters,
 } from "@/lib/match-filters";
+import { Chip } from "@/components/ui/Chip";
+import { ChipRow } from "@/components/ui/ChipRow";
 import { MatchRow } from "./MatchRow";
 import { beijingDateKey, formatDateHeadingZh } from "./zh";
 import styles from "@/app/matches/matches.module.css";
@@ -190,46 +192,41 @@ export function MatchListLive({
           高频筛选留在这里始终可见;"状态/赛季/日期/球队搜索"收进下面默认
           折叠的"更多筛选"(见文件头注释)。 */}
       <div className={styles.filters}>
-        <div className={styles.chipRow}>
-          <span className={styles.chipLabel}>时间</span>
+        <ChipRow label="时间">
           {/* 刻意**不**写 status:"upcoming" —— 那是修掉的 bug:用户切到
               已完赛后点任意时间 chip 就被弹回赛程,赛果里等于没有时间筛选。
               保留当前 status,时间与状态是两个正交维度。 */}
           {windowTabsFor(status).map(([value, label]) => (
-            <Link
+            <Chip
               key={value}
+              active={window === value}
               href={buildMatchesHref(filters, {
                 window: value,
                 date: undefined,
                 page: 1,
               })}
-              className={window === value ? styles.chipActive : styles.chip}
             >
               {label}
-            </Link>
+            </Chip>
           ))}
-        </div>
-        <div className={styles.chipRow}>
-          <span className={styles.chipLabel}>联赛</span>
-          <Link
-            href={buildMatchesHref(filters, { league: undefined, page: 1 })}
-            className={league == null ? styles.chipActive : styles.chip}
-          >
+        </ChipRow>
+        <ChipRow label="联赛">
+          <Chip active={league == null} href={buildMatchesHref(filters, { league: undefined, page: 1 })}>
             全部
-          </Link>
+          </Chip>
           {leagues.map((l) => (
-            <Link
+            <Chip
               key={l.league_id}
+              active={league === l.league_id}
               href={buildMatchesHref(filters, { league: l.league_id, page: 1 })}
-              className={league === l.league_id ? styles.chipActive : styles.chip}
             >
               {l.name_zh}
               {l.data_status !== "AVAILABLE" && (
                 <span className={styles.proBadge}>暂未收录</span>
               )}
-            </Link>
+            </Chip>
           ))}
-        </div>
+        </ChipRow>
 
         {/* 更多筛选:状态 + 赛季 + 日期 + 球队搜索,默认折叠。用户已经带着
             这四项里任意一项的筛选值进来时自动展开,不藏起用户已选的条件。
@@ -238,40 +235,42 @@ export function MatchListLive({
           className={styles.moreFilters}
           open={status !== "upcoming" || Boolean(season) || Boolean(date) || Boolean(q)}
         >
-          <summary className={styles.moreFiltersSummary}>更多筛选</summary>
+          <summary className={styles.moreFiltersSummary}>
+            {/* 「更多筛选」收成一个带图标的小按钮(2026-09-26) */}
+            <svg viewBox="0 0 24 24" aria-hidden className={styles.moreFiltersIcon}>
+              <path d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            更多筛选
+          </summary>
           <div className={styles.moreFiltersBody}>
-            <div className={styles.chipRow}>
-              <span className={styles.chipLabel}>状态</span>
+            <ChipRow label="状态">
               {/* 切状态必须同时改写 window:两侧的时间 token 不通用(带着
                   past7d 切回未开赛 = 恒空,而 isWindowAutoWidenEligible 因为
                   window 显式存在也不会放宽 → 白板且无任何解释)。统一走
                   defaultWindowFor,不再硬编码 "all"。 */}
               {STATUS_TABS.map(([value, label]) => (
-                <Link
+                <Chip
                   key={label}
+                  active={status === (value ?? "all")}
                   href={buildMatchesHref(filters, {
                     status: value ?? "all",
                     window: defaultWindowFor(value ?? "all"),
                     page: 1,
                   })}
-                  className={status === (value ?? "all") ? styles.chipActive : styles.chip}
                 >
                   {label}
-                </Link>
+                </Chip>
               ))}
-            </div>
+            </ChipRow>
             {seasonOptions.length > 0 && (
-              <div className={styles.chipRow}>
-                <span className={styles.chipLabel}>赛季</span>
-                <Link
-                  href={buildMatchesHref(filters, { season: undefined, page: 1 })}
-                  className={season == null ? styles.chipActive : styles.chip}
-                >
+              <ChipRow label="赛季">
+                <Chip active={season == null} href={buildMatchesHref(filters, { season: undefined, page: 1 })}>
                   全部
-                </Link>
+                </Chip>
                 {seasonOptions.map((s) => (
-                  <Link
+                  <Chip
                     key={s}
+                    active={season === s}
                     href={buildMatchesHref(filters, {
                       season: s,
                       status: "all",
@@ -279,12 +278,11 @@ export function MatchListLive({
                       date: undefined,
                       page: 1,
                     })}
-                    className={season === s ? styles.chipActive : styles.chip}
                   >
                     {s}
-                  </Link>
+                  </Chip>
                 ))}
-              </div>
+              </ChipRow>
             )}
             <form method="get" action="/matches" className={styles.dateForm}>
               <label className={styles.chipLabel} htmlFor="matches-date">

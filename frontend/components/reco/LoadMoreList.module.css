@@ -1,0 +1,27 @@
+.more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--brand-teal);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.more:hover {
+  background: var(--surface-2);
+}
+
+.count {
+  color: var(--ink-3);
+  font-weight: 500;
+  font-size: 12px;
+}

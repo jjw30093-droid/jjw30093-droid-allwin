@@ -43,7 +43,7 @@ describe("MemberMatchDetail:401/403 不再是可达状态,不得渲染登录门�
   it("意外收到 401 时不出现登录门禁卡片,归入通用错误态(可重试)", async () => {
     mockDetailStatus(401);
     render(
-      <MemberMatchDetail matchId={1} returnTo="/matches" returnLabel="比赛列表" />,
+      <MemberMatchDetail matchId={1} />,
     );
     await waitFor(() => expect(screen.queryByText("数据暂时无法加载")).not.toBeNull());
     expect(screen.queryByText(/登录/)).toBeNull();
@@ -53,7 +53,7 @@ describe("MemberMatchDetail:401/403 不再是可达状态,不得渲染登录门�
   it("意外收到 403 时同样不出现登录门禁卡片", async () => {
     mockDetailStatus(403);
     render(
-      <MemberMatchDetail matchId={1} returnTo="/matches" returnLabel="比赛列表" />,
+      <MemberMatchDetail matchId={1} />,
     );
     await waitFor(() => expect(screen.queryByText("数据暂时无法加载")).not.toBeNull());
     expect(screen.queryByText(/登录/)).toBeNull();
@@ -62,7 +62,7 @@ describe("MemberMatchDetail:401/403 不再是可达状态,不得渲染登录门�
   it("404 仍然是比赛不存在的诚实说明(未受影响)", async () => {
     mockDetailStatus(404);
     render(
-      <MemberMatchDetail matchId={999999} returnTo="/matches" returnLabel="比赛列表" />,
+      <MemberMatchDetail matchId={999999} />,
     );
     await waitFor(() => expect(screen.queryByText("比赛不存在")).not.toBeNull());
   });

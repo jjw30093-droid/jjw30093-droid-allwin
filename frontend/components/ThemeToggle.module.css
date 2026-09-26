@@ -66,3 +66,20 @@
     transition: none;
   }
 }
+
+/* 手机端:纯图标(去掉边框和底色),点击区域仍保持 44×44(2026-09-26) */
+@media (max-width: 640px) {
+  .toggle {
+    border: none;
+    background: transparent;
+  }
+
+  .toggle:hover {
+    background: transparent;
+  }
+
+  .toggle svg {
+    width: 22px;
+    height: 22px;
+  }
+}

@@ -51,12 +51,8 @@ type State =
 
 export function MemberMatchDetail({
   matchId,
-  returnTo,
-  returnLabel,
 }: {
   matchId: number;
-  returnTo: string;
-  returnLabel: string;
 }) {
   const [state, setState] = useState<State>({ phase: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -168,8 +164,6 @@ export function MemberMatchDetail({
       analysis={data.analysis}
       report={data.report}
       preview={data.preview}
-      returnTo={returnTo}
-      returnLabel={returnLabel}
       previousMatch={data.previousMatch}
       nextMatch={data.nextMatch}
     />

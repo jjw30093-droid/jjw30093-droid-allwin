@@ -237,9 +237,13 @@ html {
   }
 }
 
+/* min-height 而不是 height:100%(2026-09-26):body 被锁成一屏高时,顶栏的
+ * position:sticky 只在"第一屏"内有效——滚过 ~780px 后整个顶栏就跟着 body 的下边界
+ * 一起被推出屏幕(生产上长页面一直如此)。吸顶的榜单分组条要贴在顶栏正下方,
+ * 依赖顶栏真的吸顶,所以改成 min-height。 */
 html,
 body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -282,5 +286,30 @@ a {
 @media (max-width: 767px) {
   body > main {
     --bottom-nav-clearance: 16px;
+  }
+}
+
+/* 手机端:顶部栏与第一块内容之间的留白统一为 16px(2026-09-26)。各页 .page 原来
+   各写各的 padding-top(20–32px),再叠首个子元素自己的 margin-top,加起来 30–50px。
+   用 !important 是有意的全局归一:这里要压过每个页面 CSS Module 里的 padding。 */
+@media (max-width: 767px) {
+  body > main {
+    padding-top: 16px !important;
+  }
+
+  body > main > :first-child {
+    margin-top: 0 !important;
+  }
+}
+
+/* 站点顶栏高度(含 1px 下边框):给吸顶元素(榜单分组条等)定位用。与 SiteNav.module.css 的
+   .inner min-height(桌面 66 / 手机 56)保持同步。 */
+:root {
+  --site-header-h: 67px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --site-header-h: 57px;
   }
 }

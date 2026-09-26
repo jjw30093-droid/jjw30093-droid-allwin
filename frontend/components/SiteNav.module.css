@@ -159,6 +159,11 @@
   display: none;
 }
 
+/* 比赛详情页顶部栏左侧的返回箭头:只在手机显示 */
+.backBtn {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .inner {
     min-height: 56px;
@@ -182,6 +187,39 @@
 
   .nav {
     display: none;
+  }
+
+  /* 顶部栏不再放"登录 / 账户"入口(2026-09-26):登录和账户入口在底部导航的「我的」 */
+  .account {
+    display: none;
+  }
+
+  .backBtn {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    margin-left: -8px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .backBtn + .brand {
+    margin-right: auto;
+  }
+
+  .backBtn svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
   }
 
   .accountLink {

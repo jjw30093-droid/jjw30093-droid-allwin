@@ -447,8 +447,6 @@ export function MatchDetailBody({
   analysis,
   report = null,
   preview = null,
-  returnTo,
-  returnLabel,
   previousMatch,
   nextMatch,
 }: {
@@ -459,8 +457,6 @@ export function MatchDetailBody({
   report?: MatchReportResponse | null;
   /** /matches/{id}/preview(阵容/伤停快照 + 风格 + 球员):数据 tab 阵容/风格/球员三个子 tab 的数据源 */
   preview?: MatchPreviewResponse | null;
-  returnTo: string;
-  returnLabel: string;
   previousMatch: MatchSummary | null;
   nextMatch: MatchSummary | null;
 }) {
@@ -471,23 +467,14 @@ export function MatchDetailBody({
   return (
     <main className={styles.page}>
       <RecordVisit matchId={idNum} />
-      <nav className={styles.contextNav} aria-label="比赛上下文导航">
-        <Link href={returnTo}>← {returnLabel}</Link>
-        <span>
-          {previousMatch && (
-            <Link href={`/matches/${previousMatch.match_id}`}>上一场</Link>
-          )}
+      {/* 「← 返回当前筛选结果」与「查看更多赛果」已删除(2026-09-26):返回改为顶栏左侧的
+          返回箭头(components/SiteNav.tsx::BackArrow);这里只留上一场/下一场。 */}
+      {(previousMatch || nextMatch) && (
+        <nav className={styles.contextNav} aria-label="比赛上下文导航">
+          {previousMatch && <Link href={`/matches/${previousMatch.match_id}`}>上一场</Link>}
           {nextMatch && <Link href={`/matches/${nextMatch.match_id}`}>下一场</Link>}
-          {/* 已完赛比赛不该把用户送回"未来七天赛程"——那是另一个语境。
-              指向赛果视图,用户能接着看别的已完赛比赛。 */}
-          <Link
-            href={finished ? "/matches?status=finished" : "/matches?status=upcoming&window=7d"}
-            className={styles.contextNavWide}
-          >
-            {finished ? "查看更多赛果" : "查看本周其他比赛"}
-          </Link>
-        </span>
-      </nav>
+        </nav>
+      )}
 
       {factReport ? (
         <MatchHeaderFinished detail={detail} />

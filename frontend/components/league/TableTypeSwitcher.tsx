@@ -6,9 +6,8 @@
  * 连 API 都出不去**,更进不了页面。这个切换器是它们的唯一入口。
  */
 
-import Link from "next/link";
+import { Tabs } from "@/components/ui/Tabs";
 import { buildLeagueSeasonHref } from "@/lib/league-links";
-import styles from "./SeasonSwitcher.module.css";
 
 export const TABLE_TYPES = [
   { key: "all", label: "总榜" },
@@ -40,22 +39,17 @@ export function TableTypeSwitcher({
   season?: string;
   active: TableTypeKey;
 }) {
+  // 榜别是页面级切换 → 全站统一的 Tabs(链接形态);切换时赛季带着走
   return (
-    <nav className={styles.chipRow} aria-label="选择榜别">
-      {TABLE_TYPES.map((t) => {
-        const isActive = t.key === active;
-        return (
-          <Link
-            key={t.key}
-            href={buildLeagueSeasonHref(leagueId, "standings", { season, tableType: t.key })}
-            className={isActive ? styles.chipActive : styles.chip}
-            aria-current={isActive ? "page" : undefined}
-            data-testid="table-type-chip"
-          >
-            {t.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <Tabs
+      ariaLabel="选择榜别"
+      activeKey={active}
+      items={TABLE_TYPES.map((t) => ({
+        key: t.key,
+        label: t.label,
+        href: buildLeagueSeasonHref(leagueId, "standings", { season, tableType: t.key }),
+        testId: "table-type-chip",
+      }))}
+    />
   );
 }

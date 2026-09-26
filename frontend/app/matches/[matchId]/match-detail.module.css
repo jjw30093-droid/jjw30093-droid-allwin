@@ -11,20 +11,14 @@
 }
 
 
+/* 上一场 / 下一场(返回入口已挪到顶栏的返回箭头) */
 .contextNav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  font-size: 13px;
-}
-
-.contextNav > span {
-  display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
 }
 
 .contextNav a {
@@ -35,37 +29,12 @@
   text-decoration: none;
 }
 
-.contextNav > a {
-  font-weight: 700;
-}
-
-/* "查看本周其他比赛"窄屏隐藏,只留返回/上一场/下一场三项(红线:砍列不缩字) */
-.contextNavWide {
-  display: none;
-}
-
-@media (min-width: 640px) {
-  .contextNavWide {
-    display: inline-flex;
-  }
-}
-
 .staleNotice {
   margin: 10px 0 14px;
   color: var(--loss);
   font-size: 13px;
 }
 
-@media (max-width: 620px) {
-  .contextNav {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .contextNav > span {
-    justify-content: flex-start;
-  }
-}
 
 /* 头部样式已迁到 MatchHeaderPre.module.css / MatchHeaderFinished.module.css
  * (2026-08-14 重设计:两种形态拆成独立组件,不再是本文件里的双分支)。 */

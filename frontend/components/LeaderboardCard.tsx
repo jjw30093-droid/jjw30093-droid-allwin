@@ -34,6 +34,8 @@ export interface LeaderboardRow {
 
 /** 默认露出的行数,其余折叠(对齐 FotMob 联赛球队/球员数据 tab 的 top-3 卡)。 */
 const VISIBLE_ROWS = 3;
+/** 点「查看全部」最多展开到第几名(2026-09-26:手机端榜单太长,展开上限 10 名)。 */
+const MAX_ROWS = 10;
 
 function RowAvatar({ avatar, name }: { avatar: LeaderboardAvatar; name: string }) {
   if (avatar.kind === "player") {
@@ -135,7 +137,7 @@ export function LeaderboardCard({
   }
 
   const head = rows.slice(0, VISIBLE_ROWS);
-  const rest = rows.slice(VISIBLE_ROWS);
+  const rest = rows.slice(VISIBLE_ROWS, MAX_ROWS);
 
   // 没有更多行时不套 <details>,免得出现一个点了没反应的箭头
   if (rest.length === 0) {
@@ -158,12 +160,19 @@ export function LeaderboardCard({
     <details className={styles.card}>
       <summary
         className={styles.summary}
-        aria-label={`${title}${highIsBad ? "(越多越差)" : ""},展开全部 ${rows.length} 名`}
+        aria-label={`${title}${highIsBad ? "(越多越差)" : ""},查看全部 ${Math.min(rows.length, MAX_ROWS)} 名`}
       >
         <span className={styles.head}>
           <span className={styles.title}>{title}</span>
           {badge}
-          <span className={styles.chevron} aria-hidden="true" />
+          {/* 「查看全部 / 收起」放在标题行右侧(2026-09-26 站长要求:不单独占一行、
+              不增加卡片高度)。展开后同一位置变成「收起」,文字切换靠 CSS 的 [open]
+              选择器,保持服务端渲染。整个 <summary> 本身就是点击目标,这里只是看得见的
+              文字提示;44×44 的触控区靠负外边距撑出来,不占布局高度。 */}
+          <span className={styles.viewAll} aria-hidden="true">
+            <span className={styles.viewAllClosed}>查看全部</span>
+            <span className={styles.viewAllOpen}>收起</span>
+          </span>
         </span>
         <Rows rows={head} start={1} />
       </summary>

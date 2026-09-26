@@ -45,6 +45,7 @@ import {
   slipTone,
   type Slip,
 } from "@/components/reco/TrackRecordPanel";
+import { Tabs } from "@/components/ui/Tabs";
 import styles from "./reco.module.css";
 
 export { SlipCard, slipTone };
@@ -216,29 +217,17 @@ function RecoBody() {
         </div>
       )}
 
-      <nav className={styles.tabs} aria-label="精选内容切换">
-        <Link
-          href="/reco?tab=public"
-          className={tab === "public" ? styles.tabActive : styles.tab}
-          aria-current={tab === "public" ? "page" : undefined}
-        >
-          每日公推
-        </Link>
-        <Link
-          href="/reco?tab=daily"
-          className={tab === "daily" ? styles.tabActive : styles.tab}
-          aria-current={tab === "daily" ? "page" : undefined}
-        >
-          今日精选
-        </Link>
-        <Link
-          href="/reco?tab=record"
-          className={tab === "record" ? styles.tabActive : styles.tab}
-          aria-current={tab === "record" ? "page" : undefined}
-        >
-          历史战绩
-        </Link>
-      </nav>
+      <Tabs
+        ariaLabel="精选内容切换"
+        activeKey={tab}
+        items={[
+          { key: "public", label: "每日公推", href: "/reco?tab=public" },
+          { key: "daily", label: "今日精选", href: "/reco?tab=daily" },
+          // 「历史战绩」并入精选页(2026-09-26):内容与 /track-record 相同(共用
+          // TrackRecordPanel),/track-record 路由保留,旧链接不失效。
+          { key: "record", label: "历史战绩", href: "/reco?tab=record" },
+        ]}
+      />
 
       {tab === "daily" ? (
         me === "loading" ? (
