@@ -7293,3 +7293,123 @@ URL 深链接 `?team=`;额外请求 `/standings`;面板堆全部 17 项;抖音 P
 **未执行**(被本地沙箱分类器拦下,需站长自己跑):`purge_stale_xref`
 (删掉热刺那条错配,注意必须**先确认再 purge**——PSV 那条 kdiff -19800 也在
 purge 射程内,`confirmed` 才是受保护状态)与随后的 `resolve_entities` 重跑。
+
+## 66. /api/v1/matches 慢查询修复(2026-09-27,只读诊断 + 方案 + 本地实测,
+未部署,等站长确认)
+
+### 66.1 线上影响(只读,`journalctl`/nginx 访问日志/生产备份只读副本)
+
+- `serving API timeout`(0b6dd76 于当日 05:05 UTC 上线 8 秒服务端超时起算,
+  经 687f072→b07387b 两次发布持续在线):journalctl 全文 0 次命中——8 秒
+  超时目前没有真的触发过,是好消息,但样本窗口只有约 2 小时。
+- nginx `rt=`/`urt=` 字段(格式于当日 05:44 UTC 上线,同样样本窗口约
+  1.5 小时):直接命中 `/api/v1/matches`(不含子路径)的行只有 17 条,10 种
+  参数组合,几乎每种 n=1——**样本单薄到不能算真正的 p50/p95**,原因是架构
+  层面的:多数 `/api/v1/matches` 真实流量是 Next.js 服务端组件在
+  127.0.0.1 直连 FastAPI(CLAUDE.md §10.2),完全不经过 nginx,nginx 只看得
+  到浏览器/爬虫直连该路径的极少数请求。有意义的是这些直连样本本身已经全部
+  ≥2s(2.17s~4.0s),与同期 FastAPI 侧慢请求日志(见下)量级一致。
+- FastAPI 侧慢请求日志(`slow_requests/slow_20260927.log`,阈值 2s,
+  覆盖全天):`/api/v1/matches` 当天 70 条命中,`min=2.127s p50=2.779s
+  p95=11.696s max=30.619s`——这是"≥2s 的尾部"分布,不是全量 p50(低于 2s
+  的请求不会被记录),但足以说明尾部确实又长又重。
+
+### 66.2 服务端取数缓存审计(`frontend/lib/api-v1.ts::serverGet`/
+`serverGetOptional`,默认 `cache:"no-store"`,显式传 `revalidate` 才走
+Next.js Data Cache)
+
+全部调用点(`grep serverGet(Optional)?<`)都已经传了 `revalidate`,没有裸的
+`no-store` 调用:首页(`page.tsx`)matches 主查询 60s、today/tomorrow/shots
+60s、reco/overview 120s、freshness 60s、五大联赛停赛提示 300s;`/matches`
+列表页 60s;`/matches/[matchId]` detail 120s、analysis 120s、report 300s、
+preview 120s;`/leagues` 60s;`/pricing` 300s;`/track-record`(页面级
+`export const revalidate=300`)。**这部分此前已经做到位,不是本次要修的
+缺口**——首页因此在构建产物里是 `○ /  1m`(静态 + 1 分钟 ISR),`/matches`
+与 `/matches/[matchId]` 因为读 `searchParams`/动态路由参数而是 `ƒ`(整页
+不进 Full Route Cache),但底层单个 `fetch()` 仍各自享有自己的 Data Cache
+revalidate 窗口(Next 16"前一代缓存模型",未开 `cacheComponents`,见
+`node_modules/next/dist/docs/01-app/02-guides/caching-without-cache-components.md`)。
+
+### 66.3 修复方案与本地实测(生产备份只读副本,`allwin.db` 830MB,
+`fadvise(DONTNEED)` 逐文件冷缓存,不动线上库、不用系统级 `drop_caches`)
+
+**先纠正一个中途发现的建模错误**:`backend/api/routes_public.py` 的
+`/api/v1/matches` 端点**无论是否传 `boost`,都无条件传
+`priority_match_ids=analysis_match_ids|odds_match_ids`**(生产实测
+`odds_match_ids`=13,562、`analysis_match_ids`=0,即 73% 的 `dim_match` 行)。
+`list_matches()` 据此在 `ORDER BY` 前面加一段
+`CASE WHEN Match_ID IN (13562 个值) THEN ... END`,这段 CASE 引用的是
+每次请求现算的 ad-hoc 集合,**任何持久化索引都无法满足这一层排序**——这意味
+着"排序走索引"这条诊断如果只测裸 SQL(不带这段 CASE)会显著低估真实生产
+查询的复杂度,本次已经用真实 13,562 规模的 IN-list 复测过全部 4 种调用,
+结论按"带不带这段 CASE"分两类:
+
+**方案(已实现、已跑通迁移,未部署)**:
+1. `dim_match` 新增 `sort_kickoff_utc TEXT GENERATED ALWAYS AS
+   (COALESCE(kickoff_at_utc, Date)) VIRTUAL` + 索引
+   `idx_dim_match_sort_kickoff(sort_kickoff_utc, Match_ID)`
+   (`backend/migrations/core/0023_dim_match_sort_kickoff.sql`)。选 VIRTUAL
+   不是 STORED——本机验证过 SQLite 的 `ALTER TABLE ADD COLUMN` 不允许新增
+   STORED 生成列("cannot add a STORED column");VIRTUAL 不占存储、索引仍能
+   正常建在其上,效果等价于表达式索引,只是有了可复用列名。**必须同迁移跑
+   `ANALYZE dim_match`**——本机验证过,索引建好但不 ANALYZE 时,SQLite 对
+   `League_ID IN (17 值)` 这类宽筛选的默认选择性估计不准,新索引即使存在
+   也不会被规划器选中;跑一次 ANALYZE 后才切换成
+   `SCAN...idx_dim_match_sort_kickoff`。
+2. `list_matches()` 的 `ORDER BY` 全部换用 `sort_kickoff_utc`(两个分支,
+   语义不变);窗口 WHERE 保留原有 `julianday(kickoff_at_utc)` 谓词不变
+   (正确性以它为准),**追加**一组冗余谓词 `sort_kickoff_utc >= ? AND < ?`
+   (同样的边界值)——不改变结果集(安全前提:`kickoff_at_utc` 落库统一
+   20 字符 `YYYY-MM-DDTHH:MM:SSZ`,全库抽样验证过,字符串比较与 julianday
+   数值比较结果一致),只是给规划器一个能配合新索引做范围 SEEK 的信号,
+   让 TEMP B-TREE(如果仍然需要)只需要排序"窗口内"的行,不必从 2020 年
+   最早的历史记录扫起。
+3. 生成列的两处冷知识,本机都验证过(不是猜的):`PRAGMA table_info` 会
+   **隐藏**生成列(`hidden=2`),`active_league_mvp.py::_insert_match` 那类
+   靠 `PRAGMA table_info` 动态拼列名的写路径因此不会误写这一列;隐式列表的
+   `INSERT INTO dim_match SELECT * FROM other.dim_match`(如
+   `backend/verify/merge_into_allwin.py`,一次性历史合并脚本)同样安全,
+   SQLite 正确推断出只需要非生成列。但 Python `sqlite3.Row` 的显式
+   `SELECT *` **会**把生成列带出来——`backend/queries/matches.py` 的三处
+   `SELECT * FROM dim_match` 消费方式都是按列名精确取字段
+   (`_row_to_summary` 等),多一个不读的字段不影响任何行为,已用测试钉住
+   这条"两种 API 行为不一致"的事实
+   (`tests/backend/test_matches_sort_kickoff_index.py`)。
+
+**基准结果**(4 种调用,冷缓存,`docs/current-state.md` 本节之外的详细
+命令记录在任务对话里,可复现):
+
+| 调用 | 旧(冷) | 新(冷) | 说明 |
+|---|---|---|---|
+| A 默认无筛选(裸 SQL,无 CASE) | 0.243s | 0.023s | ~10x,但**不代表真实调用**——真实调用带 CASE |
+| A 默认无筛选(带真实 13562-CASE) | 0.454s | 0.462s | **无改善**,CASE 主导,TEMP B-TREE 逃不掉 |
+| B 首页 boost(裸 SQL,无 CASE) | 0.462s | 0.019s | ~24x |
+| B 首页 boost(带真实 CASE,新 WHERE) | 0.479s | 0.035s | **~14x,这是真实生产查询的形状** |
+| C 单联赛 47(裸 SQL/带真实 CASE) | 0.118s/0.132s | 0.118s/0.132s | 本来就快(League_ID 选择性够高),无需改善也没有退化 |
+| D 赛果 finished(这条分支从不带 CASE) | 0.469s | 0.157s | ~3x,真实生产路径 |
+
+**已知遗留缺口(如实声明,本次不解决)**:任何"不带时间窗口 + 携带这段
+13,562-CASE"的调用(裸 `/api/v1/matches` 本身、赛季间歇期"自动放宽到全部
+未来赛程"的 `status=upcoming&window=all` 兜底)仍然是 TEMP B-TREE + 全表
+扫描量级,本次改动对它没有帮助。真实前端调用绝大多数是"首页/`/matches`
+默认访问 = `window=7d`"或"赛果 tab = 无 CASE",裸默认调用的真实流量目前
+主要来自 release.sh 自己的 `warm_up_live`/`business_smoke` 与直连 API 的
+爬虫(nginx 日志实测),不是普通用户浏览路径——但如果要彻底补上这个缺口,
+需要更深的改动(把 priority 信号物化成持久化列,或按层分别查询后在应用层
+合并),复杂度和风险都高于本次改动,留给站长单独决定要不要做,不在本次
+迁移范围内。
+
+### 66.4 涉及文件
+
+- `backend/migrations/core/0023_dim_match_sort_kickoff.sql`(新)
+- `backend/queries/matches.py`(ORDER BY 换列 + 窗口 WHERE 追加冗余谓词)
+- `tests/backend/test_matches_sort_kickoff_index.py`(新,排序等价性 +
+  生成列行为)
+- `tests/backend/test_five_critical_product_fixes.py`、
+  `tests/backend/test_match_past_windows.py`(手工建表的测试 schema 补上
+  新生成列,否则报 `no such column: sort_kickoff_utc`)
+- `tests/backend/test_schedule_state_schema.py`(既有"随 migrations 数量
+  机械增长"的计数断言 +1,新增一行 `0023_dim_match_sort_kickoff.sql`)
+
+全量 `pytest tests/backend/` 复核结果见任务汇报(未部署,等站长确认后再
+`git push` + 服务器 `release.sh`)。

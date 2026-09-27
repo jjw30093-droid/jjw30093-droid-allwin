@@ -46,6 +46,10 @@ def _core() -> sqlite3.Connection:
           League_ID INTEGER NOT NULL,
           Date TEXT NOT NULL,
           kickoff_at_utc TEXT,
+          -- 迁移 0023(2026-09-27):与生产 dim_match 的生成列保持一致,
+          -- 否则 list_matches() 里新增的 sort_kickoff_utc 窗口谓词报
+          -- "no such column"。
+          sort_kickoff_utc TEXT GENERATED ALWAYS AS (COALESCE(kickoff_at_utc, Date)) VIRTUAL,
           Match_Round TEXT,
           status TEXT NOT NULL,
           Home_Team_ID INTEGER,

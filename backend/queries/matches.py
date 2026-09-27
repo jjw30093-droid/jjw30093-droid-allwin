@@ -242,8 +242,21 @@ def list_matches(
     if start is not None:
         where.append("julianday(kickoff_at_utc) >= julianday(?)")
         params.append(start)
+        # 冗余谓词(2026-09-27,性能诊断见 docs/current-state.md):不改变结果集
+        # ——上面这条 julianday(kickoff_at_utc) 条件已经保证走到这里的行
+        # kickoff_at_utc 非空,而 sort_kickoff_utc(见迁移 0023)在非空时就是
+        # kickoff_at_utc 本身;加这条只是给 SQLite 一个能配合
+        # idx_dim_match_sort_kickoff 做范围 SEEK 的谓词,不必从索引最早的历史
+        # 记录开始扫描。安全前提:kickoff_at_utc 落库统一
+        # 'YYYY-MM-DDTHH:MM:SSZ'(20 字符,以 Z 结尾),字符串比较与 julianday
+        # 数值比较结果一致(全库抽样验证,tests/backend/test_matches_query.py
+        # 固定断言)。
+        where.append("sort_kickoff_utc >= ?")
+        params.append(start)
     if end is not None:
         where.append("julianday(kickoff_at_utc) < julianday(?)")
+        params.append(end)
+        where.append("sort_kickoff_utc < ?")
         params.append(end)
     cleaned_query = query.strip() if isinstance(query, str) else ""
     if cleaned_query:
@@ -308,7 +321,12 @@ def list_matches(
         # 但把"免费且已发布概率"提到前面对赛程有意义、对赛果只会打乱时间倒序,
         # 用户翻赛果就是要按时间从近到远看。所以 boost=free_predicted 对
         # status=finished 无效是**设计如此**,不是漏了,别当成 bug 补上。
-        order = "julianday(COALESCE(kickoff_at_utc, Date)) DESC, Match_ID DESC"
+        # sort_kickoff_utc(迁移 0023 新增的 VIRTUAL 生成列,值就是
+        # COALESCE(kickoff_at_utc, Date),语义不变)——这条分支没有 priority
+        # CASE 前缀,改用这个列后 SQLite 能直接用 idx_dim_match_sort_kickoff
+        # 走索引 DESC 扫描 + LIMIT 提前终止,不必对匹配到的全部行做
+        # TEMP B-TREE 排序(只读基准见 docs/current-state.md)。
+        order = "sort_kickoff_utc DESC, Match_ID DESC"
     else:
         # 两层优先级(2026-08-16 首页重点位确定性选场修复):
         # top_priority_match_ids 排在 priority_match_ids 之前——原先单一
@@ -333,9 +351,17 @@ def list_matches(
             priority_order = f"CASE {' '.join(when_clauses)} ELSE {len(tiers)} END, "
             for _, ids in tiers:
                 order_params.extend(ids)
+        # sort_kickoff_utc 同上一分支;这条分支通常带 priority CASE
+        # (routes_public.py 每次都传 priority_match_ids),CASE 前缀本身不能
+        # 走索引,所以 tiers 非空时这里换列本身不解决 TEMP B-TREE(残留问题,
+        # 已如实记录在只读诊断里,不在本次改动范围)——但换成这个列能让上面
+        # WHERE 里新增的 sort_kickoff_utc 范围谓词被规划器识别并走索引 SEEK,
+        # 缩小喂给 TEMP B-TREE 排序的行数(window 收窄时效果显著,见基准数据);
+        # tiers 为空时(理论上的 list_matches 其它调用方)则完全不需要
+        # TEMP B-TREE。
         order = (
             priority_order
-            + "julianday(COALESCE(kickoff_at_utc, Date)) ASC, Match_ID ASC"
+            + "sort_kickoff_utc ASC, Match_ID ASC"
         )
     rows = conn.execute(
         f"SELECT * FROM dim_match WHERE {cond} ORDER BY {order} LIMIT ? OFFSET ?",

@@ -123,10 +123,10 @@ def _staged_core_migrations(tmp_path: Path, names: tuple[str, ...]) -> Path:
 
 def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
     db_path = tmp_path / "fresh.db"
-    # 22 = 0001..0022(0022 给 fact_player_match_stats 再加三列,网页版逐
-    # tab 对拍真实比赛时顺手挖出的第三批 __total 缺口;这个数字随 core
-    # migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 22
+    # 23 = 0001..0023(0023 给 dim_match 新增 VIRTUAL 生成列
+    # sort_kickoff_utc + 索引,/api/v1/matches 排序与时间窗口走索引;这个数字
+    # 随 core migrations 目录里的文件数机械增长,不是本测试关心的逻辑)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 23
     assert schedule.apply_schedule_state_schema_v1(db_path) == 0
     conn = sqlite3.connect(db_path)
     try:
@@ -159,6 +159,7 @@ def test_fresh_migration_exact_schema_and_rerun_are_idempotent(tmp_path):
             (20, "0020_aerials_total_and_line_breaking_passes.sql"),
             (21, "0021_dribbles_succeeded_total.sql"),
             (22, "0022_crosses_longballs_grounduels_total.sql"),
+            (23, "0023_dim_match_sort_kickoff.sql"),
         ]
     finally:
         conn.close()
@@ -204,8 +205,11 @@ def test_legacy_core_upgrade_preserves_dim_match_columns_and_rows(tmp_path):
     # 0019(silver_player_season(_ratios) 两张新表,同样不碰 dim_match)再使它变为 17;
     # 0020(fact_player_match_stats 加两列,同样不碰 dim_match)再使它变为 18;
     # 0021(fact_player_match_stats 再加一列,同样不碰 dim_match)再使它变为 19;
-    # 0022(fact_player_match_stats 再加三列,同样不碰 dim_match)再使它变为 20。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 20
+    # 0022(fact_player_match_stats 再加三列,同样不碰 dim_match)再使它变为 20;
+    # 0023(给 dim_match 新增 VIRTUAL 生成列 sort_kickoff_utc + 索引)再使它变为
+    # 21——生成列不出现在 PRAGMA table_info 里(SQLite 对生成列的既有约定,
+    # 迁移文件头注释有实测记录),所以下面 new_columns 的期望列表不需要跟着改。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 21
     conn = sqlite3.connect(db_path)
     try:
         after_columns = conn.execute("PRAGMA table_info(dim_match)").fetchall()
@@ -246,8 +250,9 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
     conn.commit()
     conn.close()
 
-    # 21 = 0002..0022(0022 给 fact_player_match_stats 再加三列,机械增长)。
-    assert schedule.apply_schedule_state_schema_v1(db_path) == 21
+    # 22 = 0002..0023(0023 给 dim_match 新增 VIRTUAL 生成列
+    # sort_kickoff_utc + 索引,机械增长)。
+    assert schedule.apply_schedule_state_schema_v1(db_path) == 22
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -261,7 +266,7 @@ def test_current_real_v1_shape_upgrades_through_0002_0003_0004_0005_0006_0007_00
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall() == [
             (1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,),
-            (16,), (17,), (18,), (19,), (20,), (21,), (22,),
+            (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,),
         ]
     finally:
         conn.close()
