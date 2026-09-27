@@ -56,6 +56,20 @@ SMOKE_INTERVAL="${SMOKE_INTERVAL:-1}"
 BUSINESS_SMOKE_RETRIES="${BUSINESS_SMOKE_RETRIES:-18}"
 BUSINESS_SMOKE_INTERVAL="${BUSINESS_SMOKE_INTERVAL:-10}"
 
+# systemd 单元一致性检查(2026-09-27):这几个单元文件此前多次改了仓库版本,却漏了在服务器上
+# 手动 `cp` 到 /etc/systemd/system/(unit 文件不随 release.sh 自动安装,见 README/CLAUDE.md
+# 运维章节——涉及 sudo 写系统目录,保持人工确认),导致"以为部署了新配置,其实线上还在跑旧的
+# ExecStart/LimitNOFILE"。只列这几个明确会影响本次改动(fd/并发限制)的文件,不是仓库里全部
+# 单元——新增但尚未安装的其它 timer/service 不该因为这条检查而挡住无关的发布。
+SYSTEMD_UNITS_DIR="${SYSTEMD_UNITS_DIR:-/etc/systemd/system}"
+SYSTEMD_UNIT_FILES=(
+  "allwin-api.service"
+  "allwin-web.service"
+  "allwin-fdwatch.service"
+  "allwin-fdwatch.timer"
+  "allwin-api.service.d/limits.conf"
+)
+
 log() { echo "[release] $*"; }
 die() { echo "[release] ERROR: $*" >&2; exit 1; }
 
@@ -83,6 +97,35 @@ _free_disk_mb() {
 # df -P 第 5 列是 "89%";取整数百分比,取不到返回空(空则跳过该项检查,不误杀)
 _disk_used_percent() {
   df -Pk "$APP_ROOT" 2>/dev/null | tail -n 1 | awk '{gsub(/%/, "", $5); print $5}'
+}
+
+# 比较仓库(SOURCE_DIR,已 fetch 到目标提交,此时 RELEASE_DIR 还没建出来)里的
+# SYSTEMD_UNIT_FILES 与 SYSTEMD_UNITS_DIR 下已安装的版本;任一文件缺失或内容不一致就打印
+# diff 并中止发布,提示先手动安装——不自动 cp(那需要 sudo 写系统目录,本脚本刻意不做,
+# 保持人工确认这一步,同 §14.1"禁止未经授权修改线上系统状态"的既有纪律)。
+# 仓库里不存在的文件直接跳过(理论不该发生,防御性处理,不因为文件缺失而误报"不一致")。
+_check_systemd_units_installed() {
+  local f repo_f installed_f out diffs=0
+  for f in "${SYSTEMD_UNIT_FILES[@]}"; do
+    repo_f="$SOURCE_DIR/deploy/systemd/$f"
+    installed_f="$SYSTEMD_UNITS_DIR/$f"
+    [ -f "$repo_f" ] || continue
+    if [ ! -f "$installed_f" ]; then
+      echo "[release] systemd 单元未安装: $installed_f(仓库版本: $repo_f)" >&2
+      diffs=1
+      continue
+    fi
+    if ! out="$(diff -u "$installed_f" "$repo_f" 2>&1)"; then
+      echo "[release] systemd 单元与仓库不一致: $f" >&2
+      echo "$out" >&2
+      diffs=1
+    fi
+  done
+  if [ "$diffs" -ne 0 ]; then
+    die "systemd 单元文件与仓库不一致(见上方 diff / 缺失提示),已中止发布。请先手动安装再重新发布,例如:
+  sudo cp $SOURCE_DIR/deploy/systemd/<file> $SYSTEMD_UNITS_DIR/<file> && sudo systemctl daemon-reload
+本脚本不自动安装(涉及 sudo 写系统目录,保持人工确认;SYSTEMD_UNITS_DIR 可覆盖检查目标)。"
+  fi
 }
 
 # ── 阶段 1:preflight(在任何构建/备份/migration/切换之前) ────────────
@@ -121,6 +164,8 @@ preflight() {
       fi
       ;;
   esac
+
+  _check_systemd_units_installed
 
   # current/previous 软链形状必须合法:不存在,或指向 RELEASES_DIR 下的目录
   if [ -e "$CURRENT_LINK" ]; then

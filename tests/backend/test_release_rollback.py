@@ -1032,3 +1032,85 @@ cleanup_old_releases
 '''
         r = _run(script, _base_env(app_root))
         assert r.returncode != 0
+
+
+class TestSystemdUnitConsistency:
+    """2026-09-27:preflight 比较仓库里的 SYSTEMD_UNIT_FILES 与 SYSTEMD_UNITS_DIR 下已安装的
+    版本,不一致就打印 diff 并中止,不自动安装(涉及 sudo 写系统目录,保持人工确认)。"""
+
+    UNIT_FILES = (
+        "allwin-api.service",
+        "allwin-web.service",
+        "allwin-fdwatch.service",
+        "allwin-fdwatch.timer",
+        "allwin-api.service.d/limits.conf",
+    )
+
+    def _setup(self, tmp_path, *, repo_content: dict[str, str], installed_content: dict[str, str]):
+        app_root = _setup_app_root(
+            tmp_path,
+            extra_files={f"deploy/systemd/{name}": content for name, content in repo_content.items()},
+        )
+        units_dir = tmp_path / "installed_units"
+        for name, content in installed_content.items():
+            p = units_dir / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content)
+        env = _base_env(app_root, SYSTEMD_UNITS_DIR=str(units_dir))
+        return app_root, env
+
+    def test_matching_units_pass_preflight(self, tmp_path):
+        content = {n: f"# {n} v1\n" for n in self.UNIT_FILES}
+        _, env = self._setup(tmp_path, repo_content=content, installed_content=content)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode == 0, r.stderr
+
+    def test_mismatched_unit_aborts_with_diff(self, tmp_path):
+        repo = {n: f"# {n} v2 (new)\n" for n in self.UNIT_FILES}
+        installed = {n: f"# {n} v1 (old)\n" for n in self.UNIT_FILES}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "systemd 单元" in r.stderr and "手动安装" in r.stderr
+        assert "-# allwin-api.service v1 (old)" in r.stderr
+        assert "+# allwin-api.service v2 (new)" in r.stderr
+
+    def test_missing_installed_unit_aborts(self, tmp_path):
+        repo = {"allwin-fdwatch.timer": "# timer content\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content={})
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "未安装" in r.stderr and "allwin-fdwatch.timer" in r.stderr
+
+    def test_dropin_file_is_checked(self, tmp_path):
+        repo = {"allwin-api.service.d/limits.conf": "[Service]\nLimitNOFILE=65536\n"}
+        installed = {"allwin-api.service.d/limits.conf": "[Service]\nLimitNOFILE=1024\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "allwin-api.service.d/limits.conf" in r.stderr
+        assert "-LimitNOFILE=1024" in r.stderr and "+LimitNOFILE=65536" in r.stderr
+
+    def test_all_mismatches_reported_not_just_first(self, tmp_path):
+        repo = {"allwin-api.service": "A-new\n", "allwin-web.service": "W-new\n"}
+        installed = {"allwin-api.service": "A-old\n", "allwin-web.service": "W-old\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "allwin-api.service" in r.stderr and "allwin-web.service" in r.stderr
+
+    def test_repo_without_unit_files_skips_check(self, tmp_path):
+        """仓库里根本没有这些文件(如测试用的最小 source repo)时不报不一致——
+        与既有 TestPreflight.test_clean_source_passes 的隐含前提一致。"""
+        app_root = _setup_app_root(tmp_path)
+        env = _base_env(app_root, SYSTEMD_UNITS_DIR=str(tmp_path / "nonexistent_units_dir"))
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode == 0, r.stderr
+
+    def test_does_not_write_to_installed_units_dir(self, tmp_path):
+        """只读比较,不自动安装:installed 版本内容在 preflight 跑完后必须原样不变。"""
+        repo = {"allwin-api.service": "new\n"}
+        installed = {"allwin-api.service": "old\n"}
+        app_root, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
+        _run(f'{SOURCE_RELEASE}; preflight', env)  # 无论通过与否
+        assert (tmp_path / "installed_units" / "allwin-api.service").read_text() == "old\n"
