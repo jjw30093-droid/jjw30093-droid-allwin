@@ -987,6 +987,11 @@ schedule_sync_multi
 - `.env`、数据库、模型二进制、日志和备份不得提交 Git。
 - Production 不允许默认密码、Mock Auth、测试会员参数或调试后门。
 - 禁止 `?simulate_membership=paid`、`?token=<jwt>`、`?dev=1` 等生产绕过入口。
+- `allwin-api` 的 systemd 单元设 `LimitNOFILE=65536`（本体 + `allwin-api.service.d/limits.conf`
+  drop-in 各一份，双重保险），uvicorn 启动参数带 `--limit-concurrency 200
+  --timeout-keep-alive 5`（2026-09-27，防止连接堆积耗尽文件描述符——API 曾在 2026-08-24 起
+  多次触发 `Errno 24 Too many open files`，根因未最终定位，这是缓解与可观测性措施，见下方
+  fdwatch 与慢请求日志）。
 
 ### 14.2 发布
 
@@ -999,7 +1004,23 @@ schedule_sync_multi
 /opt/allwin/shared/logs
 ```
 
-发布顺序：备份 → 构建 → migration → 启动候选服务 → healthcheck → 切换 → 冒烟测试。失败必须可回滚到上一 release，禁止直接覆盖线上目录。
+**发布链路**（在开发机提交后，登录服务器执行）：
+
+```bash
+# 开发机:提交并 push 到 main
+git push origin main
+
+# 服务器:同步 source 检出到最新提交
+cd /opt/allwin/source && git fetch origin && git merge --ff-only origin/main
+
+# 服务器:执行发布(preflight → rsync → 构建 → 备份 → migration → 候选冒烟 → 切换 → 线上验收 → 业务冒烟 → 清理)
+bash deploy/scripts/release.sh
+```
+
+发布顺序：preflight（含磁盘使用率、systemd 单元一致性检查）→ 构建 → migration 前备份
+→ 候选进程冒烟 → 原子切换 `current` 软链 + 重启 systemd → 线上 healthz/readyz/首页验收
+→ 业务冒烟 → 失败在任一阶段自动回滚到上一 release 并重新验收 → 成功后清理旧 release
+与旧备份。失败必须可回滚，禁止直接覆盖线上目录。
 
 发布脚本的业务冒烟不能只检查进程存活和首页 HTTP 200。至少必须验证：
 
@@ -1012,13 +1033,88 @@ schedule_sync_multi
 
 构建所需环境变量必须在 `npm run build` 前加载。
 
+**systemd 单元文件需要手动安装**（`deploy/systemd/*.service`、`*.timer` 与
+`allwin-api.service.d/limits.conf` 不随 `release.sh` 自动 `cp` 到 `/etc/systemd/system/`——
+这一步涉及 `sudo` 写系统目录，刻意保持人工确认，不自动化）：
+
+```bash
+sudo cp deploy/systemd/<file> /etc/systemd/system/<file>
+sudo systemctl daemon-reload
+sudo systemctl restart <service>   # unit 本体改动才需要；仅改 timer 触发计划不需要重启对应 service
+```
+
+`release.sh` 的 preflight 会比较仓库里 `allwin-api.service`、`allwin-web.service`、
+`allwin-fdwatch.service`、`allwin-fdwatch.timer`、`allwin-api.service.d/limits.conf`
+这几个文件与 `/etc/systemd/system/` 下已安装的版本；只要有一个不一致或未安装，就打印 diff
+并中止发布——不会带着"仓库改了、线上还在跑旧配置"的静默漂移继续发。
+
+**三路核验**（每次发布 / 变更 systemd 单元后都要做，CLAUDE.md §10 的既有纪律）：
+
+```bash
+# 1) systemd:进程 cwd / ExecStart 确实指向新 release
+systemctl show allwin-api allwin-web -p WorkingDirectory -p ExecStart -p MainPID
+pid=$(systemctl show allwin-api -p MainPID --value); sudo readlink -f /proc/$pid/cwd
+
+# 2) nginx:反代目标是本机端口,不是别的地方
+sudo nginx -T | grep -n -A2 "upstream allwin_"
+
+# 3) 域名指纹:线上真的在提供这次改动的内容(挑一处这次改动会体现的文案/字段)
+curl -sI https://miaomiaodi.vip/ | grep -iE "^HTTP|cf-cache-status"
+curl -s https://miaomiaodi.vip/<受影响路径> | grep -o "<这次改动引入的标记>"
+```
+
 ### 14.3 备份
 
-- 每日对三个 SQLite 数据库做一致性在线备份并上传 S3 versioned bucket。
-- migration 前额外备份。
-- 预测 manifest 与普通数据库备份分开保存。
-- 每月执行恢复演练并记录真实结果。
-- 磁盘 70% 告警、85% 严重告警。
+- 每日由 `allwin-backup.timer` 触发一致性在线备份（`BACKUP_TRIGGER=daily`），发布前由
+  `release.sh` 额外触发一次（`BACKUP_TRIGGER=release`）；备份元数据
+  `backup_metadata.json` 记录 `trigger`，决定后续保留策略。
+- 预测 manifest 与普通数据库备份分开保存（`data/backups/manifests/<时间戳>/`）。
+- **分级保留**（2026-09-27，取代旧的"保留最近 N 份"）：`daily` 保留 7 天，`release` 保留
+  最近 3 份，`manual`（人工执行 `backup_sqlite.sh` 时显式指定）不自动删；没有 `trigger`
+  字段的历史备份按 `daily` 处理；最新一份完整备份永不删除。
+- **压缩**：创建超过 24 小时的备份，三库各压成 `.zst`（zstd）；`zstd -t` + 解压后 sha256
+  比对 metadata + `PRAGMA integrity_check` 全部通过才删原文件，任一步失败保留原文件、
+  只告警。`restore_verify.sh` 能自动识别并解压 `.zst` 备份，校验方式不变。
+- 实现见 `backend/cli/backup_maintenance.py`（`--dry-run` 先看计划）；`release.sh` 在
+  **发布成功之后**才调用它清理/压缩旧备份，失败只告警，不影响本次发布结果。
+- `release.sh` 的 `KEEP_RELEASES` 默认保留 **3 个** release 目录（`current` + 最近 2 个供
+  回滚），发布成功后自动清理更早的。
+- **preflight 磁盘使用率检查**：使用率超过 85%（`MAX_DISK_USED_PERCENT` 可覆盖）时中止
+  发布并打印清理提示（旧备份 `backup_maintenance.py --dry-run`、旧 release、日志占用），
+  不带着满盘风险继续发布。
+- 每月执行恢复演练并记录真实结果（`deploy/scripts/restore_verify.sh`）。
+- 磁盘 70% 告警（`ops_check`）、85% 严重告警 / 中止发布（release.sh preflight）。
+
+### 14.4 运维：文件描述符看门狗、慢请求日志与日志轮转
+
+背景：2026-08-24 起 `allwin-api` 多次因文件描述符耗尽（`Errno 24 Too many open files`，
+systemd 默认软上限 1024）不可用，根因至今未最终定位（已排除长事务写库与已知批处理任务
+重叠；无法验证具体是哪类请求触发，因为事发时没有任何采样）。以下是为此建立的缓解与
+可观测性机制：
+
+- **fdwatch 看门狗**（`backend/cli/fdwatch.py`，`allwin-fdwatch.timer` 每分钟触发一次）：
+  - 采样写入 `/opt/allwin/shared/logs/fd_sampling/`，按天分文件（`fd_YYYYMMDD.log`），
+    保留 14 天；每条记录 API 进程 fd 数与上限、8000 端口各 TCP 连接状态计数、fd 目标
+    top 20、`/readyz` 结果。
+  - 自动重启条件：连续 3 次 `/readyz` 失败，**或** fd 数超过软上限的 70%。
+  - 冷却期：15 分钟内最多重启一次，超过则只记录（`SUPPRESSED`）、不再重启。
+  - 每次触发重启前，把当时的采样、`ss -tanp`、`lsof -nP`、`limits`、journal 尾部
+    100 行、以及最近 5 分钟的慢请求记录另存一份快照到
+    `/opt/allwin/shared/logs/fd_sampling/restart_snapshots/<UTC 时间戳>/`。
+  - 决策与全部重启/告警记录额外汇总在 `/opt/allwin/shared/logs/fd_sampling/watchdog.log`。
+- **慢请求日志**（`backend/api/slow_request_log.py`，API 进程内中间件）：耗时超过 2 秒
+  （`SLOW_REQUEST_THRESHOLD_SECONDS` 可覆盖）的请求单独记一行到
+  `/opt/allwin/shared/logs/slow_requests/`（按天分文件，保留 14 天），内容只有时间、方法、
+  **路径模板**（如 `/api/v1/matches/{match_id}`，不是带具体 ID 的原始路径）、状态码、耗时；
+  **绝不记录 query string**（可能带 token/搜索词等敏感值）。记录失败（如目录不可写）只
+  静默跳过，不影响业务响应。
+- **nginx 访问日志**含请求耗时字段（`$request_time` / `$upstream_response_time`，
+  `log_format allwin_timed`）；这一项配置在服务器 `/etc/nginx/nginx.conf`，不在仓库内，
+  只在此存档说明，服务器重装/迁移时需要重新配置。
+- **日志轮转**：`/var/log/syslog` 由独立的 `logrotate-syslog.timer` 每小时检查一次，
+  超过 100M 立即轮转并压缩，保留 7 份（取代此前"每周检查一次、不设大小上限"的默认策略——
+  2026-09-20 起的一次 fd 耗尽故障把它刷到过 1.2GB）；journald 保持
+  `SystemMaxUse=500M`（`/etc/systemd/journald.conf.d/99-size-limit.conf`）。
 
 ## 15. 测试与验收
 
