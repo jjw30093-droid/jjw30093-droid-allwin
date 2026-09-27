@@ -69,6 +69,16 @@ SYSTEMD_UNIT_FILES=(
   "allwin-fdwatch.timer"
   "allwin-api.service.d/limits.conf"
 )
+# nginx 配置(2026-09-27):deploy/nginx/ 里的相对路径 → NGINX_CONFIG_DIR 下的相对路径
+# 不是同一个相对路径(仓库里 miaomiaodi.vip 放在 deploy/nginx/ 根下,已安装的版本在
+# sites-available/ 子目录),所以是"仓库相对路径:安装相对路径"配对,不能沿用
+# SYSTEMD_UNIT_FILES 那种"同一相对路径"的简单形式。deploy/nginx/allwin.conf.example
+# 是可移植模板,不对应任何已安装文件,不在这个列表里(见 deploy/nginx/README.md)。
+NGINX_CONFIG_DIR="${NGINX_CONFIG_DIR:-/etc/nginx}"
+NGINX_CONFIG_FILES=(
+  "nginx.conf:nginx.conf"
+  "miaomiaodi.vip:sites-available/miaomiaodi.vip"
+)
 
 log() { echo "[release] $*"; }
 die() { echo "[release] ERROR: $*" >&2; exit 1; }
@@ -99,32 +109,46 @@ _disk_used_percent() {
   df -Pk "$APP_ROOT" 2>/dev/null | tail -n 1 | awk '{gsub(/%/, "", $5); print $5}'
 }
 
+# 比较仓库(repo_f)与已安装版本(installed_f)一份文件;不一致或安装侧缺失就打印
+# diff/提示并返回非零,一致返回 0。仓库里不存在的文件直接当"一致"跳过(理论不该发生,
+# 防御性处理,不因为文件本身缺失而误报"不一致")——供 systemd 单元与 nginx 配置共用。
+_diff_against_installed() {
+  local repo_f="$1" installed_f="$2" out
+  [ -f "$repo_f" ] || return 0
+  if [ ! -f "$installed_f" ]; then
+    echo "[release] 配置未安装: $installed_f(仓库版本: $repo_f)" >&2
+    return 1
+  fi
+  if ! out="$(diff -u "$installed_f" "$repo_f" 2>&1)"; then
+    echo "[release] 配置与仓库不一致: $repo_f vs $installed_f" >&2
+    echo "$out" >&2
+    return 1
+  fi
+  return 0
+}
+
 # 比较仓库(SOURCE_DIR,已 fetch 到目标提交,此时 RELEASE_DIR 还没建出来)里的
-# SYSTEMD_UNIT_FILES 与 SYSTEMD_UNITS_DIR 下已安装的版本;任一文件缺失或内容不一致就打印
-# diff 并中止发布,提示先手动安装——不自动 cp(那需要 sudo 写系统目录,本脚本刻意不做,
-# 保持人工确认这一步,同 §14.1"禁止未经授权修改线上系统状态"的既有纪律)。
-# 仓库里不存在的文件直接跳过(理论不该发生,防御性处理,不因为文件缺失而误报"不一致")。
-_check_systemd_units_installed() {
-  local f repo_f installed_f out diffs=0
+# systemd 单元(SYSTEMD_UNIT_FILES,同一相对路径同时在 deploy/systemd/ 与
+# SYSTEMD_UNITS_DIR 下)与 nginx 配置(NGINX_CONFIG_FILES,"仓库相对路径:安装相对路径"
+# 配对,两侧路径不同)与已安装版本;任一文件缺失或内容不一致就打印 diff 并中止发布,
+# 提示先手动安装——不自动 cp(那需要 sudo 写系统目录,本脚本刻意不做,保持人工确认这一步,
+# 同 §14.1"禁止未经授权修改线上系统状态"的既有纪律)。
+_check_deploy_configs_installed() {
+  local f pair repo_rel installed_rel diffs=0
   for f in "${SYSTEMD_UNIT_FILES[@]}"; do
-    repo_f="$SOURCE_DIR/deploy/systemd/$f"
-    installed_f="$SYSTEMD_UNITS_DIR/$f"
-    [ -f "$repo_f" ] || continue
-    if [ ! -f "$installed_f" ]; then
-      echo "[release] systemd 单元未安装: $installed_f(仓库版本: $repo_f)" >&2
-      diffs=1
-      continue
-    fi
-    if ! out="$(diff -u "$installed_f" "$repo_f" 2>&1)"; then
-      echo "[release] systemd 单元与仓库不一致: $f" >&2
-      echo "$out" >&2
-      diffs=1
-    fi
+    _diff_against_installed "$SOURCE_DIR/deploy/systemd/$f" "$SYSTEMD_UNITS_DIR/$f" || diffs=1
+  done
+  for pair in "${NGINX_CONFIG_FILES[@]}"; do
+    repo_rel="${pair%%:*}"
+    installed_rel="${pair#*:}"
+    _diff_against_installed "$SOURCE_DIR/deploy/nginx/$repo_rel" "$NGINX_CONFIG_DIR/$installed_rel" || diffs=1
   done
   if [ "$diffs" -ne 0 ]; then
-    die "systemd 单元文件与仓库不一致(见上方 diff / 缺失提示),已中止发布。请先手动安装再重新发布,例如:
-  sudo cp $SOURCE_DIR/deploy/systemd/<file> $SYSTEMD_UNITS_DIR/<file> && sudo systemctl daemon-reload
-本脚本不自动安装(涉及 sudo 写系统目录,保持人工确认;SYSTEMD_UNITS_DIR 可覆盖检查目标)。"
+    die "配置文件与仓库不一致(见上方 diff / 缺失提示),已中止发布。请先手动安装再重新发布,例如:
+  systemd: sudo cp $SOURCE_DIR/deploy/systemd/<file> $SYSTEMD_UNITS_DIR/<file> && sudo systemctl daemon-reload
+  nginx:   sudo cp $SOURCE_DIR/deploy/nginx/<file> <对应安装路径> && sudo nginx -t && sudo systemctl reload nginx
+本脚本不自动安装(涉及 sudo 写系统目录,保持人工确认;SYSTEMD_UNITS_DIR / NGINX_CONFIG_DIR
+可覆盖检查目标,测试用)。"
   fi
 }
 
@@ -165,7 +189,7 @@ preflight() {
       ;;
   esac
 
-  _check_systemd_units_installed
+  _check_deploy_configs_installed
 
   # current/previous 软链形状必须合法:不存在,或指向 RELEASES_DIR 下的目录
   if [ -e "$CURRENT_LINK" ]; then

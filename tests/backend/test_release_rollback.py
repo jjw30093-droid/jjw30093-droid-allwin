@@ -1071,7 +1071,7 @@ class TestSystemdUnitConsistency:
         _, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
         r = _run(f'{SOURCE_RELEASE}; preflight', env)
         assert r.returncode != 0
-        assert "systemd 单元" in r.stderr and "手动安装" in r.stderr
+        assert "配置" in r.stderr and "手动安装" in r.stderr
         assert "-# allwin-api.service v1 (old)" in r.stderr
         assert "+# allwin-api.service v2 (new)" in r.stderr
 
@@ -1114,3 +1114,82 @@ class TestSystemdUnitConsistency:
         app_root, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
         _run(f'{SOURCE_RELEASE}; preflight', env)  # 无论通过与否
         assert (tmp_path / "installed_units" / "allwin-api.service").read_text() == "old\n"
+
+
+class TestNginxConfigConsistency:
+    """2026-09-27:nginx.conf 与站点配置(仓库相对路径 → NGINX_CONFIG_DIR 下不同的相对路径)
+    同样纳入 preflight 一致性检查,不自动安装,只打印 diff 并中止。"""
+
+    def _setup(self, tmp_path, *, repo_content: dict[str, str], installed_content: dict[str, str]):
+        app_root = _setup_app_root(
+            tmp_path,
+            extra_files={f"deploy/nginx/{name}": content for name, content in repo_content.items()},
+        )
+        nginx_dir = tmp_path / "installed_nginx"
+        for rel, content in installed_content.items():
+            p = nginx_dir / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content)
+        env = _base_env(app_root, NGINX_CONFIG_DIR=str(nginx_dir))
+        return app_root, env
+
+    def test_matching_nginx_configs_pass_preflight(self, tmp_path):
+        repo = {"nginx.conf": "http {}\n", "miaomiaodi.vip": "server {}\n"}
+        installed = {"nginx.conf": "http {}\n", "sites-available/miaomiaodi.vip": "server {}\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode == 0, r.stderr
+
+    def test_mismatched_site_config_aborts_with_diff(self, tmp_path):
+        repo = {"miaomiaodi.vip": "server { listen 443; }\n"}
+        installed = {"sites-available/miaomiaodi.vip": "server { listen 80; }\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content=installed)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "miaomiaodi.vip" in r.stderr
+        assert "-server { listen 80; }" in r.stderr and "+server { listen 443; }" in r.stderr
+        assert "sudo nginx -t" in r.stderr and "systemctl reload nginx" in r.stderr
+
+    def test_missing_installed_site_config_aborts(self, tmp_path):
+        repo = {"miaomiaodi.vip": "server {}\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content={})
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "未安装" in r.stderr and "miaomiaodi.vip" in r.stderr
+
+    def test_repo_relative_path_differs_from_installed_relative_path(self, tmp_path):
+        """仓库里 miaomiaodi.vip 在 deploy/nginx/ 根下,已安装版本在 sites-available/ 子目录——
+        确认检查确实按这条不对称映射去读,不是简单假设两侧同一相对路径。"""
+        repo = {"miaomiaodi.vip": "server { same }\n"}
+        # 故意把内容放在错误的位置(NGINX_CONFIG_DIR 根下,不是 sites-available/ 下)
+        wrong_place = {"miaomiaodi.vip": "server { same }\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content=wrong_place)
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0  # 因为真正要看的 sites-available/miaomiaodi.vip 并不存在
+        assert "未安装" in r.stderr
+
+    def test_example_template_not_checked(self, tmp_path):
+        """allwin.conf.example 是可移植模板,不对应任何已安装文件,不应被这条检查要求安装。"""
+        repo = {"allwin.conf.example": "# ALLWIN_DOMAIN placeholder\n"}
+        _, env = self._setup(tmp_path, repo_content=repo, installed_content={})
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode == 0, r.stderr
+
+    def test_systemd_and_nginx_mismatches_both_reported_together(self, tmp_path):
+        app_root = _setup_app_root(
+            tmp_path,
+            extra_files={
+                "deploy/systemd/allwin-api.service": "new-api\n",
+                "deploy/nginx/nginx.conf": "new-nginx\n",
+            },
+        )
+        units_dir = tmp_path / "units"
+        (units_dir).mkdir()
+        (units_dir / "allwin-api.service").write_text("old-api\n")
+        nginx_dir = tmp_path / "nginx"
+        nginx_dir.mkdir()
+        (nginx_dir / "nginx.conf").write_text("old-nginx\n")
+        env = _base_env(app_root, SYSTEMD_UNITS_DIR=str(units_dir), NGINX_CONFIG_DIR=str(nginx_dir))
+        r = _run(f'{SOURCE_RELEASE}; preflight', env)
+        assert r.returncode != 0
+        assert "allwin-api.service" in r.stderr and "nginx.conf" in r.stderr

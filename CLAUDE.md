@@ -1048,6 +1048,17 @@ sudo systemctl restart <service>   # unit 本体改动才需要；仅改 timer �
 这几个文件与 `/etc/systemd/system/` 下已安装的版本；只要有一个不一致或未安装，就打印 diff
 并中止发布——不会带着"仓库改了、线上还在跑旧配置"的静默漂移继续发。
 
+**nginx 配置同样纳入仓库并接受同一条一致性检查**（2026-09-27，`deploy/nginx/`）：
+`nginx.conf`、`miaomiaodi.vip` 是生产服务器上 `/etc/nginx/nginx.conf` 与
+`/etc/nginx/sites-available/miaomiaodi.vip` 的原样副本（`allwin.conf.example` 是可移植
+模板，不对应任何已安装文件，不参与这条检查，见 `deploy/nginx/README.md`）。改动同样不
+自动安装：
+
+```bash
+sudo cp deploy/nginx/<file> <对应安装路径>
+sudo nginx -t && sudo systemctl reload nginx
+```
+
 **三路核验**（每次发布 / 变更 systemd 单元后都要做，CLAUDE.md §10 的既有纪律）：
 
 ```bash

@@ -1,0 +1,75 @@
+# allwin — 部署到 miaomiaodi.vip 做测试(2026-08-14)。
+# 基于 deploy/nginx/allwin.conf.example 改写,SSL 证书沿用服务器上已有的
+# Let's Encrypt(Certbot)证书,不是 Cloudflare Origin Certificate。
+
+upstream allwin_api {
+    server 127.0.0.1:8000;
+    keepalive 32;
+}
+
+upstream allwin_web {
+    server 127.0.0.1:3000;
+    keepalive 32;
+}
+
+server {
+    if ($host = www.miaomiaodi.vip) {
+        return 301 https://$host$request_uri;
+    }
+    if ($host = miaomiaodi.vip) {
+        return 301 https://$host$request_uri;
+    }
+    listen 80;
+    server_name miaomiaodi.vip www.miaomiaodi.vip;
+    return 404;
+}
+
+server {
+    server_name miaomiaodi.vip www.miaomiaodi.vip;
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/miaomiaodi.vip/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/miaomiaodi.vip/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    server_tokens off;
+    client_max_body_size 4m;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection "";
+
+    location = /healthz {
+        proxy_pass http://allwin_api;
+        add_header Cache-Control "no-store" always;
+    }
+    location = /readyz {
+        proxy_pass http://allwin_api;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location /api/ {
+        proxy_pass http://allwin_api;
+        proxy_read_timeout 30s;
+        proxy_cache off;
+    }
+
+    location /_next/static/ {
+        proxy_pass http://allwin_web;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location /brand/ {
+        proxy_pass http://allwin_web;
+        add_header Cache-Control "public, max-age=86400" always;
+    }
+
+    location / {
+        proxy_pass http://allwin_web;
+        proxy_read_timeout 30s;
+    }
+}
