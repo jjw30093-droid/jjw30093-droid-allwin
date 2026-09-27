@@ -156,8 +156,30 @@ class TestRunOnce:
         snap = env[1] / "logs" / "restart_snapshots" / "20260927T030000Z"
         assert (snap / "reasons.txt").exists() and (snap / "sample.txt").exists()
         assert (snap / "ss_tanp.txt").exists() and (snap / "journal_tail.txt").exists()
+        # 最近 5 分钟慢请求:目录不存在时如实说明,不是报错也不是留空文件
+        assert "没有慢请求记录" in (snap / "slow_requests_last5min.txt").read_text()
         assert "RESTART allwin-api" in (env[1] / "logs" / "watchdog.log").read_text()
         assert "DECISION: restart" in (env[1] / "logs" / "fd_20260927.log").read_text()
+
+    def test_restart_snapshot_includes_recent_slow_requests(self, env, monkeypatch):
+        calls, tmp = env
+        slow_dir = tmp / "slow_requests"
+        slow_dir.mkdir()
+        now = datetime(2026, 9, 27, 3, 0, 0, tzinfo=timezone.utc)
+        (slow_dir / "slow_20260927.log").write_text(
+            "2026-09-27T02:57:00Z GET /api/v1/matches/{match_id} 200 2.500s\n"  # 3 分钟前,在窗口内
+            "2026-09-27T02:40:00Z GET /api/v1/leagues 200 3.100s\n"  # 20 分钟前,窗口外
+        )
+        monkeypatch.setattr(fw, "fd_count", lambda pid: 900)
+        monkeypatch.setattr(fw, "check_readyz", lambda url, timeout=5: (True, "200", 7))
+        d = fw.run_once(
+            log_dir=tmp / "logs", state_file=tmp / "state.json", now=now,
+            restart=lambda s: calls["restart"].append(s), slow_log_dir=slow_dir,
+        )
+        assert d.action == "restart"
+        text = (tmp / "logs" / "restart_snapshots" / "20260927T030000Z" / "slow_requests_last5min.txt").read_text()
+        assert "/api/v1/matches/{match_id}" in text
+        assert "/api/v1/leagues" not in text
 
     def test_second_trigger_within_15_minutes_is_only_logged(self, env, monkeypatch):
         t = datetime(2026, 9, 27, 3, 0, tzinfo=timezone.utc)

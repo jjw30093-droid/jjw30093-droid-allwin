@@ -17,6 +17,7 @@ from backend.db.connections import connect_ro
 
 from .cache_policy import install_cache_policy
 from .error_handlers import register_error_handlers
+from .slow_request_log import install_slow_request_logging
 
 log = logging.getLogger("allwin.api")
 
@@ -46,6 +47,10 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
     # Set-Cookie 强制 private,no-store;非白名单路径同样强制 no-store;
     # 详见 cache_policy.py 顶部说明。
     install_cache_policy(app)
+
+    # 慢请求日志(2026-09-27):耗时超过阈值(默认 2 秒)的请求单独记一行,供排查
+    # 连接堆积用(见 backend/cli/fdwatch.py 的快照,会附带最近 5 分钟的慢请求)。
+    install_slow_request_logging(app)
 
     # 全站统一错误契约(CLAUDE.md §10):HTTPException/422 校验失败/未捕获异常
     # 全部归一成 {code, message, details}(/readyz 503 是独立运维 allowlist,不经此处)。

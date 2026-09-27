@@ -61,12 +61,12 @@ describe("服务端请求超时", () => {
   });
 
   it("每次请求都带 AbortSignal,并保留原有 revalidate / no-store 缓存参数", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await serverGet("/api/v1/a", { revalidate: 60 });
     await serverGet("/api/v1/b");
-    const [, first] = fetchMock.mock.calls[0];
-    const [, second] = fetchMock.mock.calls[1];
+    const first = fetchMock.mock.calls[0]![1]!;
+    const second = fetchMock.mock.calls[1]![1]!;
     expect(first.signal).toBeInstanceOf(AbortSignal);
     expect((first as { next?: { revalidate: number } }).next).toEqual({ revalidate: 60 });
     expect(second.signal).toBeInstanceOf(AbortSignal);

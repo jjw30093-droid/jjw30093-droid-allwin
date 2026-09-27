@@ -35,6 +35,10 @@ PORT = 8000
 READYZ_URL = "http://127.0.0.1:8000/readyz"
 LOG_DIR = "/opt/allwin/shared/logs/fd_sampling"
 STATE_FILE = "/var/lib/allwin-fdwatch/state.json"
+# 慢请求日志目录(backend/api/slow_request_log.py 的 DEFAULT_LOG_DIR),重启快照里带上
+# 最近 5 分钟的记录,帮助把"哪些接口在耗尽 fd 之前变慢"和"什么时候重启"对上时间线。
+SLOW_REQUEST_LOG_DIR = "/opt/allwin/shared/logs/slow_requests"
+SLOW_REQUEST_SNAPSHOT_MINUTES = 5
 
 CONSECUTIVE_FAILS = 3
 FD_RATIO_LIMIT = 0.70
@@ -237,7 +241,13 @@ def build_sample(
     return "\n".join(lines) + "\n"
 
 
-def save_snapshot(snap_dir: Path, sample: str, pid: int, service: str, reasons: list[str]) -> None:
+def save_snapshot(
+    snap_dir: Path, sample: str, pid: int, service: str, reasons: list[str],
+    now: datetime | None = None, slow_log_dir: Path | None = None,
+) -> None:
+    from backend.api.slow_request_log import recent_slow_lines
+
+    now = now or datetime.now(timezone.utc)
     snap_dir.mkdir(parents=True, exist_ok=True)
     (snap_dir / "reasons.txt").write_text("\n".join(reasons) + "\n")
     (snap_dir / "sample.txt").write_text(sample)
@@ -245,6 +255,12 @@ def save_snapshot(snap_dir: Path, sample: str, pid: int, service: str, reasons: 
     (snap_dir / "lsof.txt").write_text(_run(["lsof", "-nP", "-p", str(pid)], timeout=30) if pid else "")
     (snap_dir / "limits.txt").write_text(read_limits(pid) if pid else "")
     (snap_dir / "journal_tail.txt").write_text(_run(["journalctl", "-u", service, "-n", "100", "--no-pager"], 30))
+    # 最近 5 分钟的慢请求(>2s 的请求,见 backend/api/slow_request_log.py);读不到就是
+    # 空列表(目录不存在/无权限),不让这一步的失败挡住其它快照文件的写入。
+    lines = recent_slow_lines(slow_log_dir or Path(SLOW_REQUEST_LOG_DIR), now, SLOW_REQUEST_SNAPSHOT_MINUTES)
+    (snap_dir / "slow_requests_last5min.txt").write_text(
+        "".join(lines) if lines else f"(最近 {SLOW_REQUEST_SNAPSHOT_MINUTES} 分钟没有慢请求记录)\n"
+    )
 
 
 def run_once(
@@ -253,7 +269,7 @@ def run_once(
     now: datetime | None = None, dry_run: bool = False,
     consecutive_fails: int = CONSECUTIVE_FAILS, fd_ratio_limit: float = FD_RATIO_LIMIT,
     cooldown: int = COOLDOWN_SECONDS, retention_days: int = RETENTION_DAYS,
-    restart=None,
+    restart=None, slow_log_dir: Path | None = None,
 ) -> Decision:
     now = now or datetime.now(timezone.utc)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -294,7 +310,7 @@ def run_once(
 
     if decision.action == "restart":
         snap = log_dir / "restart_snapshots" / now.strftime("%Y%m%dT%H%M%SZ")
-        save_snapshot(snap, sample, pid, service, decision.reasons)
+        save_snapshot(snap, sample, pid, service, decision.reasons, now=now, slow_log_dir=slow_log_dir)
         with open(log_dir / "watchdog.log", "a", encoding="utf-8") as f:
             f.write(f"{now.strftime('%Y-%m-%dT%H:%M:%SZ')} RESTART {service}: {'; '.join(decision.reasons)} (snapshot {snap.name})\n")
         if not dry_run:
