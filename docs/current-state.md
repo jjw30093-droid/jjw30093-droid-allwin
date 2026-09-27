@@ -7508,3 +7508,192 @@ OS 页缓存为空)两次都在 11.4~11.7s 量级,几乎没变——这与 §67 
   实时查询路径访问的历史数据迁到独立的归档库/降低其常驻页缓存的必要性
   ——但这是比"加内存"更大的改动,收益不确定,应该在加内存之后再看是否
   还有必要。
+
+## 68. 25/26 赛季赔率数据现状排查(2026-09-27,只读,不改库不重跑脚本)
+
+### 68.1 `backend/cli/ingest_nowgoal_season_odds.py` 做什么
+
+- 来源:NowGoal season-archive 接口(`NowGoalArchiveTransport.archive_season()`),
+  一次请求拿整赛季;范围由 `--league-id`(FotMob)+`--season`+
+  `--nowgoal-league-id`(NowGoal 内部联赛 id,**不给默认值、不猜**,需要
+  operator 事先手动双重确证)三个参数指定,一次只处理一个联赛一个赛季。
+  目标集合只取 core `dim_match` 里该联赛该赛季 `status='Finish'` 且
+  `kickoff_precision='exact'` 的比赛(没有精确开球时间的比赛直接跳过,
+  计入 `skipped_no_exact_kickoff`)。
+- 市场:只抓 `--company`(默认 bet365,可选 macauslot)一家公司的 ah/ou
+  (mix_history)+1x2(euro_history),各取严格赛前的"两点摘要"
+  (initial=开盘、latest=收盘),不是完整时间线。
+- 写入:只写 `bronze_legacy_odds_summary`,`source='nowgoal_archive_refetch'`。
+  去重:`INSERT OR IGNORE`,唯一键 `UNIQUE(fotmob_match_id, source, market,
+  period)`——同一场比赛同一 market/period 只会有一行,重复运行天然幂等,
+  不会覆盖已有行,也不会与其它 `source` 的行冲突。
+- 匹配方式:两轮身份解析(`nowgoal_historical_match_resolution`,不是常规
+  `entity_resolution`——archive 的开球时间是北京时间、常规模块要求已转
+  UTC,直接喂会导致时区错判)。第一轮用"联赛+日期窗口(±2天)+比分"解出
+  唯一存活的种子对,训练出 `nowgoal_team_id -> fotmob_team_id` 词典
+  (`min_votes=3, min_margin_ratio=3.0`,按单联赛单赛季~120场/16队规模
+  校准,双射校验 fail-closed);第二轮复用词典解析全部比赛。**额外加一道
+  精确 kickoff 门禁**:候选 kickoff(转 UTC 后)与目标 `kickoff_at_utc`
+  差值必须 ≤1800s 才算 `auto_ok`,否则降级 `needs_review`。
+- 有 `--dry-run`/`--live` 互斥模式;`--dry-run` 会真实发起网络请求(需要
+  `THORDATA_PROXY`)、完整走完解析,只是不写库、不建备份,打印一份汇总
+  JSON(`target_matches`/`archive_rows`/`resolution_by_status` 等计数,不含
+  逐场明细)。
+
+### 68.2 9 月 21 日运行痕迹(只读取证)
+
+- **`~/.bash_history`(ubuntu 用户)**:只有 30 行,最后修改时间 7 月 5 日,
+  与 9 月 21 日完全无关——这类一次性运维命令大概率是通过
+  `ssh host '...'` 非交互方式执行,天然不进 bash_history,**history 为空
+  不能当"没运行过"的证据**。`/root/.bash_history` 不存在(root 从无交互
+  登录)。
+- **脚本自建的 pre-write 备份文件**(`backup_db()` 只在真正进入 `--live`
+  分支、即将写库前才调用):
+  `/opt/allwin/shared/data/odds.db.backup-pre-nowgoal-season-odds-
+  20260921T210311Z`(661,458,944 字节,与当前 `odds.db` 字节数完全一致)。
+  **这是确凿证据**:9 月 21 日 21:03:11 UTC 确实有一次 `--live` 运行,
+  已经通过了实体解析阶段(备份在 `resolve_and_gate()` 之后才调用)。
+- **`/tmp/run_ng_backfill.py`**(mtime 2026-09-21 21:02:19 UTC,比上面
+  备份早 52 秒):内容是一个把 `ingest_nowgoal_season_odds.main()` 的
+  `CORE_DB`/`ODDS_DB` 重定向到生产 `/opt/allwin/shared/data/` 的最小
+  wrapper——这就是当时实际执行的入口脚本,但脚本本身不记录调用时传的
+  `--league-id`/`--season`/`--nowgoal-league-id` 参数(那些是它自身
+  `sys.argv` 的一部分,不在文件内容里,现场没有留下这份参数记录)。
+- **直接验证"到底写进去了没有"**:`bronze_legacy_odds_summary` 里
+  `source='nowgoal_archive_refetch'` 全表只有 2926 行,`ingested_at` 全部
+  落在 2026-08-06~2026-08-11,**没有任何一行是 9 月 21 日写入的**——9 月
+  21 日那次 `--live` 运行,最终写入行数是 0,与站长的观察("为什么没写入")
+  完全一致。
+
+### 68.3 9 月 21 日为什么没写入(结论:采集层两个真实缺陷先后叠加,
+不是"数据已存在被去重"也不是"匹配不上比赛")
+
+用 `git log` 比对同一时间窗口的 commit,连成一条完整时间线(UTC):
+
+1. **21:01:34**(commit `97f7101`):`parse_archive_season()` 此前只认
+   "分组→轮次→列表"两层嵌套(挪超/瑞典超/意甲实测都是这种),遇到
+   **英超/西甲/德甲/法甲**实际的"轮次→列表"一层扁平结构时,中间那层
+   `isinstance(rounds, dict)` 判断全部落空——**不报错、静默返回 0 行**。
+   commit message 原话:"用五大联赛真实联赛 id 回填 25/26 赛季历史赔率时
+   才发现,archive_rows 恒为 0"——这条 commit 本身就是当时排查这个问题
+   留下的记录,与站长现在问的"为什么没写入"是同一件事。
+2. **21:02:19~21:03:11**:`/tmp/run_ng_backfill.py` 落地 + 触发一次
+   `--live` 运行(即上面的备份文件)。时间点在 97f7101 修复落地**之后**,
+   说明这次是拿着刚修好的解析代码重跑的。
+3. **21:44:00**(commit `f815397`):同一批排查中发现第二个独立缺陷——
+   NowGoal 的 `mix_history()`/`euro_history()` 域名已从 `live10` 迁移到
+   `live11`(301 跳转),旧代码没跟上,**所有历史赔率请求返回无效响应,
+   且被误判成 `ErrCode=None` 而不是报错**(commit message 记录:一度被
+   错误归因为"数据保留期只有几周",反编译 APK + 抓包后才确认是纯域名
+   过期)。
+4. 综合时间线:21:03:11 那次 `--live` 运行,发生在 97f771 之后、
+   f815397 之前——**即使联赛 archive 结构已经解析正确、比赛也匹配上了,
+   实际抓赔率这一步仍然会因为 live10 域名失效而拿到空结果**,`fetch_
+   two_point_rows()` 对每一场都返回空列表,最终 `rows_inserted=0`,但
+   脚本本身不报错、能正常跑完并打印 JSON——**这正是"静默什么都没抓到"
+   最容易被忽略的那种失败模式**。
+- 归类到站长给的四选项:属于第三类"**NowGoal 归档页面结构变化或访问
+  失败**",且是两个独立缺陷按时间顺序先后命中,不是去重跳过、也不是
+  匹配不上比赛(entity resolution 本身当时和现在都能正常工作)。
+
+**用今天的代码(两个缺陷均已修复)重新验证**(只读 dry-run + 对一份
+throwaway 副本做 `--live`,全程未碰生产 `odds.db`):
+
+```
+--league-id 47 --season 2025/2026 --nowgoal-league-id 36 --limit 3 --dry-run
+{
+ "target_matches": 3, "skipped_no_exact_kickoff": 0,
+ "archive_rows": 380,                      # 不再是 0,扁平结构 bug 已修复
+ "resolution_by_status": {"auto_ok": 3}    # 3 场全部解析成功
+}
+
+--live(写进 /tmp 的一份 odds.db throwaway 副本,--skip-backup)
+{
+ "rows_inserted": 18, "rows_prepared": 18, "fetch_errors": [],
+ "integrity_check": "ok"
+}
+```
+18 = 3 场 × 3 market(1x2/ah/ou)× 2 period(initial/latest),零抓取错误——
+**两个缺陷在当前代码上都已确认修复**。
+
+### 68.4 25/26 赛季赔率覆盖率(按联赛,已完赛比赛,分表 + 合并)
+
+`odds.db` 里存赔率的表(内容/粒度/时间范围):
+
+| 表 | 内容 | 粒度 | 时间范围 | 总行数 |
+|---|---|---|---|---|
+| `bronze_ng_odds_snap` | 实时/历史完整时间线(pre_match/in_play) | 每次观测一行 | 2020-08-09 ~ 现在 | 1,292,529 |
+| `bronze_legacy_odds_summary` | 赛前两点摘要(开盘/收盘) | 每场×market×period 最多2行 | 全部在 2026-08-06~08-11 一次性批量导入(5 个 source) | 88,457 |
+| `bronze_kbisai_odds_point` | 另一来源变化点(append-only) | 每次观测一行 | 单一批次,2026-08-04 一个时间点 | 320(几乎可忽略) |
+
+2025/2026 赛季按联赛覆盖率(已完赛比赛,合并三张表任一有记录即算覆盖):
+
+| 联赛 | 已完赛 | legacy_summary | kbisai | ng_snap | 合并覆盖率 |
+|---|---|---|---|---|---|
+| 英超47/法甲53/德甲54/意甲55/西甲87 | 380/306/306/380/380 | 大多80%+ | 0 | =已完赛数 | **100%** |
+| 澳超113 | 163 | 159 | 0 | 0 | 97.5% |
+| 英冠48/荷甲57/葡超61 | 120/309/306 | 0 | 0 | 0 | **0%** |
+| 86/110/140/146(未登记联赛,不在 `LEAGUE_META` 白名单) | 90~110 | 0 | 0 | 0 | 0%(不影响站点,这些联赛未上线) |
+| **全部有效联赛合计** | 3040 | — | — | — | 62.9% |
+
+关键发现:五大联赛的 100% 覆盖**几乎全部来自 `bronze_ng_odds_snap`**——
+抽查英超 25/26 赛季最早几场(2025-08-15 开球),`observed_at` 最早到
+**2025-06-18**(开球前近 2 个月),单场 129~1878 条 `market_phase='pre_match'`
+快照,是真实的完整赛前时间线,**不是**两点摘要能比的质量。也就是说,五大
+联赛的 25/26 赔率数据早就靠常规实时轮询管道全季覆盖了,与 9 月 21 日那次
+失败的 `nowgoal_archive_refetch` 尝试完全无关——那次尝试真正应该覆盖、
+现在也确实还是空的,是**英冠/荷甲/葡超**这三个有效联赛。
+
+2026/2027(当前赛季)同口径对比:5 大联赛 93%~100%(实时轮询正在进行,
+少量最新赛程还未产生快照,符合预期),整体合并覆盖率 90.4%。**口径基本
+一致**——公司(Bet365/Crown/Macauslot)两个赛季相同;**唯一差异**:
+`corners_ou`(角球大小球)市场只在 26/27 赛季出现,25/26 赛季完全没有——
+这是采集管道后来才新增的市场类型,不是数据丢失,如果分析需要角球盘口,
+25/26 赛季结构性没有这个市场。
+
+`bronze_legacy_odds_summary` 里 2025/2026 赛季相关的行,写入日期(按
+source)清一色 **2026-08-06**——全部来自同一批一次性历史导入,不是持续
+写入;`nowgoal_archive_refetch` 贡献的 168 行里,128 场比赛属于澳超113
+(该联赛 25/26 赛季在扁平结构 bug 出现前就已经跑成功过)。
+
+### 68.5 结论:25/26 赛季赔率样本够不够用
+
+- **五大联赛(英超/法甲/德甲/意甲/西甲)+ 澳超:样本充足,直接可用**——
+  已有 100%(澳超 97.5%)覆盖,且主力数据源是真实完整赛前时间线
+  (`bronze_ng_odds_snap`),质量优于本次原计划要补的"两点摘要"。**不需要
+  为这些联赛跑任何补抓**。
+- **英冠 48 / 荷甲 57 / 葡超 61:0% 覆盖,样本不够,如果赔率分析范围包含
+  这三个联赛,需要补抓**。
+- 86/110/140/146 不在当前站点联赛白名单,不建议为它们补数据(不影响任何
+  在线功能)。
+
+### 68.6 补抓方案(仅英冠/荷甲/葡超,未执行,停下等站长确认)
+
+- **前置缺口(需要先做,不能跳过)**:英冠(48)/荷甲(57)/葡超(61)的
+  `--nowgoal-league-id` **目前没有已确证的值**——现有文档只双重确证过
+  挪超(59)=22、瑞典超(67)=26,英超=36 是从 9 月 22 日修复 commit 的
+  fixture 描述里找到的(未在 `nowgoal_archive.py` 模块文档里正式记录)。
+  需要先用与挪超/瑞典超同样的方法(NowGoal `type=6` 联赛目录 + 已知真实
+  titan 页面的 `sclassId` 双重确证)分别找出这三个联赛的 NowGoal 内部
+  id,不能猜、不能照抄其它联赛的值。
+- **范围**:3 个联赛各 1 个赛季(2025/2026),目标比赛数 120(英冠)+309
+  (荷甲)+306(葡超)=735 场(均为 `status='Finish'` 且 `kickoff_precision
+  ='exact'` 的比赛,已在当前 `dim_match` 里)。
+- **预计请求量与耗时**:3 次 `archive_season()`(每联赛一次,拿整季)+
+  每场解析成功(`auto_ok`)的比赛 2 次请求(`mix_history`+`euro_history`)
+  ——按此前 16/16 队进词典的实测经验,解析成功率应该很高,保守估计
+  700 场左右能进入抓取阶段,即约 3+1400=1403 次请求;脚本默认
+  `--sleep-min 0.3 --sleep-max 0.8`(均值 0.55s/次),预计总耗时
+  **约 13~20 分钟**(三个联赛顺序执行,不并发,与现有采集任务的节奏
+  下限保持同一保守风格)。
+- **写入表**:`bronze_legacy_odds_summary`,`source='nowgoal_archive_
+  refetch'`,与现状一致。
+- **避免冲突**:`INSERT OR IGNORE` + `UNIQUE(fotmob_match_id, source,
+  market, period)` 已经保证幂等——即使反复运行或与其它 source 的历史行
+  重叠,只会补齐缺失的行,不会覆盖或重复写入任何已有行。脚本自带
+  `backup_db()`,正式跑(`--live`,不加 `--skip-backup`)前会先给
+  `odds.db` 打一份时间戳备份。
+- **建议顺序**:先对每个联赛跑 `--dry-run`(确认 `archive_rows>0` 且
+  `resolution_by_status` 里 `auto_ok` 占大多数),确认没问题后再对该联赛
+  单独跑 `--live`,三个联赛不要一次性全跑,方便任何一个联赛出问题时
+  只影响它自己、其它两个联赛的进度不受影响。
