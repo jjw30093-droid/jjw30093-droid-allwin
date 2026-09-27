@@ -1193,3 +1193,165 @@ class TestNginxConfigConsistency:
         r = _run(f'{SOURCE_RELEASE}; preflight', env)
         assert r.returncode != 0
         assert "allwin-api.service" in r.stderr and "nginx.conf" in r.stderr
+
+
+class TestWarmUpLive:
+    """2026-09-27:重启后串行预热(`/api/v1/matches`、首页真实查询、积分榜、
+    比赛详情各请求 2 次),避免冷启动撞上真实用户请求(CLAUDE.md §11.4 一类
+    的冷启动风险,这次是后端查询本身慢,不是前端渲染)。用真实
+    `http.server.HTTPServer` 记录实际收到的请求路径,不是假 curl——同
+    TestBusinessSmokeLargePageUnderPipefail/TestCandidateSmokeProcessCleanup
+    的先例。"""
+
+    def _fake_release_python(self, release_dir: Path) -> None:
+        """`warm_up_live` 用 `$RELEASE_DIR/.venv/bin/python` 解析
+        `/api/v1/matches?limit=1` 的 JSON 取真实 match_id——测试环境没有真实
+        release .venv,直接软链到当前 Python 解释器即可(纯 stdlib json,不需要
+        项目依赖)。"""
+        venv_bin = release_dir / ".venv" / "bin"
+        venv_bin.mkdir(parents=True, exist_ok=True)
+        (venv_bin / "python").symlink_to(sys.executable)
+
+    def _serve(self, handler_cls):
+        port = _free_port()
+        httpd = http.server.HTTPServer(("127.0.0.1", port), handler_cls)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        return httpd, thread, port
+
+    def test_warm_up_requests_each_endpoint_twice(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        release_dir = app_root / "releases" / "fakesha000001"
+        self._fake_release_python(release_dir)
+        seen: list[str] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                if self.path.startswith("/api/v1/matches?limit=1"):
+                    self.wfile.write(b'{"matches": [{"match_id": 555}]}')
+                else:
+                    self.wfile.write(b"{}")
+
+            def log_message(self, *a):
+                pass
+
+        httpd, thread, port = self._serve(Handler)
+        try:
+            script = f'''
+{SOURCE_RELEASE}
+RELEASE_DIR="{release_dir}"
+LIVE_API_PORT={port}
+warm_up_live
+'''
+            r = _run(script, _base_env(app_root, tmp_path), timeout=60)
+            assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        finally:
+            httpd.shutdown()
+            thread.join(timeout=5)
+
+        assert seen.count("/api/v1/matches") == 2
+        assert seen.count(
+            "/api/v1/matches?status=upcoming&window=7d&limit=120&boost=free_predicted"
+        ) == 2
+        assert seen.count("/api/v1/leagues/47/standings") == 2
+        assert seen.count("/api/v1/matches?limit=1") == 1, "取 match_id 只需要请求一次"
+        assert seen.count("/api/v1/matches/555") == 2, "取到真实 match_id 后必须预热详情接口两次"
+        assert "预热" in r.stdout
+
+    def test_warm_up_never_aborts_release_on_non_2xx_or_connection_failure(self, tmp_path):
+        """所有接口(含 match_id 探测请求)都返回 500、空 body 时,JSON 解析必然
+        失败、拿不到 match_id;warm_up_live 仍必须返回 0——预热失败不能中止
+        发布,真正的验收是紧接着的 business_smoke。"""
+        app_root = _setup_app_root(tmp_path)
+        release_dir = app_root / "releases" / "fakesha000002"
+        self._fake_release_python(release_dir)
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(500)
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        httpd, thread, port = self._serve(Handler)
+        try:
+            script = f'''
+{SOURCE_RELEASE}
+RELEASE_DIR="{release_dir}"
+LIVE_API_PORT={port}
+warm_up_live
+echo "WARM_UP_EXIT=$?"
+'''
+            r = _run(script, _base_env(app_root, tmp_path), timeout=60)
+            assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+            assert "WARM_UP_EXIT=0" in r.stdout
+            assert "HTTP 500" in r.stdout
+        finally:
+            httpd.shutdown()
+            thread.join(timeout=5)
+
+    def test_warm_up_skips_match_detail_when_no_match_id_found(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        release_dir = app_root / "releases" / "fakesha000003"
+        self._fake_release_python(release_dir)
+        seen: list[str] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"matches": []}')
+
+            def log_message(self, *a):
+                pass
+
+        httpd, thread, port = self._serve(Handler)
+        try:
+            script = f'''
+{SOURCE_RELEASE}
+RELEASE_DIR="{release_dir}"
+LIVE_API_PORT={port}
+warm_up_live
+'''
+            r = _run(script, _base_env(app_root, tmp_path), timeout=60)
+            assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        finally:
+            httpd.shutdown()
+            thread.join(timeout=5)
+
+        assert not any(p.startswith("/api/v1/matches/") and p != "/api/v1/matches?limit=1" for p in seen
+                        if p not in ("/api/v1/matches", "/api/v1/matches?status=upcoming&window=7d&limit=120&boost=free_predicted",
+                                     "/api/v1/leagues/47/standings", "/api/v1/matches?limit=1")), seen
+        assert "跳过比赛详情接口预热" in r.stdout
+
+    def test_warm_up_runs_between_verify_live_and_business_smoke(self, tmp_path):
+        app_root = _setup_app_root(tmp_path)
+        order_marker = tmp_path / "order.txt"
+        previous_dir = app_root / "releases" / "prevsha000000"
+        previous_dir.mkdir(parents=True)
+        (app_root / "current").symlink_to(previous_dir, target_is_directory=True)
+
+        script = f'''
+{SOURCE_RELEASE}
+preflight
+do_build() {{ :; }}
+do_backup_and_migrate() {{ :; }}
+candidate_smoke() {{ return 0; }}
+switch_current() {{ ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"; }}
+verify_live() {{ echo "verify_live" >> "{order_marker}"; return 0; }}
+warm_up_live() {{ echo "warm_up_live" >> "{order_marker}"; return 0; }}
+business_smoke() {{ echo "business_smoke" >> "{order_marker}"; return 0; }}
+cleanup_old_releases() {{ :; }}
+cleanup_old_backups() {{ :; }}
+main
+'''
+        r = _run(script, _base_env(app_root), timeout=60)
+        assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+        assert order_marker.read_text().splitlines() == ["verify_live", "warm_up_live", "business_smoke"]

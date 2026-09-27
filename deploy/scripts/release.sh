@@ -406,6 +406,54 @@ verify_live() {
   [ "$ok" -eq 1 ]
 }
 
+# ── 阶段 6a:预热(2026-09-27):重启后进程是冷的(SQLite 页缓存空、Python 模块
+# 刚 import),第一批真实用户请求如果撞上冷启动,容易触发前端 8 秒服务端
+# fetch 超时(frontend/lib/api-v1.ts SERVER_FETCH_TIMEOUT_MS)或计入
+# slow_requests 日志。串行请求几个关键接口各两次,让 SQLite 页缓存和查询
+# 计划在真实用户到达前就热起来。刻意不影响发布结果:单次请求超时或非 2xx
+# 只记日志,不 return 1——冷启动预热本身不是验收,真正验收仍是下面的
+# verify_live(已跑过)和 business_smoke(紧接着跑)。
+_warm_up_one() {
+  local url="$1" out
+  out="$(curl -s --max-time 30 -o /dev/null -w '%{http_code} %{time_total}' "$url" 2>/dev/null || echo "000 -")"
+  log "预热: $url -> HTTP ${out%% *}, 耗时 ${out#* }s"
+}
+
+warm_up_live() {
+  local release_py="$RELEASE_DIR/.venv/bin/python" base="http://127.0.0.1:$LIVE_API_PORT"
+  local url match_id
+  # /api/v1/matches:默认无筛选,是本次要分析的冷启动慢查询本身。
+  # 首页真实调用(frontend/app/page.tsx):status=upcoming&window=7d&limit=120&boost=free_predicted。
+  # /api/v1/leagues/47/standings:英超积分榜,联赛页常用接口。
+  for url in \
+    "$base/api/v1/matches" \
+    "$base/api/v1/matches?status=upcoming&window=7d&limit=120&boost=free_predicted" \
+    "$base/api/v1/leagues/47/standings"
+  do
+    _warm_up_one "$url"
+    _warm_up_one "$url"
+  done
+
+  # 比赛详情接口:先取一个真实存在的 match_id,取不到就跳过(不影响发布;
+  # 预热不是验收)。json.load 失败或字段缺失一律吞掉,不让预热本身抛出。
+  match_id="$(curl -s --max-time 30 "$base/api/v1/matches?limit=1" 2>/dev/null \
+    | "$release_py" -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin).get("matches") or []
+    if rows:
+        print(rows[0]["match_id"])
+except Exception:
+    pass
+' 2>/dev/null || true)"
+  if [ -n "${match_id:-}" ]; then
+    _warm_up_one "$base/api/v1/matches/$match_id"
+    _warm_up_one "$base/api/v1/matches/$match_id"
+  else
+    log "预热:未取到真实 match_id,跳过比赛详情接口预热"
+  fi
+}
+
 # ── 阶段 6b:业务冒烟(不只看进程存活和 HTTP 200) ─────────────────────
 business_smoke() {
   local release_py="$RELEASE_DIR/.venv/bin/python" html_ok=0 i
@@ -527,6 +575,9 @@ main() {
   if ! verify_live; then
     rollback
   fi
+
+  log "预热:重启后串行请求关键接口各 2 次,避免冷启动撞上真实用户请求"
+  warm_up_live
 
   log "业务冒烟:/api/v1/products、/api/v1/matches JSON + 首页 API 数据标志"
   if ! business_smoke; then
