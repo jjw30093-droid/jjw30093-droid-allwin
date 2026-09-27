@@ -1,0 +1,13 @@
+# allwin-api 文件描述符采样 + 看门狗(2026-09-27)。root 运行:需要读 allwin 用户进程的 /proc/<pid>/fd 并 systemctl restart。
+# 逻辑与保护条件见 backend/cli/fdwatch.py 头注:连续 3 次 /readyz 失败或 fd 超软上限 70% → 重启 allwin-api,
+# 15 分钟内最多重启 1 次,每次重启前另存快照。采样写 /opt/allwin/shared/logs/fd_sampling/(按天,保留 14 天)。
+# 安装:cp 到 /etc/systemd/system/ → systemctl daemon-reload → systemctl enable --now allwin-fdwatch.timer
+[Unit]
+Description=allwin-api fd sampling + watchdog (readyz/fd threshold restart with cooldown)
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/allwin/current/backend/cli/fdwatch.py
+TimeoutStartSec=120

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run allwin fd sampling + watchdog every minute
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -12,7 +12,13 @@ WorkingDirectory=/opt/allwin/current
 # 共享 .env:APP_ENV=production、AUTH/微信凭证、THORDATA_PROXY、
 # ALLWIN_DATA_DIR=/opt/allwin/shared/data(数据库随 release 切换保持不动)
 EnvironmentFile=/opt/allwin/shared/.env
-ExecStart=/opt/allwin/current/.venv/bin/uvicorn backend.api.app:app --host 127.0.0.1 --port 8000
+# 2026-09-27 防连接堆积(API 曾多次 fd 耗尽 Errno 24,软上限 1024):
+#   --limit-concurrency 200:同时处理的连接/任务超过 200 时新请求直接回 503,而不是无限堆积
+#     (日常约 1 请求/秒,200 远高于日常、远低于 fd 上限);
+#   --timeout-keep-alive 5:空闲 keep-alive 连接 5 秒后由服务端关闭(uvicorn 默认也是 5,显式写出)。
+ExecStart=/opt/allwin/current/.venv/bin/uvicorn backend.api.app:app --host 127.0.0.1 --port 8000 --timeout-keep-alive 5 --limit-concurrency 200
+# fd 软上限:systemd 默认软限制 1024,曾被耗尽;65536 是软/硬上限(drop-in 见 allwin-api.service.d/limits.conf)
+LimitNOFILE=65536
 Restart=on-failure
 RestartSec=3
 TimeoutStartSec=30

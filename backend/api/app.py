@@ -112,6 +112,11 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
         """
         problems = []
         for name in ("core", "platform", "odds"):
+            # 连接必须在 finally 里关闭(2026-09-27):此前 conn.close() 只在成功路径,
+            # conn.execute 一旦抛异常(库被锁/损坏)连接就泄漏。/readyz 每 5 分钟被健康检查
+            # 调一次,数据库故障期间每次都会漏 3 个 fd(库文件 + -wal + -shm)——恰好在
+            # 最不该耗 fd 的时候耗 fd(API 曾多次因 Errno 24 文件描述符耗尽而不可用)。
+            conn = None
             try:
                 st = migrate.status(name)
                 if st["pending"]:
@@ -120,10 +125,12 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
                     problems.append(f"{name}: checksum_drift={len(st['checksum_drift'])}")
                 conn = connect_ro(name)
                 conn.execute("SELECT 1").fetchone()
-                conn.close()
             except Exception:  # pragma: no cover - 故障路径
                 log.exception("readyz check failed for db=%s", name)
                 problems.append(f"{name}: unavailable")
+            finally:
+                if conn is not None:
+                    conn.close()
         if problems:
             from fastapi.responses import JSONResponse
 

@@ -88,20 +88,51 @@ export function leagueSectionPath(
 
 /* ── 服务端(RSC)读取:匿名公开数据 ───────────────────── */
 
+/**
+ * 服务端请求 API 的统一超时(2026-09-27,防连接堆积):此前 serverGet/serverGetOptional
+ * 没有任何超时,API 一旦变慢或卡住,Next 服务端的请求就无限挂着,连接一直占着 API 侧的 fd——
+ * 2026-08-25 起 API 多次文件描述符耗尽(Errno 24,软上限 1024),其中一个放大因素就是这种
+ * 没有上限的等待。8 秒足够覆盖正常查询(日常 <1s),超时抛出 Error(与其它失败同一种错误
+ * 形态,页面按既有的 try/catch 或路由错误边界处理,不会白屏挂起)。
+ * 覆盖整个请求周期:连接、等响应头、读响应体,都在同一个 AbortController 计时内。
+ */
+export const SERVER_FETCH_TIMEOUT_MS = 8000;
+
+async function withServerTimeout<T>(
+  path: string,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SERVER_FETCH_TIMEOUT_MS);
+  try {
+    return await run(controller.signal);
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`serving API timeout after ${SERVER_FETCH_TIMEOUT_MS}ms: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function serverGet<T>(
   path: string,
   opts: { revalidate?: number } = {},
 ): Promise<T> {
-  const res = await fetch(`${serverApiBase()}${path}`, {
-    ...(opts.revalidate != null
-      ? { next: { revalidate: opts.revalidate } }
-      : { cache: "no-store" as const }),
+  return withServerTimeout(path, async (signal) => {
+    const res = await fetch(`${serverApiBase()}${path}`, {
+      ...(opts.revalidate != null
+        ? { next: { revalidate: opts.revalidate } }
+        : { cache: "no-store" as const }),
+      signal,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`serving API ${res.status}: ${body.slice(0, 300)}`);
+    }
+    return (await res.json()) as T;
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`serving API ${res.status}: ${body.slice(0, 300)}`);
-  }
-  return res.json() as Promise<T>;
 }
 
 /** 401/403(联赛门禁等)返回 null 而不是抛错,页面渲染引导态。 */
@@ -109,14 +140,17 @@ export async function serverGetOptional<T>(
   path: string,
   opts: { revalidate?: number } = {},
 ): Promise<T | null> {
-  const res = await fetch(`${serverApiBase()}${path}`, {
-    ...(opts.revalidate != null
-      ? { next: { revalidate: opts.revalidate } }
-      : { cache: "no-store" as const }),
+  return withServerTimeout(path, async (signal) => {
+    const res = await fetch(`${serverApiBase()}${path}`, {
+      ...(opts.revalidate != null
+        ? { next: { revalidate: opts.revalidate } }
+        : { cache: "no-store" as const }),
+      signal,
+    });
+    if (res.status === 401 || res.status === 403 || res.status === 404) return null;
+    if (!res.ok) throw new Error(`serving API ${res.status}`);
+    return (await res.json()) as T;
   });
-  if (res.status === 401 || res.status === 403 || res.status === 404) return null;
-  if (!res.ok) throw new Error(`serving API ${res.status}`);
-  return res.json() as Promise<T>;
 }
 
 /* ── 浏览器端:带会话 cookie 的私有请求 ────────────────── */
