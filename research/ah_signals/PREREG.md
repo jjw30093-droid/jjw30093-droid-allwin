@@ -304,3 +304,7 @@ Phase 3/4/5/6 按任务书,每阶段末尾 `git status`、只提交任务文件�
   (5/10 场、对手调整、仅上半场)单独成表不进 FDR,B3/B4 的上半场版因 FirstHalf Goals
   全 NULL 标"不可算"。p 值用正态近似(df≈1600;服务器无 numpy/scipy,OLS+HC1 为纯
   Python 实现,已与 numpy 在合成数据上逐值核对一致)。
+- 2026-09-28 Phase 3 结论确认(站长):C 族 11 个、B 族 6 个均未通过 BH;Phase 5 方案(收盘线 +
+  B_composite + 全部 C 族 ridge,单一整体增量检验)批准,**ridge alpha 只能在每个训练窗口
+  内部 CV 选择,不得全样本调参**;先不跑。B1/B2 系数为负(与先验相反)记入 REPORT 探索性
+  部分,注明"不显著,不据此行动"。Phase 4 另行预注册于 `PREREG_phase4.md`。
