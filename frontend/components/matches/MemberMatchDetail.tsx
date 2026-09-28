@@ -21,11 +21,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
   clientFetch,
+  leagueSectionPath,
   type MatchDetailResponse,
   type MatchListResponse,
   type MatchPreviewResponse,
   type MatchReportResponse,
   type MatchSummary,
+  type TeamStatsResponse,
 } from "@/lib/api-v1";
 import {
   MatchDetailBody,
@@ -39,6 +41,9 @@ type LoadedData = {
   analysis: AnalysisBundle | null;
   report: MatchReportResponse | null;
   preview: MatchPreviewResponse | null;
+  /** 2026-09-28:「攻守 xG」象限图数据源,与 SSR 路径(app/matches/[matchId]/page.tsx)
+   *  同一个 leagueSectionPath("team-stats", …)。 */
+  leagueTeamStats: TeamStatsResponse["rows"] | null;
   previousMatch: MatchSummary | null;
   nextMatch: MatchSummary | null;
 };
@@ -64,7 +69,7 @@ export function MemberMatchDetail({
       const detail = await clientFetch<MatchDetailResponse>(
         `/api/v1/matches/${matchId}`,
       );
-      const [analysis, report, preview, related] = await Promise.all([
+      const [analysis, report, preview, related, leagueTeamStatsRes] = await Promise.all([
         clientFetch<AnalysisBundle>(`/api/v1/matches/${matchId}/analysis`).catch(
           () => null,
         ),
@@ -81,6 +86,12 @@ export function MemberMatchDetail({
         clientFetch<MatchListResponse>(
           `/api/v1/matches?${relatedMatchesQuery(detail.match.league_id)}`,
         ).catch(() => null),
+        // 与 SSR 路径同一个 leagueSectionPath,同一份数据(见 page.tsx 同一天的改动)。
+        clientFetch<TeamStatsResponse>(
+          leagueSectionPath("team-stats", String(detail.match.league_id), {
+            season: detail.match.season,
+          }),
+        ).catch(() => null),
       ]);
       const relatedMatches = related?.matches ?? [];
       const idx = relatedMatches.findIndex((item) => item.match_id === matchId);
@@ -89,6 +100,7 @@ export function MemberMatchDetail({
         analysis,
         report,
         preview,
+        leagueTeamStats: leagueTeamStatsRes?.rows ?? null,
         previousMatch: idx > 0 ? relatedMatches[idx - 1] : null,
         nextMatch:
           idx >= 0 && idx + 1 < relatedMatches.length
@@ -164,6 +176,7 @@ export function MemberMatchDetail({
       analysis={data.analysis}
       report={data.report}
       preview={data.preview}
+      leagueTeamStats={data.leagueTeamStats}
       previousMatch={data.previousMatch}
       nextMatch={data.nextMatch}
     />

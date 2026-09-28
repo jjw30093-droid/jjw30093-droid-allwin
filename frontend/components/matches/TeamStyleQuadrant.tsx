@@ -41,16 +41,67 @@ import {
   type PlotBox,
 } from "@/components/charts/crestQuadrantLayout";
 import { competitionRank } from "@/components/league/teamMetrics";
+import {
+  dirsOf,
+  outlierNames,
+  plotSet,
+  quadrantOf,
+  viewById,
+  type Pt,
+} from "@/components/league/quadrantViews";
+import { buildQuadrantOption } from "@/components/league/quadrantOption";
 import styles from "./MatchDataModules.module.css";
 import panelStyles from "./TeamStyleQuadrant.module.css";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import type { components } from "@/lib/api-types";
+import type { TeamSeasonStatRow } from "@/lib/api-v1";
 
 type StyleView = components["schemas"]["MatchPreviewStyleViewDTO"];
 type StylePoint = components["schemas"]["MatchPreviewStylePointDTO"];
 type PlottedPoint = StylePoint & { x: number; y: number };
 
-function usable(v: StyleView) {
+/**
+ * 「攻守 xG」视角(2026-09-28 起改为复用球队页 both-ends 视角与
+ * team_season_stats 数据,不再由 team_style_preview.py 产出——
+ * scripts/audit/quadrant_audit.py 发现它与球队页逐队数值 Spearman
+ * x-x/y-y 均 r=1.0,是同一份数据的重复实现)。id 沿用旧值,保持
+ * DOM/测试里已有的引用稳定;tab 文案与球队页同步为「攻守 xG」。
+ */
+const REAL_VIEW_ID = "xg-for-against";
+const REAL_VIEW = viewById("both-ends");
+
+/** 统一形状:legacy(poss-fastbreak/cross-box,来自 team_style_preview.py 的
+ * 近 N 场滚动)与 real(攻守 xG,来自球队页 both-ends + team_season_stats
+ * 的整赛季口径)在这一层统一成同一套字段,下面的选中态/表格/ariaSummary/
+ * 图例代码不用为两种来源各写一份——只有"怎么算象限下标"和"怎么建
+ * ECharts option"两处仍然分叉,因为两边底层 view 对象的下标约定不同
+ * (quadrantIndex 原始高低 vs quadrantOf 好/坏,见文件顶部注释),不能
+ * 靠数值换算硬拉平,那正是 2026-09-16 门将视角标签写反那次真实事故的
+ * 错误模式。 */
+type NormalizedView = {
+  id: string;
+  tab: string;
+  title: string;
+  x_label: string;
+  y_label: string;
+  digits: number;
+  quadrants: [string, string, string, string];
+  y_lower_is_better: boolean;
+  points: PlottedPoint[];
+  isReal: boolean;
+  /** 仅 isReal=true 时有值:option 构造与详情面板都需要原始 Pt(带 key/teamId)。 */
+  realPts?: Pt[];
+  windowLabel: string;
+  /** legacy(近 N 场滚动)取自 StyleView.window;real(整赛季)为 null,
+   *  渲染时改用固定文案,不写一个不存在的"至多 N 场"。 */
+  window: number | null;
+};
+
+function quadOfFor(nv: NormalizedView, p: { x: number; y: number }, mx: number, my: number): number {
+  return nv.isReal ? quadrantOf(p, mx, my, dirsOf(REAL_VIEW)) : quadrantIndex(p, mx, my);
+}
+
+function usable(v: NormalizedView) {
   return v.points.filter((p) => p.x != null && p.y != null).length >= 4;
 }
 
@@ -104,8 +155,12 @@ export type StyleQuadrantOpts = {
 const COMPACT_DOT_SIZE = 8;
 
 /** 2026-08-24 抽出为可独立渲染冒烟测试的纯函数(CLAUDE.md §11.3)。 */
+/** buildOption 只读这四个字段;放宽成结构类型后 NormalizedView(legacy 分支)
+ *  和原始 StyleView 都能直接传,不用为了适配类型再包一层转换对象。 */
+export type LegacyViewLike = Pick<StyleView, "x_label" | "y_label" | "digits" | "quadrants">;
+
 export function buildOption(
-  view: StyleView,
+  view: LegacyViewLike,
   pts: PlottedPoint[],
   mx: number,
   my: number,
@@ -334,6 +389,7 @@ function chartHeightFor(width: number | null): number {
 
 export function TeamStyleQuadrant({
   views,
+  leagueTeamStats,
   homeTeamId,
   awayTeamId,
   homeName,
@@ -345,7 +401,13 @@ export function TeamStyleQuadrant({
   windowNote,
   crossLeague = false,
 }: {
+  /** team_style_preview.py 现只产出「控球×快攻」「传中×禁区触球」两个视角
+   *  (近 N 场滚动);第三个「攻守 xG」已改为下面 leagueTeamStats 驱动。 */
   views: StyleView[];
+  /** 2026-09-28 新增:球队页 /api/v1/leagues/{id}/team-stats 的整赛季行,
+   *  为空(联赛缺 xg 档,或取数失败)时「攻守 xG」标签自动隐藏并说明原因,
+   *  不静默降级成空白 tab。 */
+  leagueTeamStats: TeamSeasonStatRow[] | null;
   homeTeamId: number;
   awayTeamId: number;
   homeName: string;
@@ -356,13 +418,62 @@ export function TeamStyleQuadrant({
   /** 该队近期代表色:本场配色缺失或校验不过时的第二级(见 charts/matchTeamColors.ts) */
   homeTeamBrandColor?: TeamBrandColor | null;
   awayTeamBrandColor?: TeamBrandColor | null;
-  /** 「近 5 场 · 2026-05-10 至 2026-08-09」——必须带真实日期区间(CLAUDE.md 措辞纪律) */
+  /** 「近 5 场 · 2026-05-10 至 2026-08-09」——必须带真实日期区间(CLAUDE.md 措辞纪律)。
+   *  只用于 legacy 的两个近 N 场视角;「攻守 xG」是整赛季口径,窗口文案由组件自己算。 */
   windowNote: string;
   /** 欧战等跨联赛赛事:本图画的是"该联赛全部球队",两队分处不同联赛时这个
    * 概念本身不成立,不是数据没采够。只影响空态文案,不改绘图逻辑。 */
   crossLeague?: boolean;
 }) {
-  const available = useMemo(() => views.filter(usable), [views]);
+  // 「攻守 xG」:用球队页同一个 both-ends 视角 + plotSet 取点(整赛季,不滚动
+  // 近 N 场)——与球队数据页「攻守 xG」tab 逐字节同一套数据函数和组件
+  // (quadrantOption.ts::buildQuadrantOption),不是又写一份近似实现。
+  const realPts = useMemo(
+    () => (leagueTeamStats ? plotSet(leagueTeamStats, REAL_VIEW).pts : []),
+    [leagueTeamStats],
+  );
+  const normalizedViews = useMemo<NormalizedView[]>(() => {
+    const legacy: NormalizedView[] = views.map((v) => ({
+      id: v.id,
+      tab: v.tab,
+      title: v.title,
+      x_label: v.x_label,
+      y_label: v.y_label,
+      digits: v.digits,
+      quadrants: v.quadrants as [string, string, string, string],
+      y_lower_is_better: v.y_lower_is_better === true,
+      points: v.points.filter((p): p is PlottedPoint => p.x != null && p.y != null),
+      isReal: false,
+      windowLabel: windowNote,
+      window: v.window,
+    }));
+    const real: NormalizedView = {
+      id: REAL_VIEW_ID,
+      tab: REAL_VIEW.tab,
+      title: REAL_VIEW.title,
+      x_label: REAL_VIEW.x.label,
+      y_label: REAL_VIEW.y.label,
+      digits: Math.max(REAL_VIEW.x.digits, REAL_VIEW.y.digits),
+      quadrants: REAL_VIEW.quadrants,
+      y_lower_is_better: dirsOf(REAL_VIEW).y === true,
+      points: realPts.map((p) => ({
+        team_id: p.teamId ?? -1,
+        name: p.name,
+        crest_url: p.crestUrl,
+        x: p.x,
+        y: p.y,
+      })),
+      isReal: true,
+      realPts,
+      windowLabel: "本联赛本赛季（与球队数据页「攻守 xG」口径一致）",
+      window: null,
+    };
+    // 沿用原来的 tab 顺序:控球×快攻/传中×禁区触球 在前,攻守 xG 放最后
+    // (与旧版 _TEAM_STAT_VIEWS 的顺序一致,不打乱既有视觉习惯)。
+    return [...legacy, real];
+  }, [views, realPts, windowNote]);
+
+  const available = useMemo(() => normalizedViews.filter(usable), [normalizedViews]);
   const [viewId, setViewId] = useState<string | null>(null);
   const view = available.find((v) => v.id === viewId) ?? available[0];
   const defaultPair = useMemo(() => [homeTeamId, awayTeamId], [homeTeamId, awayTeamId]);
@@ -432,6 +543,34 @@ export function TeamStyleQuadrant({
   const option = useMemo(() => {
     if (!view || !derived) return null;
     const { mx, my, xr, yr, crestSize, layout } = derived;
+    if (view.isReal) {
+      // 「攻守 xG」:复用球队页的 option 构造器(quadrantOption.ts),不是
+      // 再拿本文件的 buildOption 凑一份近似实现——两边渲染逻辑(队徽避让、
+      // 四象限角标、tooltip 措辞)完全一致,以后只用改一处。
+      const realPtsList = view.realPts ?? [];
+      const selectedIndexes = realPtsList
+        .map((p, i) => (p.teamId != null && selectedIds.includes(p.teamId) ? i : -1))
+        .filter((i) => i >= 0);
+      const labelled = new Set([
+        ...outlierNames(realPtsList, mx, my),
+        ...realPtsList.filter((p) => !p.crestUrl).map((p) => p.name),
+        ...selectedIndexes.map((i) => realPtsList[i].name),
+      ]);
+      return buildQuadrantOption({
+        view: REAL_VIEW,
+        pts: realPtsList,
+        mx,
+        my,
+        colors: effectiveColors,
+        labelled,
+        crestSize,
+        layout,
+        xr,
+        yr,
+        grid: QUADRANT_GRID,
+        selectedIndexes,
+      });
+    }
     return buildOption(view, pts, mx, my, homeTeamId, awayTeamId, effectiveColors, {
       crestSize,
       layout,
@@ -461,7 +600,7 @@ export function TeamStyleQuadrant({
 
   const { mx, my } = derived;
   const fmt = (v: number) => v.toFixed(view.digits);
-  const quadOf = (p: { x: number; y: number }) => view.quadrants[quadrantIndex(p, mx, my)];
+  const quadOf = (p: { x: number; y: number }) => view.quadrants[quadOfFor(view, p, mx, my)];
   const lowerY = view.y_lower_is_better === true;
 
   // ECharts 的 click 只在点到图形元素时触发,点空白 canvas 没有回调——
@@ -485,11 +624,11 @@ export function TeamStyleQuadrant({
   const away = pts.find((p) => p.team_id === awayTeamId);
   const ariaSummary =
     `${view.title}象限图,共 ${pts.length} 支球队。` +
-    `虚线是这 ${pts.length} 支球队${windowNote}的平均值(${view.x_label} ${fmt(mx)},${view.y_label} ${fmt(my)}),` +
+    `虚线是这 ${pts.length} 支球队${view.windowLabel}的平均值(${view.x_label} ${fmt(mx)},${view.y_label} ${fmt(my)}),` +
     `只在联赛内部比较,不能跨联赛。` +
     (home ? `${homeName} ${fmt(home.x)} / ${fmt(home.y)},落在「${quadOf(home)}」。` : `${homeName} 缺该视角数据。`) +
     (away ? `${awayName} ${fmt(away.x)} / ${fmt(away.y)},落在「${quadOf(away)}」。` : `${awayName} 缺该视角数据。`) +
-    `描述的是${windowNote}怎么踢,不是对本场的预测。` +
+    `描述的是${view.windowLabel}怎么踢,不是对本场的预测。` +
     (!isDefault && selected.length
       ? `当前对比:${selected.map((p) => `${p.name}(${quadOf(p)})`).join("、")}。`
       : "");
@@ -503,10 +642,14 @@ export function TeamStyleQuadrant({
         <span className={pageStyles.sectionBar} aria-hidden />
         球队风格定位
       </h2>
-      <p className={styles.windowNote}>{windowNote}</p>
+      <p className={styles.windowNote}>{view.windowLabel}</p>
 
       <div className={styles.viewTabs} role="tablist" aria-label="象限图视角">
-        {views.map((v) => {
+        {/* N=0 时(如联赛缺 xg 档、team-stats 取数失败)该视角标签直接不出现,
+            不是灰置(disabled) —— 2026-09-28 站长要求"自动隐藏标签",不再让
+            用户点到一个永远打不开的按钮。仍旧无法出现在 available 里的
+            (可能达标但队数不足 4)才保留旧的灰置 + title 提示。 */}
+        {normalizedViews.filter((v) => v.isReal ? leagueTeamStats != null : true).map((v) => {
           const ok = available.some((a) => a.id === v.id);
           return (
             <button
@@ -524,6 +667,11 @@ export function TeamStyleQuadrant({
           );
         })}
       </div>
+      {leagueTeamStats == null && (
+        <p className={styles.windowNote}>
+          {REAL_VIEW.tab}：该联赛该赛季数据不足或缺少 xG 档，标签已隐藏。
+        </p>
+      )}
 
       <div className={styles.chartCard}>
         <div className={styles.chartHead}>
@@ -531,7 +679,9 @@ export function TeamStyleQuadrant({
           {/* 2026-09 真实缺陷修复:此前写死"每队 5 场",与上方 windowNote
               (该队真实找到的场次,可能因样本不足而更少)矛盾——同一张卡里
               两个互相矛盾的样本量。`view.window` 是上限,措辞改成"至多"。 */}
-          <span className={styles.chartSample}>{pts.length} 支 · 每队至多 {view.window} 场</span>
+          <span className={styles.chartSample}>
+            {pts.length} 支 · {view.window != null ? `每队至多 ${view.window} 场` : "本赛季全部已完赛比赛"}
+          </span>
         </div>
         {/* 卡片自带摘要段落,关掉 EChart 内置摘要避免重复(a11y label 仍在) */}
         {/* 键盘路径走 Esc 与「恢复本场两队」,这个 div 的 onClick 只服务鼠标/触屏"点空白" */}
@@ -625,7 +775,7 @@ export function TeamStyleQuadrant({
                 </table>
               </div>
               <p className={panelStyles.foot}>
-                「第 N/M」= 联赛内排名 / 该视角有数据的球队数，为{windowNote}联赛内部比较；
+                「第 N/M」= 联赛内排名 / 该视角有数据的球队数，为{view.windowLabel}联赛内部比较；
                 {lowerY ? `${view.y_label}越低越好，排名按升序；` : ""}
                 点击其它队徽可换成与它对比，按 Esc 或点空白处回到本场两队。
               </p>

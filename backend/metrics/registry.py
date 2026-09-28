@@ -203,9 +203,10 @@ POSSESSION_CONTROL: dict[str, MetricDef] = {
 }
 
 # ── 图3:防守承压与限制能力(对手在同一场比赛里的进攻数据)────────────
-# 全部通过对手联结取值(同 team_style_preview.py::_xg_for_against_points
-# 的按主客定位对手手法),不是自己队伍的字段——被射门数/被射正数/让出xG
-# 描述的是"对手在这场创造了多少",不是本队自己的动作。
+# 全部通过对手联结取值(同 backend/queries/league_stats.py 里"被创造 xG"
+# 走 fact_league_table 的 xg 档、按主客定位对手的手法),不是自己队伍的
+# 字段——被射门数/被射正数/让出xG 描述的是"对手在这场创造了多少",不是
+# 本队自己的动作。
 DEFENSIVE_PRESSURE: dict[str, MetricDef] = {
     "shots_faced": MetricDef(
         canonical_key="shots_faced", name_zh="被射门",

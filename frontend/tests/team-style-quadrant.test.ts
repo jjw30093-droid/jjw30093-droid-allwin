@@ -15,13 +15,14 @@ describe("球队风格象限图 quadrantIndex", () => {
   });
 
   /**
-   * xg-for-against 视角(y=预期失球,越低越好)的完整真值表回归——直接对齐
-   * backend/queries/team_style_preview.py 里为该视角写的 quadrants 文案
-   * ["对攻型","攻守兼备","攻守俱弱","重守轻攻"],证明"后端文案下标 + 前端
-   * 原始高低下标"两边组合后,用户看到的最终象限名是方向语义正确的,
-   * 不是"y 高 = 好"这个错误假设(修复前四个标签全部错位)。
+   * 通用真值表回归:quadrantIndex 的原始高低下标 + 一组"y 越低越好"的
+   * quadrants 文案组合后,方向语义必须正确,不是"y 高 = 好"这个错误假设
+   * (修复前四个标签全部错位)。「攻守 xG」视角本身 2026-09-28 起已改为
+   * 复用球队页 quadrantOf/dirsOf(见 tests/team-quadrant-views.test.ts),
+   * 这里的 quadrants 文案只是历史遗留的示例数组,用来验证 quadrantIndex
+   * 这个仍在被 poss-fastbreak/cross-box 使用的纯函数本身没有问题。
    */
-  it("预期进球×预期失球 视角:方向语义端到端正确(与后端 quadrants 文案对齐)", () => {
+  it("y 反转的方向语义:quadrantIndex 原始高低下标 + 反转文案组合正确", () => {
     const quadrants = ["对攻型", "攻守兼备", "攻守俱弱", "重守轻攻"];
     const mx = 1.5; // 场均预期进球均值
     const my = 1.3; // 场均预期失球均值(越低越好)

@@ -40,9 +40,12 @@ def _shot(conn, match_id, team_id, situation, xg, *, player_id="pX"):
 def style_league(data_dir):
     """英超三队(1001/1002/1003)各 5 场近赛,风格互不相同,供象限/来源拆解测试。
 
-    1001(高控球高快攻):poss 高、fastbreak 射门占比高、xg-for/against 都有数据。
-    1002(低控球低快攻,且 expected_goals 缺失 → xg-for-against 视角该队应为 None)。
-    1003(样本只有 2 场,验证"每队独立窗口"不会被 1001/1002 的 5 场拖累)。
+    1001(高控球高快攻)。1002(低控球低快攻)。1003(样本只有 2 场,验证
+    "每队独立窗口"不会被 1001/1002 的 5 场拖累)。expected_goals 字段仍然写入
+    (1002 故意不给),供 backend/queries/league_stats.py::team_season_stats
+    的测试复用同一批夹具数据时对齐;本模块自己不再产出 xg-for-against 视角
+    (2026-09-28 起该视角改为前端复用球队页组件与 team_season_stats 数据,
+    不在 team_style_preview.py 里)。
     """
     conn = connect_rw("core")
     seed_core_schema(conn)
@@ -74,10 +77,13 @@ def style_league(data_dir):
 
 
 class TestLeagueStyleViews:
-    def test_three_views_returned_with_labels(self, style_league):
+    def test_two_views_returned_with_labels(self, style_league):
+        """2026-09-28 起只剩两个视角:第三个「攻守 xG」已改为前端复用球队页
+        both-ends 视角与 team_season_stats 数据(见 scripts/audit/quadrant_audit.py
+        发现的重复:与球队页逐队数值 Spearman r=1.0),不再由本模块产出。"""
         conn = connect_rw("core")
         views = q.league_style_views(conn, LEAGUE, SEASON, "2026-01-20", window=5)
-        assert [v["id"] for v in views] == ["poss-fastbreak", "cross-box", "xg-for-against"]
+        assert [v["id"] for v in views] == ["poss-fastbreak", "cross-box"]
         pf = views[0]
         assert pf["x_label"] == "控球率 %"
         assert pf["quadrants"] == ["控快兼备", "阵地控球", "防守反击", "控守被动"]
@@ -102,7 +108,7 @@ class TestLeagueStyleViews:
                 assert by_id[1001]["crest_url"] == "/api/v1/media/team-crests/fotmob/1001.png?v=abc"
             if 1002 in by_id:
                 assert by_id[1002]["crest_url"] is None
-        # 三个视角共 3 支球队 → 只解析 3 次,不是 3 视角 × N 队
+        # 两个视角共 3 支球队 → 只解析 3 次,不是 2 视角 × N 队
         assert sorted(calls) == sorted(set(calls))
 
     def test_poss_fastbreak_values(self, style_league):
@@ -112,15 +118,6 @@ class TestLeagueStyleViews:
         assert pf[1001]["x"] == 60.0
         assert pf[1001]["y"] == 50.0  # 每场 1 FastBreak + 1 RegularPlay,5/10 = 50%
         assert pf[1002]["y"] == 0.0  # 有射门但全非反击 —— 真实 0,不是缺失
-
-    def test_xg_for_against_missing_expected_goals_is_none_not_zero(self, style_league):
-        """1002 从未写入 expected_goals —— 该视角必须是 None,不能补 0(补 0 会把
-        没数据的球队画成全联赛防守最好)。"""
-        conn = connect_rw("core")
-        views = q.league_style_views(conn, LEAGUE, SEASON, "2026-01-20", window=5)
-        xg_view = {p["team_id"]: p for p in views[2]["points"]}
-        assert xg_view[1001]["x"] == 2.0
-        assert xg_view[1002]["x"] is None
 
     def test_per_team_independent_window_not_shared_match_dates(self, style_league):
         """1003 只打了 2 场(对手都是 1001),1001 打了 7 场 —— 1001 的近 5 场窗口
@@ -133,31 +130,16 @@ class TestLeagueStyleViews:
         assert pf[1001]["x"] == 58.0
         assert pf[1003]["x"] == 50.0
 
-    def test_direction_semantics_propagated_and_quadrant_labels_correct(self, style_league):
-        """xg-for-against 的 y 轴(让出 xG)是"越低越好"——这个方向语义必须端到端
-        传播(query 返回的 dict 必须带 y_lower_is_better),且象限标签数组本身要按
-        "x 好/y 好"的真实组合写,不能假定"y 高 = 好"。
-
-        用真值表逐一核对(x=预期进球 越高越好,y=预期失球 越低越好):
-          进球多(x高)+ 失球少(y低,方向好) → 攻守兼备
-          进球多(x高)+ 失球多(y高,方向差) → 对攻型
-          进球少(x低)+ 失球少(y低,方向好) → 重守轻攻
-          进球少(x低)+ 失球多(y高,方向差) → 攻守俱弱
-        这与 quadrants 数组按 [x高y高, x高y低, x低y高, x低y低](原始高低,不是好坏)
-        的既有下标约定必须一致换算:index0=x高y高=对攻型,index1=x高y低=攻守兼备,
-        index2=x低y高=攻守俱弱,index3=x低y低=重守轻攻。
-        """
+    def test_remaining_two_views_have_no_reversed_y_axis(self, style_league):
+        """poss-fastbreak/cross-box 的 y 轴本来就是"越高越偏向该风格",不需要反转
+        ——反转方向语义的原「攻守 xG」(y_lower_is_better=True)已随该视角一起移出
+        本模块,方向语义的端到端传播现在由前端 both-ends 视角
+        (frontend/components/league/quadrantViews.ts,与 tests/team-quadrant-views.test.ts
+        的 quadrantOf 真值表覆盖)负责。"""
         conn = connect_rw("core")
         views = q.league_style_views(conn, LEAGUE, SEASON, "2026-01-20", window=5)
-        xg_view = views[2]
-        assert xg_view["id"] == "xg-for-against"
-        assert xg_view["y_lower_is_better"] is True
-        # 其余两个视角的 y 轴本来就是"越高越偏向该风格",不需要反转
         assert views[0].get("y_lower_is_better", False) is False
         assert views[1].get("y_lower_is_better", False) is False
-        assert xg_view["quadrants"] == ["对攻型", "攻守兼备", "攻守俱弱", "重守轻攻"]
-        assert xg_view["x_label"] == "场均预期进球 xG"
-        assert xg_view["y_label"] == "场均预期失球 xGA"
 
 
 class TestSeasonScoping:

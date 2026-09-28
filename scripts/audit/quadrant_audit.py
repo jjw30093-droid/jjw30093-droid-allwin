@@ -137,7 +137,9 @@ TEAM_VIEWS = [
     # (id, x_key, y_key, tab, title)
     ("both-ends", "xg", "xga", "攻守 xG", "预期进球 × 预期失球"),
     ("tactics", "openPlayXg", "setPlayXg", "战术", "运动战 × 定位球"),
-    ("volume", "totalShots", "xg", "多射还是精射", "射门数量 × 机会质量"),
+    # 2026-09-28 修复对角线化(原 y=xg 与 x=totalShots 曾 r=0.849):
+    # y 改为每脚 xG(比值,不随射门量机械上升)。
+    ("volume", "totalShots", "xgPerShot", "多射还是精射", "射门数量 × 每脚质量"),
     ("possession-passing", "oppHalfPassShare", "totalShots", "推进方式", "前场传球占比"),
     ("set-piece-both-ends", "setPieceXgShare", "setPieceXgaShare", "定位球攻防", "定位球攻防"),
     ("attack-defence-quality", "xgPerShot", "oppXgPerShot", "攻防质量", "攻防质量"),
@@ -153,19 +155,25 @@ TEAM_VIEWS = [
     ("defence-goalkeeping", "oppXgPerShot", "gkSavesAboveExpected", "防线与门将", "防线与门将"),
 ]
 
-# 比赛页三个视角:x/y 来自 league_style_views 直接返回的 x/y(已在函数内算好)。
-# 2026-09-28:xg-for-against 已改名「攻守 xG」,与球队页 both-ends 是同一个视角
-# (Phase 2 合并共用实现前,这里仍按各自当时的数据源分别取数、只统一显示名)。
+# 比赛页视角:x/y 来自 league_style_views 直接返回的 x/y(已在函数内算好)。
+# 2026-09-28:原第三个视角"xg-for-against"(攻守 xG)已删除对应的 team_style_
+# preview.py 实现,改为比赛页直接复用球队页 both-ends 视角的组件与
+# team_season_stats 数据(TeamStyleQuadrant.tsx)——不再是 league_style_views
+# 产出的独立视角,因此这里也不再列出;它现在已经等同于 TEAM_VIEWS 里的
+# both-ends,由那一行覆盖。
 MATCH_VIEWS = [
     ("poss-fastbreak", "控球 × 快攻", "控球率 % × 快攻射门占比 %"),
     ("cross-box", "传中 × 禁区触球", "场均成功传中 × 场均禁区触球"),
-    ("xg-for-against", "攻守 xG", "预期进球 × 预期失球"),
 ]
 
 PLAYER_VIEWS = [
     # (id, x_key, y_key, tab, title, positions)
     ("player-shooting-finishing", "npxgPer90", "finishingDeltaPer90", "射门与终结", "每90分钟非点球xG × 终结超额", (2, 3)),
-    ("player-creativity", "chancesCreatedPer90", "xaPer90", "进攻创造力", "每90分钟创造机会数 × 预期助攻(xA)", (1, 2, 3)),
+    # 2026-09-28 修复对角线化(原 y=xaPer90 与 x=chancesCreatedPer90 曾
+    # r=0.896):y 改为 xaPerChanceCreated = xA 累计 ÷ 创造机会累计(比值,
+    # 创造机会<5 次记 None——与前端 PLAYER_METRICS.xaPerChanceCreated 同一
+    # 口径,见 player_metric_value_special() 里对这个 key 的特殊处理)。
+    ("player-creativity", "chancesCreatedPer90", "xaPerChanceCreated", "进攻创造力", "每90分钟创造机会数 × 每次创造的xA", (1, 2, 3)),
     ("player-defensive-contribution", "defensiveActionsPer90", "duelWinRate", "防守贡献", "每90分钟防守动作 × 对抗成功率", (1, 2)),
     ("player-progression", "touchesPer90", "progressionRate", "持球推进", "每90分钟触球数 × 每百次触球送进前场传球数", (1, 2)),
     ("player-goalkeeping", "xgotFacedPer90", "goalsPreventedPer90", "门将扑救", "每90分钟面对射正预期进球 × 扑救超额", (0,)),
@@ -179,15 +187,32 @@ VIEW_GROUP_LABELS = ["攻防总览", "进攻构成", "射门质量", "控球与�
 
 
 def player_metric_value(ratios: dict | None, key: str) -> float | None:
+    if key == "xaPerChanceCreated":
+        return _xa_per_chance_created(ratios)
     if not ratios:
         return None
     d = ratios.get(key)
     return num(d.get("value")) if d else None
 
 
+def _xa_per_chance_created(ratios: dict | None) -> float | None:
+    """与 frontend/components/league/playerMetrics.ts::xaPerChanceCreated
+    同一口径:xA 累计 numerator ÷ 创造机会累计 numerator,创造机会<5 次记 None。"""
+    if not ratios:
+        return None
+    xa = ratios.get("xa_per90")
+    ch = ratios.get("chances_created_per90")
+    xa_num = num(xa.get("numerator")) if xa else None
+    ch_num = num(ch.get("numerator")) if ch else None
+    if xa_num is None or ch_num is None or ch_num < 5:
+        return None
+    return xa_num / ch_num
+
+
 PLAYER_RATIO_KEY_MAP = [
     ("npxgPer90", "npxg_per90"), ("finishingDeltaPer90", "finishing_delta_per90"),
     ("chancesCreatedPer90", "chances_created_per90"), ("xaPer90", "xa_per90"),
+    ("xaPerChanceCreated", "xaPerChanceCreated"),  # 见 player_metric_value() 的特殊处理
     ("defensiveActionsPer90", "defensive_actions_per90"), ("duelWinRate", "duel_win_rate"),
     ("touchesPer90", "touches_per90"), ("progressionRate", "progression_rate"),
     ("xgotFacedPer90", "xgot_faced_per90"), ("goalsPreventedPer90", "goals_prevented_per90"),

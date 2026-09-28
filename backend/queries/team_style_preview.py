@@ -55,8 +55,10 @@ _SITUATION_ZH: dict[str, str] = {
     "Penalty": "点球",
 }
 
-# 三个视角的定义:(id, tab短标签, 标题, x字段, y字段, x轴名, y轴名, 小数位, 四象限中文名)
-# 象限顺序:x高y高 / x高y低 / x低y高 / x低y低(与 TeamStyleQuadrant.tsx 的 quadOf 对应)。
+# 两个视角的定义:(id, tab短标签, 标题, x字段, y字段, x轴名, y轴名, 小数位, 四象限中文名)
+# 象限顺序:x高y高 / x高y低 / x低y高 / x低y低(与 TeamStyleQuadrant.tsx 的 quadrantIndex
+# 对应)。第三个视角「攻守 xG」2026-09-28 起改为复用球队页组件与数据,不在这里定义,
+# 见文件下方 league_style_views() 之前的说明。
 #
 # 文案纪律(2026-09-09 术语校准):象限名一律用中文足球术语(攻守兼备 / 防守反击 /
 # 两翼齐飞……),不用口语("既控又快""少压向禁区")。xG 轴给中文全称"预期进球 /
@@ -74,19 +76,16 @@ _TEAM_STAT_VIEWS = [
         # 传中多+禁区触球多 / 传中多+禁区触球少 / 传中少+禁区触球多 / 传中少+禁区触球少
         "quadrants": ["两翼齐飞", "边路起球", "中路渗透", "难入禁区"],
     },
-    {
-        # x(预期进球)越高越好,y(预期失球)越低越好——quadrants 数组仍按既有
-        # [x高y高, x高y低, x低y高, x低y低](原始高低,不是好坏)下标约定,
-        # 但文案必须换算成"两个方向都指向好"才算"攻守兼备":
-        # x高y低(进球多+失球少)才是攻守兼备;x高y高(进球多+失球多)是同时开放的对攻型;
-        # x低y低(进球少+失球少)是重守轻攻;x低y高(进球少+失球多)才是真正的攻守俱弱。
-        # 见 tests/backend/test_team_style_preview.py::test_direction_semantics_propagated_and_quadrant_labels_correct
-        "id": "xg-for-against", "tab": "攻防 xG", "title": "预期进球 × 预期失球",
-        "x_label": "场均预期进球 xG", "y_label": "场均预期失球 xGA", "digits": 2,
-        "quadrants": ["对攻型", "攻守兼备", "攻守俱弱", "重守轻攻"],
-        "y_lower_is_better": True,
-    },
 ]
+# 2026-09-28 站长拍板(scripts/audit/quadrant_audit.py 命名审计发现的真实重复):
+# 原来这里还有第三个视角"xg-for-against"(x=预期进球 y=预期失球,近 5 场滚动),
+# 与球队页 quadrantViews.ts 的 both-ends 视角(现已改名「攻守 xG」)逐队数值
+# 几乎完全相同(Spearman x-x r=1.0, y-y r=1.0, n=96)——同一份 xG/xGA 数据被
+# 两处各写一次。比赛页现在直接复用球队页那个视角的组件与数据函数(全联赛
+# 全赛季口径,不是这里的近 N 场滚动),见 frontend/components/matches/
+# TeamStyleQuadrant.tsx 与 frontend/app/matches/[matchId]/page.tsx 的
+# leagueTeamStats 取数;本文件不再产出这个视角,_xg_for_against_points()
+# 一并删除,不留一份没人调用的重复实现。
 
 
 def _single_team_stat(
@@ -145,37 +144,6 @@ def _team_stat_points(
     return {int(r["tid"]): {"x": r["x"], "y": r["y"]} for r in rows}
 
 
-def _xg_for_against_points(
-    conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str, window: int,
-) -> dict[int, dict[str, float | None]]:
-    """场均创造 xG(自身)× 场均让出 xG(同场对手)。需要按主客定位对手,单独实现。"""
-    sql = """
-      WITH ranked AS (
-        SELECT m.Match_ID mid, t.Team_ID tid, m.Home_Team_ID home_id, m.Away_Team_ID away_id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY t.Team_ID
-                 ORDER BY COALESCE(m.kickoff_at_utc, m.Date) DESC, m.Match_ID DESC
-               ) rn
-          FROM dim_match m
-          JOIN fact_team_match_stats t ON t.Match_ID=m.Match_ID AND t.Period='All'
-         WHERE m.League_ID=? AND m.Season=? AND m.status IN ('Finish','Finished')
-           AND COALESCE(m.kickoff_at_utc, m.Date) < ?
-      ),
-      last_n AS (SELECT mid, tid, home_id, away_id FROM ranked WHERE rn<=?)
-      SELECT l.tid,
-             AVG(json_extract(t_own.extra_json, '$.expected_goals')) x,
-             AVG(json_extract(t_opp.extra_json, '$.expected_goals')) y
-        FROM last_n l
-        JOIN fact_team_match_stats t_own ON t_own.Match_ID=l.mid AND t_own.Team_ID=l.tid AND t_own.Period='All'
-        JOIN fact_team_match_stats t_opp ON t_opp.Match_ID=l.mid
-         AND t_opp.Team_ID = (CASE WHEN l.tid=l.home_id THEN l.away_id ELSE l.home_id END)
-         AND t_opp.Period='All'
-       GROUP BY l.tid
-    """
-    rows = conn_core.execute(sql, (league_id, season, before_date, window)).fetchall()
-    return {int(r["tid"]): {"x": r["x"], "y": r["y"]} for r in rows}
-
-
 def league_style_views(
     conn_core: sqlite3.Connection, league_id: int, season: str, before_date: str,
     window: int = WINDOW,
@@ -191,7 +159,7 @@ def league_style_views(
     """
     fastbreak = _fastbreak_share_by_team(conn_core, league_id, season, before_date, window)
 
-    # 2026-08-19 性能修复:先把三个视角各自的 points_map 都算出来,再用它们
+    # 2026-08-19 性能修复:先把两个视角各自的 points_map 都算出来,再用它们
     # team_id 的并集去查译名——team_display_map() 每次都全扫 dim_match
     # (33,868 行)求全部 304 支球队的译名,而这里最多只用得上一个联赛的
     # 十几到二十支球队。改成两遍循环(先聚合、再拼名字)是为了让
@@ -200,9 +168,7 @@ def league_style_views(
     view_points: list[tuple[dict[str, Any], dict[int, dict[str, Any]]]] = []
     all_team_ids: set[int] = set()
     for view in _TEAM_STAT_VIEWS:
-        if view["id"] == "xg-for-against":
-            points_map = _xg_for_against_points(conn_core, league_id, season, before_date, window)
-        elif view["id"] == "poss-fastbreak":
+        if view["id"] == "poss-fastbreak":
             poss = _single_team_stat(
                 conn_core, league_id, season, before_date, "BallPossesion", window
             )

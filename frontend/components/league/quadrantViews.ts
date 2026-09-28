@@ -123,13 +123,17 @@ export const VIEWS: View[] = [
     // 标签同名——该视角却分在 group:"overview"(攻防总览)下,默认打开页面时
     // 类别行与视角 tab 行会同时出现两个"射门质量"文字,不是同一视角渲染了
     // 两次,是两个不同配置碰巧同名。改名解决,不改分组结构。
+    // 2026-09-28 同一次审计还发现这张图本身对角线化(x=射门数 y=总 xG 时
+    // Spearman r=0.849)——射门越多,总 xG 天然越高,两根轴本质上量着同一件事
+    // (进攻活跃度),象限区分度弱。纵轴改成"每脚 xG"(质量,不随射门量机械
+    // 上升)后两根轴才是真正独立的两件事:射得多不多、射得准不准。
     tab: "多射还是精射",
-    title: "射门数量 × 机会质量",
+    title: "射门数量 × 每脚质量",
     x: METRICS.totalShots,
-    y: METRICS.xg,
+    y: METRICS.xgPerShot,
     quadrants: ["量质齐优", "少而精", "量质皆低", "广种薄收"],
-    note: "同样的射门数，预期进球越高说明射门位置越好。右下角是打得多但位置差，左上角是射门少但每次都在好位置。",
-    related: [METRICS.shotsOnTarget, METRICS.xgot, METRICS.xgPerShot],
+    note: "横轴是场均射门数，纵轴是每脚射门的平均预期进球（质量，不是总量——不会因为射门多就跟着显得「质量高」）。右下角是射门多但每脚平均质量低（广种薄收），左上角是射门少但每次都在好位置。",
+    related: [METRICS.shotsOnTarget, METRICS.xgot, METRICS.xg],
   },
   {
     id: "possession-passing",

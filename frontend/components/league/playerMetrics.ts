@@ -101,6 +101,25 @@ export const PLAYER_METRICS = {
     caliber: "创造的机会按转化概率估算「理论上该有几次助攻」——只有球员维度才有这个字段,球队维度算不出来。",
     value: (r) => num(r.ratios?.xa_per90?.value),
   },
+  // 2026-09-28 审计改名后新增(scripts/audit/quadrant_audit.py):player-creativity
+  // 视角原纵轴 xaPer90 与横轴 chancesCreatedPer90 逐球员 Spearman r=0.896(对
+  // 角线化)——创造机会越多,总 xA 天然越高,两根轴本质上量的是同一件"创造
+  // 产出量"的事。改成"每次创造机会的平均 xA"(比值,不随创造次数机械上升)
+  // 才是真正独立的第二个维度:创造得多不多、每次创造的含金量高不高。
+  xaPerChanceCreated: {
+    id: "xa_per_chance_created",
+    label: "每次创造机会的预期助攻(xA)",
+    unit: "",
+    digits: 3,
+    semantic: "performance",
+    caliber: "赛季累计预期助攻(xA) ÷ 赛季累计创造机会数,不是两个每90分钟值相除(分母口径见 caliber 字段说明)。创造机会数少于 5 次的球员不计入——分母太小,比值噪声大,不画点。",
+    value: (r) => {
+      const xaTotal = num(r.ratios?.xa_per90?.numerator);
+      const chancesTotal = num(r.ratios?.chances_created_per90?.numerator);
+      if (xaTotal == null || chancesTotal == null || chancesTotal < 5) return null;
+      return xaTotal / chancesTotal;
+    },
+  },
   defensiveActionsPer90: {
     id: "defensive_actions_per90",
     label: "每90分钟防守动作",

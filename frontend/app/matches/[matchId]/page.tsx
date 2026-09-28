@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
+  leagueSectionPath,
   serverGetOptional,
   type MatchDetailResponse,
   type MatchListResponse,
   type MatchPreviewResponse,
   type MatchReportResponse,
+  type TeamStatsResponse,
 } from "@/lib/api-v1";
 import {
   MatchDetailBody,
@@ -88,7 +90,7 @@ export default async function MatchDetailPage({
   }
 
   const m = detail.match;
-  const [analysis, report, preview, related] = await Promise.all([
+  const [analysis, report, preview, related, leagueTeamStatsRes] = await Promise.all([
     // revalidate: 120(2026-08-19 性能修复)——此前没有 revalidate,落到
     // cache:"no-store",每次都真回源(占该端点耗时的大头,详见
     // backend/queries/teams.py::team_display_for 的修复说明),而它只喂
@@ -109,7 +111,16 @@ export default async function MatchDetailPage({
       `/api/v1/matches?${relatedMatchesQuery(m.league_id)}`,
       { revalidate: 60 },
     ).catch(() => null),
+    // 2026-09-28:「攻守 xG」象限图改为复用球队数据页同一个端点/同一套数据函数
+    // (backend/queries/league_stats.py::team_season_stats,整赛季口径,不是
+    // 近 N 场滚动)——与球队数据页用同一个 leagueSectionPath,同一份数据,
+    // 不是又长出第二套"球队风格"聚合。
+    serverGetOptional<TeamStatsResponse>(
+      leagueSectionPath("team-stats", String(m.league_id), { season: m.season }),
+      { revalidate: 120 },
+    ).catch(() => null),
   ]);
+  const leagueTeamStats = leagueTeamStatsRes?.rows ?? null;
 
   const relatedMatches = related?.matches ?? [];
   const relatedIndex = relatedMatches.findIndex((item) => item.match_id === idNum);
@@ -126,6 +137,7 @@ export default async function MatchDetailPage({
       analysis={analysis}
       report={report}
       preview={preview}
+      leagueTeamStats={leagueTeamStats}
       previousMatch={previousMatch}
       nextMatch={nextMatch}
     />

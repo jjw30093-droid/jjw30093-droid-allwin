@@ -129,8 +129,10 @@ describe("PLAYER_METRICS 取值口径", () => {
     expect(PLAYER_METRICS.longBallShare.semantic).toBe("style");
   });
 
-  it("12 个指标全部有非空的 caliber 口径说明", () => {
-    expect(Object.keys(PLAYER_METRICS)).toHaveLength(12);
+  it("13 个指标全部有非空的 caliber 口径说明", () => {
+    // 2026-09-28 新增 xaPerChanceCreated(player-creativity 纵轴改轴,
+    // scripts/audit/quadrant_audit.py 发现原纵轴对角线化后的修复)。
+    expect(Object.keys(PLAYER_METRICS)).toHaveLength(13);
     for (const m of Object.values(PLAYER_METRICS)) {
       expect(m.caliber, `${m.id} 缺 caliber`).toBeTruthy();
     }

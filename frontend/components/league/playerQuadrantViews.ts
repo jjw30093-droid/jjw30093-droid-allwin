@@ -109,11 +109,16 @@ export const PLAYER_VIEWS: PlayerView[] = [
   {
     id: "player-creativity",
     tab: "进攻创造力",
-    title: "每90分钟创造机会数 × 预期助攻(xA)",
+    title: "每90分钟创造机会数 × 每次创造的xA",
     x: PLAYER_METRICS.chancesCreatedPer90,
-    y: PLAYER_METRICS.xaPer90,
+    // 2026-09-28 审计改名后同步改轴(scripts/audit/quadrant_audit.py 发现
+    // 原纵轴 xaPer90 与横轴 chancesCreatedPer90 对角线化,r=0.896)——改成
+    // "每次创造机会的平均 xA"(比值),不再随创造次数机械上升;创造机会少于
+    // 5 次的球员这张图不画(PLAYER_METRICS.xaPerChanceCreated.value 已处理,
+    // 不达标返回 null,走 playerHiddenNote 既有的"未画出"说明)。
+    y: PLAYER_METRICS.xaPerChanceCreated,
     quadrants: ["量质俱佳", "少而精", "创造有限", "多而不精"],
-    note: "横轴是每 90 分钟创造的射门机会次数,纵轴是预期助攻(创造的机会按转化概率折算)——只有球员维度才有 xA 这个字段,球队维度算不出来。右下角「多而不精」是创造次数不少、但机会平均含金量偏低的球员。",
+    note: "横轴是每 90 分钟创造的射门机会次数,纵轴是每次创造的机会平均能换来多少预期助攻(xA ÷ 创造机会数,不是每90分钟的 xA——不会因为创造次数多就跟着显得含金量高)。创造机会数少于 5 次的球员不画点(样本太小)。右下角「多而不精」是创造次数不少、但机会平均含金量偏低的球员。",
     // 计划表「主场景位置」是中场/前锋,后卫是站长 2026-09-16 审核时点名加的:
     // usual_position 只有四档,边后卫和中卫混在「后卫」里,而边后卫恰恰是
     // 传中/创造机会/xA 的主力,砍掉这张图会让边后卫最有价值的一面消失。

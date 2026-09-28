@@ -28,8 +28,14 @@ function row(pid: string, x: number | null, y: number | null, over: Partial<Play
     minutes_share: 0.5,
     teams_count: 1,
     ratios: {
-      chances_created_per90: x == null ? undefined : { value: x, numerator: x, denominator: 900, paired_matches: 10 },
-      xa_per90: y == null ? undefined : { value: y, numerator: y, denominator: 900, paired_matches: 10 },
+      // numerator 分别给"创造机会数""xA"的赛季累计原始值,不是 value 本身
+      // (2026-09-28 player-creativity 纵轴改为 xaPerChanceCreated = xA
+      // 累计 ÷ 创造机会累计,读的是 numerator,不是 value;这里固定给创造
+      // 机会数 20 次——保证 ≥5 的门槛不挡住这批测试用例,同时 xa 的 numerator
+      // 按 y*20 反推,使 xaPerChanceCreated 算出来仍等于调用方传入的 y,
+      // 不改变本文件其余断言的数值预期)。
+      chances_created_per90: x == null ? undefined : { value: x, numerator: 20, denominator: 900, paired_matches: 10 },
+      xa_per90: y == null ? undefined : { value: y, numerator: y * 20, denominator: 900, paired_matches: 10 },
     },
     ...over,
   } as PlayerQuadrantRow;

@@ -24,6 +24,7 @@ import type {
   MatchPreviewResponse,
   MatchReportResponse,
   MatchSummary,
+  TeamStatsResponse,
 } from "@/lib/api-v1";
 import { RecordVisit } from "@/components/matches/RecordVisit";
 import { OddsTimeline } from "@/components/matches/OddsTimeline";
@@ -160,11 +161,14 @@ function DataGroup({
   detail,
   preview,
   analysis,
+  leagueTeamStats,
   includeProjectedLineup = true,
 }: {
   detail: MatchDetailResponse;
   preview: MatchPreviewResponse | null;
   analysis: AnalysisBundle | null;
+  /** 2026-09-28:「攻守 xG」象限图数据源,见 TeamStyleQuadrant.tsx。 */
+  leagueTeamStats: TeamStatsResponse["rows"] | null;
   includeProjectedLineup?: boolean;
 }) {
   const m = detail.match;
@@ -226,6 +230,7 @@ function DataGroup({
               {homeTeamId != null && awayTeamId != null ? (
                 <TeamStyleQuadrant
                   views={preview.style_views}
+                  leagueTeamStats={leagueTeamStats}
                   homeTeamId={homeTeamId}
                   awayTeamId={awayTeamId}
                   homeName={homeName}
@@ -453,6 +458,7 @@ export function MatchDetailBody({
   analysis,
   report = null,
   preview = null,
+  leagueTeamStats = null,
   previousMatch,
   nextMatch,
 }: {
@@ -463,6 +469,9 @@ export function MatchDetailBody({
   report?: MatchReportResponse | null;
   /** /matches/{id}/preview(阵容/伤停快照 + 风格 + 球员):数据 tab 阵容/风格/球员三个子 tab 的数据源 */
   preview?: MatchPreviewResponse | null;
+  /** /api/v1/leagues/{id}/team-stats 的整赛季行(与球队数据页同一个端点),
+   *  驱动 TeamStyleQuadrant 的「攻守 xG」视角(2026-09-28)。 */
+  leagueTeamStats?: TeamStatsResponse["rows"] | null;
   previousMatch: MatchSummary | null;
   nextMatch: MatchSummary | null;
 }) {
@@ -512,6 +521,7 @@ export function MatchDetailBody({
               detail={detail}
               preview={preview}
               analysis={analysis}
+              leagueTeamStats={leagueTeamStats}
               includeProjectedLineup={false}
             />
           }
@@ -565,7 +575,14 @@ export function MatchDetailBody({
       ) : (
         <MatchPreTabs
           highlights={<HighlightsGroup idNum={idNum} detail={detail} finished={finished} />}
-          data={<DataGroup detail={detail} preview={preview} analysis={analysis} />}
+          data={
+              <DataGroup
+                detail={detail}
+                preview={preview}
+                analysis={analysis}
+                leagueTeamStats={leagueTeamStats}
+              />
+            }
           odds={<OddsGroup idNum={idNum} detail={detail} analysis={analysis} finished={finished} />}
         />
       )}

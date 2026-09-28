@@ -709,15 +709,18 @@ describe("league/quadrantOption.buildQuadrantOption 渲染冒烟(球员头像当
       minutes_share: 0.5,
       teams_count: 1,
       ratios: {
+        // numerator(赛季累计创造机会数)固定给 20,≥5 的门槛不会把这 30 个
+        // 合成球员全部挡成"未画出"(2026-09-28 player-creativity 纵轴改为
+        // xaPerChanceCreated = xA 累计 ÷ 创造机会累计,读 numerator 不是 value)。
         chances_created_per90: {
           value: 1 + ((i * 7) % 10) / 10,
-          numerator: 1,
+          numerator: 20,
           denominator: 900,
           paired_matches: 10,
         },
         xa_per90: {
           value: 0.1 + ((i * 3) % 6) / 100,
-          numerator: 0.1,
+          numerator: 2 + ((i * 3) % 6) / 10,
           denominator: 900,
           paired_matches: 10,
         },
