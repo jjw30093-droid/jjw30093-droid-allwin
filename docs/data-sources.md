@@ -548,6 +548,39 @@ side='away' 赢盘 ⟺ adjusted_home_margin < 0
 整数盘 adjusted_home_margin == 0 ⟺ 走水(半线/四分之一线的拆分见该模块 docstring)
 ```
 
+### 2.6 快照密度与收盘间隔(2026-09-28,`research/ah_signals/phase0_audit.py` 只读审计)
+
+查询口径:五大联赛(47/53/54/55/87)`Season IN ('2025/2026','2026/2027')`、
+`status='Finish'`、`kickoff_precision='exact'` 的 2002 场;经 `dim_match_xref`
+(`provider='nowgoal'`,`review_status IN ('auto_ok','confirmed')`)关联到
+`bronze_ng_odds_snap`,`market='ah'`,只取 `observed_at < kickoff_at_utc` 的行;
+Macauslot 两个 id(1/80)合并、Bet365 两个 id(8/281)合并、Crown=3。
+"最后 snap 距开球" = `kickoff_at_utc − max(observed_at)`。
+
+| 赛季 | 公司 | 每场赛前 AH snap 数 p10/p50/p90 | 最后 snap 距开球(分钟)p50/p90/max |
+|---|---|---|---|
+| 2025/2026 | Macauslot | 2 / 4 / 7 | **31 / 777 / 10457** |
+| 2025/2026 | Bet365 | 27 / 50 / 95 | 2 / 12 / 438 |
+| 2025/2026 | Crown | 39 / 60 / 92 | 2 / 8 / 64 |
+| 2026/2027 | Macauslot | 2 / 4 / 10 | 15 / 498 / 6680 |
+| 2026/2027 | Bet365 | 6 / 8 / 11 | 13 / 50 / 6680 |
+| 2026/2027 | Crown | 7 / 9 / 12 | 13 / 27 / 6680 |
+
+两条结论:
+
+- **Macauslot 的快照过稀**:每场中位数只有 4 次变化点,最后一条 snap 距开球
+  p50=31 分钟、p90≈13 小时——它的"最后一条"经常不是临场盘,不能当收盘线用;
+  Phase 0 后已决定只在公司间分歧分析里、且只比较同一 ±15 分钟窗口内两家都有
+  snap 的时点时使用它。
+- **两个赛季的数据来源结构不同**:25/26 是 2026-09-22 的全量历史回填
+  (`backend/cli/backfill_nowgoal_odds_full_history.py`,`observed_at` 为来源
+  自带时间戳,可到开球前 0 分钟);26/27 是本站 5 分钟档实时轮询
+  (`allwin-odds.timer`,`observed_at` 为轮询时刻,最后一条结构性 ≥10 分钟)。
+  两季的 snap 密度(Crown p50 60 vs 9)和收盘间隔不可直接混同,研究里收盘线
+  统一按"`observed_at ≤ kickoff−10min` 的最后一条、距开球 >120 分钟记缺失"定义。
+  另:`observed_at<kickoff` 与 `market_phase='pre_match'` 在 531,520 条 snap 上
+  0 处不一致;`home_away_inverted` 在这 2002 场里全部为 0(且反转本就在写入时归一)。
+
 ## 3. 轮询策略(窗口到期调度,CLAUDE.md §6.3)
 
 - **触发**(PIPELINE_REDESIGN_V2 P3 起,2026-08-17):`allwin-odds.timer` 每 5
