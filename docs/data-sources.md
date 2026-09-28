@@ -598,6 +598,25 @@ Bet365 数据异常。研究里该场只从 Bet365 稳健性检验中剔除(`com
 Crown 主分析保留。这类异常可用水位合理性(`home+away` 明显偏离 1.7~2.0、单边 <0.3)
 在读取时识别,PREREG 已列入数据清洗项。
 
+### 2.7 球员/阵容表字段的存量覆盖与语义(2026-09-28,`research/ah_signals/phase2_verify.py` 只读核验)
+
+查询口径:五大联赛 25/26 + 26/27 已完赛且 xref 正常的 1994 场(3988 队场,61,948 球员行)。
+
+- `fact_player_match_stats` 的 `*_total` 分母列**存量未回填**:`accurate_passes_total` 在
+  25/26 为 99.9% NULL(54,272/54,336)、26/27 为 8.7% NULL;`accurate_crosses_total` 两季
+  100% NULL。迁移 0007/0022 只加了列,历史比赛没有重抓;要用这些分母必须先跑补采。
+  `passes_into_final_third` 两季约 20% NULL(出场球员),按 FotMob"零值省略"惯例解释。
+- 球员级求和 ≠ 队级值:Σ球员 `expected_goals` 与队级 `expected_goals` 相对误差 >2% 的
+  队场占 13.0%(>10% 占 1.45%);Σ球员 `goals` 与队级 `Goals` 不一致 3.86%(乌龙球记在
+  受害方,见 CLAUDE.md §11.3);Σ球员 `accurate_passes` 与队级一致(>2% 仅 0.05%)。
+  因此"球员行 NULL = 0"不能用于所有字段的求和。
+- `fact_match_lineup.market_value` 是**抓取时刻的当前估值,不是赛前估值**:同一球员的值
+  按写入批次而不是按比赛日期分段(例:08-16=A、08-23=B、08-31..12-21=A、12-27=B、
+  12-30=A……),两季取值集合相同的球员仅 2/1697。做任何"赛前"分析不得使用该列。
+- `fact_team_match_stats` Period='FirstHalf' 的 `Goals` 列全 NULL(3988/3988);上半场
+  比分要另取。队级 `extra_json` 在这 1994 场上没有 key 缺失或 null(All),0 值为真实 0。
+- 每队场首发恰 11 人(3988/3988);`rating` NULL 仅 0.09%/0.04%。
+
 ## 3. 轮询策略(窗口到期调度,CLAUDE.md §6.3)
 
 - **触发**(PIPELINE_REDESIGN_V2 P3 起,2026-08-17):`allwin-odds.timer` 每 5
