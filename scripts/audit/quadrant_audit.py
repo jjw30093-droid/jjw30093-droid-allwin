@@ -135,9 +135,9 @@ def team_metrics(row: dict) -> dict[str, float | None]:
 
 TEAM_VIEWS = [
     # (id, x_key, y_key, tab, title)
-    ("both-ends", "xg", "xga", "攻防", "预期进球 × 预期失球"),
+    ("both-ends", "xg", "xga", "攻守 xG", "预期进球 × 预期失球"),
     ("tactics", "openPlayXg", "setPlayXg", "战术", "运动战 × 定位球"),
-    ("volume", "totalShots", "xg", "射门质量", "射门数量 × 机会质量"),
+    ("volume", "totalShots", "xg", "多射还是精射", "射门数量 × 机会质量"),
     ("possession-passing", "oppHalfPassShare", "totalShots", "推进方式", "前场传球占比"),
     ("set-piece-both-ends", "setPieceXgShare", "setPieceXgaShare", "定位球攻防", "定位球攻防"),
     ("attack-defence-quality", "xgPerShot", "oppXgPerShot", "攻防质量", "攻防质量"),
