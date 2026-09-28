@@ -456,3 +456,29 @@ NEXT_PUBLIC_SITE_URL=https://miaomiaodi.vip
 - 可以增加 `ops-check.service`/`.timer` 定期跑并把非零退出接到告警渠道,但
   **不伪造告警发送成功**——CloudWatch/SNS/邮件通道未真实配置前，这里只提供
   退出码和结构化输出,真正接入告警渠道仍是 **UNVERIFIED**。
+
+## 研究纸面记录 H-M2(ubuntu 用户级 crontab,2026-09-28)
+
+`research/ah_signals/PREREG_hm2.md` 的前瞻检验只做**纸面记录**(paper log):每天 05:00 UTC 用只读
+连接(`mode=ro`)读 `dim_match` / `bronze_ng_odds_snap`,把定稿时间(2026-09-28T07:20:00Z)之后开球、
+已完赛的五大联赛比赛按冻结规则记到仓库外的 `/home/ubuntu/research_out/ah_signals/hm2/`
+(`hm2_bets.csv`、`hm2_state.json`、`cron.log`)。零写入生产库,不动 systemd,不需要 sudo。
+
+安装(以 ubuntu 用户,`crontab -e` 或):
+
+```bash
+( crontab -l 2>/dev/null; echo '0 5 * * * cd /opt/allwin/source && ALLWIN_DATA_DIR=/opt/allwin/shared/data nice -n 19 /usr/bin/python3 research/ah_signals/hm2_log.py --data-dir /opt/allwin/shared/data --out-dir /home/ubuntu/research_out/ah_signals/hm2 >> /home/ubuntu/research_out/ah_signals/hm2/cron.log 2>&1' ) | crontab -
+```
+
+- 脚本 stdout 只打印新增场次、累计场次、累计下注数、不下注原因计数;**不打印命中率/ROI**。
+- 规则冻结自检:`hm2_log.py`、`hm2_evaluate.py`、`PREREG_hm2.md` 三个文件的 SHA-256 在首次运行时
+  写入 `hm2_state.json`,此后任一文件改动 → 脚本退出码 4 并在 `cron.log` 留下"规则冻结自检失败"。
+  因此 `git pull` 带来的这三个文件的任何改动都会让记录停止——这是预期行为,不是故障。
+- 评估:累计下注数达 1600 时人工运行一次
+  `python3 research/ah_signals/hm2_evaluate.py --out-dir /home/ubuntu/research_out/ah_signals/hm2`
+  (不足 1600 时退出码 3;已评估过退出码 5)。评估后记录脚本自动停止。
+- 数据源变化(采集中断等):站长可在 `hm2_incidents.csv`(`start_utc,end_utc,note`)登记区间,
+  区间内比赛记为 `data_source_change`,规则不变。
+- 卸载:`crontab -e` 删除该行即可;记录文件保留。
+- 数据保留核验(2026-09-28):代码、systemd 定时器、`/etc/cron.d`、ubuntu crontab 均无清理
+  `bronze_ng_odds_snap` 的任务(root crontab 未能读取,`UNVERIFIED`);最早快照 2020-08-09。
