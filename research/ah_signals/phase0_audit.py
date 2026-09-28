@@ -253,6 +253,49 @@ def main() -> int:
             dist[f"lastgap_min|{season}|{ck}|ah"] = q
     report["distributions"] = dist
 
+    # ------------------------------------------- 7b. payload 形状(嵌套 vs 扁平)
+    # 库里存在两种真实形状(backend/queries/odds.py 模块 docstring):实时轮询与
+    # 2026-09-22 全量历史回填写嵌套 {"initial","latest"};更早的 JSONL 分片回填写
+    # 扁平 {home,line,away}。扁平行没有 initial,开盘线只能取该序列最早一行。
+    print("\n" + "=" * 12, "7b. payload 形状:嵌套(initial/latest) vs 扁平,目标比赛 AH/OU", "=" * 12)
+    shape_rows = odds.execute(
+        """SELECT provider_match_id, market, company_id,
+                  CASE WHEN json_type(payload_json,'$.initial') IS NOT NULL
+                         OR json_type(payload_json,'$.latest') IS NOT NULL
+                       THEN 'nested' ELSE 'flat' END AS shape,
+                  COUNT(*)
+             FROM bronze_ng_odds_snap
+            WHERE market IN ('ah','ou','1x2')
+            GROUP BY provider_match_id, market, company_id, shape"""
+    ).fetchall()
+    shape_ct = defaultdict(int)          # (season, ck, market, shape) -> rows
+    nested_match = defaultdict(set)      # (season, ck, market) -> mids with >=1 nested
+    flat_only_match = defaultdict(set)   # (season, ck, market) -> mids with flat but no nested
+    tmp_has_nested = defaultdict(set)
+    tmp_has_flat = defaultdict(set)
+    for pmid, market, cid, shape, n in shape_rows:
+        mid = pmid_to_mid.get(str(pmid))
+        if mid is None:
+            continue
+        ck = COMPANIES.get(str(cid))
+        if ck is None:
+            continue
+        season = mid_info[mid][2]
+        shape_ct[(season, ck, market, shape)] += n
+        (tmp_has_nested if shape == "nested" else tmp_has_flat)[(season, ck, market)].add(mid)
+    print(f"{'season':10s} {'company':10s} {'mkt':4s} {'nested_rows':>12s} {'flat_rows':>10s} "
+          f"{'m_nested':>9s} {'m_flatonly':>11s}")
+    for season in SEASONS:
+        for ck in ("Macauslot", "Bet365", "Crown"):
+            for market in MARKETS:
+                nr = shape_ct.get((season, ck, market, "nested"), 0)
+                fr = shape_ct.get((season, ck, market, "flat"), 0)
+                mn = tmp_has_nested.get((season, ck, market), set())
+                mf = tmp_has_flat.get((season, ck, market), set()) - mn
+                print(f"{season:10s} {ck:10s} {market:4s} {nr:12d} {fr:10d} {len(mn):9d} {len(mf):11d}")
+                dist[f"shape|{season}|{ck}|{market}"] = dict(nested_rows=nr, flat_rows=fr,
+                                                            matches_nested=len(mn), matches_flat_only=len(mf))
+
     # ---------------------------------------------------------- 8. 对照已知盘点
     print("\n" + "=" * 12, "8. 与任务书『已知数据盘点』逐项对照", "=" * 12)
     fin_2526 = sum(v["fin"] for (s, _), v in cov.items() if s == "2025/2026")
