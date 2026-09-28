@@ -581,6 +581,23 @@ Macauslot 两个 id(1/80)合并、Bet365 两个 id(8/281)合并、Crown=3。
   另:`observed_at<kickoff` 与 `market_phase='pre_match'` 在 531,520 条 snap 上
   0 处不一致;`home_away_inverted` 在这 2002 场里全部为 0(且反转本就在写入时归一)。
 
+**`initial` 字段语义(2026-09-28,`research/ah_signals/phase1b_verify.py`)**:同一场比赛
+所有 Crown AH snap 里的 `initial.line` 两季均 100% 恒定(25/26 1752 场、26/27 242 场,
+不恒定 0 场),即 `initial` 是来源声明的开盘值、不随轮询变化。但"首条 snap 的
+`latest`"两季语义不同:25/26 回填首条 = 开盘(首条距开球 p50=305h,与 `initial`
+100% 相同);26/27 实时轮询的候选池是开球前 168h(`FOTMOB_LINEUP_CANDIDATE_WINDOW_HOURS`
+同构的 `DISCOVERY_WINDOW_HOURS`),首条距开球 p75/p90 = 168.0h 恰为截断值,21.1%
+(51/242)场首条 `latest` 已偏离 `initial`。要"开盘线"必须取 `initial`,不能取首条 snap。
+
+**Bet365 单场数据异常(2026-09-28)**:26/27 西甲 Malaga vs Deportivo A Coruña
+(FotMob 5868027 / NowGoal 3013658,2026-08-24T19:30Z)Bet365 AH 自 T−3h14m 起三条
+snap `latest` 均为 `line=1.75, home=5.25, away=0.12`(水位在亚盘里不可能出现),
+同一时刻 Crown 0.25、Macauslot 0.25、Bet365 自家 1x2 主胜 2.40;每条 snap 的 payload
+只有一个 `latest.line`,不存在多线可选,所以不是主盘口选择规则的问题,是来源侧
+Bet365 数据异常。研究里该场只从 Bet365 稳健性检验中剔除(`common.BET365_EXCLUDE_MIDS`),
+Crown 主分析保留。这类异常可用水位合理性(`home+away` 明显偏离 1.7~2.0、单边 <0.3)
+在读取时识别,PREREG 已列入数据清洗项。
+
 ## 3. 轮询策略(窗口到期调度,CLAUDE.md §6.3)
 
 - **触发**(PIPELINE_REDESIGN_V2 P3 起,2026-08-17):`allwin-odds.timer` 每 5

@@ -34,6 +34,14 @@ CLOSE_CUTOFF_MIN = 10       # 主定义:kickoff−10min 之前的最后一条
 CLOSE_MAX_GAP_MIN = 120     # 超过则收盘线记缺失
 T24_HOURS = 24
 
+# Bet365 单场数据异常(Phase 1 核验:Malaga vs Deportivo 26/27,latest 1.75@5.25/0.12,
+# 来源侧异常,见 docs/data-sources.md §2.6);只从 Bet365 稳健性检验剔除,Crown 主分析保留
+BET365_EXCLUDE_MIDS = frozenset({5868027})
+
+# 水位合理性(PREREG 数据清洗项):亚盘两边水位之和正常在 1.7~2.0,单边 <0.3 视为异常
+WATER_SUM_RANGE = (1.60, 2.10)
+WATER_MIN = 0.30
+
 # 25/26 升班马常量(任务书给定,按库内英文队名匹配,匹配不上的列出)
 PROMOTED_2526 = {
     47: ("Leeds United", "Burnley", "Sunderland"),
