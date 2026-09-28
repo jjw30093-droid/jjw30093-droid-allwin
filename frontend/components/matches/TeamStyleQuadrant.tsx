@@ -433,7 +433,13 @@ export function TeamStyleQuadrant({
     [leagueTeamStats],
   );
   const normalizedViews = useMemo<NormalizedView[]>(() => {
-    const legacy: NormalizedView[] = views.map((v) => ({
+    // 防御性过滤:万一后端还没跟着这次改动一起部署(滚动发布顺序、回滚等),
+    // style_views 里仍可能带着旧的 xg-for-against 条目——不能让它和下面新拼的
+    // real 条目 id 撞车、在 tab 行里同时出现两个"攻守/攻防 xG"。旧条目本身
+    // 也不该再展示(它的数据口径已经不是这次要呈现的口径)。
+    const legacy: NormalizedView[] = views
+      .filter((v) => v.id !== REAL_VIEW_ID)
+      .map((v) => ({
       id: v.id,
       tab: v.tab,
       title: v.title,

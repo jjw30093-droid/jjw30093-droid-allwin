@@ -218,6 +218,21 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
   const hiddenText = playerHiddenNote(hidden);
   const truncationText = quadrantTruncationNote(totalByQuadrant, undefined, nearMeanDropped);
 
+  // 「数据源根本没给」(不是出场占比没达标)——2026-09-28 站长要求这类视角
+  // 自动从 tab 行隐藏,不再是"灰掉但还在"。**不能**从 fullPlots.hidden 的
+  // reason 分布去推断:playerPlotSet 先判 below_threshold 再判 missing,
+  // 两种原因的判定顺序不同——只要位置池里有任何一个球员出场占比不到 40%
+  // (几乎总会有,跟这个指标是否存在毫无关系),hidden 里就会混进
+  // "below_threshold",导致"这个指标其实压根没有数据"的信号被完全盖住。
+  // 真正的判定必须绕开出场占比门槛,直接看**全部**球员(不分是否达标)的
+  // 原始指标值是否清一色为 null——例如 player-goalkeeper-distribution 依赖
+  // 的传球尝试总数字段本赛季本来就不下发,不管出场占比多高都是 null。
+  const isHardMissing = (v: (typeof viewsForPosition)[number]) =>
+    positionRows.every((r) => v.x.value(r) == null || v.y.value(r) == null);
+  const hardMissingViews = viewsForPosition.filter(
+    (v) => !available.some((a) => a.id === v.id) && isHardMissing(v),
+  );
+
   const disabledViews = viewsForPosition.filter((v) => !available.some((a) => a.id === v.id)).reduce(
     (acc, v) => {
       const p = fullPlots.get(v.id)!;
@@ -273,7 +288,9 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
         </div>
 
         <div className={styles.tabs} role="tablist" aria-label="球员象限图视角">
-          {viewsForPosition.map((v) => {
+          {viewsForPosition
+            .filter((v) => available.some((a) => a.id === v.id) || !isHardMissing(v))
+            .map((v) => {
             const usable = available.some((a) => a.id === v.id);
             return (
               <button
@@ -291,6 +308,12 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
             );
           })}
         </div>
+        {hardMissingViews.length > 0 && (
+          <p className={styles.sub}>
+            {hardMissingViews.map((v) => v.tab).join("、")}
+            ：该位置该赛季数据源没有提供对应指标，标签已隐藏。
+          </p>
+        )}
       </header>
 
       {outcomeVarianceBanner && <p className={styles.outcomeVarianceBanner}>{outcomeVarianceBanner}</p>}

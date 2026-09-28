@@ -72,6 +72,14 @@ function disabledReason(p: PlotSet, filtered: boolean): string {
     : "该联赛该赛季样本达标的球队不足 4 支";
 }
 
+/** 「数据源根本没给」(不是样本还没攒够)——2026-09-28 站长要求这类视角
+ *  自动从 tab 行隐藏,不再是"灰掉但还在"。判定:hidden 里一个"sample"原因
+ *  都没有(意味着即使放宽样本门槛也一个人都凑不出来,是结构性缺失,不是
+ *  "再等等就有"),且没有任何已画出的点。 */
+function isHardMissing(p: PlotSet): boolean {
+  return p.pts.length === 0 && p.hidden.every((h) => h.reason !== "sample");
+}
+
 /** 分类行同样要分清"样本不够"（赛季初的正常状态,随轮次增加会自动解锁）
  *  和"数据源真没有"（不会自动变好）——只要该类别下所有暂不可用的视角都是
  *  样本原因,就不该说成"缺少数据",那会被赛季初的用户误读成本站永久没有
@@ -278,6 +286,12 @@ export function TeamQuadrantChart({
   const hiddenText = hiddenNote(hidden, view, windowScale);
   const windowLabel = filterWindowLabel(recency, venue);
 
+  // 当前类别下"数据源真没给"的视角——tab 行已经把它们过滤掉,这里单独
+  // 算出来只是为了在 tab 行下方显示"标签已隐藏"的一行说明(2026-09-28)。
+  const hardMissingInGroup = VIEWS.filter(
+    (v) => v.group === activeGroup && isHardMissing(plots.get(v.id)!),
+  );
+
   // 灰掉的 tab 分两种原因,脚注措辞不能混为一谈:数据源真没给 vs 有数但样本不够。
   const disabledViews = VIEWS.filter((v) => !available.some((a) => a.id === v.id)).reduce(
     (acc, v) => {
@@ -343,7 +357,9 @@ export function TeamQuadrantChart({
         </div>
 
         <div className={styles.tabs} role="tablist" aria-label="象限图视角">
-          {VIEWS.filter((v) => v.group === activeGroup).map((v) => {
+          {VIEWS.filter((v) => v.group === activeGroup)
+            .filter((v) => available.some((a) => a.id === v.id) || !isHardMissing(plots.get(v.id)!))
+            .map((v) => {
             const usable = available.some((a) => a.id === v.id);
             return (
               <button
@@ -361,6 +377,12 @@ export function TeamQuadrantChart({
             );
           })}
         </div>
+        {hardMissingInGroup.length > 0 && (
+          <p className={styles.sub}>
+            {hardMissingInGroup.map((v) => v.tab).join("、")}
+            ：该联赛该赛季数据源没有提供对应指标，标签已隐藏。
+          </p>
+        )}
       </header>
 
       {outcomeVarianceBanner && <p className={styles.outcomeVarianceBanner}>{outcomeVarianceBanner}</p>}
