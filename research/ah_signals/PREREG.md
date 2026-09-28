@@ -1,6 +1,6 @@
 # PREREG — 五大联赛 AH 赢盘信号研究(预注册)
 
-状态:**草案,待站长审核**。审过之前不跑 Phase 2 的字段核验与持续性检验;审过之后本文件
+状态:**第 2 稿,待站长审核**。审过之前不跑 Phase 2 的字段核验与持续性检验;审过之后本文件
 只允许追加"修订记录",不允许改写已注册的假设与检验集合。
 
 日期:2026-09-28。代码:`research/ah_signals/`。数据访问只读(`mode=ro`),中间产物在
@@ -28,16 +28,14 @@
 
 ## 1. 主假设与目标
 
-**H0(主)**:在控制 Crown 收盘线之后,任何赛前可得的球队/球员滚动特征对 `margin`
-均无增量预测力。
+**H0(主)**:在控制 Crown 收盘线之后,任何赛前可得的**非射门类**球队/球员滚动特征
+(C 族)对 `margin` 均无增量预测力。射门/xG 类(B 族)只作对照基准,不构成研究结论。
 
 **主目标变量**:`margin`(连续)。**次目标**:`settle`、按真实收盘水位的平注 ROI
 (只做描述,不作为检验统计量)。
 
-**主检验形式(Phase 3)**:每个特征单独一条 OLS
-`margin ~ closing_line + feature_diff`,HC1 稳健标准误,报告系数、95% CI、p 值、
-标准化效应(每 1 SD 特征对应的 margin 变化,单位:球)。特征一律取 **主队 − 客队**
-的差值(`feature_diff`),这样一条回归同时覆盖"主队强/客队弱"两个方向。
+特征一律取 **主队 − 客队** 的差值(`feature_diff`),一条回归同时覆盖"主队强/客队弱"
+两个方向。
 
 ---
 
@@ -71,57 +69,92 @@
 
 ### 3.3 仅上半场版本(敏感性,不进 FDR)
 
-`fact_team_match_stats.Period='FirstHalf'` 的同名统计,按同一窗口计算,只对 F1–F7
-(队级统计类)做。目的:检验"上半场表现"是否比全场更少受比分状态(game state)影响。
+`fact_team_match_stats.Period='FirstHalf'` 的同名统计,按同一窗口计算,只对能从
+队级 `extra_json` 直接构造的特征(B1–B6、C1–C3、C5–C8、C12)做。目的:检验"上半场
+表现"是否比全场更少受比分状态(game state)影响。
 
-### 3.4 确认性特征集合(进 FDR,共 12 个,≤15)
+### 3.4 B 基线族(射门/xG,只作对照;独立 BH;**结果不计入研究结论**)
 
-编号按先验优先级;`for/against` 指本队/对手在该场的值;差值 = 主队 EWMA − 客队 EWMA。
-"方向"是控制收盘线后系数的预期符号(用于报告是否与先验一致,**不做单边检验**)。
+用途:Phase 3 报告里作为对照基准;Phase 5 作为协变量;§5 次检验的合成指标来源。
 
-| # | 特征 | 定义(单场值) | 来源字段 | 预期方向 | 先验理由 |
+| # | 特征 | 定义(单场值,for=本队 against=对手) | 来源字段 | 预期方向 |
+|---|---|---|---|---|
+| B1 | npxGD | `expected_goals_non_penalty(for) − (against)` | team extra_json | + |
+| B2 | xGOT 差 | `expected_goals_on_target(for) − (against)` | team extra_json | + |
+| B3 | 进攻运气残差 | `Goals(for) − expected_goals(for)` | team Goals + extra_json | **−**(均值回归) |
+| B4 | 防守运气残差 | `Goals(against) − expected_goals(against)` | 同上 | **+** |
+| B5 | 大机会差 | `big_chance(for) − (against)` | team extra_json | + |
+| B6 | 禁区内射门差 | `shots_inside_box(for) − (against)` | team extra_json | + |
+
+B3/B4 的 `expected_goals` 用含点球版本,因为 `Goals` 含点球。
+
+### 3.5 C 确认族(非射门,研究对象;独立 BH;≤14 个,当前 13 个)
+
+"构造"一列写明所用字段;**标"代理"的表示与 Opta 标准定义不同**,报告里按此名称
+而不是标准名称称呼。
+
+| # | 特征 | 构造(单场值) | 来源字段 | 预期方向 | 先验理由 |
 |---|---|---|---|---|---|
-| F1 | npxGD | `expected_goals_non_penalty(for) − (against)` | team extra_json | + | 基线:基础实力,市场可能未充分吸收 |
-| F2 | xGOT 差 | `expected_goals_on_target(for) − (against)` | team extra_json | + | 射正质量比 xG 更接近真实进球 |
-| F3 | 进攻运气残差 | `Goals(for) − expected_goals(for)` | team Goals + extra_json | **−** | 市场按结果定价,超额进球应均值回归 |
-| F4 | 防守运气残差 | `Goals(against) − expected_goals(against)` | 同上 | **+** | 对称:超额失球的队被低估 |
-| F5 | 大机会差 | `big_chance(for) − (against)` | team extra_json | + | 高质量机会创造 |
-| F6 | 禁区内触球差 | `touches_opp_box(for) − (against)` | team extra_json | + | 领地控制,比控球率更贴近威胁 |
-| F7 | 禁区内射门差 | `shots_inside_box(for) − (against)` | team extra_json | + | 射门位置质量 |
-| F8 | 控球率 | `BallPossesion(for)` | team extra_json | 0(无先验) | 常被市场高估,作为对照 |
-| F9 | 首发平均评分 | 该场本队 11 名首发 `rating` 均值 | `fact_match_lineup.rating`(is_starter=1) | + | 球员层面的表现质量 |
-| F10 | 首发市值合计 | 该场本队 11 名首发 `market_value` 之和(log) | `fact_match_lineup.market_value` | + | 阵容资源(可能已被市场充分定价 → 用作"已定价"对照) |
-| F11 | 阵容稳定性 | 该场首发 11 人与本队上一场首发的 Jaccard 相似度 | `fact_match_lineup` | + | 轮换/伤病扰动 |
-| F12 | 休息天数差 | 本场 kickoff − 本队上一场(样本内联赛)kickoff,天;取 `min(x, 14)` 后主减客 | `dim_match.kickoff_at_utc` | + | 疲劳;**局限:杯赛/欧战不在样本内,只能度量联赛间隔**,在报告中明示 |
+| C1 | field tilt(代理:前场传球占比) | `opp_half_passes(for) / (opp_half_passes(for) + opp_half_passes(against))` | team `opposition_half_passes` | + | 领地控制 |
+| C2 | PPDA(代理:未限区域) | `passes(against) / (tackles(for) + interceptions(for) + fouls(for))`,分母为 0 记缺失 | team `passes`、`matchstats.headers.tackles`、`interceptions`、`fouls` | **−**(值越小压迫越强) | 高位压迫强度;**局限:无区域限制,是全场版 PPDA** |
+| C3 | 禁区触球差 | `touches_opp_box(for) − (against)` | team `touches_opp_box` | + | 领地控制,比控球率更贴近威胁 |
+| C4 | 推进传球差 | `Σ 首发+替补球员 passes_into_final_third(for) − (against)` | player `passes_into_final_third`(球员级求和,依赖 §6.2 交叉核对) | + | 纵向推进能力 |
+| C5 | 传中占比(代理) | `accurate_crosses(for) / accurate_passes(for)` | team `accurate_crosses`、`accurate_passes` | **−** | 依赖传中的低效进攻;**局限:库内只有成功传中,无传中总数** |
+| C6 | 长传占比(代理) | `long_balls_accurate(for) / accurate_passes(for)` | team `long_balls_accurate`、`accurate_passes` | 双侧,不预设 | 风格变量 |
+| C7 | 对抗成功率差 | `(ground_duels_won(for) + aerials_won(for)) / (ground_duels_won(for)+aerials_won(for)+ground_duels_won(against)+aerials_won(against))`,主减客 | team `ground_duels_won`、`aerials_won`(对抗零和,双方 won 之和即总数) | + | 身体对抗 |
+| C8 | 角球差 | `corners(for) − (against)` | team `corners` | + | 施压频率 |
+| C9 | 首发球员赛前滚动评分差 | 见下方 C9 定义 | `fact_match_lineup.rating`、`is_starter`、`sub_in/out_time`、`minutes_played` | + | 球员层面表现质量 |
+| C10 | 阵容 Jaccard 稳定性差 | 本队上一场首发 11 人 vs 上上场首发 11 人的 Jaccard(两场均严格早于本场),取 8 场 EWMA;主减客 | `fact_match_lineup` | + | 轮换/伤病扰动 |
+| C11 | 休息天数差 | 本场 kickoff − 本队上一场(样本内联赛)kickoff,天;`min(x, 14)`;主减客 | `dim_match.kickoff_at_utc` | + | 疲劳;**局限:杯赛/欧战不在样本内,只能度量联赛间隔** |
+| C12 | 控球差(对照) | `BallPossesion(for)` 差 | team `BallPossesion` | 0(预期控制收盘线后无增量) | 常被市场高估 |
+| C13 | 首发市值差(条件保留) | 本队上一场首发 11 人 `market_value` 之和取 log;主减客 | `fact_match_lineup.market_value` | + | 阵容资源;**保留前提见 §6.6** |
 
-注:F9–F11 用的是 **历史比赛** 的首发(开球前已知),不是本场首发;本场赛前阵容
-(kickoff−60min)属于 Phase 4 的独立分析。F3/F4 的 `expected_goals` 用含点球版本,
-因为 `Goals` 含点球。
+**C9 定义(写死)**:对本场 kickoff 严格早于本场的所有比赛,取每名球员的**赛后**
+`rating`,按该场 `minutes_played` 加权做 8 场 EWMA(球员个人的近 8 场,不足 8 场但 ≥3
+场按已有归一化,<3 场缺失),得到每名球员的"赛前滚动评分"。球队值 = 该队**上一场**
+(赛前可得)首发 11 人赛前滚动评分的均值(评分缺失的球员不计,11 人中缺失 >3 人则该
+场缺失)。**本场的 rating 与本场实际首发不得进入**;本场赛前阵容(kickoff−60min)归
+Phase 4。
 
-### 3.5 探索性集合(不进 FDR,报告时标注"探索性")
+**去留规则(写死,§6.1/6.2 核验后执行,只看字段核验结果,不看与 margin 的关系)**:
+C1、C2、C4、C5、C6、C7 若在 Phase 2 无法构造(字段不存在、分母语义不成立、球员汇总
+交叉核对不通过),或所需任一字段 NULL 率(key 缺失 + 值 null)>5%,直接移出 C 族并记录
+原因;移出后 BH 按剩余特征数计算。C13 按 §6.6 决定去留。
+
+### 3.6 探索性集合(不进 FDR,报告时标注"探索性")
 
 - **Phase 1 已观察**的分组(意甲主/客、`|line|` 深度、升班马、赛季阶段):只能作为
   "探索性 / Phase 1 已观察"列出,**不得作为确认性检验**。
-- F1–F12 的 5/10 场窗口、对手调整版、仅上半场版:敏感性。
+- B/C 族的 5/10 场窗口、对手调整版、仅上半场版:敏感性。
 - 市场类特征(Phase 4):开盘→收盘线移动、T-24h→收盘移动、水位移动、Crown↔Bet365 收盘
   线分歧、AH-OU Poisson 一致性、赛前阵容(kickoff−60min)与预期首发的偏离、CLV。这些在
   Phase 4 单独预注册假设后才跑,本文件先只登记名单。
 
 ---
 
-## 4. 多重比较与判定
+## 4. 检验结构与多重比较
 
-- 确认性检验 = F1–F12 主版本(8 场窗口、未调整、Crown 收盘线),共 **12 个 p 值**,
-  Benjamini–Hochberg **q = 0.10**。
-- 通过 BH 的特征还必须同时满足(否则只报"统计显著但不稳健"):
+- **主检验**(每个特征一条):`margin ~ closing_line + feature_diff`,HC1 稳健标准误,
+  报告系数、95% CI、双侧 p、标准化效应(每 1 SD 特征对应的 margin 变化,单位:球)。
+  每个特征预设方向,**检验用双侧**,报告"方向与预期是否一致"。
+- **次检验(仅 C 族)**:`margin ~ closing_line + B_composite + feature_diff`,报告
+  "xG 之外的增量"。`B_composite` = B1–B6 各自在全样本标准化(z 分数)后**按先验方向
+  对齐**(B3 取负号,其余取正号)的**等权平均**:
+  `B_composite = (z(B1) + z(B2) − z(B3) + z(B4) + z(B5) + z(B6)) / 6`。权重现在写死,
+  不按结果拟合;某项缺失时该场 `B_composite` 缺失。
+- **多重比较**:B 族与 C 族**各自独立**做 Benjamini–Hochberg,q = 0.10,只对主检验
+  的 p 值做;B 族通过与否只作对照,不写入结论;C 族的 BH 按 §3.5 去留规则后的实际
+  特征数计算(≤13)。
+- C 族通过 BH 的特征还必须同时满足(否则只报"统计显著但不稳健"):
   1. 5 场与 10 场窗口下系数同号;
   2. 对手调整版同号;
   3. Bet365 收盘线(剔除 5868027)下同号;
-  4. 五个联赛中至少 4 个同号(各联赛 N≈340–440,不要求各自显著);
+  4. 五个联赛中至少 4 个同号(各联赛 N≈340–440,不要求各自显著;§6.1 判"覆盖不足"
+     的联赛不计入);
   5. 25/26 上下半季(`Match_Round ≤ 19` / `> 19`)同号。
-- 任一特征通过全部条件才进入 Phase 5 的多变量模型;没有特征通过时,Phase 5 只跑
-  "收盘线 + 全部 F1–F12 的 ridge"作为"整体是否有增量"的单一检验,报告 walk-forward
-  的 out-of-sample R² 相对纯收盘线基线的增量与 95% CI。
+- 任一 C 族特征通过全部条件才进入 Phase 5 的多变量模型;没有特征通过时,Phase 5 只跑
+  "收盘线 + B_composite + 全部 C 族的 ridge"作为"整体是否有增量"的单一检验,报告
+  walk-forward 的 out-of-sample R² 相对"收盘线 + B_composite"基线的增量与 95% CI。
 - 报告用语:只写数字、N、CI、p 与 q;不用"表现优异"等形容词。
 
 ---
@@ -132,14 +165,14 @@
 单个标准化特征在 n 个样本、双侧 α 下 80% 功效可检出的偏相关约
 `r_min ≈ (z_{α/2} + z_{0.80}) / √n`:
 
-| n | α=0.05 | α≈0.0083(BH 12 个假设最严格档) |
+| n | α=0.05 | α≈0.0077(BH 13 个假设最严格档) |
 |---|---|---|
-| 1600 | 0.070 | 0.086 |
-| 1800 | 0.066 | 0.081 |
+| 1600 | 0.070 | 0.087 |
+| 1800 | 0.066 | 0.082 |
 
-换算成 margin:每 1 SD 特征 ≈ **0.10–0.13 球**。也就是说,比这更小的真实效应本研究
-结构上检不出;Phase 3 的报告要把"未拒绝 H0"与"效应上限(CI 上界)"一起给出,不写
-"无信号"以外的过度结论。
+换算成 margin:每 1 SD 特征 ≈ **0.10–0.13 球**。比这更小的真实效应本研究结构上
+检不出;Phase 3 的报告要把"未拒绝 H0"与"效应上限(CI 上界)"一起给出,不写"无信号"
+以外的过度结论。次检验(加 B_composite)的功效更低,同样报告 CI 上界。
 
 ---
 
@@ -147,22 +180,23 @@
 
 ### 6.1 NULL 语义三分法
 
-对 §3.4 用到的每个 `extra_json` key,在 Period='All' 与 'FirstHalf' 上分别统计
+对 §3.4/3.5 用到的每个 `extra_json` key,在 Period='All' 与 'FirstHalf' 上分别统计
 **(a) key 缺失 / (b) 值为 null / (c) 值为 0** 的行数与占比,分季分联赛。规则:
 
 - (a) 与 (b) 一律记缺失,不当 0;
 - (c) 只有在该 key 属于"计数类且 FotMob 会显式给 0"时才当 0,否则也标出来供审;
 - 某 key 在某联赛缺失率 >5% → 该特征在该联赛标"覆盖不足",并在 §4 条件 4 中不计
-  该联赛。
+  该联赛;对 C1/C2/C4/C5/C6/C7,任一字段全样本缺失率 >5% → 按 §3.5 去留规则移出。
 
-对 `fact_match_lineup.rating` / `market_value`:统计 NULL 占比(按首发)。
+对 `fact_match_lineup.rating` / `market_value`、`fact_player_match_stats.minutes_played` /
+`passes_into_final_third`:统计 NULL 占比(按首发 / 按出场)。
 
 ### 6.2 球员汇总 vs 球队交叉核对
 
 同一 (Match_ID, Team_ID) 上,`Σ 球员 expected_goals` vs 队级 `expected_goals`、
 `Σ 球员 accurate_passes` vs 队级 `accurate_passes`、`Σ 球员 goals` vs `Goals`:报告
 相对误差分位数与 |误差|>10% 的场次占比。若 >2% 场次不一致,该来源的 NULL=0 假设
-在本研究中不成立,F9–F11 之外不再引入任何球员级汇总特征。
+在本研究中不成立 → C4(球员级求和)按 §3.5 移出,C9 仍可用(rating 不是求和量)。
 
 ### 6.3 水位合理性(数据清洗)
 
@@ -178,16 +212,33 @@ team-season 求 Pearson r(25/26 全部;26/27 单独,预计 N 小标不可靠)。
 
 ### 6.5 截断测试(防泄漏,Phase 2 末尾贴原始输出)
 
-随机取 3 场(seed 固定),把该场及之后所有比赛从输入中删掉后重算前一场的全部特征,
-必须与全量计算逐字段完全相等(浮点 `==`,不设容差)。任何一项不等即停。
+**全部场次**:对每一场 i,把开球 ≥ i 的所有比赛从输入中删掉后重算第 i 场的全部特征
+(B/C 族主版本 + 5/10 窗口 + 对手调整 + 上半场版),必须与全量计算逐字段**浮点严格
+相等**(`==`,不设容差);任何一项不等即停并贴出不等的场次与字段。
+若全量耗时过长(单次 >30 分钟),改为:**随机 300 场(seed 固定)+ 26/27 全部前 3 轮场次
++ 25/26 第 4 轮全部场次**(冷启动边界),并在输出里写明用了哪一档。
+
+### 6.6 C13 `market_value` 时间语义核验
+
+- 同一球员在 25/26 不同比赛的 `fact_match_lineup.market_value` 是否随时间变化:按
+  球员统计 distinct 值个数,报告"恒定 / 变化"的球员占比与变化球员的前 10 例(球员、
+  各值、对应比赛日期)。
+- 25/26 的值与 26/27 同一球员的值是否一致:两季都有首发记录的球员中,值相同的占比。
+- 判定:只有当值随比赛时间**在赛季内有变化**、且变化时点与比赛日期一致(即写入的是
+  当场抓取时的估值,而非事后回填的当前值)时,才视为"赛前估值";**不能证明是赛前
+  估值的(例如同一球员两季值全部相同、或赛季内恒定),删除 C13**,并记录核验结果。
 
 ---
 
 ## 7. 各阶段停点
 
-Phase 2:本文件审过 → 跑 §6 → 贴 stdout → STOP。Phase 3/4/5/6 按任务书,每阶段
-末尾 `git status`、只提交任务文件、`wip:` 前缀。
+Phase 2:本文件审过 → 跑 §6 → 贴 stdout → 按 §3.5/§6.6 更新去留并追加修订记录 → STOP。
+Phase 3/4/5/6 按任务书,每阶段末尾 `git status`、只提交任务文件、`wip:` 前缀。
 
 ## 8. 修订记录
 
 - 2026-09-28 初稿(待审)。
+- 2026-09-28 第 2 稿(按站长意见):拆 B 基线族 / C 确认族各自独立 BH;C 族改为非射门
+  13 个特征并写死去留规则;C9 改为赛前滚动评分(仅严格更早比赛的赛后评分、分钟加权、
+  上一场首发);C13 加 `market_value` 时间语义核验;增加次检验(`+ B_composite`,
+  权重写死);截断测试改为全部场次(超时则 300 场 + 冷启动边界档)。
