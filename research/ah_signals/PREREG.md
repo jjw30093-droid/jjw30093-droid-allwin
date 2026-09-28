@@ -1,7 +1,7 @@
 # PREREG — 五大联赛 AH 赢盘信号研究(预注册)
 
-状态:**第 2 稿,待站长审核**。审过之前不跑 Phase 2 的字段核验与持续性检验;审过之后本文件
-只允许追加"修订记录",不允许改写已注册的假设与检验集合。
+状态:**第 2 稿已审定(2026-09-28)**。此后本文件只允许追加"修订记录",不允许改写已注册的
+假设与检验集合。
 
 日期:2026-09-28。代码:`research/ah_signals/`。数据访问只读(`mode=ro`),中间产物在
 仓库外 `~/research_out/ah_signals/`。
@@ -95,11 +95,11 @@ B3/B4 的 `expected_goals` 用含点球版本,因为 `Goals` 含点球。
 
 | # | 特征 | 构造(单场值) | 来源字段 | 预期方向 | 先验理由 |
 |---|---|---|---|---|---|
-| C1 | field tilt(代理:前场传球占比) | `opp_half_passes(for) / (opp_half_passes(for) + opp_half_passes(against))` | team `opposition_half_passes` | + | 领地控制 |
-| C2 | PPDA(代理:未限区域) | `passes(against) / (tackles(for) + interceptions(for) + fouls(for))`,分母为 0 记缺失 | team `passes`、`matchstats.headers.tackles`、`interceptions`、`fouls` | **−**(值越小压迫越强) | 高位压迫强度;**局限:无区域限制,是全场版 PPDA** |
+| C1 | field tilt(代理:前场传球占比) | `opp_half_passes(for) / (opp_half_passes(for) + opp_half_passes(against))`,分母明确为**双方 `opposition_half_passes` 之和** | team `opposition_half_passes` | + | 领地控制 |
+| C2 | PPDA(代理) | 分子 = `passes(against) − opposition_half_passes(against)`(对手在本方半场的传球);分母 = `tackles(for) + interceptions(for) + fouls(for)`;分母为 0 记缺失 | team `passes`、`opposition_half_passes`、`matchstats.headers.tackles`、`interceptions`、`fouls` | **−**(值越小压迫越强) | 高位压迫强度;报告附 C2 与 C12 的相关系数,\|r\|>0.8 标注共线但不移出 |
 | C3 | 禁区触球差 | `touches_opp_box(for) − (against)` | team `touches_opp_box` | + | 领地控制,比控球率更贴近威胁 |
-| C4 | 推进传球差 | `Σ 首发+替补球员 passes_into_final_third(for) − (against)` | player `passes_into_final_third`(球员级求和,依赖 §6.2 交叉核对) | + | 纵向推进能力 |
-| C5 | 传中占比(代理) | `accurate_crosses(for) / accurate_passes(for)` | team `accurate_crosses`、`accurate_passes` | **−** | 依赖传中的低效进攻;**局限:库内只有成功传中,无传中总数** |
+| C4 | 推进传球差 | `Σ 出场球员 passes_into_final_third(for) − (against)` | player `passes_into_final_third`(球员级求和,间接验证见 §6.2) | + | 纵向推进能力 |
+| C5 | 传中占比 | 球员表有传中总数列(`accurate_crosses_total`,迁移 0022)时:`Σ 球员 accurate_crosses_total / Σ 球员 accurate_passes_total`(传中总数 / 传球总数);该列不可用时沿用队级 `accurate_crosses / accurate_passes` 并标"代理" | player `accurate_crosses_total`、`accurate_passes_total`;回退 team `accurate_crosses`、`accurate_passes` | 双侧,不预设 | 风格变量 |
 | C6 | 长传占比(代理) | `long_balls_accurate(for) / accurate_passes(for)` | team `long_balls_accurate`、`accurate_passes` | 双侧,不预设 | 风格变量 |
 | C7 | 对抗成功率差 | `(ground_duels_won(for) + aerials_won(for)) / (ground_duels_won(for)+aerials_won(for)+ground_duels_won(against)+aerials_won(against))`,主减客 | team `ground_duels_won`、`aerials_won`(对抗零和,双方 won 之和即总数) | + | 身体对抗 |
 | C8 | 角球差 | `corners(for) − (against)` | team `corners` | + | 施压频率 |
@@ -115,6 +115,8 @@ B3/B4 的 `expected_goals` 用含点球版本,因为 `Goals` 含点球。
 (赛前可得)首发 11 人赛前滚动评分的均值(评分缺失的球员不计,11 人中缺失 >3 人则该
 场缺失)。**本场的 rating 与本场实际首发不得进入**;本场赛前阵容(kickoff−60min)归
 Phase 4。
+**C9 缺失规则(审定)**:首发 11 人中历史评分场次 <3 的球员不参与均值;有效球员
+<8 人时该队该场 C9 记为缺失,不做插补;报告 C9 缺失率。
 
 **去留规则(写死,§6.1/6.2 核验后执行,只看字段核验结果,不看与 margin 的关系)**:
 C1、C2、C4、C5、C6、C7 若在 Phase 2 无法构造(字段不存在、分母语义不成立、球员汇总
@@ -196,7 +198,11 @@ C1、C2、C4、C5、C6、C7 若在 Phase 2 无法构造(字段不存在、分母
 同一 (Match_ID, Team_ID) 上,`Σ 球员 expected_goals` vs 队级 `expected_goals`、
 `Σ 球员 accurate_passes` vs 队级 `accurate_passes`、`Σ 球员 goals` vs `Goals`:报告
 相对误差分位数与 |误差|>10% 的场次占比。若 >2% 场次不一致,该来源的 NULL=0 假设
-在本研究中不成立 → C4(球员级求和)按 §3.5 移出,C9 仍可用(rating 不是求和量)。
+在本研究中不成立,C9 仍可用(rating 不是求和量)。
+**C4 间接验证(审定)**:逐场对比 `Σ 球员 accurate_passes_total`(球员传球总数)与队级
+`passes`,相对误差 >2% 的场次 C4 记为缺失;C4 缺失场次占比 >5% 时按 §3.5 去留规则
+移出。另报告每队每场 `Σ minutes_played` 的分布(应接近 11×90 + 补时),用于检查是否
+有球员行缺失。
 
 ### 6.3 水位合理性(数据清洗)
 
@@ -238,6 +244,13 @@ Phase 3/4/5/6 按任务书,每阶段末尾 `git status`、只提交任务文件�
 ## 8. 修订记录
 
 - 2026-09-28 初稿(待审)。
+- 2026-09-28 第 2 稿审定修改(站长审定,直接生效):C1 分母写明为双方
+  `opposition_half_passes` 之和;C2 分子改为对手在本方半场的传球(`passes −
+  opposition_half_passes`),报告附 C2×C12 相关系数;C4 改为间接验证(球员传球总数 vs
+  队级 passes,>2% 记缺失,缺失 >5% 移出)+ 报告 Σminutes_played 分布;C5 优先用球员
+  表传中总数列,方向改双侧;C9 缺失规则(评分场次 <3 不参与,有效 <8 记缺失);C7 不改。
+  Phase 2 范围:只做字段核验、NULL 三分法、交叉核对、market_value 时间语义、split-half、
+  截断测试;不计算任何特征与 margin/settle/收盘线的关系。
 - 2026-09-28 第 2 稿(按站长意见):拆 B 基线族 / C 确认族各自独立 BH;C 族改为非射门
   13 个特征并写死去留规则;C9 改为赛前滚动评分(仅严格更早比赛的赛后评分、分钟加权、
   上一场首发);C13 加 `market_value` 时间语义核验;增加次检验(`+ B_composite`,
