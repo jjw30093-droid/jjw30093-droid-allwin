@@ -153,11 +153,13 @@ TEAM_VIEWS = [
     ("defence-goalkeeping", "oppXgPerShot", "gkSavesAboveExpected", "防线与门将", "防线与门将"),
 ]
 
-# 比赛页三个视角:x/y 来自 league_style_views 直接返回的 x/y(已在函数内算好)
+# 比赛页三个视角:x/y 来自 league_style_views 直接返回的 x/y(已在函数内算好)。
+# 2026-09-28:xg-for-against 已改名「攻守 xG」,与球队页 both-ends 是同一个视角
+# (Phase 2 合并共用实现前,这里仍按各自当时的数据源分别取数、只统一显示名)。
 MATCH_VIEWS = [
     ("poss-fastbreak", "控球 × 快攻", "控球率 % × 快攻射门占比 %"),
     ("cross-box", "传中 × 禁区触球", "场均成功传中 × 场均禁区触球"),
-    ("xg-for-against", "攻防 xG", "预期进球 × 预期失球"),
+    ("xg-for-against", "攻守 xG", "预期进球 × 预期失球"),
 ]
 
 PLAYER_VIEWS = [
@@ -166,9 +168,14 @@ PLAYER_VIEWS = [
     ("player-creativity", "chancesCreatedPer90", "xaPer90", "进攻创造力", "每90分钟创造机会数 × 预期助攻(xA)", (1, 2, 3)),
     ("player-defensive-contribution", "defensiveActionsPer90", "duelWinRate", "防守贡献", "每90分钟防守动作 × 对抗成功率", (1, 2)),
     ("player-progression", "touchesPer90", "progressionRate", "持球推进", "每90分钟触球数 × 每百次触球送进前场传球数", (1, 2)),
-    ("player-goalkeeping", "xgotFacedPer90", "goalsPreventedPer90", "门将", "每90分钟面对射正预期进球 × 扑救超额", (0,)),
+    ("player-goalkeeping", "xgotFacedPer90", "goalsPreventedPer90", "门将扑救", "每90分钟面对射正预期进球 × 扑救超额", (0,)),
     ("player-goalkeeper-distribution", "passCompletionRate", "longBallShare", "门将出球", "传球成功率 × 长传占比", (0,)),
 ]
+
+# 与 frontend/components/league/quadrantViews.ts::VIEW_GROUPS 的 label 逐字对应
+# (Python 侧无法直接 import TS 常量,靠这份注释人工保持同步——改动分组名时
+# 记得同步改这里)。both-ends 的 tab 已改名,不再是这些类别名的子串。
+VIEW_GROUP_LABELS = ["攻防总览", "进攻构成", "射门质量", "控球与推进", "防守承压"]
 
 
 def player_metric_value(ratios: dict | None, key: str) -> float | None:
@@ -343,11 +350,12 @@ def main() -> int:
     print(f"  球员级重复对总数:{dup_count_p}")
 
     # ---------------------------------------------------------------- 命名问题
-    print("\n" + "=" * 20 + " 3. 显示名相同/高度相似但轴不同的视角对 " + "=" * 20)
+    print("\n" + "=" * 20 + " 3. 命名审计:视角间 + 视角与类别名 " + "=" * 20)
     all_tabs = [(vid, tab, team_axis_metric.get(vid)) for vid, xk, yk, tab, title in TEAM_VIEWS]
     all_tabs += [(vid, tab, team_axis_metric.get(vid)) for vid, tab, title in MATCH_VIEWS]
     all_tabs += [(vid, tab, (xk, yk)) for vid, xk, yk, tab, title, poss in PLAYER_VIEWS]
     found_name = False
+    print("-- 3a. 视角两两之间(显示名相同/互为子串,且轴不同) --")
     for i in range(len(all_tabs)):
         for j in range(i + 1, len(all_tabs)):
             vid_a, tab_a, ax_a = all_tabs[i]
@@ -359,7 +367,20 @@ def main() -> int:
                 found_name = True
                 print(f"  「{tab_a}」⊂「{tab_b}」高度相似:{vid_a}({ax_a}) vs {vid_b}({ax_b})")
     if not found_name:
-        print("  无命名问题:未发现显示名相同/互为子串但轴不同的视角对。")
+        print("  无:未发现显示名相同/互为子串但轴不同的视角对。")
+
+    print("-- 3b. 视角名 vs 类别名(VIEW_GROUPS) --")
+    found_group = False
+    for vid, tab, _ax in all_tabs:
+        for glabel in VIEW_GROUP_LABELS:
+            if tab == glabel:
+                found_group = True
+                print(f"  视角「{tab}」({vid}) 与类别「{glabel}」同名")
+            elif tab in glabel or glabel in tab:
+                found_group = True
+                print(f"  视角「{tab}」({vid}) 与类别「{glabel}」互为子串")
+    if not found_group:
+        print("  无:未发现视角名与类别名相同或互为子串。")
 
     print(f"\n[数据说明] 球员池已按站点自身逻辑排除出场占比<40%的球员(汇总 excluded_below_floor={excluded_total},"
           f"含低于后端 15% 下限已不下发的部分)。团队级样本为 5 联赛全部球队(N≈{n_teams}),未额外施加各视角自身的"

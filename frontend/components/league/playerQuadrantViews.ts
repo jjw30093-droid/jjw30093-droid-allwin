@@ -146,7 +146,11 @@ export const PLAYER_VIEWS: PlayerView[] = [
   },
   {
     id: "player-goalkeeping",
-    tab: "门将",
+    // 2026-09-28 命名审计改名(scripts/audit/quadrant_audit.py):原来的
+    // tab"门将"分别是"防线与门将"(球队页)和"门将出球"(同页另一视角)的
+    // 子串,与这两个不同轴的视角撞名。改成"门将扑救"后不再是任何其它
+    // 视角名字的子串,也更准确——这张图的纵轴本来就是扑救超额。
+    tab: "门将扑救",
     title: "每90分钟面对射正预期进球 × 扑救超额",
     x: PLAYER_METRICS.xgotFacedPer90,
     y: PLAYER_METRICS.goalsPreventedPer90,

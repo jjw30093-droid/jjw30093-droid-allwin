@@ -147,7 +147,8 @@ test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用
   await page.keyboard.press("Escape");
   await expect(panel).toHaveAttribute("data-empty", "true");
 
-  // 攻防/战术/射门质量三个既有视角同属默认分组"攻防总览",一行内直接切换,
+  // 攻守 xG/战术/多射还是精射三个既有视角同属默认分组"攻防总览"(2026-09-28
+  // 改名,见 scripts/audit/quadrant_audit.py 命名审计),一行内直接切换,
   // 不用先点分类按钮
   await page.getByRole("tab", { name: "战术" }).click();
   await expect(page.getByText(/运动战 × 定位球象限图/)).toBeVisible();
@@ -165,11 +166,11 @@ test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用
 
   // 切回攻防总览,战术不再被选中(证明类别切换真的换了图,不是原地不动)
   await page.getByRole("button", { name: "攻防总览" }).click();
-  await expect(page.getByRole("tab", { name: "攻防" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "攻守 xG" })).toBeVisible();
 
-  // 数据源没给 xg 档的赛季:攻防视角禁用并说明原因,默认落到战术,不静默补 0
+  // 数据源没给 xg 档的赛季:攻守 xG 视角禁用并说明原因,默认落到战术,不静默补 0
   await page.goto("/league/53/team-stats?season=2020%2F2021");
-  const gated = page.getByRole("tab", { name: "攻防" });
+  const gated = page.getByRole("tab", { name: "攻守 xG" });
   await expect(gated).toBeDisabled();
   await expect(gated).toHaveAttribute("title", /缺少此视角所需的数据/);
   await expect(page.getByRole("tab", { name: "战术" })).toHaveAttribute(

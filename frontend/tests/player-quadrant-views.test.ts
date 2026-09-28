@@ -64,7 +64,7 @@ describe("PLAYER_VIEWS 注册表约束", () => {
     expect(tabsFor(1)).toEqual(["进攻创造力", "防守贡献", "持球推进"]);
     expect(tabsFor(2)).toEqual(["射门与终结", "进攻创造力", "防守贡献", "持球推进"]);
     expect(tabsFor(3)).toEqual(["射门与终结", "进攻创造力"]);
-    expect(tabsFor(0)).toEqual(["门将", "门将出球"]);
+    expect(tabsFor(0)).toEqual(["门将扑救", "门将出球"]);
     // 三个非门将位置两两不同——这条才是站长真正在意的那件事:上面几条
     // 逐字断言只锁住内容,锁不住"它们会不会又变回一模一样"。
     const [df, mf, fw] = [tabsFor(1), tabsFor(2), tabsFor(3)].map((t) => t.join("/"));

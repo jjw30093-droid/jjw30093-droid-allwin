@@ -87,7 +87,11 @@ export const VIEWS: View[] = [
   {
     id: "both-ends",
     group: "overview",
-    tab: "攻防",
+    // 2026-09-28 站长拍板改名(命名对照表第 5 步):与比赛页"攻防 xG"合并为
+    // 同一实现后统一叫「攻守 xG」——两处不再各用一个含糊的"攻防"当名字,
+    // 也顺带解决它作为其它三个视角(定位球攻防/攻防质量/攻防 xG)名字子串
+    // 的命名碰撞,见 scripts/audit/quadrant_audit.py 的命名相似检查。
+    tab: "攻守 xG",
     title: "预期进球 × 预期失球",
     x: METRICS.xg,
     y: METRICS.xga,
@@ -114,7 +118,12 @@ export const VIEWS: View[] = [
   {
     id: "volume",
     group: "overview", // 同上 tactics 的分组说明
-    tab: "射门质量",
+    // 2026-09-28 真实 bug 修复改名(见 scripts/audit/quadrant_audit.py 命名审计):
+    // 这个视角的 tab 原来也叫"射门质量",与 VIEW_GROUPS 里 id="quality" 的类别
+    // 标签同名——该视角却分在 group:"overview"(攻防总览)下,默认打开页面时
+    // 类别行与视角 tab 行会同时出现两个"射门质量"文字,不是同一视角渲染了
+    // 两次,是两个不同配置碰巧同名。改名解决,不改分组结构。
+    tab: "多射还是精射",
     title: "射门数量 × 机会质量",
     x: METRICS.totalShots,
     y: METRICS.xg,
