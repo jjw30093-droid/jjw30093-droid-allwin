@@ -605,7 +605,11 @@ Crown 主分析保留。这类异常可用水位合理性(`home+away` 明显偏�
 - `fact_player_match_stats` 的 `*_total` 分母列**存量未回填**:`accurate_passes_total` 在
   25/26 为 99.9% NULL(54,272/54,336)、26/27 为 8.7% NULL;`accurate_crosses_total` 两季
   100% NULL。迁移 0007/0022 只加了列,历史比赛没有重抓;要用这些分母必须先跑补采。
-  `passes_into_final_third` 两季约 20% NULL(出场球员),按 FotMob"零值省略"惯例解释。
+  `passes_into_final_third` 两季约 20% NULL(出场球员);按球员分组核验:minutes≥45 且
+  accurate_passes≥10 的球员仍有 6.8% NULL(且这些行 accurate_passes p50=17、max=103),
+  **不能按"零值省略"解释为 0,应视为缺数据**(2026-09-28 `phase2c_c4.py`)。
+  行完整性本身没问题:Σ球员 `accurate_passes` 与队级 `accurate_passes` >2% 不一致仅
+  2/3988 队场。
 - 球员级求和 ≠ 队级值:Σ球员 `expected_goals` 与队级 `expected_goals` 相对误差 >2% 的
   队场占 13.0%(>10% 占 1.45%);Σ球员 `goals` 与队级 `Goals` 不一致 3.86%(乌龙球记在
   受害方,见 CLAUDE.md §11.3);Σ球员 `accurate_passes` 与队级一致(>2% 仅 0.05%)。
