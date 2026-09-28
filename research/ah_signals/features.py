@@ -156,7 +156,11 @@ def build_features(matches: list[dict], team_stats: dict, lineups: dict, player_
     # 球员汇总(C4/C5 用) + 球员 minutes(C9 用)
     pagg: dict[tuple[int, int], dict] = {}
     pmin: dict[tuple[int, str], float | None] = {}
-    tmp = defaultdict(lambda: dict(ft=0.0, ft_any=False, pt=0.0, pt_any=False, ct=0.0, ct_any=False, n=0))
+    # C4 验证字段更正(2026-09-28 站长审定):行完整性用 Σ球员 accurate_passes 对队级
+    # accurate_passes(≤2%),passes_into_final_third 的 NULL 按 0 计(NULL 语义核验见
+    # phase2c_c4.py);accurate_passes_total 存量未回填,不再作为验证字段。
+    tmp = defaultdict(lambda: dict(ft=0.0, ap=0.0, ap_any=False, pt=0.0, pt_any=False,
+                                   ct=0.0, ct_any=False, n=0))
     for r in player_rows:
         key = (r["Match_ID"], r["Team_ID"])
         if r["Match_ID"] not in mids:
@@ -165,20 +169,22 @@ def build_features(matches: list[dict], team_stats: dict, lineups: dict, player_
         t["n"] += 1
         pmin[(r["Match_ID"], str(r["Player_ID"]))] = r["minutes_played"]
         if r["passes_into_final_third"] is not None:
-            t["ft"] += float(r["passes_into_final_third"]); t["ft_any"] = True
+            t["ft"] += float(r["passes_into_final_third"])
+        if r["accurate_passes"] is not None:
+            t["ap"] += float(r["accurate_passes"]); t["ap_any"] = True
         if r["accurate_passes_total"] is not None:
             t["pt"] += float(r["accurate_passes_total"]); t["pt_any"] = True
         if r["accurate_crosses_total"] is not None:
             t["ct"] += float(r["accurate_crosses_total"]); t["ct_any"] = True
     for key, t in tmp.items():
-        team_passes = _num(team_stats.get((key[0], key[1], "All"), {}).get("raw", {}), K["passes"])
+        team_ap = _num(team_stats.get((key[0], key[1], "All"), {}).get("raw", {}), K["acc_passes"])
         c4_valid = False
         rel = None
-        if t["pt_any"] and team_passes:
-            rel = abs(t["pt"] - team_passes) / team_passes
-            c4_valid = rel <= C4_REL_TOL and t["ft_any"]
+        if t["ap_any"] and team_ap:
+            rel = abs(t["ap"] - team_ap) / team_ap
+            c4_valid = rel <= C4_REL_TOL
         pagg[key] = dict(
-            final_third_passes=t["ft"] if t["ft_any"] else None,
+            final_third_passes=t["ft"],
             passes_total=t["pt"] if t["pt_any"] else None,
             crosses_total=t["ct"] if t["ct_any"] else None,
             c4_valid=c4_valid, c4_rel_err=rel, n_players=t["n"],

@@ -451,21 +451,23 @@ def main() -> int:
     from features import single_match_values  # noqa: E402
     single_vals = {}
     pagg = {}
-    tmp = defaultdict(lambda: dict(ft=0.0, ft_any=False, pt=0.0, pt_any=False, ct=0.0, ct_any=False))
+    tmp = defaultdict(lambda: dict(ft=0.0, ap=0.0, ap_any=False, pt=0.0, pt_any=False, ct=0.0, ct_any=False))
     for r0 in player_rows:
         t = tmp[(r0["Match_ID"], r0["Team_ID"])]
         if r0["passes_into_final_third"] is not None:
-            t["ft"] += float(r0["passes_into_final_third"]); t["ft_any"] = True
+            t["ft"] += float(r0["passes_into_final_third"])
+        if r0["accurate_passes"] is not None:
+            t["ap"] += float(r0["accurate_passes"]); t["ap_any"] = True
         if r0["accurate_passes_total"] is not None:
             t["pt"] += float(r0["accurate_passes_total"]); t["pt_any"] = True
         if r0["accurate_crosses_total"] is not None:
             t["ct"] += float(r0["accurate_crosses_total"]); t["ct_any"] = True
     for key, t in tmp.items():
-        tp = team_stats.get((key[0], key[1], "All"), {}).get("raw", {}).get(K["passes"])
+        tp = team_stats.get((key[0], key[1], "All"), {}).get("raw", {}).get(K["acc_passes"])
         valid = False
-        if t["pt_any"] and isinstance(tp, (int, float)) and tp:
-            valid = abs(t["pt"] - tp) / tp <= 0.02 and t["ft_any"]
-        pagg[key] = dict(final_third_passes=t["ft"] if t["ft_any"] else None,
+        if t["ap_any"] and isinstance(tp, (int, float)) and tp:
+            valid = abs(t["ap"] - tp) / tp <= 0.02
+        pagg[key] = dict(final_third_passes=t["ft"],
                          passes_total=t["pt"] if t["pt_any"] else None,
                          crosses_total=t["ct"] if t["ct_any"] else None, c4_valid=valid)
     for m in matches:
