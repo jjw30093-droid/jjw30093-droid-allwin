@@ -308,3 +308,8 @@ Phase 3/4/5/6 按任务书,每阶段末尾 `git status`、只提交任务文件�
   B_composite + 全部 C 族 ridge,单一整体增量检验)批准,**ridge alpha 只能在每个训练窗口
   内部 CV 选择,不得全样本调参**;先不跑。B1/B2 系数为负(与先验相反)记入 REPORT 探索性
   部分,注明"不显著,不据此行动"。Phase 4 另行预注册于 `PREREG_phase4.md`。
+- 2026-09-28 Phase 5 结果(`phase5_walkforward.py`,`phase5_stdout.txt`):ridge(closing_line +
+  B_composite + C 族 11,alpha 只在训练窗口内 5 折 CV;每折选中 alpha=1000 即网格上限)。
+  25/26 walk-forward(r=20..38)OOS N=839:增量 1−SSE_ridge/SSE_基准 = −0.0038,bootstrap 95%
+  CI [−0.0111, +0.0035];top 20% |信号| ROI −0.52% [−14.03, +12.77]。26/27 冻结模型 N=182:
+  增量 −0.0086 [−0.0219, +0.0050],方向为负。结论:整体模型样本外无增量。REPORT.md 已撰写。
