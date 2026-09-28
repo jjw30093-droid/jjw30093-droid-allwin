@@ -238,10 +238,16 @@ def build_features(matches: list[dict], team_stats: dict, lineups: dict, player_
     # 对手"被打出"的值:against_hist[tid] = [(ko, {f: v_opp(f)})]
     # 用 hist 反查:team O 在比赛 j 的对手 X,X 在 j 的 v 即 O 被打出的值
     v_by = {(e["mid"], tid): e["v"] for tid, es in hist.items() for e in es}
+    against_cache: dict[tuple[int, int, str], float | None] = {}
 
-    def ewma_against(tid: int, before: datetime, f: str):
-        vals = [v_by[(e["mid"], e["opp"])][f] for e in hist[tid] if e["ko"] < before]
-        return ewma(vals, MAIN_WINDOW)
+    def ewma_against(tid: int, before_mid: int, before: datetime, f: str):
+        """team tid 在 before(比赛 before_mid 的开球)之前"被对手打出"的 f 的 EWMA8;
+        同一 (tid, before_mid, f) 只算一次(截断重算时缓存随子集重建,不跨调用)。"""
+        key = (tid, before_mid, f)
+        if key not in against_cache:
+            vals = [v_by[(e["mid"], e["opp"])][f] for e in hist[tid] if e["ko"] < before]
+            against_cache[key] = ewma(vals, MAIN_WINDOW)
+        return against_cache[key]
 
     out: dict[int, dict] = {}
     for m in ms:
@@ -261,7 +267,7 @@ def build_features(matches: list[dict], team_stats: dict, lineups: dict, player_
                     adj = []
                     for e in prior:
                         base = e["v"][f]
-                        ea = ewma_against(e["opp"], e["ko"], f)
+                        ea = ewma_against(e["opp"], e["mid"], e["ko"], f)
                         adj.append(None if base is None or ea is None else base - ea)
                     tv[f"{f}__adj"] = ewma(adj, MAIN_WINDOW)
                 else:
