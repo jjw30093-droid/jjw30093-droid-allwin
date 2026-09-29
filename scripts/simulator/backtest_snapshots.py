@@ -26,8 +26,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "research" / "ah_signals"))
 sys.path.insert(0, str(HERE))
 
-from common import load_xref, open_ro, parse_round  # noqa: E402
-from features_market import load_timelines  # noqa: E402
+from common import load_xref, open_ro, parse_round, parse_utc  # noqa: E402
+from features_market import load_timelines, pick_close  # noqa: E402
 from export_params import crown_entry  # noqa: E402
 from params_core import SITUATION_CHANNEL, build, decode_formation, load_raw, truncate  # noqa: E402
 
@@ -128,11 +128,30 @@ def outcomes_for(raw, m) -> dict:
     }
 
 
+def bet365_closes(tl, matches) -> dict:
+    """Bet365 1x2 收盘去水概率(研究口径:kickoff−10min 之前最后一条,距开球 >120min 记缺失;1/赔率 归一)。"""
+    out, missing = {}, Counter()
+    for m in matches:
+        if not m["kickoff_at_utc"]:
+            missing["no_kickoff"] += 1
+            continue
+        snap, reason = pick_close(tl.get((m["Match_ID"], "Bet365", "1x2")) or [], parse_utc(m["kickoff_at_utc"]))
+        if snap is None:
+            missing[reason] += 1
+            continue
+        inv = [1.0 / v for v in snap["v"]]
+        s = sum(inv)
+        out[str(m["Match_ID"])] = {"odds": list(snap["v"]), "p": [x / s for x in inv],
+                                   "observed_at": snap["t"].strftime("%Y-%m-%dT%H:%M:%SZ")}
+    return {"matches": out, "missing": dict(missing)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", default="/opt/allwin/shared/data")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--only-truncation", action="store_true")
+    ap.add_argument("--only-bet365", action="store_true")
     args = ap.parse_args()
     out_dir = Path(args.out_dir)
     if REPO in out_dir.resolve().parents or out_dir.resolve() == REPO:
@@ -146,6 +165,14 @@ def main() -> None:
     dates = sorted({m["Date"] for m in cur})
     print(f"loaded {len(raw.matches)} matches ({len(cur)} in {CURRENT}, {len(dates)} dates) in {time.time() - t0:.1f}s",
           flush=True)
+
+    if args.only_bet365:
+        ok_xref, _ = load_xref(odds, {m["Match_ID"] for m in cur})
+        p2m = {str(x["provider_match_id"]): mid for mid, x in ok_xref.items() if not x["home_away_inverted"]}
+        res = bet365_closes(load_timelines(odds, p2m), cur)
+        (out_dir / "bet365_1x2.json").write_text(dumps(res), encoding="utf-8")
+        print(json.dumps({"with_close": len(res["matches"]), "of": len(cur), "missing": res["missing"]}), flush=True)
+        return
 
     kwargs = dict(leagues=LEAGUES, current_season=CURRENT, k_grid=K_GRID, extras=True)
 
