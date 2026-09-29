@@ -42,6 +42,23 @@ function loadRes<T>(name: string): T {
   return readJson<T>(join(resDir, name));
 }
 
+/** Bet365 1x2 收盘去水概率 [主, 平, 客](P2.6b)。 */
+const bet365: Map<number, [number, number, number]> = new Map(
+  Object.entries(readJson<{ matches: Record<string, { p: [number, number, number] }> }>(join(dir, "bet365_1x2.json")).matches).map(
+    ([k, v]) => [Number(k), v.p],
+  ),
+);
+const FAV_THRESHOLD = 0.6;
+
+/** 热门方:Bet365 去水胜率 ≥ 60% 的一方(0 主 / 2 客);没有则 null。 */
+function favouriteOf(matchId: number): 0 | 2 | null {
+  const p = bet365.get(matchId);
+  if (!p) return null;
+  if (p[0] >= FAV_THRESHOLD) return 0;
+  if (p[2] >= FAV_THRESHOLD) return 2;
+  return null;
+}
+
 function loadRows(): Row[] {
   const outcomes = new Map(readJson<Outcome[]>(join(dir, "outcomes.json")).map((o) => [o.match_id, o]));
   const rows: Row[] = [];
@@ -338,12 +355,9 @@ function simulateRows(rows: Row[], cal: Cal): { sims: SimRow[]; skipped: number 
 }
 
 function favNotWin(sims: SimRow[]) {
-  const fav = sims.filter((s) => s.r.pm.crown?.ah && s.r.pm.crown.ah.line !== 0);
-  const sim = mean(fav.map((s) => (s.r.pm.crown!.ah!.line > 0 ? 1 - s.pH : 1 - s.pA)));
-  const act = mean(fav.map((s) => {
-    const o = outcomeIndex(s.r.out.score);
-    return s.r.pm.crown!.ah!.line > 0 ? (o === 0 ? 0 : 1) : o === 2 ? 0 : 1;
-  }));
+  const fav = sims.filter((s) => favouriteOf(s.r.pm.match_id) !== null);
+  const sim = mean(fav.map((s) => (favouriteOf(s.r.pm.match_id) === 0 ? 1 - s.pH : 1 - s.pA)));
+  const act = mean(fav.map((s) => (outcomeIndex(s.r.out.score) === favouriteOf(s.r.pm.match_id) ? 0 : 1)));
   return { sim, act, n: fav.length };
 }
 
@@ -433,7 +447,11 @@ function validate(rows: Row[]) {
     return s.meanGoals[hi] / s.expected[hi];
   });
 
-  // 如实报告:Crown 收盘 Brier、公平让球线一致率
+  // 如实报告:与市场的 Brier 差距(基准 Bet365 1x2 收盘去水);附报 Crown AH+OU 反推版;公平让球线一致率
+  const withB365 = sims.filter((s) => bet365.has(s.r.pm.match_id));
+  const brierB365 = mean(withB365.map((s) => brier3(bet365.get(s.r.pm.match_id)!, outcomeIndex(s.r.out.score))));
+  const brierSimOnB365 = mean(withB365.map((s) => brier3([s.pH, s.pD, s.pA], outcomeIndex(s.r.out.score))));
+  const drawB365 = mean(withB365.map((s) => bet365.get(s.r.pm.match_id)![1]));
   const withCrown = sims.filter((s) => s.r.pm.crown?.market_lambda);
   const brierCrown = mean(withCrown.map((s) => brier3(poisson1x2(s.r.pm.crown!.market_lambda!.home, s.r.pm.crown!.market_lambda!.away), outcomeIndex(s.r.out.score))));
   const brierSimOnCrown = mean(withCrown.map((s) => brier3([s.pH, s.pD, s.pA], outcomeIndex(s.r.out.score))));
@@ -457,8 +475,12 @@ function validate(rows: Row[]) {
     { name: "进球时间分布逐段相差 ≤ 2pp", value: { sim: simShare.map(pct), act: actShare.map(pct), diff_pp: simShare.map((v, i) => pct(v - actShare[i])) }, pass: simShare.every((v, i) => Math.abs(v - actShare[i]) <= 0.02) },
     { name: "λ 较低一方 模拟 ÷ 期望 均值 ∈ [0.98, 1.02]", value: { low: mean(lowRatios), high: mean(highRatios), n: lowRatios.length }, pass: mean(lowRatios) >= 0.98 && mean(lowRatios) <= 1.02 },
   ];
+  const drawCrown = mean(withCrown.map((s) => poisson1x2(s.r.pm.crown!.market_lambda!.home, s.r.pm.crown!.market_lambda!.away)[1]));
   const report = {
-    brier: { sim: brierSim, crown: brierCrown, sim_on_crown: brierSimOnCrown, crown_minus_sim: brierCrown - brierSimOnCrown, n_crown: withCrown.length },
+    brier_vs_bet365: { sim: brierSimOnB365, bet365: brierB365, sim_minus_bet365: brierSimOnB365 - brierB365, n: withB365.length, bet365_mean_draw_p: drawB365 },
+    brier_vs_crown_poisson_note: "附报:Crown AH+OU 经独立 Poisson 反推的胜平负,独立 Poisson 低估平局",
+    brier_vs_crown_poisson: { sim: brierSimOnCrown, crown: brierCrown, sim_minus_crown: brierSimOnCrown - brierCrown, n: withCrown.length, crown_mean_draw_p: drawCrown },
+    brier_sim_all: brierSim,
     fair_ah_vs_crown: { agree_share: agree, n: withAh.length, diff_distribution: Object.fromEntries(Object.entries(diffs).sort((a, b) => +a[0] - +b[0])) },
   };
   save("validation.json", { calibration: cal, n: sims.length, skipped, gates, report, seconds: (Date.now() - t0) / 1000 });
