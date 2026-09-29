@@ -1,7 +1,7 @@
 // 快照 + 校准值 → 引擎输入(SimParams / MatchSetup)。只做拼装,模型计算全部在 engine.ts。
 
 import { ALL_EFFECTS, V02_STATE, type Effects, type MatchSetup } from "../engine";
-import type { FixtureParams, SimParams, StateMultipliers } from "../types";
+import type { FixtureParams, RateModel, SimParams, StateMultipliers } from "../types";
 import type { Prematch, Snapshot } from "./types";
 
 export interface Cal {
@@ -13,6 +13,7 @@ export interface Cal {
   red_own: number;
   red_opp: number;
   state: StateMultipliers;
+  rate_model?: RateModel;
 }
 
 export const V02_CAL: Cal = { k: 5, h: null, w: 0.7, kappa: 12, red_own: 0.75, red_opp: 1.25, state: V02_STATE };
@@ -53,7 +54,7 @@ export function simParamsFor(snap: Snapshot, cal: Cal, opts: { useMarket: boolea
     teams,
     players: snap.params.players,
     fixtures,
-    calibration: { market_w: cal.w, kappa: cal.kappa, red_own: cal.red_own, red_opp: cal.red_opp, state: cal.state },
+    calibration: { market_w: cal.w, kappa: cal.kappa, red_own: cal.red_own, red_opp: cal.red_opp, state: cal.state, rate_model: cal.rate_model },
   };
 }
 

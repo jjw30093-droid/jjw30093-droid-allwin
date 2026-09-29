@@ -10,6 +10,7 @@ import {
   type LeagueParams,
   type PlayerParams,
   type PosGroup,
+  type RateModel,
   type ShotChannel,
   type SimParams,
   type StateMultipliers,
@@ -171,6 +172,8 @@ export interface MatchConfig {
   redOwn: number;
   redOpp: number;
   state: StateMultipliers;
+  /** v0.3 回归系数;null 时按 v0.2 的 timing 归一化与乘数运行 */
+  rateModel: RateModel | null;
   timing: number[];
   /** 补时经验分布:[分钟数[], 累计概率[]],上下半场各一份 */
   stoppageDist: [[number[], number[]], [number[], number[]]];
@@ -436,6 +439,7 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
       redOwn: cal.red_own ?? RED_OWN,
       redOpp: cal.red_opp ?? RED_OPP,
       state: { ...V02_STATE, ...(cal.state ?? {}) },
+      rateModel: cal.rate_model ?? null,
       effects: setup.effects ?? ALL_EFFECTS,
       timing: league.goal_timing.factor,
       stoppageDist: [
@@ -567,9 +571,21 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
   const ticks = buildTicks(stoppage);
   // v0.2 第 1 条:按本场实际模拟的全部分钟归一化,关闭所有事件时期望进球恰好等于 λ。
   const timingSum = ticks.reduce((acc, tk) => acc + cfg.timing[tk.bucket], 0);
-  const eps: [number, number] = fx.epsilon
+  const eps: [number, number] = fx.epsilon && cfg.kappa > 0
     ? [gamma(rng, cfg.kappa, 1 / cfg.kappa), gamma(rng, cfg.kappa, 1 / cfg.kappa)]
     : [1, 1];
+  const rm = cfg.rateModel;
+  // v0.3:η = 时段(或末段格子)+ 75 分钟前的比分状态 + 红牌,均为回归系数
+  const eta = (tk: MinuteTick, d: number, ownDown: boolean, oppDown: boolean): number => {
+    const r = rm as RateModel;
+    let e: number;
+    if (tk.bucket === 5) {
+      e = d === 0 ? r.late.level : d === 1 ? r.late.lead1 : d === -1 ? r.late.trail1 : d >= 2 ? r.late.lead2 : r.late.trail2;
+    } else {
+      e = r.periods[tk.bucket] + (d === 0 ? 0 : d === 1 ? r.early_state.lead1 : d === -1 ? r.early_state.trail1 : d >= 2 ? r.early_state.lead2 : r.early_state.trail2);
+    }
+    return e + (ownDown ? r.red_own_down : 0) + (oppDown ? r.red_opp_down : 0);
+  };
   const sched: Scheduled[] = [0, 1].map(() => ({
     red: fx.redCard && rng() < cfg.redCardRate ? scheduleMinute(rng, 20, 90) : null,
     injury: fx.injury && rng() < INJURY_P ? scheduleMinute(rng, 1, 90) : null,
@@ -636,14 +652,16 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
       const o = (1 - t) as 0 | 1;
       const team = cfg.teams[t];
       const d = score[t] - score[o];
-      const eventMult = (red[t] ? cfg.redOwn : 1) * (red[o] ? cfg.redOpp : 1);
-      const shotEventMult = eventMult * (injured[t] ? INJURY_MULT : 1) * (tk.tick <= collapseUntil[t] ? COLLAPSE_MULT : 1);
       const press = team.pressLate && tk.half === 2 && tk.minute > PRESS_LATE_FROM ? PRESS_LATE_MULT : 1;
-      const share = cfg.timing[tk.bucket] / timingSum;
+      const otherEvents = (injured[t] ? INJURY_MULT : 1) * (tk.tick <= collapseUntil[t] ? COLLAPSE_MULT : 1);
+      // v0.2:timing 归一化 × 分渠道比分状态 × 红牌乘数;v0.3:exp(η)/90(对所有渠道相同)
+      const minuteMult = rm ? Math.exp(eta(tk, fx.scoreState ? d : 0, red[t], red[o])) / 90 : cfg.timing[tk.bucket] / timingSum;
+      const eventMult = rm ? 1 : (red[t] ? cfg.redOwn : 1) * (red[o] ? cfg.redOpp : 1);
+      const shotEventMult = eventMult * otherEvents;
 
       for (const c of SHOT_CHANNELS) {
-        const state = fx.scoreState ? stateMult(d, c, cfg.state) : 1;
-        const rate = team.lambda[c] * share * eps[t] * state * shotEventMult * press;
+        const state = rm || !fx.scoreState ? 1 : stateMult(d, c, cfg.state);
+        const rate = team.lambda[c] * minuteMult * eps[t] * state * shotEventMult * press;
         const perShot = cfg.xgMean[c] * team.xgMult[c];
         const n = poisson(rng, rate / perShot);
         if (c === "penalty") penalties += n;
@@ -661,7 +679,8 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
         }
       }
 
-      const ogRate = team.lambda.owngoal * share * (fx.scoreState ? stateMultAll(d, cfg.state) : 1) * eventMult;
+      const ogState = rm || !fx.scoreState ? 1 : stateMultAll(d, cfg.state);
+      const ogRate = team.lambda.owngoal * minuteMult * ogState * eventMult;
       const nOg = poisson(rng, ogRate);
       for (let k = 0; k < nOg; k++) {
         addGoal(t, tk);

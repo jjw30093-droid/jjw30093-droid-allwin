@@ -240,6 +240,43 @@ describe("校准参数注入(Phase 2)", () => {
   });
 });
 
+describe("v0.3 时段 / 比分状态 / 红牌回归模式", () => {
+  const zero = {
+    periods: [0, 0, 0, 0, 0] as [number, number, number, number, number],
+    early_state: { trail2: 0, trail1: 0, lead1: 0, lead2: 0 },
+    late: { level: 0, trail1: 0, trail2: 0, lead1: 0, lead2: 0 },
+    red_own_down: 0,
+    red_opp_down: 0,
+  };
+
+  it("系数全为 0、事件全关时,每分钟 = λ/90:模拟进球 ≈ 期望进球 × 实际分钟 ÷ 90", () => {
+    const p = buildParams();
+    p.calibration = { rate_model: zero, kappa: 0 };
+    const r = prepareMatch(p, setup({ effects: NO_EFFECTS }));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.config.rateModel).not.toBeNull();
+    const m = simulateMany(r.config, 5, 20000, [0, 0]);
+    // 补时分布(见 buildParams):上半场均值 3.4,下半场均值 6.4 → 平均 99.8 分钟
+    const minutes = 90 + (1 * 0.1 + 3 * 0.6 + 5 * 0.3) + (4 * 0.2 + 6 * 0.5 + 9 * 0.3);
+    const expected = (r.config.teams[0].breakdown.expectedGoals + r.config.teams[1].breakdown.expectedGoals) * (minutes / 90);
+    const ratio = (m.meanGoals[0] + m.meanGoals[1]) / expected;
+    expect(ratio).toBeGreaterThan(0.99);
+    expect(ratio).toBeLessThan(1.01);
+  }, 60000);
+
+  it("'75后 持平'系数为负时,末段进球占比下降", () => {
+    const run = (level: number) => {
+      const p = buildParams();
+      p.calibration = { rate_model: { ...zero, late: { ...zero.late, level } }, kappa: 0 };
+      const r = prepareMatch(p, setup({ effects: NO_EFFECTS }));
+      if (!r.ok) throw new Error(r.error);
+      const m = simulateMany(r.config, 5, 5000, [0, 0]);
+      return m.goalBuckets[5] / m.goalBuckets.reduce((a, b) => a + b, 0);
+    };
+    expect(run(-0.5)).toBeLessThan(run(0));
+  }, 60000);
+});
+
 describe("进球率归一化(v0.2 第 1 条)", () => {
   it("关闭全部事件时,模拟进球 ÷ 期望进球在 [0.99, 1.01]", () => {
     const r = prepareMatch(buildParams(), setup({ effects: NO_EFFECTS }));

@@ -34,10 +34,24 @@ export interface StateMultipliers {
   lead2_all: number;
 }
 
+/** v0.3:时段 / 比分状态 / 红牌的 Poisson 回归系数(对数乘数,相对 λ/90)。 */
+export interface RateModel {
+  /** 1–15、16–30、31–45+、46–60、61–75 五个时段(持平状态) */
+  periods: [number, number, number, number, number];
+  /** 75 分钟前的比分状态(参照持平) */
+  early_state: { trail2: number; trail1: number; lead1: number; lead2: number };
+  /** 75 分钟后(含下半场补时)按比分状态的格子 */
+  late: { level: number; trail1: number; trail2: number; lead1: number; lead2: number };
+  red_own_down: number;
+  red_opp_down: number;
+}
+
 /** Phase 2 校准得到的参数;缺省为 v0.2 取值。 */
 export interface Calibration {
   market_w: number;
+  /** 0 = 关闭状态系数(ε ≡ 1) */
   kappa: number;
+  rate_model: RateModel;
   red_own: number;
   red_opp: number;
   state: StateMultipliers;
