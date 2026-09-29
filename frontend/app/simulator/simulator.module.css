@@ -426,12 +426,12 @@
 }
 
 .momHome {
-  background: var(--brand-teal);
+  background: var(--sim-home);
   transition: width 0.3s ease;
 }
 
 .momAway {
-  background: var(--brand-blue);
+  background: var(--sim-away);
   transition: width 0.3s ease;
 }
 
@@ -462,18 +462,17 @@
 }
 
 .shotHome {
-  background: var(--brand-teal);
+  background: var(--sim-home-pitch);
 }
 
 .shotAway {
-  background: var(--brand-blue);
+  background: var(--sim-away-pitch);
 }
 
 .shotGoal {
   width: 20px;
   height: 20px;
-  background: var(--brand-gold);
-  border: 2px solid var(--ink);
+  border: 3px solid var(--brand-gold);
 }
 
 .goalPop {
@@ -547,6 +546,14 @@
   font-weight: 700;
 }
 
+.tickHome {
+  box-shadow: inset 3px 0 0 var(--sim-home);
+}
+
+.tickAway {
+  box-shadow: inset 3px 0 0 var(--sim-away);
+}
+
 .tickClock {
   font-variant-numeric: tabular-nums;
 }
@@ -605,7 +612,7 @@
 }
 
 .wdlHome {
-  background: var(--win);
+  background: var(--sim-home);
 }
 
 .wdlDraw {
@@ -613,7 +620,7 @@
 }
 
 .wdlAway {
-  background: var(--loss);
+  background: var(--sim-away);
 }
 
 .wdlLegend {

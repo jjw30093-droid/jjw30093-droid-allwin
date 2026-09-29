@@ -446,8 +446,10 @@ export type EventKind = "shot" | "goal" | "red" | "injury" | "gk_error";
 
 export interface SimEvent {
   tick: number;
-  /** 常规时间分钟(补时记在 45 / 90),供 xG 赛跑图横轴使用 */
+  /** 常规时间分钟(补时记在 45 / 90) */
   minute: number;
+  /** 补时分钟数(常规时间为 0),供 xG 赛跑图展开补时横轴 */
+  added: number;
   clock: string;
   team: 0 | 1;
   kind: EventKind;
@@ -473,6 +475,7 @@ interface MinuteTick {
   tick: number;
   half: 1 | 2;
   minute: number;
+  added: number;
   clock: string;
   bucket: number;
 }
@@ -482,11 +485,11 @@ function buildTicks(stoppage: [number, number]): MinuteTick[] {
   let tick = 0;
   for (let m = 1; m <= 45 + stoppage[0]; m++) {
     const minute = Math.min(m, 45);
-    ticks.push({ tick: tick++, half: 1, minute, clock: m > 45 ? `45+${m - 45}'` : `${m}'`, bucket: Math.min(Math.floor((minute - 1) / 15), 2) });
+    ticks.push({ tick: tick++, half: 1, minute, added: Math.max(0, m - 45), clock: m > 45 ? `45+${m - 45}'` : `${m}'`, bucket: Math.min(Math.floor((minute - 1) / 15), 2) });
   }
   for (let m = 46; m <= 90 + stoppage[1]; m++) {
     const minute = Math.min(m, 90);
-    ticks.push({ tick: tick++, half: 2, minute, clock: m > 90 ? `90+${m - 90}'` : `${m}'`, bucket: 3 + Math.min(Math.floor((minute - 46) / 15), 2) });
+    ticks.push({ tick: tick++, half: 2, minute, added: Math.max(0, m - 90), clock: m > 90 ? `90+${m - 90}'` : `${m}'`, bucket: 3 + Math.min(Math.floor((minute - 46) / 15), 2) });
   }
   return ticks;
 }
@@ -592,7 +595,7 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
   };
 
   for (const tk of ticks) {
-    const base = { tick: tk.tick, minute: tk.minute, clock: tk.clock };
+    const base = { tick: tk.tick, minute: tk.minute, added: tk.added, clock: tk.clock };
     for (let t = 0; t < 2; t++) {
       const s = sched[t];
       if (tk.clock.includes("+")) continue;

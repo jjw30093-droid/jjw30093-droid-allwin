@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cumulativeSeries } from "@/components/matches/XgRaceChart";
+import { buildOption as buildXgRaceOption, cumulativeSeries } from "@/components/matches/XgRaceChart";
+import type { ChartColors } from "@/components/charts/useChartColors";
 import {
   focusError,
   fPos,
@@ -245,6 +246,33 @@ describe("xG 同源", () => {
     expect(cumulativeSeries(shots, true).at(-1)!.total).toBeCloseTo(h, 9);
     expect(cumulativeSeries(shots, false).at(-1)!.total).toBeCloseTo(a, 9);
     expect(shots.filter((x) => x.outcome === "Goal")).toHaveLength(s.score[0] + s.score[1]);
+  });
+});
+
+describe("模拟事件 → xG 赛跑图", () => {
+  it("客队进球转换成 is_home=false,并在图上用客队色;补时分钟随事件传出", () => {
+    const r = prepareMatch(buildParams(), setup());
+    if (!r.ok) throw new Error(r.error);
+    let found = null as null | ReturnType<typeof simulateOnce>;
+    for (let seed = 1; seed < 500 && !found; seed++) {
+      const s = simulateOnce(r.config, seed);
+      if (s.events.some((e) => e.kind === "goal" && e.team === 1 && e.channel !== "owngoal")) found = s;
+    }
+    if (!found) throw new Error("no away goal in 500 seeds");
+    const shots = toReportShots(found.events, [10, 20], found.halfTimeTick);
+    const awayGoals = shots.filter((x) => x.outcome === "Goal" && x.team_id === 20);
+    expect(awayGoals.length).toBeGreaterThan(0);
+    expect(awayGoals.every((x) => x.is_home === false)).toBe(true);
+    const colors = { teal: "#087e78", navy: "#b45309", win: "#287851" } as ChartColors;
+    const st = { firstHalf: found.stoppage[0], secondHalf: found.stoppage[1] };
+    const opt = buildXgRaceOption(
+      cumulativeSeries(shots, true, st), cumulativeSeries(shots, false, st), "主", "客",
+      90 + st.firstHalf + st.secondHalf, "interactive", colors, st,
+    );
+    const away = (opt.series as { markPoint: { data: { itemStyle: { color: string } }[] } }[])[1];
+    expect(away.markPoint.data.length).toBeGreaterThan(0);
+    expect(away.markPoint.data.every((d) => d.itemStyle.color === "#b45309")).toBe(true);
+    for (const e of found.events) expect(e.added).toBe(e.clock.includes("+") ? Number(e.clock.split("+")[1].replace("'", "")) : 0);
   });
 });
 

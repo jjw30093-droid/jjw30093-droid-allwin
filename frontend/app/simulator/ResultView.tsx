@@ -47,11 +47,11 @@ export function ResultView({
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>本次模拟</h2>
         <div className={styles.scoreboard}>
-          <span className={styles.sbTeam}>{names[0]}</span>
+          <span className={styles.sbTeam} style={{ color: "var(--sim-home)" }}>{names[0]}</span>
           <div className={styles.sbScore}>
             {single.score[0]} : {single.score[1]}
           </div>
-          <span className={styles.sbTeam}>{names[1]}</span>
+          <span className={styles.sbTeam} style={{ color: "var(--sim-away)" }}>{names[1]}</span>
         </div>
         <ul className={styles.feed}>
           {goals.map((g, i) => (
@@ -75,40 +75,15 @@ export function ResultView({
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>模拟 xG 赛跑</h2>
         <p className={styles.muted} style={{ marginTop: 0 }}>
-          本次模拟比分 {single.score.join(" : ")},累计 xG:{names[0]} {xgTotal[0].toFixed(2)},{names[1]} {xgTotal[1].toFixed(2)};阶梯线,圆点为进球,补时并入第 45 / 90 分钟。
+          本次模拟比分 {single.score.join(" : ")},累计 xG:{names[0]} {xgTotal[0].toFixed(2)},{names[1]} {xgTotal[1].toFixed(2)};阶梯线,圆点为进球,灰色带为补时。
         </p>
         {/* 不传比分:该组件的文字摘要把比分写成"实际比分",不适用于模拟 */}
-        <XgRaceChart shots={shots} homeName={names[0]} awayName={names[1]} />
-      </section>
-
-      <section className={styles.card} data-testid="sim-settings">
-        <h2 className={styles.cardTitle}>本场设定</h2>
-        <div className={styles.teams}>
-          {([setup.home, setup.away] as const).map((t, i) => (
-            <div key={i}>
-              <div className={styles.teamName}>
-                {names[i]} · {t.formation}
-              </div>
-              <p className={styles.settingsLine}>
-                侧重点:{t.focuses.length ? t.focuses.map((f) => FOCUS_LABEL[f]).join("、") : "无"}
-                {t.shortRest ? " · 休息不足 3 天(假设设定)" : ""}
-              </p>
-              <p className={styles.settingsLine}>
-                首发:
-                {t.slots
-                  .map((sl) => {
-                    const p = sl.playerId ? params.players[sl.playerId] : null;
-                    return `${p ? displayName(p) : "空位"}(${POS_LABEL[sl.group]})`;
-                  })
-                  .join("、")}
-              </p>
-            </div>
-          ))}
-        </div>
-        <p className={styles.settingsLine}>
-          随机强度:{setup.chaos ? "混乱模式(κ=4)" : "标准档(κ=12)"} · 种子 {single.seed} · 补时 {single.stoppage[0]} / {single.stoppage[1]} 分钟
-          {config.market ? ` · Crown 盘口定锚(${config.market.status})` : " · 未用盘口定锚"}
-        </p>
+        <XgRaceChart
+          shots={shots}
+          homeName={names[0]}
+          awayName={names[1]}
+          stoppage={{ firstHalf: single.stoppage[0], secondHalf: single.stoppage[1] }}
+        />
       </section>
 
       <div className={styles.resultGrid}>
@@ -186,13 +161,46 @@ export function ResultView({
             {many.scorerProb.map((s) => (
               <li key={`${s.team}:${s.playerId}`}>
                 <span>
-                  {s.name} <span className={styles.muted}>{names[s.team]}</span>
+                  {s.name}{" "}
+                  <span className={styles.muted} style={{ color: s.team === 0 ? "var(--sim-home)" : "var(--sim-away)" }}>
+                    {names[s.team]}
+                  </span>
                 </span>
                 <span>{pct(s.p)}</span>
               </li>
             ))}
           </ol>
           <p className={styles.muted}>不含乌龙球。</p>
+        </section>
+
+        <section className={styles.card} data-testid="sim-settings">
+          <h2 className={styles.cardTitle}>本场设定</h2>
+          <div className={styles.teams}>
+            {([setup.home, setup.away] as const).map((t, i) => (
+              <div key={i}>
+                <div className={styles.teamName} style={{ color: i === 0 ? "var(--sim-home)" : "var(--sim-away)" }}>
+                  {names[i]} · {t.formation}
+                </div>
+                <p className={styles.settingsLine}>
+                  侧重点:{t.focuses.length ? t.focuses.map((f) => FOCUS_LABEL[f]).join("、") : "无"}
+                  {t.shortRest ? " · 休息不足 3 天(假设设定)" : ""}
+                </p>
+                <p className={styles.settingsLine}>
+                  首发:
+                  {t.slots
+                    .map((sl) => {
+                      const p = sl.playerId ? params.players[sl.playerId] : null;
+                      return `${p ? displayName(p) : "空位"}(${POS_LABEL[sl.group]})`;
+                    })
+                    .join("、")}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className={styles.settingsLine}>
+            随机强度:{setup.chaos ? "混乱模式(κ=4)" : "标准档(κ=12)"} · 种子 {single.seed} · 补时 {single.stoppage[0]} / {single.stoppage[1]} 分钟
+            {config.market ? ` · Crown 盘口定锚(${config.market.status})` : " · 未用盘口定锚"}
+          </p>
         </section>
       </div>
 

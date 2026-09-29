@@ -27,27 +27,63 @@ import type { MatchReportResponse } from "@/lib/api-v1";
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type Shot = MatchReport["shots"][number];
 
-type Point = { minute: number; total: number; goal: Shot | null };
+/** 可选携带补时分钟数(minute_added);只有启用补时横轴(stoppage)时才会用到。 */
+export type XgRaceShot = Shot & { minute_added?: number | null };
 
-/** 逐分钟累积:返回从 0 分钟起的阶梯点序列。 */
-export function cumulativeSeries(shots: Shot[], isHome: boolean): Point[] {
+/** 上 / 下半场补时长度(分钟)。传入时横轴展开补时:上半场补时排在 45' 之后、
+ * 下半场之前,下半场整体右移上半场补时的长度,终点为 90+下半场补时。 */
+export type StoppageAxis = { firstHalf: number; secondHalf: number };
+
+type Point = { minute: number; total: number; goal: XgRaceShot | null };
+
+/** 启用补时横轴时一次射门在横轴上的位置。 */
+export function stoppageAxisPosition(
+  s: Pick<XgRaceShot, "minute" | "period" | "minute_added">,
+  st: StoppageAxis,
+): number {
+  const minute = s.minute ?? 0;
+  const added = Math.max(0, s.minute_added ?? 0);
+  const secondHalf = s.period === "SecondHalf" || (s.period == null && minute > 45);
+  if (!secondHalf) return Math.min(minute, 45) + (minute >= 45 ? Math.min(added, st.firstHalf) : 0);
+  return Math.min(minute, 90) + st.firstHalf + (minute >= 90 ? Math.min(added, st.secondHalf) : 0);
+}
+
+/** 补时横轴位置 → 比赛时钟文字(45+2'、90+5' 这类)。 */
+export function stoppageAxisLabel(v: number, st: StoppageAxis): string {
+  const m = Math.round(v);
+  if (m <= 45) return `${m}'`;
+  if (m <= 45 + st.firstHalf) return `45+${m - 45}'`;
+  if (m <= 90 + st.firstHalf) return `${m - st.firstHalf}'`;
+  return `90+${m - 90 - st.firstHalf}'`;
+}
+
+/** 逐分钟累积:返回从 0 分钟起的阶梯点序列。传入 stoppage 时横轴位置按补时展开。 */
+export function cumulativeSeries(shots: XgRaceShot[], isHome: boolean, stoppage?: StoppageAxis): Point[] {
+  const pos = (s: XgRaceShot) => (stoppage ? stoppageAxisPosition(s, stoppage) : (s.minute ?? 0));
   const mine = shots
     .filter(
       (s) =>
         s.period !== "PenaltyShootout" && s.minute != null && s.is_home === isHome,
     )
-    .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+    .sort((a, b) => pos(a) - pos(b));
   const out: Point[] = [{ minute: 0, total: 0, goal: null }];
   let total = 0;
   for (const s of mine) {
     total += s.xg ?? 0;
     out.push({
-      minute: s.minute ?? 0,
+      minute: pos(s),
       total,
       goal: s.outcome === "Goal" ? s : null,
     });
   }
   return out;
+}
+
+/** 补时横轴的刻度位置:0/15/30/45'、下半场 60/75/90'(右移上半场补时)、终点 90+X'。 */
+export function stoppageTicks(st: StoppageAxis): number[] {
+  const ticks = [0, 15, 30, 45, 60 + st.firstHalf, 75 + st.firstHalf, 90 + st.firstHalf];
+  if (st.secondHalf > 0) ticks.push(90 + st.firstHalf + st.secondHalf);
+  return ticks;
 }
 
 /** 导出供渲染冒烟测试直接调用(frontend/tests/chart-render-smoke.test.ts,
@@ -60,6 +96,7 @@ export function buildOption(
   endMinute: number,
   mode: ChartMode,
   c: ChartColors,
+  stoppage?: StoppageAxis,
 ): EChartsOption {
   const t = tokensFor(mode);
   // 曲线画到终场:补一个末端点,否则线在最后一次射门处就断了
@@ -108,19 +145,35 @@ export function buildOption(
               }>;
               if (!rows?.length) return "";
               const min = rows[0].value[0];
-              return `第 ${min} 分钟<br/>${rows
+              const head = stoppage ? `${stoppageAxisLabel(min, stoppage)}` : `第 ${min} 分钟`;
+              return `${head}<br/>${rows
                 .map((r) => `${r.seriesName} 累积 xG ${r.value[1].toFixed(2)}`)
                 .join("<br/>")}`;
             },
           },
-    xAxis: {
-      type: "value",
-      min: 0,
-      max: endMinute,
-      interval: 15,
-      axisLabel: { color: c.ink2, fontSize: t.axisFont, formatter: (v: number) => `${v}'` },
-      splitLine: { show: false },
-    },
+    xAxis: stoppage
+      ? {
+          type: "value",
+          min: 0,
+          max: endMinute,
+          axisTick: { customValues: stoppageTicks(stoppage) },
+          axisLabel: {
+            color: c.ink2,
+            fontSize: t.axisFont,
+            customValues: stoppageTicks(stoppage),
+            hideOverlap: true,
+            formatter: (v: number) => stoppageAxisLabel(v, stoppage),
+          },
+          splitLine: { show: false },
+        }
+      : {
+          type: "value",
+          min: 0,
+          max: endMinute,
+          interval: 15,
+          axisLabel: { color: c.ink2, fontSize: t.axisFont, formatter: (v: number) => `${v}'` },
+          splitLine: { show: false },
+        },
     yAxis: {
       type: "value",
       axisLabel: {
@@ -140,18 +193,31 @@ export function buildOption(
         color: c.teal,
         lineStyle: { width: t.lineWidth },
         areaStyle: { opacity: 0.12 },
+        // 进球点与标签用本队曲线的颜色(此前两队都用 c.win,客队进球会显示成主队的青绿)
         markPoint: {
           symbol: "circle",
           symbolSize: t.symbolSize + 4,
-          data: goalMarks(home, c.win),
+          data: goalMarks(home, c.teal),
           label: {
             show: true,
             position: "top",
             fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
-            color: c.win,
+            color: c.teal,
             formatter: ({ name }: { name: string }) => name,
           },
         },
+        ...(stoppage
+          ? {
+              markArea: {
+                silent: true,
+                itemStyle: { color: c.grey, opacity: 0.18 },
+                data: [
+                  [{ xAxis: 45 }, { xAxis: 45 + stoppage.firstHalf }],
+                  [{ xAxis: 90 + stoppage.firstHalf }, { xAxis: endMinute }],
+                ],
+              },
+            }
+          : {}),
       },
       {
         name: awayName,
@@ -165,12 +231,12 @@ export function buildOption(
         markPoint: {
           symbol: "circle",
           symbolSize: t.symbolSize + 4,
-          data: goalMarks(away, c.win),
+          data: goalMarks(away, c.navy),
           label: {
             show: true,
             position: "bottom",
             fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
-            color: c.win,
+            color: c.navy,
             formatter: ({ name }: { name: string }) => name,
           },
         },
@@ -191,8 +257,9 @@ export function XgRaceChart({
   awayScore,
   mode = "interactive",
   height,
+  stoppage,
 }: {
-  shots: MatchReport["shots"];
+  shots: XgRaceShot[];
   homeName: string;
   awayName: string;
   /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
@@ -205,6 +272,8 @@ export function XgRaceChart({
   awayScore?: number | null;
   mode?: ChartMode;
   height?: number;
+  /** 可选:展开补时横轴(默认不展开,行为与此前一致)。 */
+  stoppage?: StoppageAxis;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
@@ -224,17 +293,19 @@ export function XgRaceChart({
     return () => io.disconnect();
   }, [mode]);
 
-  const home = useMemo(() => cumulativeSeries(shots, true), [shots]);
-  const away = useMemo(() => cumulativeSeries(shots, false), [shots]);
+  const home = useMemo(() => cumulativeSeries(shots, true, stoppage), [shots, stoppage]);
+  const away = useMemo(() => cumulativeSeries(shots, false, stoppage), [shots, stoppage]);
   const endMinute = useMemo(
     () =>
-      Math.max(
-        90,
-        ...shots
-          .filter((s) => s.period !== "PenaltyShootout")
-          .map((s) => s.minute ?? 0),
-      ),
-    [shots],
+      stoppage
+        ? 90 + stoppage.firstHalf + stoppage.secondHalf
+        : Math.max(
+            90,
+            ...shots
+              .filter((s) => s.period !== "PenaltyShootout")
+              .map((s) => s.minute ?? 0),
+          ),
+    [shots, stoppage],
   );
 
   const hTotal = home.length ? home[home.length - 1].total : 0;
@@ -255,8 +326,8 @@ export function XgRaceChart({
   }, [home.length, away.length, hTotal, aTotal, homeName, awayName, homeScore, awayScore]);
 
   const option = useMemo(
-    () => buildOption(home, away, homeName, awayName, endMinute, mode, effectiveColors),
-    [home, away, homeName, awayName, endMinute, mode, effectiveColors],
+    () => buildOption(home, away, homeName, awayName, endMinute, mode, effectiveColors, stoppage),
+    [home, away, homeName, awayName, endMinute, mode, effectiveColors, stoppage],
   );
 
   if (home.length <= 1 && away.length <= 1) {

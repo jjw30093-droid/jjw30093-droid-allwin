@@ -114,7 +114,7 @@ export function MatchAnimation({
   return (
     <section className={styles.card} data-testid="sim-animation">
       <div className={styles.scoreboard}>
-        <span className={styles.sbTeam}>{names[0]}</span>
+        <span className={styles.sbTeam} style={{ color: "var(--sim-home)" }}>{names[0]}</span>
         <div>
           <div className={styles.sbScore}>
             {score[0]} : {score[1]}
@@ -124,7 +124,7 @@ export function MatchAnimation({
             xG {xg[0].toFixed(2)} : {xg[1].toFixed(2)}
           </div>
         </div>
-        <span className={styles.sbTeam}>{names[1]}</span>
+        <span className={styles.sbTeam} style={{ color: "var(--sim-away)" }}>{names[1]}</span>
       </div>
       <div className={styles.momentum} aria-label={`势头 主队 ${Math.round(momentum * 100)}%`}>
         <span className={styles.momHome} style={{ width: `${momentum * 100}%` }} />
@@ -158,13 +158,19 @@ export function MatchAnimation({
           </div>
         ) : null}
       </div>
-      <p className={styles.muted}>青绿 = {names[0]},蓝 = {names[1]},金色 = 进球。</p>
+      <p className={styles.muted}>
+        <span style={{ color: "var(--sim-home)" }}>● {names[0]}</span> <span style={{ color: "var(--sim-away)" }}>● {names[1]}</span>
+        ;带金边的大圆点 = 进球。
+      </p>
       <ol className={styles.ticker} data-testid="event-ticker" aria-label="比赛事件">
         {ticker.length === 0 ? <li className={styles.muted}>比赛开始</li> : null}
         {ticker.map((e, i) => {
           const key = e.kind === "goal" || e.kind === "red" || e.channel === "penalty" || e.channel === "owngoal";
           return (
-            <li key={`${e.tick}-${i}`} className={`${styles.tickRow} ${key ? styles.tickKey : ""}`}>
+            <li
+              key={`${e.tick}-${i}`}
+              className={`${styles.tickRow} ${key ? styles.tickKey : ""} ${e.team === 0 ? styles.tickHome : styles.tickAway}`}
+            >
               <span className={styles.tickClock}>{e.clock}</span>
               <span className={styles.tickTeam}>{names[e.team]}</span>
               <span className={styles.tickType}>{eventLabel(e)}</span>

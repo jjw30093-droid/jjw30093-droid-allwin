@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Chip } from "@/components/ui/Chip";
 import {
   FOCUS_LABEL,
@@ -17,6 +17,7 @@ import {
   type TeamSetup,
 } from "@/features/simulator/engine";
 import type { PosGroup, SimParams } from "@/features/simulator/types";
+import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import { LineupEditor } from "./LineupEditor";
 import { MatchAnimation } from "./MatchAnimation";
 import { ResultView } from "./ResultView";
@@ -96,6 +97,13 @@ export function SimulatorClient({ params }: { params: SimParams }) {
     setup: MatchSetup;
   } | null>(null);
   const workerRef = useRef<Worker | null>(null);
+  const teamColors = useSimTeamColors();
+  const colorVars = {
+    "--sim-home": teamColors.surface[0],
+    "--sim-away": teamColors.surface[1],
+    "--sim-home-pitch": teamColors.pitch[0],
+    "--sim-away-pitch": teamColors.pitch[1],
+  } as CSSProperties;
 
   const setTeams = (lid: string, h: number, a: number, fixtureId: number | null = null) => {
     setLeagueId(lid);
@@ -156,7 +164,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
   ];
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} style={colorVars}>
       <header className={styles.header}>
         <h1 className={styles.title}>比赛模拟器</h1>
         <span className={styles.badge} data-testid="uncalibrated-badge">未校准原型</span>
