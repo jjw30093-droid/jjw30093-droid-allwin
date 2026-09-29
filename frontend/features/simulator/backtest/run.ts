@@ -567,6 +567,45 @@ function favNotWin(sims: SimRow[]) {
   return { sim, act, n: fav.length };
 }
 
+/** v0.3 第 12 条:热门方 = 本路径模拟胜率(主胜或客胜)≥ 60% 的一方。 */
+function favNotWinSelf(sims: SimRow[]) {
+  const fav = sims.filter((s) => s.pH >= FAV_THRESHOLD || s.pA >= FAV_THRESHOLD);
+  const side = (s: SimRow) => (s.pH >= FAV_THRESHOLD ? 0 : 2);
+  return {
+    sim: mean(fav.map((s) => (side(s) === 0 ? 1 - s.pH : 1 - s.pA))),
+    act: mean(fav.map((s) => (outcomeIndex(s.r.out.score) === side(s) ? 0 : 1))),
+    n: fav.length,
+  };
+}
+
+/** v0.3 第 13 条:比例类闸门容差 = max(原容差, 1.96 × SE),SE 按实际比例与该闸门场数。 */
+function propTol(orig: number, p: number, n: number) {
+  const se = Math.sqrt((p * (1 - p)) / n);
+  return { se, tol: Math.max(orig, 1.96 * se) };
+}
+
+/** v0.3 第 15 条:Bet365 热门方子集上"模拟不胜 − Bet365 去水不胜"的均值与按场次 bootstrap 的 95% CI。 */
+function bet365FavDiagnostic(sims: SimRow[]) {
+  const d: number[] = [];
+  for (const s of sims) {
+    const f = favouriteOf(s.r.pm.match_id);
+    if (f === null) continue;
+    const b = bet365.get(s.r.pm.match_id)!;
+    const simNot = f === 0 ? 1 - s.pH : 1 - s.pA;
+    const bNot = f === 0 ? 1 - b[0] : 1 - b[2];
+    d.push(simNot - bNot);
+  }
+  const rng = mulberry32(20260930);
+  const boots: number[] = [];
+  for (let b = 0; b < 10000; b++) {
+    let sum = 0;
+    for (let i = 0; i < d.length; i++) sum += d[Math.floor(rng() * d.length)];
+    boots.push(sum / d.length);
+  }
+  boots.sort((x, y) => x - y);
+  return { n: d.length, mean_diff: mean(d), ci95: [boots[Math.floor(0.025 * boots.length)], boots[Math.floor(0.975 * boots.length) - 1]] };
+}
+
 function bigMargin(sims: SimRow[]) {
   return {
     sim: mean(sims.map((s) => s.pBig)),
@@ -634,7 +673,11 @@ function validate(rows: Row[]) {
   const goalsSim = mean(sims.map((s) => s.meanGoals[0] + s.meanGoals[1]));
   const goalsAct = mean(sims.map((s) => s.r.out.score[0] + s.r.out.score[1]));
   const big = bigMargin(sims);
-  const fav = favNotWin(sims);
+  const fav = favNotWinSelf(sims);
+  const favB365 = favNotWin(sims);
+  const drawT = propTol(0.03, drawAct, sims.length);
+  const bigT = propTol(0.02, big.act, big.n);
+  const favT = propTol(0.03, fav.act, fav.n);
   const redsSim = mean(sims.map((s) => s.reds));
   const redsAct = mean(sims.map((s) => s.r.out.reds.length));
   const pensSim = mean(sims.map((s) => s.pens));
@@ -675,10 +718,10 @@ function validate(rows: Row[]) {
   const gates = [
     { name: "Brier 不差于简单 Poisson 基准", value: { sim: brierSimOnBase, baseline: brierBase, n: baseRows.length }, pass: brierSimOnBase <= brierBase },
     { name: "校准斜率 ∈ [0.8, 1.2]", value: { slope: cs.slope, intercept: cs.intercept, table: cs.table }, pass: cs.slope >= 0.8 && cs.slope <= 1.2 },
-    { name: "平局率相差 ≤ 3pp", value: { sim: pct(drawSim), act: pct(drawAct), diff_pp: pct(drawSim - drawAct) }, pass: Math.abs(drawSim - drawAct) <= 0.03 },
+    { name: "平局率相差 ≤ max(3pp, 1.96·SE)", value: { sim: pct(drawSim), act: pct(drawAct), diff_pp: pct(drawSim - drawAct), n: sims.length, se_pp: pct(drawT.se), tol_pp: pct(drawT.tol) }, pass: Math.abs(drawSim - drawAct) <= drawT.tol },
     { name: "场均总进球相差 ≤ 0.15", value: { sim: goalsSim, act: goalsAct, diff: goalsSim - goalsAct }, pass: Math.abs(goalsSim - goalsAct) <= 0.15 },
-    { name: "净胜 ≥3 球比例相差 ≤ 2pp", value: { sim: pct(big.sim), act: pct(big.act), diff_pp: pct(big.sim - big.act), n: big.n }, pass: Math.abs(big.sim - big.act) <= 0.02 },
-    { name: "热门方不胜比例相差 ≤ 3pp", value: { sim: pct(fav.sim), act: pct(fav.act), diff_pp: pct(fav.sim - fav.act), n: fav.n }, pass: Math.abs(fav.sim - fav.act) <= 0.03 },
+    { name: "净胜 ≥3 球比例相差 ≤ max(2pp, 1.96·SE)", value: { sim: pct(big.sim), act: pct(big.act), diff_pp: pct(big.sim - big.act), n: big.n, se_pp: pct(bigT.se), tol_pp: pct(bigT.tol) }, pass: Math.abs(big.sim - big.act) <= bigT.tol },
+    { name: "热门方(本路径模拟胜率 ≥60%)不胜比例相差 ≤ max(3pp, 1.96·SE)", value: { sim: pct(fav.sim), act: pct(fav.act), diff_pp: pct(fav.sim - fav.act), n: fav.n, se_pp: pct(favT.se), tol_pp: pct(favT.tol) }, pass: Math.abs(fav.sim - fav.act) <= favT.tol },
     { name: "每场红牌数相对差 ≤ 15%", value: { sim: redsSim, act: redsAct, rel: redsSim / redsAct - 1 }, pass: Math.abs(redsSim / redsAct - 1) <= 0.15 },
     { name: "每场点球数相对差 ≤ 15%", value: { sim: pensSim, act: pensAct, rel: pensSim / pensAct - 1 }, pass: Math.abs(pensSim / pensAct - 1) <= 0.15 },
     { name: "进球时间分布逐段相差 ≤ 2pp", value: { sim: simShare.map(pct), act: actShare.map(pct), diff_pp: simShare.map((v, i) => pct(v - actShare[i])) }, pass: simShare.every((v, i) => Math.abs(v - actShare[i]) <= 0.02) },
@@ -686,6 +729,8 @@ function validate(rows: Row[]) {
   ];
   const drawCrown = mean(withCrown.map((s) => poisson1x2(s.r.pm.crown!.market_lambda!.home, s.r.pm.crown!.market_lambda!.away)[1]));
   const report = {
+    diag_fav_bet365_selected: { sim: pct(favB365.sim), act: pct(favB365.act), diff_pp: pct(favB365.sim - favB365.act), n: favB365.n },
+    diag_sim_minus_bet365_notwin_on_bet365_favs: bet365FavDiagnostic(sims),
     brier_vs_bet365: { sim: brierSimOnB365, bet365: brierB365, sim_minus_bet365: brierSimOnB365 - brierB365, n: withB365.length, bet365_mean_draw_p: drawB365 },
     brier_vs_crown_poisson_note: "附报:Crown AH+OU 经独立 Poisson 反推的胜平负,独立 Poisson 低估平局",
     brier_vs_crown_poisson: { sim: brierSimOnCrown, crown: brierCrown, sim_minus_crown: brierSimOnCrown - brierCrown, n: withCrown.length, crown_mean_draw_p: drawCrown },
