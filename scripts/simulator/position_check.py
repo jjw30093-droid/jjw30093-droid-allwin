@@ -22,6 +22,18 @@ SAMPLE_TOTAL = 60
 SEED = 20260929
 
 
+def expected_mismatch(p: dict) -> str | None:
+    """已知的、预期内的解码差异(站长 2026-09-30 认定),单独列出,不计入不一致。"""
+    f, pid, g, u = p["top_formation"] or "", p["top_position_id"], p["main_position"], p["usual_position_id"]
+    if f == "4-4-2" and pid in (72, 78) and g == "W" and u == 2:
+        return "4-4-2 边前卫 72/78:解码 W,FotMob 中场"
+    if (f.startswith("3-4-") or f == "3-5-2" or f.startswith("5-")) and g == "FB" and u in (2, 3):
+        return "三中卫/五后卫体系翼卫:解码 FB,FotMob 中场或前锋"
+    if f in ("4-2-3-1", "3-4-2-1") and pid in (84, 85) and g == "AM" and u == 3:
+        return "4-2-3-1 / 3-4-2-1 的 84/85:解码 AM,FotMob 前锋"
+    return None
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     d = json.loads(path.read_text(encoding="utf-8"))
@@ -45,11 +57,23 @@ def main() -> None:
         a, n = by_group[g]
         if n:
             print(f"  {g:<2} → {USUAL_LABEL[TO_COARSE[g]]}:{a}/{n} = {a / n:.1%}")
-    pairs = Counter((p["main_position"], USUAL_LABEL[p["usual_position_id"]]) for p in comparable
-                    if TO_COARSE[p["main_position"]] != p["usual_position_id"])
-    print("不一致组合(解码 → usual):", ", ".join(f"{a}→{b}×{n}" for (a, b), n in pairs.most_common()))
-    print("不一致名单(姓名|球队|解码|usual|最多的阵型/position_id/次数):")
-    for p in sorted((p for p in comparable if p not in agree), key=lambda p: (p["main_position"], -p["minutes"])):
+    mismatched = [p for p in comparable if p not in agree]
+    expected = [p for p in mismatched if expected_mismatch(p)]
+    remaining = [p for p in mismatched if not expected_mismatch(p)]
+    denom = len(comparable) - len(expected)
+    print(f"扣除预期内的不一致 {len(expected)} 人后:一致 {len(agree)} / {denom} = {len(agree) / denom:.1%}"
+          f"(剩余不一致 {len(remaining)} 人)")
+    print("预期内的不一致(按类别):")
+    for cat, n in Counter(expected_mismatch(p) for p in expected).most_common():
+        print(f"  {cat}:{n} 人")
+        for p in sorted((q for q in expected if expected_mismatch(q) == cat), key=lambda q: -q["minutes"]):
+            t = teams.get(str(p["team_id"]), {}).get("name_zh", "")
+            print(f"    {name(p)}|{t}|{p['main_position']}|{USUAL_LABEL[p['usual_position_id']]}|"
+                  f"{p['top_formation']}/{p['top_position_id']}/{p['top_position_starts']}")
+    pairs = Counter((p["main_position"], USUAL_LABEL[p["usual_position_id"]]) for p in remaining)
+    print("剩余不一致组合(解码 → usual):", ", ".join(f"{a}→{b}×{n}" for (a, b), n in pairs.most_common()))
+    print("剩余不一致名单(姓名|球队|解码|usual|最多的阵型/position_id/次数):")
+    for p in sorted(remaining, key=lambda p: (p["main_position"], -p["minutes"])):
         t = teams.get(str(p["team_id"]), {}).get("name_zh", "")
         print(f"  {name(p)}|{t}|{p['main_position']}|{USUAL_LABEL[p['usual_position_id']]}|"
               f"{p['top_formation']}/{p['top_position_id']}/{p['top_position_starts']}")

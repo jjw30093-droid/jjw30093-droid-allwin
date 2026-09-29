@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -26,7 +27,15 @@ sys.path.insert(0, str(REPO / "research" / "ah_signals"))
 from common import load_xref, open_ro  # noqa: E402
 from features_market import fit_poisson, implied_two, load_timelines, pick_close  # noqa: E402
 
-MODEL_VERSION = "v0.1"
+SPEC_PATH = REPO / "docs" / "simulator-model.md"
+
+
+def spec_version() -> str:
+    """模型版本 = 规格文档里最后一条"## vX.Y 变更记录"(没有则为 v0),不在代码里写死。"""
+    found = re.findall(r"^## (v\d+\.\d+) 变更记录", SPEC_PATH.read_text(encoding="utf-8"), flags=re.M)
+    return found[-1] if found else "v0"
+
+
 LEAGUES = (47, 87)
 SEASONS = ("2025/2026", "2026/2027")
 CURRENT_SEASON = "2026/2027"
@@ -706,7 +715,7 @@ def main() -> None:
     out = {
         "meta": {
             "generated_at": fmt_utc(now),
-            "model_version": MODEL_VERSION,
+            "model_version": spec_version(),
             "uncalibrated": True,
             "spec": "docs/simulator-model.md (v0 + v0.1)",
             "leagues": list(LEAGUES),
