@@ -18,7 +18,7 @@ import random
 import sys
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO / "research" / "ah_signals"))
 sys.path.insert(0, str(HERE))
 
 from common import load_xref, open_ro, parse_round, parse_utc  # noqa: E402
-from features_market import load_timelines, pick_close  # noqa: E402
+from features_market import load_timelines  # noqa: E402
 from export_params import crown_entry  # noqa: E402
 from params_core import SITUATION_CHANNEL, build, decode_formation, load_raw, truncate  # noqa: E402
 
@@ -129,21 +129,27 @@ def outcomes_for(raw, m) -> dict:
 
 
 def bet365_closes(tl, matches) -> dict:
-    """Bet365 1x2 收盘去水概率(研究口径:kickoff−10min 之前最后一条,距开球 >120min 记缺失;1/赔率 归一)。"""
-    out, missing = {}, Counter()
+    """Bet365 1x2 收盘去水概率:kickoff−10min 之前的最后一条(站长口径,不设距开球时长上限;
+    距开球 >120min 的条数单独统计);去水 = 1/赔率 归一。"""
+    out, missing, stale = {}, Counter(), 0
     for m in matches:
         if not m["kickoff_at_utc"]:
             missing["no_kickoff"] += 1
             continue
-        snap, reason = pick_close(tl.get((m["Match_ID"], "Bet365", "1x2")) or [], parse_utc(m["kickoff_at_utc"]))
-        if snap is None:
-            missing[reason] += 1
+        ko = parse_utc(m["kickoff_at_utc"])
+        cutoff = ko - timedelta(minutes=10)
+        snaps = [x for x in (tl.get((m["Match_ID"], "Bet365", "1x2")) or []) if x["t"] <= cutoff]
+        if not snaps:
+            missing["no_snap_before_cutoff"] += 1
             continue
+        snap = snaps[-1]
+        gap = (ko - snap["t"]).total_seconds() / 60.0
+        stale += gap > 120
         inv = [1.0 / v for v in snap["v"]]
         s = sum(inv)
-        out[str(m["Match_ID"])] = {"odds": list(snap["v"]), "p": [x / s for x in inv],
+        out[str(m["Match_ID"])] = {"odds": list(snap["v"]), "p": [x / s for x in inv], "gap_min": round(gap, 1),
                                    "observed_at": snap["t"].strftime("%Y-%m-%dT%H:%M:%SZ")}
-    return {"matches": out, "missing": dict(missing)}
+    return {"matches": out, "missing": dict(missing), "gap_over_120min": stale}
 
 
 def main() -> None:
@@ -171,7 +177,8 @@ def main() -> None:
         p2m = {str(x["provider_match_id"]): mid for mid, x in ok_xref.items() if not x["home_away_inverted"]}
         res = bet365_closes(load_timelines(odds, p2m), cur)
         (out_dir / "bet365_1x2.json").write_text(dumps(res), encoding="utf-8")
-        print(json.dumps({"with_close": len(res["matches"]), "of": len(cur), "missing": res["missing"]}), flush=True)
+        print(json.dumps({"with_close": len(res["matches"]), "of": len(cur), "missing": res["missing"],
+                          "gap_over_120min": res["gap_over_120min"]}), flush=True)
         return
 
     kwargs = dict(leagues=LEAGUES, current_season=CURRENT, k_grid=K_GRID, extras=True)
