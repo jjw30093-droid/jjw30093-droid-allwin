@@ -113,7 +113,7 @@
       "port": 3020,
       "env": {
         "SIMULATOR_ENABLED": "1",
-        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_20260929.json"
+        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_v03.json"
       }
     },
     {
