@@ -373,17 +373,27 @@ def build(
                 if r[8] is not None and r[9] is not None:
                     formation_coords[(formation, r[5])].append((r[8], r[9]))
 
+    # 同一阵型字符串可能出现不止一种 position_id 组合(变体);逐个组合按同一规则解码进同一张表,
+    # 出现次数最多的组合优先,变体里同一 position_id 解码不同的计入 variant_conflicts。
     position_map: dict[str, dict[int, str]] = {}
     undecodable = []
+    conflicts = 0
     for formation, cnt in formation_sets.items():
-        pids, _ = cnt.most_common(1)[0]
-        groups = decode_formation(formation, list(pids))
-        if groups is None:
+        for pids, _n in cnt.most_common():
+            groups = decode_formation(formation, list(pids))
+            if groups is None:
+                continue
+            m = position_map.setdefault(formation, {})
+            for pid, g in groups.items():
+                if pid not in m:
+                    m[pid] = g
+                elif m[pid] != g:
+                    conflicts += 1
+        if formation not in position_map:
             undecodable.append(formation)
-            continue
-        position_map[formation] = groups
     diag["undecodable_formations"] = undecodable
     diag["formation_variant_slot_sets"] = sum(len(c) - 1 for f, c in formation_sets.items() if f in position_map)
+    diag["variant_decode_conflicts"] = conflicts
 
     def slot_group(formation, pid):
         return position_map.get(formation or "", {}).get(pid)
