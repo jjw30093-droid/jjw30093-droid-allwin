@@ -40,3 +40,6 @@ backend/studio/content_scripts/*.png
 # marketing/research/：研究产物目录（手机端审计截图 mobile_audit/、球员中文名盘点
 # zh_inventory/、issue 草稿 issue_drafts/ 等），本地留档不入库。
 marketing/research/
+
+# 本地原型数据(模拟器参数等),永不进 git
+.local-data/
