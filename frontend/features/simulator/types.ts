@@ -23,6 +23,27 @@ export interface LeagueParams {
   gk_xgot_faced_per90: number;
   /** 主场系数 h:主队 ×h、客队 ×1/h(Phase 2 校准)。缺省时用 v0.2 的 1.08 / 0.93。 */
   home_advantage?: number;
+  /** 联赛场均进球 / 场均非乌龙 xG(每队每场;v0.3 强度回归的 μ) */
+  goals_per_team_match?: number;
+  xg_per_team_match?: number;
+}
+
+/** v0.3 第 7 条:强度回归特征。A / D 为 [k=0, k=5] 两个收缩版本。 */
+export interface StrengthFeature {
+  n: number;
+  n_eff: number;
+  xg: { A: [number, number]; D: [number, number] };
+  goals: { A: [number, number]; D: [number, number] };
+}
+
+/** v0.3 第 7 条:数据模型的强度回归(log λ = α + γ·log(强度/μ) + β_home·主场)。 */
+export interface StrengthModel {
+  window: "10" | "20" | "38";
+  basis: "xg" | "goals" | "both";
+  k: 0 | 5;
+  alpha: number;
+  gamma: { xg_A?: number; xg_D?: number; goals_A?: number; goals_D?: number };
+  beta_home: number;
 }
 
 /** 比分状态乘数(§7.2):落后 1 球 open / counter,领先 1 球、落后 ≥2、领先 ≥2 作用于全部渠道。 */
@@ -52,6 +73,7 @@ export interface Calibration {
   /** 0 = 关闭状态系数(ε ≡ 1) */
   kappa: number;
   rate_model: RateModel;
+  strength_model: StrengthModel;
   red_own: number;
   red_opp: number;
   state: StateMultipliers;
@@ -87,6 +109,7 @@ export interface TeamParams {
     starters: LineupStarter[];
   } | null;
   squad: string[];
+  strength?: Record<string, StrengthFeature>;
 }
 
 export interface PlayerParams {

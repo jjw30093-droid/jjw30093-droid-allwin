@@ -240,6 +240,26 @@ describe("校准参数注入(Phase 2)", () => {
   });
 });
 
+describe("v0.3 强度回归(数据模型 λ)", () => {
+  it("λ_model 总量 = exp(预测) − μ_OG,渠道占比不变,不再乘主场系数", () => {
+    const p = buildParams();
+    const feat = (a: number, d: number) => ({ n: 10, n_eff: 8.7, xg: { A: [a, a] as [number, number], D: [d, d] as [number, number] }, goals: { A: [a, a] as [number, number], D: [d, d] as [number, number] } });
+    p.leagues["1"].goals_per_team_match = 1.4;
+    p.teams["10"].strength = { "10": feat(1.8, 1.2) };
+    p.teams["20"].strength = { "10": feat(1.2, 1.6) };
+    const base = prepareMatch(p, setup());
+    if (!base.ok) throw new Error(base.error);
+    p.calibration = { strength_model: { window: "10", basis: "xg", k: 5, alpha: 0.3, gamma: { xg_A: 1.2, xg_D: 1.1 }, beta_home: 0.2 } };
+    const r = prepareMatch(p, setup());
+    if (!r.ok) throw new Error(r.error);
+    const muXg = 0.8 + 0.15 + 0.35 + 0.1;
+    const pred = Math.exp(0.3 + 0.2 + 1.2 * Math.log(1.8 / muXg) + 1.1 * Math.log(1.6 / muXg));
+    expect(r.config.teams[0].breakdown.lambdaModel).toBeCloseTo(pred - 0.05, 9);
+    const share = (x: typeof r.config.teams[0]) => x.lambda.open / (x.lambda.open + x.lambda.counter + x.lambda.setpiece + x.lambda.penalty);
+    expect(share(r.config.teams[0])).toBeCloseTo(share(base.config.teams[0]), 9);
+  });
+});
+
 describe("v0.3 时段 / 比分状态 / 红牌回归模式", () => {
   const zero = {
     periods: [0, 0, 0, 0, 0] as [number, number, number, number, number],

@@ -250,6 +250,28 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
   });
   const sumCh = (r: Record<ShotChannel, number>) => SHOT_CHANNELS.reduce((s, c) => s + r[c], 0);
 
+  // v0.3 第 7 条:有强度回归时,λ_model 的总量取回归预测(不再乘主场系数),非乌龙部分按原公式的渠道占比分配
+  const sm = cal.strength_model;
+  if (sm && teamP.every((t) => t.strength?.[sm.window])) {
+    const ki = sm.k === 0 ? 0 : 1;
+    const muT = { xg: SHOT_CHANNELS.reduce((s, c) => s + mu[c], 0), goals: league.goals_per_team_match ?? 0 };
+    for (let t = 0; t < 2; t++) {
+      const o = 1 - t;
+      const own = teamP[t].strength![sm.window];
+      const opp = teamP[o].strength![sm.window];
+      let eta = sm.alpha + (t === 0 ? sm.beta_home : 0);
+      for (const basis of ["xg", "goals"] as const) {
+        const gA = sm.gamma[`${basis}_A`];
+        const gD = sm.gamma[`${basis}_D`];
+        if (gA !== undefined) eta += gA * Math.log(own[basis].A[ki] / muT[basis]);
+        if (gD !== undefined) eta += gD * Math.log(opp[basis].D[ki] / muT[basis]);
+      }
+      const nonOg = Math.max(Math.exp(eta) - mu.owngoal, 0.05);
+      const old = sumCh(lamModel[t]);
+      for (const c of SHOT_CHANNELS) lamModel[t][c] = (nonOg * lamModel[t][c]) / old;
+    }
+  }
+
   // §3 市场定锚
   let market: MatchConfig["market"] = null;
   let lamMkt: [number, number] | null = null;

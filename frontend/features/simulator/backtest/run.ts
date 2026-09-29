@@ -6,7 +6,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FOCUS_LIST, focusError, prepareMatch, simulateMany, type Focus, type MatchConfig } from "../engine";
 import { mulberry32 } from "../rng";
-import type { LeagueParams, RateModel, ShotChannel, SimParams, StateMultipliers } from "../types";
+import type { LeagueParams, RateModel, ShotChannel, SimParams, StateMultipliers, StrengthModel } from "../types";
 import { setupFor, simParamsFor, V02_CAL, type Cal } from "./assemble";
 import { brier3, calibrationSlope, goldenMax, mean, outcomeIndex, poisson1x2, poissonLogLik, timingBucket } from "./stats";
 import type { Outcome, Prematch, Snapshot } from "./types";
@@ -96,26 +96,27 @@ function prep(r: Row, params: SimParams, useMarket: boolean): MatchConfig | null
   return res.ok ? res.config : null;
 }
 
-/** v0.3 的校准链:a(h、k)→ b(w)→ rm(Poisson 回归)→ d(κ)。 */
-function calFromResults(upTo: "a" | "b" | "rm" | "d"): Cal {
+/** v0.3 的校准链:a(合并 h、k)→ 强度回归 → b(w)→ rm(时段 / 比分状态 / 红牌回归);标准档 κ 关闭。 */
+function calFromResults(upTo: "a" | "strength" | "b" | "rm"): Cal {
   const a = loadRes<{ k: number; h: Record<string, number> }>("step_a.json");
-  let cal: Cal = { ...V02_CAL, k: a.k, h: a.h };
+  let cal: Cal = { ...V02_CAL, k: a.k, h: a.h, kappa: 0 };
   if (upTo === "a") return cal;
+  cal = { ...cal, strength_model: loadRes<{ strength_model: StrengthModel }>("step_strength.json").strength_model };
+  if (upTo === "strength") return cal;
   cal = { ...cal, w: loadRes<{ w: number }>("step_b.json").w };
   if (upTo === "b") return cal;
-  cal = { ...cal, rate_model: loadRes<{ rate_model: RateModel }>("step_rm.json").rate_model };
-  if (upTo === "rm") return cal;
-  return { ...cal, kappa: loadRes<{ kappa: number }>("step_d.json").kappa };
+  return { ...cal, rate_model: loadRes<{ rate_model: RateModel }>("step_rm.json").rate_model };
 }
 
 // ------------------------------------------------------------------ a. HA 与 k
 function stepA(rows: Row[]) {
+  // v0.3 第 9 条:五大联赛合并估计一个 h;k 的选择规则不变
   const train = rows.filter((r) => inRange(r, TRAIN));
-  const byK: Record<string, { ll: number; h: Record<string, number>; n: number; skipped: number }> = {};
-  const dataByK: Record<string, Record<string, { bH: number; bA: number; og: number; yH: number; yA: number }[]>> = {};
+  const byK: Record<string, { ll: number; h: number; n: number; skipped: number }> = {};
+  const dataByK: Record<string, { bH: number; bA: number; og: number; yH: number; yA: number }[]> = {};
   for (const k of K_GRID) {
     const get = paramsCache({ ...V02_CAL, k }, { useMarket: false, hOverride: 1 });
-    const data: Record<string, { bH: number; bA: number; og: number; yH: number; yA: number }[]> = {};
+    const data: { bH: number; bA: number; og: number; yH: number; yA: number }[] = [];
     let skipped = 0;
     for (const r of train) {
       const params = get(r.snap);
@@ -124,53 +125,105 @@ function stepA(rows: Row[]) {
         skipped++;
         continue;
       }
-      const og = params.leagues[String(r.pm.league_id)].mu.owngoal;
-      (data[r.pm.league_id] ??= []).push({
+      data.push({
         bH: cfg.teams[0].breakdown.lambdaModel,
         bA: cfg.teams[1].breakdown.lambdaModel,
-        og,
+        og: params.leagues[String(r.pm.league_id)].mu.owngoal,
         yH: r.out.score[0],
         yA: r.out.score[1],
       });
     }
-    const h: Record<string, number> = {};
-    let ll = 0;
-    let n = 0;
-    for (const [lid, ms] of Object.entries(data)) {
-      const f = (x: number) => ms.reduce((s, m) => s + poissonLogLik(m.yH, m.bH * x + m.og) + poissonLogLik(m.yA, m.bA / x + m.og), 0);
-      h[lid] = goldenMax(f, H_RANGE[0], H_RANGE[1]);
-      ll += f(h[lid]);
-      n += ms.length;
-    }
-    byK[String(k)] = { ll, h, n, skipped };
+    const f = (x: number) => data.reduce((s2, m) => s2 + poissonLogLik(m.yH, m.bH * x + m.og) + poissonLogLik(m.yA, m.bA / x + m.og), 0);
+    const h = goldenMax(f, H_RANGE[0], H_RANGE[1]);
+    byK[String(k)] = { ll: f(h), h, n: data.length, skipped };
     dataByK[String(k)] = data;
-    console.log(`k=${k}: logLik=${ll.toFixed(3)} n=${n} skipped=${skipped} h=${JSON.stringify(Object.fromEntries(Object.entries(h).map(([l, v]) => [l, +v.toFixed(4)])))}`);
+    console.log(`k=${k}: logLik=${f(h).toFixed(3)} n=${data.length} skipped=${skipped} h(合并)=${h.toFixed(4)}`);
   }
   const best = K_GRID.reduce((b, k) => (byK[String(k)].ll > byK[String(b)].ll ? k : b), K_GRID[0]);
-  // h_L 的 95% 置信区间:剖面似然,对数似然比最优值低 1.92 处(二分)
-  const ci: Record<string, [number, number]> = {};
-  for (const [lid, ms] of Object.entries(dataByK[String(best)])) {
-    const f = (x: number) => ms.reduce((s2, m) => s2 + poissonLogLik(m.yH, m.bH * x + m.og) + poissonLogLik(m.yA, m.bA / x + m.og), 0);
-    const hHat = byK[String(best)].h[lid];
-    const target = f(hHat) - 1.92;
-    const solve = (lo: number, hi: number) => {
-      for (let i = 0; i < 60; i++) {
-        const mid = (lo + hi) / 2;
-        if ((f(mid) - target) * (f(lo) - target) > 0) lo = mid;
-        else hi = mid;
+  const data = dataByK[String(best)];
+  const f = (x: number) => data.reduce((s2, m) => s2 + poissonLogLik(m.yH, m.bH * x + m.og) + poissonLogLik(m.yA, m.bA / x + m.og), 0);
+  const hHat = byK[String(best)].h;
+  const target = f(hHat) - 1.92;
+  const solve = (lo: number, hi: number) => {
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if ((f(mid) - target) * (f(lo) - target) > 0) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const ci: [number, number] = [solve(0.5, hHat), solve(hHat, 2.5)];
+  const leagues = [...new Set(train.map((r) => String(r.pm.league_id)))];
+  save("step_a.json", { k: best, h: Object.fromEntries(leagues.map((l) => [l, hHat])), h_pooled: hHat, h_ci95: ci, two_log_h: 2 * Math.log(hHat), by_k: byK });
+  console.log(`选定 k=${best};合并 h = ${hHat.toFixed(4)},95% CI [${ci[0].toFixed(4)}, ${ci[1].toFixed(4)}](${data.length} 场);2·log h = ${(2 * Math.log(hHat)).toFixed(4)}`);
+}
+
+// ------------------------------------------------------------------ v0.3 第 7 条:数据模型强度回归
+function ols(X: number[][], y: number[]) {
+  const p = X[0].length;
+  const XtX = Array.from({ length: p }, (_, i) => Array.from({ length: p }, (_, j) => X.reduce((s2, r) => s2 + r[i] * r[j], 0)));
+  const Xty = Array.from({ length: p }, (_, i) => X.reduce((s2, r, n) => s2 + r[i] * y[n], 0));
+  const beta = solveLinear(XtX, Xty);
+  const rss = X.reduce((s2, r, n) => s2 + (y[n] - r.reduce((a, v, i) => a + v * beta[i], 0)) ** 2, 0);
+  const sigma2 = rss / (X.length - p);
+  const inv = invert(XtX);
+  const se = beta.map((_, i) => Math.sqrt(sigma2 * inv[i][i]));
+  return { beta, se, rss, n: X.length, p };
+}
+
+function stepStrength(rows: Row[]) {
+  const train = rows.filter((r) => inRange(r, TRAIN) && r.pm.crown?.market_lambda);
+  const combos: { window: "10" | "20" | "38"; basis: "xg" | "goals" | "both"; k: 0 | 5 }[] = [];
+  for (const window of ["10", "20", "38"] as const) for (const basis of ["xg", "goals", "both"] as const) for (const k of [0, 5] as const) combos.push({ window, basis, k });
+  const results = [];
+  let best: { rss: number; idx: number } = { rss: Infinity, idx: -1 };
+  for (const [ci, c] of combos.entries()) {
+    const X: number[][] = [];
+    const y: number[] = [];
+    let floorRows = 0;
+    const ki = c.k === 0 ? 0 : 1;
+    for (const r of train) {
+      const L = r.snap.params.leagues[String(r.pm.league_id)];
+      const mu = { xg: SHOT.reduce((s2, ch) => s2 + L.mu[ch], 0), goals: L.goals_per_team_match! };
+      const teams = [r.snap.params.teams[String(r.pm.home_team_id)], r.snap.params.teams[String(r.pm.away_team_id)]];
+      const lam = [r.pm.crown!.market_lambda!.home, r.pm.crown!.market_lambda!.away];
+      for (const t of [0, 1]) {
+        const own = teams[t].strength![c.window];
+        const opp = teams[1 - t].strength![c.window];
+        const row = [1];
+        for (const basis of c.basis === "both" ? (["xg", "goals"] as const) : [c.basis]) {
+          const a = own[basis].A[ki];
+          const d = opp[basis].D[ki];
+          if (a <= 0.05 + 1e-12 || d <= 0.05 + 1e-12) floorRows++;
+          row.push(Math.log(a / mu[basis]), Math.log(d / mu[basis]));
+        }
+        row.push(t === 0 ? 1 : 0);
+        X.push(row);
+        y.push(Math.log(lam[t]));
       }
-      return (lo + hi) / 2;
-    };
-    ci[lid] = [solve(0.5, hHat), solve(hHat, 2.5)];
-    console.log(`h[${lid}] = ${hHat.toFixed(4)},95% CI [${ci[lid][0].toFixed(4)}, ${ci[lid][1].toFixed(4)}](${ms.length} 场)`);
+    }
+    const fit = ols(X, y);
+    const names = ["α", ...(c.basis === "both" ? ["γ_A(xG)", "γ_D(xG)", "γ_A(进球)", "γ_D(进球)"] : c.basis === "xg" ? ["γ_A(xG)", "γ_D(xG)"] : ["γ_A(进球)", "γ_D(进球)"]), "β_home"];
+    const coef = names.map((name, i) => ({ name, coef: fit.beta[i], se: fit.se[i], ci95: [fit.beta[i] - 1.96 * fit.se[i], fit.beta[i] + 1.96 * fit.se[i]] }));
+    results.push({ ...c, rss: fit.rss, n: fit.n, p: fit.p, floor_rows: floorRows, coefficients: coef });
+    console.log(`窗口 ${c.window.padStart(2)} | ${c.basis.padEnd(5)} | k=${c.k} | RSS ${fit.rss.toFixed(4)} | n=${fit.n} p=${fit.p} | 下限行 ${floorRows}`);
+    if (fit.rss < best.rss) best = { rss: fit.rss, idx: ci };
   }
-  save("step_a.json", { k: best, h: byK[String(best)].h, h_ci95: ci, by_k: byK });
-  console.log(`选定 k=${best}`);
+  const chosen = results[best.idx];
+  const b = chosen.coefficients.map((x) => x.coef);
+  const gamma: StrengthModel["gamma"] = {};
+  if (chosen.basis === "xg") Object.assign(gamma, { xg_A: b[1], xg_D: b[2] });
+  else if (chosen.basis === "goals") Object.assign(gamma, { goals_A: b[1], goals_D: b[2] });
+  else Object.assign(gamma, { xg_A: b[1], xg_D: b[2], goals_A: b[3], goals_D: b[4] });
+  const strength_model: StrengthModel = { window: chosen.window, basis: chosen.basis, k: chosen.k, alpha: b[0], gamma, beta_home: b[b.length - 1] };
+  save("step_strength.json", { strength_model, chosen, all: results });
+  console.log(`选定:窗口 ${chosen.window} | ${chosen.basis} | k=${chosen.k}`);
+  for (const x of chosen.coefficients) console.log(`  ${x.name.padEnd(10)} ${x.coef.toFixed(4)}  SE ${x.se.toFixed(4)}  95% CI [${x.ci95[0].toFixed(4)}, ${x.ci95[1].toFixed(4)}]`);
 }
 
 // ------------------------------------------------------------------ b. 市场权重 w
 function stepB(rows: Row[]) {
-  const cal = calFromResults("a");
+  const cal = calFromResults("strength");
   const get = paramsCache(cal, { useMarket: false });
   const items: { mH: number; mA: number; kH: number; kA: number; og: number; o: 0 | 1 | 2 }[] = [];
   let skipped = 0;
@@ -526,6 +579,7 @@ function bigMargin(sims: SimRow[]) {
 function stepD(rows: Row[]) {
   const base = calFromResults("rm");
   const train = rows.filter((r) => inRange(r, TRAIN));
+  // v0.3 第 8 条起标准档固定关闭 ε;本命令保留供对照
   const byK: Record<string, unknown> = {};
   let best = { kappa: KAPPA_GRID[0], sse: Infinity };
   for (const kappa of KAPPA_GRID) {
@@ -545,7 +599,7 @@ function stepD(rows: Row[]) {
 // ------------------------------------------------------------------ 闸门(验证集)
 function validate(rows: Row[]) {
   // 路径 A:w 取训练集选出的值(有盘口时定锚);路径 B:w = 0(只用数据模型)
-  const cal0 = calFromResults("d");
+  const cal0 = calFromResults("rm");
   const cal = path === "B" ? { ...cal0, w: 0 } : cal0;
   const valid = rows.filter((r) => inRange(r, VALID));
   const t0 = Date.now();
@@ -646,7 +700,7 @@ function validate(rows: Row[]) {
 
 // ------------------------------------------------------------------ 侧重点合理性
 function focusTest(rows: Row[]) {
-  const cal0 = calFromResults("d");
+  const cal0 = calFromResults("rm");
   const useMarket = path === "A";
   const cal = useMarket ? cal0 : { ...cal0, w: 0 };
   const get = paramsCache(cal, { useMarket });
@@ -732,6 +786,7 @@ if (cmd === "ha-k") stepA(rows);
 else if (cmd === "w") stepB(rows);
 else if (cmd === "empirical") stepC(rows);
 else if (cmd === "rate-model") stepRateModel(rows);
+else if (cmd === "strength") stepStrength(rows);
 else if (cmd === "kappa") stepD(rows);
 else if (cmd === "validate") validate(rows);
 else if (cmd === "focus") focusTest(rows);
