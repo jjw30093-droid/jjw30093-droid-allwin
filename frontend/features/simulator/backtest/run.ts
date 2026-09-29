@@ -262,8 +262,11 @@ function stepC(rows: Row[]) {
       for (const g of goals) {
         if (g.own_goal || g.t >= end) continue;
         const after = g.t >= t0;
-        if (g.team === team) after ? red.ownGa++ : red.ownGb++;
-        else after ? red.oppGa++ : red.oppGb++;
+        if (g.team === team) {
+          if (after) red.ownGa++;
+          else red.ownGb++;
+        } else if (after) red.oppGa++;
+        else red.oppGb++;
       }
     }
   }
@@ -536,7 +539,10 @@ function diagnose(rows: Row[]) {
       if (!res.ok) reason = res.error.replace(/^[^ ]+ /, "").replace(/\d+(-\d+)+/, "<阵型>");
     }
     reasons[reason] = (reasons[reason] ?? 0) + 1;
-    if (reason !== "ok") (examples[reason] ??= []).length < 5 && examples[reason].push(`${r.pm.match_id}(第${r.pm.round}轮)`);
+    if (reason !== "ok") {
+      const list = (examples[reason] ??= []);
+      if (list.length < 5) list.push(`${r.pm.match_id}(第${r.pm.round}轮)`);
+    }
   }
   console.log(JSON.stringify({ reasons, examples }, null, 1));
 }

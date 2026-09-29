@@ -213,6 +213,33 @@ describe("λ 组装", () => {
   });
 });
 
+describe("校准参数注入(Phase 2)", () => {
+  it("缺省时与 v0.2 一致;home_advantage=h 时主队 ×h、客队 ×1/h", () => {
+    const base = prepareMatch(buildParams(), setup());
+    if (!base.ok) throw new Error(base.error);
+    const p = buildParams();
+    p.leagues["1"].home_advantage = 1.2;
+    const r = prepareMatch(p, setup());
+    if (!r.ok) throw new Error(r.error);
+    expect(r.config.teams[0].breakdown.lambdaModel).toBeCloseTo((base.config.teams[0].breakdown.lambdaModel / 1.08) * 1.2, 9);
+    expect(r.config.teams[1].breakdown.lambdaModel).toBeCloseTo((base.config.teams[1].breakdown.lambdaModel / 0.93) / 1.2, 9);
+    expect(base.config.kappa).toBe(12);
+    expect(base.config.redOwn).toBe(0.75);
+  });
+
+  it("calibration 字段覆盖 w、κ、红牌与比分状态乘数", () => {
+    const p = buildParams();
+    p.calibration = { market_w: 1, kappa: 16, red_own: 0.6, red_opp: 1.4, state: { lead1_all: 0.8 } as never };
+    const r = prepareMatch(p, setup({ fixtureId: 99 }));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.config.kappa).toBe(16);
+    expect(r.config.redOwn).toBe(0.6);
+    expect(r.config.state.lead1_all).toBe(0.8);
+    expect(r.config.state.trail1_open).toBe(1.12);
+    expect(r.config.teams[0].breakdown.lambdaBase).toBeCloseTo(1.6 - 0.05, 9);
+  });
+});
+
 describe("进球率归一化(v0.2 第 1 条)", () => {
   it("关闭全部事件时,模拟进球 ÷ 期望进球在 [0.99, 1.01]", () => {
     const r = prepareMatch(buildParams(), setup({ effects: NO_EFFECTS }));
