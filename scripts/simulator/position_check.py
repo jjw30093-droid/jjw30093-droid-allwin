@@ -23,10 +23,10 @@ SEED = 20260929
 
 
 def expected_mismatch(p: dict) -> str | None:
-    """已知的、预期内的解码差异(站长 2026-09-30 认定),单独列出,不计入不一致。"""
+    """已知的、预期内的解码差异(站长 2026-09-30 认定,当日追加 5-4-1、4-4-1-1),单独列出,不计入不一致。"""
     f, pid, g, u = p["top_formation"] or "", p["top_position_id"], p["main_position"], p["usual_position_id"]
-    if f == "4-4-2" and pid in (72, 78) and g == "W" and u == 2:
-        return "4-4-2 边前卫 72/78:解码 W,FotMob 中场"
+    if f in ("4-4-2", "5-4-1", "4-4-1-1") and pid in (72, 78) and g == "W" and u == 2:
+        return "4-4-2 / 5-4-1 / 4-4-1-1 边前卫 72/78:解码 W,FotMob 中场"
     if (f.startswith("3-4-") or f == "3-5-2" or f.startswith("5-")) and g == "FB" and u in (2, 3):
         return "三中卫/五后卫体系翼卫:解码 FB,FotMob 中场或前锋"
     if f in ("4-2-3-1", "3-4-2-1") and pid in (84, 85) and g == "AM" and u == 3:
