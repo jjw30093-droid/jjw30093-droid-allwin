@@ -338,6 +338,7 @@ def build(
     formation_coords = defaultdict(list)
     player_pid_counts = defaultdict(Counter)
     player_usual, player_shirt, player_lineup_name, player_last_seen = {}, {}, {}, {}
+    player_last_team = {}
     # 当前赛季(cutoff 之前)每队出现过的球员;回退:该联赛当季尚无比赛时用上一赛季
     season_squads = defaultdict(lambda: defaultdict(set))  # season -> tid -> {pid}
     season_team_league = defaultdict(dict)                 # season -> tid -> lid
@@ -359,6 +360,7 @@ def build(
                 latest = prev is None or m["sort_key"] >= prev
                 if latest:
                     player_last_seen[p] = m["sort_key"]
+                    player_last_team[p] = tid
                 if r[6] is not None and (latest or p not in player_usual):
                     player_usual[p] = r[6]
                 if r[4] not in (None, "") and (latest or p not in player_shirt):
@@ -545,8 +547,10 @@ def build(
     for tid, ps in squads.items():
         wanted |= ps
         for p in ps:
-            player_league[p] = team_league[tid]
-            player_team[p] = tid
+            # 同时出现在两队名单里(赛季中转会):归到最近一次出场的球队
+            if p not in player_team or player_last_team.get(p) == tid:
+                player_league[p] = team_league[tid]
+                player_team[p] = tid
     extra_usual = {}
     for p, (tid, usual) in (extra_players or {}).items():
         wanted.add(p)
