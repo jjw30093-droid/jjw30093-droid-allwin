@@ -74,6 +74,8 @@ export interface Calibration {
   kappa: number;
   rate_model: RateModel;
   strength_model: StrengthModel;
+  /** 合并主场系数(联赛未单独给 home_advantage 时使用) */
+  home_advantage: number;
   red_own: number;
   red_opp: number;
   state: StateMultipliers;

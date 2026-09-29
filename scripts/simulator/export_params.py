@@ -25,11 +25,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import load_xref, open_ro  # noqa: E402
 from features_market import fit_poisson, implied_two, load_timelines, pick_close  # noqa: E402
-from params_core import CHANNELS, SITUATION_CHANNEL, build, load_raw, rnd  # noqa: E402
+from params_core import CHANNELS, K_TEAM, SITUATION_CHANNEL, build, load_raw, rnd  # noqa: E402
 
-# 生效版本:导出参数实际对应的模型版本。显式维护,不从规格文档标题推导;
-# v0.3 校准值正式启用(生产导出写入 calibration)之前保持 v0.2。
-EFFECTIVE_VERSION = "v0.2"
+# 生效版本与校准值:显式维护在校准文件里(数值取自 Phase 2 回测结果),不从规格文档标题推导。
+CALIBRATION_PATH = Path(__file__).resolve().parent / "calibration_v0.3.json"
 LEAGUES = (47, 87)
 SEASONS = ("2025/2026", "2026/2027")
 CURRENT_SEASON = "2026/2027"
@@ -90,6 +89,12 @@ def main() -> None:
     now = datetime.now(timezone.utc)
     core = open_ro(data_dir / "allwin.db")
     odds = open_ro(data_dir / "odds.db")
+
+    cal = json.loads(CALIBRATION_PATH.read_text(encoding="utf-8"))
+    if float(cal["k_team"]) != K_TEAM:
+        sys.exit(f"校准文件 k_team={cal['k_team']} 与参数计算的 K_TEAM={K_TEAM} 不一致")
+    effective_version = cal["version"]
+    calibration = {key: cal[key] for key in ("market_w", "kappa", "home_advantage", "strength_model", "rate_model")}
 
     raw = load_raw(core, LEAGUES, SEASONS)
     p = build(raw, leagues=LEAGUES, current_season=CURRENT_SEASON)
@@ -156,8 +161,8 @@ def main() -> None:
     out = {
         "meta": {
             "generated_at": fmt_utc(now),
-            "effective_version": EFFECTIVE_VERSION,
-            "model_version": EFFECTIVE_VERSION,
+            "effective_version": effective_version,
+            "model_version": effective_version,
             "uncalibrated": True,
             "spec": "docs/simulator-model.md",
             "leagues": list(LEAGUES),
@@ -200,6 +205,7 @@ def main() -> None:
         "teams": teams_out,
         "players": players_out,
         "fixtures": fixtures_out,
+        "calibration": calibration,
     }
     path = out_dir / (args.out_name or f"simulator_params_{now.strftime('%Y%m%d')}.json")
     path.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

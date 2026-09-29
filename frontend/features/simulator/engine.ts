@@ -236,7 +236,7 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
 
   const mu = league.mu;
   const cal = params.calibration ?? {};
-  const h = league.home_advantage;
+  const h = league.home_advantage ?? cal.home_advantage;
   const ha = h ? [h, 1 / h] : [HA_HOME, HA_AWAY];
   const marketW = cal.market_w ?? MARKET_W;
   // §2 数据模型
