@@ -156,6 +156,21 @@ JSON/SRT 服务端导出与画面内数据截止/模型版本同测。
 - in-play(滚球)采集为显式未实现(赛前窗口结束即停);
 - dev(Turbopack)在自动化浏览器下水合停滞(生产构建正常,E2E 跑生产构建);
 - 中文覆盖:球队/球员中文名仍主要覆盖英超(P1)。
+- 【待办,2026-09-30 调查,未实现】比赛页 xG 累积对抗图的补时射门全部压在 45'/90'(例:5795464 范赫克的进球实为 90+8')。
+  XgRaceChart 已有可选 `stoppage` 参数,比赛页启用前还缺数据:
+  - 射门补时字段:`fact_shotmap.Minute_Added`(FotMob `minAdded`)。常规时间行恒为 NULL(含义:非补时);
+    Minute=45 或 ≥90 的行,非空覆盖率按赛季:20/21 9%、21/22 3%、22/23 3%、23/24 5%、24/25 8%、25/26 27%、
+    26/27 99.9%——该字段解析是后补的,旧场次未回填。因此 45'/90' 行的 NULL 含义不唯一(恰在第 45/90 分钟,
+    或未知),不能当 0 用。
+  - 进球的补时更全:`fact_match_events`(event_type='Goal').`overload_time`,45'/90' 进球覆盖率 77%–86%(各赛季)。
+  - 半场补时时长:`fact_match_events`(event_type='AddedTime', minute=45/90).`minutes_added`,
+    25/26 五大联赛 1677/1752(上半场)、1725/1752(下半场)。这是**宣布的**补时,实际常超出
+    (402 次射门的 Minute_Added 大于宣布值;5795464 下半场宣布 7'、进球在 90+8'),
+    横轴长度应取 max(宣布补时, 本场观测到的最大补时分钟)。
+  - 接口:`backend/queries/match_report.py::_shots` 未 SELECT `Minute_Added`,`MatchReportShot` 也没有该字段;
+    启用需在 Pydantic schema + 查询里加 `minute_added` 和上下半场补时时长,重新生成 OpenAPI 类型,
+    MatchShotsSection 传入 `stoppage`;旧赛季补时缺失需决定:回填(按 ID 重采 shotmap)或对进球回退到事件
+    `overload_time`,其余 NULL 仍落在 45'/90'。
 
 ## 6. 真实库行数快照(2026-07-20)
 
