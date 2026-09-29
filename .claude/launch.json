@@ -107,6 +107,16 @@
       }
     },
     {
+      "name": "frontend-simulator",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3020"],
+      "port": 3020,
+      "env": {
+        "SIMULATOR_ENABLED": "1",
+        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_20260929.json"
+      }
+    },
+    {
       "name": "video-preview",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
