@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { cumulativeSeries } from "@/components/matches/XgRaceChart";
 import {
   focusError,
   fPos,
+  NO_EFFECTS,
   prepareMatch,
+  rarityTag,
   simulateMany,
   simulateOnce,
+  slotGroup,
   type MatchSetup,
   type SlotAssign,
 } from "@/features/simulator/engine";
+import { cumulativeXg, toReportShots } from "@/features/simulator/xg";
 import { marginDist, pEff, poissonPmf, totalDist } from "@/features/simulator/market";
 import type { PlayerParams, PosGroup, SimParams, TeamParams } from "@/features/simulator/types";
 
@@ -38,7 +43,8 @@ const SLOTS: [number, PosGroup][] = [
 
 function player(id: string, pos: PosGroup, over: Partial<PlayerParams> = {}): PlayerParams {
   return {
-    player_id: id, name_zh: id, name_en: id, shirt_number: "1", main_position: pos,
+    player_id: id, name_zh: id, name_en: id, shirt_number: "1", team_id: 0, usual_position_id: null,
+    top_formation: "4-4-2", top_position_id: null, top_position_starts: 0, starts: 0, main_position: pos,
     position_source: "rule_decoded", position_unverified: true, minutes: 900,
     a_p: pos === "ST" ? 0.5 : pos === "W" ? 0.3 : 0.1, npxg90: 0.2, xa90: 0.1,
     shots90: pos === "ST" ? 3 : 1, headers90: pos === "CB" ? 0.5 : 0.1,
@@ -52,8 +58,8 @@ function team(id: number, A: number[], D: number[], prefix: string): TeamParams 
     team_id: id, league_id: 1, name_zh: prefix, name_en: prefix, A: ch(A), D: ch(D),
     window_matches: 10, n_eff: 8.67,
     last_lineup: {
-      match_id: 1, date: "2026-09-19", formation: "4-4-2", formation_has_template: true,
-      starters: SLOTS.map(([pid, g], i) => ({ player_id: `${prefix}${i}`, position_id: pid, slot_group: g })),
+      match_id: 1, date: "2026-09-19", formation: "4-4-2", formation_has_template: true, formation_in_position_map: true,
+      starters: SLOTS.map(([pid], i) => ({ player_id: `${prefix}${i}`, position_id: pid })),
     },
     squad: [...SLOTS.map((_, i) => `${prefix}${i}`), `${prefix}gk2`, `${prefix}cb2`],
   };
@@ -78,10 +84,13 @@ function buildParams(): SimParams {
         shot_xg_mean: { open: 0.1, counter: 0.16, setpiece: 0.1, penalty: 0.79 },
         red_card_rate: 0.06, penalty_rate: 0.12, penalty_conversion: 0.8,
         goal_timing: { buckets: [], goals: [], factor: [0.7, 0.7, 1.2, 0.95, 0.9, 1.5] },
-        stoppage_mean: { first_half: 3, second_half: 6 }, gk_xgot_faced_per90: 1.35,
+        stoppage_mean: { first_half: 3, second_half: 6 },
+        stoppage_distribution: { first_half: { "1": 10, "3": 60, "5": 30 }, second_half: { "4": 20, "6": 50, "9": 30 } },
+        gk_xgot_faced_per90: 1.35,
       },
     },
     formations: {},
+    position_map: { "4-4-2": Object.fromEntries(SLOTS.map(([pid, g]) => [String(pid), g])) },
     teams: { "10": team(10, [1.0, 0.2, 0.4, 0.1], [0.7, 0.1, 0.3, 0.1], "h"), "20": team(20, [0.7, 0.15, 0.3, 0.1], [0.9, 0.2, 0.4, 0.1], "a") },
     players,
     fixtures: {
@@ -152,12 +161,34 @@ describe("λ 组装", () => {
     expect(r.config.teams[0].breakdown.mDef).toBeCloseTo(1, 9);
   });
 
-  it("有 Crown λ 时按 w=0.7 混合,渠道按模型占比分配", () => {
+  it("有 Crown λ 时先扣乌龙再按 w=0.7 混合,乌龙另外叠加(v0.2 第 3 条)", () => {
     const r = prepareMatch(buildParams(), setup({ fixtureId: 99 }));
     if (!r.ok) throw new Error(r.error);
     const b = r.config.teams[0].breakdown;
-    expect(b.lambdaBase).toBeCloseTo(0.7 * 1.6 + 0.3 * b.lambdaModel, 9);
+    expect(b.lambdaBase).toBeCloseTo(0.7 * (1.6 - 0.05) + 0.3 * b.lambdaModel, 9);
+    expect(b.lambdaFinal).toBeCloseTo(b.lambdaBase + 0.05, 9);
     expect(r.config.market?.ahLine).toBe(0.5);
+  });
+
+  it("U = R 时 r_att 与 m_def 严格等于 1,即使 R 里有人踢在非本位置(v0.2 第 2 条)", () => {
+    const params = buildParams();
+    params.players.h6.main_position = "CM";
+    params.players.a2.main_position = "FB";
+    const r = prepareMatch(params, setup());
+    if (!r.ok) throw new Error(r.error);
+    for (const t of r.config.teams) {
+      expect(t.breakdown.rAtt).toBe(1);
+      expect(t.breakdown.mDef).toBe(1);
+    }
+  });
+
+  it("槽位分组只来自 position_map", () => {
+    const params = buildParams();
+    expect(slotGroup(params, "4-4-2", 74)).toBe("CM");
+    expect(slotGroup(params, "4-4-2", 99)).toBeNull();
+    params.teams["10"].last_lineup!.formation = "3-5-2";
+    const r = prepareMatch(params, setup());
+    expect(r.ok).toBe(false);
   });
 
   it("换下强力前锋 → 进攻比下降,且截断在 0.85", () => {
@@ -178,6 +209,51 @@ describe("λ 组装", () => {
     const ratio = r.config.teams[0].breakdown.focusOwnRatio;
     expect(ratio).toBeGreaterThanOrEqual(0.85 - 1e-12);
     expect(ratio).toBeLessThanOrEqual(1.15 + 1e-12);
+  });
+});
+
+describe("进球率归一化(v0.2 第 1 条)", () => {
+  it("关闭全部事件时,模拟进球 ÷ 期望进球在 [0.99, 1.01]", () => {
+    const r = prepareMatch(buildParams(), setup({ effects: NO_EFFECTS }));
+    if (!r.ok) throw new Error(r.error);
+    const m = simulateMany(r.config, 99, 20000, [0, 0]);
+    const expected = r.config.teams[0].breakdown.expectedGoals + r.config.teams[1].breakdown.expectedGoals;
+    const ratio = (m.meanGoals[0] + m.meanGoals[1]) / expected;
+    expect(ratio).toBeGreaterThanOrEqual(0.99);
+    expect(ratio).toBeLessThanOrEqual(1.01);
+  }, 60000);
+
+  it("补时按分布抽样,落在分布支撑内", () => {
+    const r = prepareMatch(buildParams(), setup());
+    if (!r.ok) throw new Error(r.error);
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = simulateOnce(r.config, seed);
+      expect([1, 3, 5]).toContain(s.stoppage[0]);
+      expect([4, 6, 9]).toContain(s.stoppage[1]);
+      expect(s.totalTicks).toBe(90 + s.stoppage[0] + s.stoppage[1]);
+    }
+  });
+});
+
+describe("xG 同源", () => {
+  it("赛跑图终点 = 实时累计 xG", () => {
+    const r = prepareMatch(buildParams(), setup());
+    if (!r.ok) throw new Error(r.error);
+    const s = simulateOnce(r.config, 4242);
+    const shots = toReportShots(s.events, [10, 20], s.halfTimeTick);
+    const [h, a] = cumulativeXg(s.events);
+    expect(cumulativeSeries(shots, true).at(-1)!.total).toBeCloseTo(h, 9);
+    expect(cumulativeSeries(shots, false).at(-1)!.total).toBeCloseTo(a, 9);
+    expect(shots.filter((x) => x.outcome === "Goal")).toHaveLength(s.score[0] + s.score[1]);
+  });
+});
+
+describe("爆冷分级", () => {
+  it("≥10% 常见、3%–10% 少见、<3% 罕见", () => {
+    expect(rarityTag(100, 1000)).toBe("常见");
+    expect(rarityTag(99, 1000)).toBe("少见");
+    expect(rarityTag(30, 1000)).toBe("少见");
+    expect(rarityTag(29, 1000)).toBe("罕见");
   });
 });
 

@@ -19,12 +19,13 @@ export interface LeagueParams {
   penalty_conversion: number;
   goal_timing: { buckets: string[]; goals: number[]; factor: number[] };
   stoppage_mean: { first_half: number; second_half: number };
+  stoppage_distribution: { first_half: Record<string, number>; second_half: Record<string, number> };
   gk_xgot_faced_per90: number;
 }
 
+// 位置分组不在模板里重复存:一律查 SimParams.position_map(单一映射表,规格 v0.2 第 5 条)。
 export interface FormationSlot {
   position_id: number;
-  group: PosGroup;
   x: number | null;
   y: number | null;
 }
@@ -32,7 +33,6 @@ export interface FormationSlot {
 export interface LineupStarter {
   player_id: string;
   position_id: number;
-  slot_group: PosGroup | null;
 }
 
 export interface TeamParams {
@@ -49,6 +49,7 @@ export interface TeamParams {
     date: string;
     formation: string;
     formation_has_template: boolean;
+    formation_in_position_map: boolean;
     starters: LineupStarter[];
   } | null;
   squad: string[];
@@ -59,6 +60,12 @@ export interface PlayerParams {
   name_zh: string | null;
   name_en: string | null;
   shirt_number: string | null;
+  team_id: number;
+  usual_position_id: number | null;
+  top_formation: string | null;
+  top_position_id: number | null;
+  top_position_starts: number;
+  starts: number;
   main_position: PosGroup;
   position_source: string;
   position_unverified: boolean;
@@ -91,6 +98,7 @@ export interface SimParams {
   meta: { generated_at: string; model_version: string; uncalibrated: boolean };
   leagues: Record<string, LeagueParams>;
   formations: Record<string, { samples: number; slots: FormationSlot[] }>;
+  position_map: Record<string, Record<string, PosGroup>>;
   teams: Record<string, TeamParams>;
   players: Record<string, PlayerParams>;
   fixtures: Record<string, FixtureParams>;

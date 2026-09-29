@@ -8,9 +8,11 @@ import {
   focusError,
   matchingFixture,
   prepareMatch,
+  slotGroup,
   type Focus,
   type ManyResult,
   type MatchConfig,
+  type MatchSetup,
   type SingleResult,
   type TeamSetup,
 } from "@/features/simulator/engine";
@@ -33,37 +35,31 @@ function gridXY(pid: number): { x: number; y: number } {
   return { x: Math.min(0.92, Math.max(0.08, (col - 1) / 8)), y: Math.min(0.9, row / 12) };
 }
 
+// 槽位分组只查 position_map(单一映射表);模板只提供坐标,查不到时按格子行列摆放。
 function initialSetup(params: SimParams, teamId: number): TeamSetup {
   const team = params.teams[String(teamId)];
   const ll = team.last_lineup;
   const formation = ll?.formation ?? FALLBACK_FORMATION;
   const tpl = params.formations[formation];
-  if (ll) {
+  const slotOf = (positionId: number, playerId: string | null) => {
+    const t = tpl?.slots.find((x) => x.position_id === positionId);
+    const g = gridXY(positionId);
     return {
-      teamId,
-      formation,
-      focuses: [],
-      shortRest: false,
-      slots: ll.starters.map((s) => {
-        const t = tpl?.slots.find((x) => x.position_id === s.position_id);
-        const g = gridXY(s.position_id);
-        return {
-          positionId: s.position_id,
-          group: (t?.group ?? s.slot_group ?? "CM") as PosGroup,
-          playerId: s.player_id,
-          x: t?.x ?? g.x,
-          y: t?.y ?? g.y,
-        };
-      }),
+      positionId,
+      group: slotGroup(params, formation, positionId) as PosGroup,
+      playerId,
+      x: t?.x ?? g.x,
+      y: t?.y ?? g.y,
     };
-  }
-  const fb = params.formations[FALLBACK_FORMATION];
+  };
   return {
     teamId,
-    formation: FALLBACK_FORMATION,
+    formation,
     focuses: [],
     shortRest: false,
-    slots: (fb?.slots ?? []).map((s) => ({ positionId: s.position_id, group: s.group, playerId: null, x: s.x ?? 0.5, y: s.y ?? 0.5 })),
+    slots: ll
+      ? ll.starters.map((s) => slotOf(s.position_id, s.player_id))
+      : (tpl?.slots ?? []).map((s) => slotOf(s.position_id, null)),
   };
 }
 
@@ -93,7 +89,12 @@ export function SimulatorClient({ params }: { params: SimParams }) {
   const [seed, setSeed] = useState(DEFAULT_SEED);
   const [selected, setSelected] = useState<{ side: 0 | 1; i: number } | null>(null);
   const [phase, setPhase] = useState<Phase>("setup");
-  const [result, setResult] = useState<{ single: SingleResult; many: ManyResult; config: MatchConfig } | null>(null);
+  const [result, setResult] = useState<{
+    single: SingleResult;
+    many: ManyResult;
+    config: MatchConfig;
+    setup: MatchSetup;
+  } | null>(null);
   const workerRef = useRef<Worker | null>(null);
 
   const setTeams = (lid: string, h: number, a: number, fixtureId: number | null = null) => {
@@ -128,15 +129,16 @@ export function SimulatorClient({ params }: { params: SimParams }) {
       workerRef.current = w;
       setPhase("running");
       const config = prepared.config;
+      const setupSnapshot: MatchSetup = { leagueId: Number(leagueId), home, away, fixtureId, chaos };
       w.onmessage = (e: MessageEvent<{ single: SingleResult; many: ManyResult }>) => {
-        setResult({ ...e.data, config });
+        setResult({ ...e.data, config, setup: setupSnapshot });
         setPhase("animating");
         w.terminate();
         workerRef.current = null;
       };
       w.postMessage({ config, seed: runSeed, runs: RUNS });
     },
-    [prepared],
+    [prepared, leagueId, home, away, fixtureId, chaos],
   );
 
   const finishAnimation = useCallback(() => setPhase("result"), []);
@@ -169,9 +171,11 @@ export function SimulatorClient({ params }: { params: SimParams }) {
 
       {phase === "result" && result ? (
         <ResultView
+          params={params}
           single={result.single}
           many={result.many}
           config={result.config}
+          setup={result.setup}
           onRerun={() => {
             const s = Math.floor(Math.random() * 2 ** 31);
             setSeed(s);
@@ -248,6 +252,11 @@ export function SimulatorClient({ params }: { params: SimParams }) {
                 );
               })}
             </div>
+            {fixtureId != null && params.fixtures[String(fixtureId)]?.status !== "未开赛" ? (
+              <p className={styles.hint} data-testid="postmatch-notice">
+                本场参数包含赛后数据,仅供演示。
+              </p>
+            ) : null}
             {pairFixtures.length > 0 ? (
               <div className={styles.chips}>
                 <Chip active={useMarket} onClick={() => setUseMarket(!useMarket)}>
@@ -330,6 +339,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
                       ["对手 λ 乘 m_def", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mDef.toFixed(3)}`],
                       ["对手进球率乘 m_gk", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mGk.toFixed(3)}`],
                       ["最终 λ(含乌龙)", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaFinal.toFixed(2)],
+                      ["期望进球(含对方门将 m_gk)", (i: 0 | 1) => prepared.config.teams[i].breakdown.expectedGoals.toFixed(2)],
                     ] as [string, (i: 0 | 1) => string][]
                   ).map(([label, fn]) => (
                     <tr key={label}>

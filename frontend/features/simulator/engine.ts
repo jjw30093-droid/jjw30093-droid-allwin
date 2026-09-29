@@ -1,5 +1,5 @@
 // 比赛模拟引擎(纯函数,可在 Web Worker 与测试里直接运行)。
-// 口径:docs/simulator-model.md v0 + v0.1。下面所有数值常量都是规格里的 [待校准] 初始假设。
+// 口径:docs/simulator-model.md v0 + v0.1 + v0.2。下面所有数值常量都是规格里的 [待校准] 初始假设。
 
 import { fairLine, pEff, type IntDist } from "./market";
 import { gamma, mulberry32, poisson, weightedPick, type Rng } from "./rng";
@@ -40,8 +40,6 @@ const INJURY_MULT = 0.98;
 const PRESS_LATE_MULT = 0.93;
 const PRESS_LATE_FROM = 70;
 const HEADER_BOOST_CROSSING = 1.5;
-// §7.1 rate = λ/90 × timing(m):按规格原文,逐分钟分母为 90,包括补时分钟。
-const MINUTE_DIVISOR = 90;
 // 没有任何出场数据的球员(射门/90 为空)的射手权重底数——实现兜底,不是规格参数。
 const SHOTS90_FALLBACK = 0.3;
 const DEFENSIVE_GROUPS: ReadonlySet<PosGroup> = new Set(["GK", "CB", "FB", "DM"]);
@@ -58,6 +56,11 @@ export function fPos(main: PosGroup, slot: PosGroup): number {
   if ((main === "GK") !== (slot === "GK")) return 0.3;
   if (ADJACENT.some(([a, b]) => (a === main && b === slot) || (a === slot && b === main))) return 0.9;
   return 0.7;
+}
+
+/** 单一映射表 (阵型, position_id) → 8 组(规格 v0.2 第 5 条);模板槽位与参照阵容都只查这里。 */
+export function slotGroup(params: SimParams, formation: string, positionId: number): PosGroup | null {
+  return params.position_map[formation]?.[String(positionId)] ?? null;
 }
 
 // ------------------------------------------------------------------ 侧重点(§5)
@@ -98,12 +101,26 @@ export interface TeamSetup {
   shortRest: boolean;
 }
 
+/** 场内随机性开关。全部关闭时模拟进球期望等于输入 λ(规格 v0.2 第 1 条的验证口径)。 */
+export interface Effects {
+  epsilon: boolean;
+  scoreState: boolean;
+  redCard: boolean;
+  collapse: boolean;
+  gkError: boolean;
+  injury: boolean;
+}
+
+export const ALL_EFFECTS: Effects = { epsilon: true, scoreState: true, redCard: true, collapse: true, gkError: true, injury: true };
+export const NO_EFFECTS: Effects = { epsilon: false, scoreState: false, redCard: false, collapse: false, gkError: false, injury: false };
+
 export interface MatchSetup {
   leagueId: number;
   home: TeamSetup;
   away: TeamSetup;
   fixtureId: number | null;
   chaos: boolean;
+  effects?: Effects;
 }
 
 export interface SimPlayer {
@@ -126,7 +143,10 @@ export interface TeamBreakdown {
   mGk: number;
   focusOwnRatio: number;
   focusOppRatio: number;
+  /** 射门渠道 λ 之和 + 乌龙 */
   lambdaFinal: number;
+  /** 期望进球:射门渠道 λ × 对方门将 m_gk + 乌龙(模拟进球的期望值) */
+  expectedGoals: number;
   lambdaByChannel: Record<Channel, number>;
 }
 
@@ -145,8 +165,10 @@ export interface TeamConfig {
 
 export interface MatchConfig {
   kappa: number;
+  effects: Effects;
   timing: number[];
-  stoppage: [number, number];
+  /** 补时经验分布:[分钟数[], 累计概率[]],上下半场各一份 */
+  stoppageDist: [[number[], number[]], [number[], number[]]];
   xgQuantiles: Record<ShotChannel, number[]>;
   xgMean: Record<ShotChannel, number>;
   xgScale: Record<ShotChannel, number>;
@@ -198,6 +220,10 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
     }
     const fe = focusError(s.focuses);
     if (fe) return { ok: false, error: `${name}:${fe}` };
+    const ll = teamP[t].last_lineup;
+    if (ll && ll.starters.some((r) => !slotGroup(params, ll.formation, r.position_id))) {
+      return { ok: false, error: `${name} 参照阵型 ${ll.formation} 不在位置映射表中` };
+    }
   }
 
   const mu = league.mu;
@@ -229,9 +255,10 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
       };
     }
   }
+  // v0.2 第 3 条:市场 λ 含乌龙,先扣掉乌龙再混合;乌龙渠道另外叠加。
   const lam = [0, 1].map((t) => {
     const model = sumCh(lamModel[t]);
-    const base = lamMkt ? MARKET_W * lamMkt[t] + (1 - MARKET_W) * model : model;
+    const base = lamMkt ? MARKET_W * (lamMkt[t] - mu.owngoal) + (1 - MARKET_W) * model : model;
     const out = {} as Record<ShotChannel, number>;
     for (const c of SHOT_CHANNELS) out[c] = (base * lamModel[t][c]) / model;
     return out;
@@ -241,8 +268,14 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
   // §4 阵容调整
   const lineupAdj = [0, 1].map((t) => {
     const s = sides[t];
-    const ref = teamP[t].last_lineup?.starters ?? [];
-    const sumR = ref.reduce((acc, r) => acc + (params.players[r.player_id]?.a_p ?? 0), 0);
+    const ll = teamP[t].last_lineup;
+    // v0.2 第 2 条:R 也按它在参照阵型中的实际位置计算 f_pos,U = R 时比值严格为 1。
+    const ref = (ll?.starters ?? []).map((r) => {
+      const p = params.players[r.player_id];
+      const g = slotGroup(params, ll!.formation, r.position_id) as PosGroup;
+      return { p, g, f: p ? fPos(p.main_position, g) : 1 };
+    });
+    const sumR = ref.reduce((acc, r) => acc + (r.p?.a_p ?? 0) * r.f, 0);
     let sumU = 0;
     const defU: number[] = [];
     let gkG: number | null = null;
@@ -253,9 +286,7 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
       if (DEFENSIVE_GROUPS.has(slot.group)) defU.push(p.r_p * f);
       if (slot.group === "GK") gkG = p.g_p ?? 0;
     }
-    const defR = ref
-      .filter((r) => r.slot_group && DEFENSIVE_GROUPS.has(r.slot_group))
-      .map((r) => params.players[r.player_id]?.r_p ?? 0);
+    const defR = ref.filter((r) => DEFENSIVE_GROUPS.has(r.g)).map((r) => (r.p?.r_p ?? 0) * r.f);
     const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
     const rAtt = sumR > 0 ? clamp(sumU / sumR, R_ATT_CLAMP) : 1;
     const dr = mean(defU) - mean(defR);
@@ -365,6 +396,7 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
         focusOwnRatio: focusOwnRatio[t],
         focusOppRatio: focusOppRatio[t],
         lambdaFinal: sumCh(lam[t]) + mu.owngoal,
+        expectedGoals: sumCh(lam[t]) * lineupAdj[1 - t].mGk + mu.owngoal,
         lambdaByChannel: lambda,
       },
     };
@@ -378,13 +410,26 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
     xgMean[c] = league.shot_xg_mean[c];
     xgScale[c] = league.shot_xg_mean[c] / interpMean(league.shot_xg_quantiles[c]);
   }
+  // §7.3:点球每脚 xG 取联赛点球转化率;射门次数也按它换算,点球渠道的期望进球才等于 λ。
+  xgMean.penalty = league.penalty_conversion;
+  const dist = (d: Record<string, number> | undefined, fallback: number): [number[], number[]] => {
+    const entries = Object.entries(d ?? {}).map(([k, v]) => [Number(k), v] as const).sort((a, b) => a[0] - b[0]);
+    if (!entries.length) return [[fallback], [1]];
+    const total = entries.reduce((s2, [, v]) => s2 + v, 0);
+    let acc = 0;
+    return [entries.map(([k]) => k), entries.map(([, v]) => (acc += v / total))];
+  };
 
   return {
     ok: true,
     config: {
       kappa: setup.chaos ? KAPPA_CHAOS : KAPPA_STANDARD,
+      effects: setup.effects ?? ALL_EFFECTS,
       timing: league.goal_timing.factor,
-      stoppage: [Math.round(league.stoppage_mean.first_half), Math.round(league.stoppage_mean.second_half)],
+      stoppageDist: [
+        dist(league.stoppage_distribution?.first_half, Math.round(league.stoppage_mean.first_half)),
+        dist(league.stoppage_distribution?.second_half, Math.round(league.stoppage_mean.second_half)),
+      ],
       xgQuantiles,
       xgMean,
       xgScale,
@@ -396,11 +441,13 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
   };
 }
 
-// ------------------------------------------------------------------ 逐分钟模拟(§6–§7)
+// ------------------------------------------------------------------ 逐分钟模拟(§6–§7,v0.2)
 export type EventKind = "shot" | "goal" | "red" | "injury" | "gk_error";
 
 export interface SimEvent {
   tick: number;
+  /** 常规时间分钟(补时记在 45 / 90),供 xG 赛跑图横轴使用 */
+  minute: number;
   clock: string;
   team: 0 | 1;
   kind: EventKind;
@@ -418,6 +465,7 @@ export interface SingleResult {
   events: SimEvent[];
   totalTicks: number;
   halfTimeTick: number;
+  stoppage: [number, number];
   epsilon: [number, number];
 }
 
@@ -443,6 +491,12 @@ function buildTicks(stoppage: [number, number]): MinuteTick[] {
   return ticks;
 }
 
+function sampleStoppage(rng: Rng, [minutes, cum]: [number[], number[]]): number {
+  const u = rng();
+  const i = cum.findIndex((c) => u <= c);
+  return minutes[i === -1 ? minutes.length - 1 : i];
+}
+
 function sampleXg(cfg: MatchConfig, c: ShotChannel, rng: Rng): number {
   const q = cfg.xgQuantiles[c];
   const pos = rng() * (q.length - 1);
@@ -462,7 +516,7 @@ function stateMult(d: number, c: Channel): number {
   return m;
 }
 
-// 乌龙渠道只吃"作用于本队所有渠道"的比分状态乘数(v0.1:受比分状态影响)。
+// v0.2 第 4 条:乌龙渠道只吃"作用于本队所有渠道"的比分状态乘数。
 function stateMultAll(d: number): number {
   if (d === 1) return 0.92;
   if (d <= -2) return 1.15;
@@ -471,7 +525,7 @@ function stateMultAll(d: number): number {
 }
 
 interface Scheduled {
-  red: { half: 1 | 2; minute: number; playerId: string | null } | null;
+  red: { half: 1 | 2; minute: number } | null;
   injury: { half: 1 | 2; minute: number } | null;
   gkError: { half: 1 | 2; minute: number } | null;
 }
@@ -481,13 +535,28 @@ function scheduleMinute(rng: Rng, lo: number, hi: number): { half: 1 | 2; minute
   return { half: minute <= 45 ? 1 : 2, minute };
 }
 
-function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number, number]; events: SimEvent[]; scorers: string[]; ticks: MinuteTick[]; epsilon: [number, number] } {
-  const ticks = buildTicks(cfg.stoppage);
-  const eps: [number, number] = [gamma(rng, cfg.kappa, 1 / cfg.kappa), gamma(rng, cfg.kappa, 1 / cfg.kappa)];
+interface MatchRun {
+  score: [number, number];
+  events: SimEvent[];
+  scorers: string[];
+  ticks: MinuteTick[];
+  stoppage: [number, number];
+  epsilon: [number, number];
+}
+
+function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
+  const fx = cfg.effects;
+  const stoppage: [number, number] = [sampleStoppage(rng, cfg.stoppageDist[0]), sampleStoppage(rng, cfg.stoppageDist[1])];
+  const ticks = buildTicks(stoppage);
+  // v0.2 第 1 条:按本场实际模拟的全部分钟归一化,关闭所有事件时期望进球恰好等于 λ。
+  const timingSum = ticks.reduce((acc, tk) => acc + cfg.timing[tk.bucket], 0);
+  const eps: [number, number] = fx.epsilon
+    ? [gamma(rng, cfg.kappa, 1 / cfg.kappa), gamma(rng, cfg.kappa, 1 / cfg.kappa)]
+    : [1, 1];
   const sched: Scheduled[] = [0, 1].map(() => ({
-    red: rng() < cfg.redCardRate ? { ...scheduleMinute(rng, 20, 90), playerId: null } : null,
-    injury: rng() < INJURY_P ? scheduleMinute(rng, 1, 90) : null,
-    gkError: rng() < GK_ERROR_P ? scheduleMinute(rng, 1, 90) : null,
+    red: fx.redCard && rng() < cfg.redCardRate ? scheduleMinute(rng, 20, 90) : null,
+    injury: fx.injury && rng() < INJURY_P ? scheduleMinute(rng, 1, 90) : null,
+    gkError: fx.gkError && rng() < GK_ERROR_P ? scheduleMinute(rng, 1, 90) : null,
   }));
   const score: [number, number] = [0, 0];
   const events: SimEvent[] = [];
@@ -507,7 +576,7 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number
     }
     const w = ps.map((p) => p.shots90 * p.fPos);
     if (c === "setpiece") {
-      const teamH = ps.reduce((s, p) => s + p.headers90, 0);
+      const teamH = ps.reduce((s2, p) => s2 + p.headers90, 0);
       const boost = cfg.teams[t].headerBoost;
       for (let i = 0; i < ps.length; i++) w[i] *= 1 + (teamH > 0 ? (boost * ps[i].headers90) / teamH : 0);
     }
@@ -519,10 +588,11 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number
     const o = 1 - t;
     const prev = concededTicks[o][concededTicks[o].length - 1];
     concededTicks[o].push(tk.tick);
-    if (prev !== undefined && tk.tick - prev <= COLLAPSE_WINDOW) collapseUntil[t] = tk.tick + COLLAPSE_WINDOW;
+    if (fx.collapse && prev !== undefined && tk.tick - prev <= COLLAPSE_WINDOW) collapseUntil[t] = tk.tick + COLLAPSE_WINDOW;
   };
 
   for (const tk of ticks) {
+    const base = { tick: tk.tick, minute: tk.minute, clock: tk.clock };
     for (let t = 0; t < 2; t++) {
       const s = sched[t];
       if (tk.clock.includes("+")) continue;
@@ -531,11 +601,11 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number
         const cands = onPitch[t].filter((p) => p.slotGroup !== "GK");
         const off = cands[Math.floor(rng() * cands.length)];
         if (off) onPitch[t] = onPitch[t].filter((p) => p.id !== off.id);
-        if (record) events.push({ tick: tk.tick, clock: tk.clock, team: t as 0 | 1, kind: "red", playerId: off?.id, playerName: off?.name });
+        if (record) events.push({ ...base, team: t as 0 | 1, kind: "red", playerId: off?.id, playerName: off?.name });
       }
       if (s.injury && !injured[t] && s.injury.half === tk.half && s.injury.minute === tk.minute) {
         injured[t] = true;
-        if (record) events.push({ tick: tk.tick, clock: tk.clock, team: t as 0 | 1, kind: "injury" });
+        if (record) events.push({ ...base, team: t as 0 | 1, kind: "injury" });
       }
     }
 
@@ -547,10 +617,11 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number
       const eventMult = (red[t] ? RED_OWN : 1) * (red[o] ? RED_OPP : 1);
       const shotEventMult = eventMult * (injured[t] ? INJURY_MULT : 1) * (tk.tick <= collapseUntil[t] ? COLLAPSE_MULT : 1);
       const press = team.pressLate && tk.half === 2 && tk.minute > PRESS_LATE_FROM ? PRESS_LATE_MULT : 1;
-      const timing = cfg.timing[tk.bucket];
+      const share = cfg.timing[tk.bucket] / timingSum;
 
       for (const c of SHOT_CHANNELS) {
-        const rate = (team.lambda[c] / MINUTE_DIVISOR) * eps[t] * timing * stateMult(d, c) * shotEventMult * press;
+        const state = fx.scoreState ? stateMult(d, c) : 1;
+        const rate = team.lambda[c] * share * eps[t] * state * shotEventMult * press;
         const perShot = cfg.xgMean[c] * team.xgMult[c];
         const n = poisson(rng, rate / perShot);
         for (let k = 0; k < n; k++) {
@@ -562,18 +633,18 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number
             if (shooter) scorers.push(`${t}:${shooter.id}`);
           }
           if (record) {
-            events.push({ tick: tk.tick, clock: tk.clock, team: t, kind: isGoal ? "goal" : "shot", channel: c, playerId: shooter?.id, playerName: shooter?.name, xg, isGoal, score: [score[0], score[1]] });
+            events.push({ ...base, team: t, kind: isGoal ? "goal" : "shot", channel: c, playerId: shooter?.id, playerName: shooter?.name, xg, isGoal, score: [score[0], score[1]] });
           }
         }
       }
 
-      const ogRate = (team.lambda.owngoal / MINUTE_DIVISOR) * timing * stateMultAll(d) * eventMult;
+      const ogRate = team.lambda.owngoal * share * (fx.scoreState ? stateMultAll(d) : 1) * eventMult;
       const nOg = poisson(rng, ogRate);
       for (let k = 0; k < nOg; k++) {
         addGoal(t, tk);
         const cands = onPitch[o].filter((p) => p.slotGroup !== "GK");
         const who = cands[Math.floor(rng() * cands.length)];
-        if (record) events.push({ tick: tk.tick, clock: tk.clock, team: t, kind: "goal", channel: "owngoal", playerId: who?.id, playerName: who?.name, isGoal: true, score: [score[0], score[1]] });
+        if (record) events.push({ ...base, team: t, kind: "goal", channel: "owngoal", playerId: who?.id, playerName: who?.name, isGoal: true, score: [score[0], score[1]] });
       }
 
       const gkErr = sched[o].gkError;
@@ -584,17 +655,25 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): { score: [number
           addGoal(t, tk);
           if (shooter) scorers.push(`${t}:${shooter.id}`);
         }
-        if (record) events.push({ tick: tk.tick, clock: tk.clock, team: t, kind: isGoal ? "goal" : "shot", channel: "gk_error", playerId: shooter?.id, playerName: shooter?.name, xg: GK_ERROR_XG, isGoal, score: [score[0], score[1]] });
+        if (record) events.push({ ...base, team: t, kind: isGoal ? "goal" : "shot", channel: "gk_error", playerId: shooter?.id, playerName: shooter?.name, xg: GK_ERROR_XG, isGoal, score: [score[0], score[1]] });
       }
     }
   }
-  return { score, events, scorers, ticks, epsilon: eps };
+  return { score, events, scorers, ticks, stoppage, epsilon: eps };
 }
 
 export function simulateOnce(cfg: MatchConfig, seed: number): SingleResult {
   const r = runMatch(cfg, mulberry32(seed), true);
   const halfTimeTick = r.ticks.findIndex((t) => t.half === 2);
-  return { seed, score: r.score, events: r.events, totalTicks: r.ticks.length, halfTimeTick, epsilon: r.epsilon };
+  return { seed, score: r.score, events: r.events, totalTicks: r.ticks.length, halfTimeTick, stoppage: r.stoppage, epsilon: r.epsilon };
+}
+
+/** 本次比分在 N 次模拟中的出现率分级:≥10% 常见,3%–10% 少见,<3% 罕见。 */
+export function rarityTag(scoreCount: number, runs: number): "常见" | "少见" | "罕见" {
+  const r = scoreCount / runs;
+  if (r >= 0.1) return "常见";
+  if (r >= 0.03) return "少见";
+  return "罕见";
 }
 
 export interface ManyResult {

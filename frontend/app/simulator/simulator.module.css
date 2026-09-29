@@ -210,7 +210,20 @@
 /* 窄屏:半场高度只有约 260px,相邻两条线只隔约 50px,位置标签只在错位时显示 */
 @media (max-width: 600px) {
   .pitch {
-    --slot-bottom: 34px;
+    --slot-bottom: 30px;
+  }
+
+  /* 错位折扣挂在圆点右侧(与圆点同高),不占名字下方的高度,也不压到上一排的名字 */
+  .slotWarn {
+    position: absolute;
+    top: 4px;
+    left: calc(50% + 14px);
+  }
+
+  /* 靠右边线的位置,折扣挂到圆点左侧,避免被球场边缘裁掉 */
+  .slotRightEdge .slotWarn {
+    left: auto;
+    right: calc(50% + 14px);
   }
 
   .slot {
@@ -240,12 +253,40 @@
   margin-top: var(--sp-3);
 }
 
+.benchToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+
+.linkBtn {
+  min-height: 36px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: none;
+  color: var(--brand-teal);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.benchGroup {
+  margin-top: var(--sp-2);
+}
+
+.benchGroupTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+}
+
 .benchList {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
 }
 
 .benchRow {
@@ -397,6 +438,8 @@
 .animPitch {
   position: relative;
   width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
   aspect-ratio: 105 / 68;
   border-radius: var(--r-card-sm);
   overflow: hidden;
@@ -462,7 +505,77 @@
   gap: 4px;
 }
 
+.liveXg {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.pitchNote {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.ticker {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  font-size: 13px;
+}
+
+.tickRow {
+  display: grid;
+  grid-template-columns: 52px 72px 1fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: 6px var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-2);
+}
+
+.tickKey {
+  background: var(--gold-hi-accent);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.tickClock {
+  font-variant-numeric: tabular-nums;
+}
+
+.tickTeam,
+.tickPlayer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- 结果 ---- */
+.settingsLine {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 4px 0 0;
+  line-height: 1.6;
+}
+
+.rarity {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--ink-3);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .resultGrid {
   display: grid;
   grid-template-columns: 1fr;

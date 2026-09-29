@@ -1,19 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
 import { fPos, type TeamSetup } from "@/features/simulator/engine";
 import type { PlayerParams, PosGroup, SimParams } from "@/features/simulator/types";
 import styles from "./simulator.module.css";
 
-const POS_ORDER: PosGroup[] = ["GK", "CB", "FB", "DM", "CM", "AM", "W", "ST"];
 export const POS_LABEL: Record<PosGroup, string> = {
   GK: "门将", CB: "中卫", FB: "边后卫", DM: "后腰", CM: "中场", AM: "前腰", W: "边锋", ST: "中锋",
 };
 
-// 名称表里没有的球员(dim_player 缺行)退回英文名,再退回"号码 + id"。
+// 中文名 → 英文名;任何情况下都不显示球员 id。
 export function displayName(p: PlayerParams): string {
-  return p.name_zh || p.name_en || `#${p.shirt_number ?? "?"} (${p.player_id})`;
+  return p.name_zh || p.name_en || "未知球员";
 }
+
+const LINE_GROUPS: { label: string; members: PosGroup[] }[] = [
+  { label: "门将", members: ["GK"] },
+  { label: "后卫", members: ["CB", "FB"] },
+  { label: "中场", members: ["DM", "CM", "AM"] },
+  { label: "前锋", members: ["W", "ST"] },
+];
+const MIN_MINUTES_DEFAULT = 90;
 
 export function LineupEditor({
   params,
@@ -32,12 +40,16 @@ export function LineupEditor({
   onSelect: (i: number | null) => void;
   onChange: (next: TeamSetup) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const team = params.teams[String(setup.teamId)];
   const inXi = new Set(setup.slots.map((s) => s.playerId));
-  const bench = team.squad
-    .filter((id) => !inXi.has(id) && params.players[id])
-    .map((id) => params.players[id])
-    .sort((a, b) => POS_ORDER.indexOf(a.main_position) - POS_ORDER.indexOf(b.main_position) || b.minutes - a.minutes);
+  const pool = team.squad.filter((id) => !inXi.has(id) && params.players[id]).map((id) => params.players[id]);
+  const hiddenCount = pool.filter((p) => p.minutes < MIN_MINUTES_DEFAULT).length;
+  const visible = showAll ? pool : pool.filter((p) => p.minutes >= MIN_MINUTES_DEFAULT);
+  const grouped = LINE_GROUPS.map((g) => ({
+    label: g.label,
+    players: visible.filter((p) => g.members.includes(p.main_position)).sort((a, b) => b.minutes - a.minutes),
+  }));
 
   const clickSlot = (i: number) => {
     if (selected === null) return onSelect(i);
@@ -75,7 +87,7 @@ export function LineupEditor({
             <button
               key={slot.positionId}
               type="button"
-              className={`${styles.slot} ${selected === i ? styles.slotSelected : ""}`}
+              className={`${styles.slot} ${selected === i ? styles.slotSelected : ""} ${slot.x > 0.75 ? styles.slotRightEdge : ""}`}
               style={{ left: `${slot.x * 100}%`, top: `min(${(1 - slot.y) * 100}%, calc(100% - var(--slot-bottom, 52px)))` }}
               onClick={() => clickSlot(i)}
               aria-label={`${POS_LABEL[slot.group]}位置:${p ? displayName(p) : "空"}`}
@@ -101,23 +113,40 @@ export function LineupEditor({
             ? "点球场上的球员选中位置,再点替补换上;连点两名首发互换位置。球员位置为规则解码,位置未校验。"
             : `已选中 ${POS_LABEL[setup.slots[selected].group]} 位置,点下面的替补换上,或再点一名首发互换。`}
         </p>
-        <div className={styles.benchList}>
-          {bench.map((p) => (
-            <button
-              key={p.player_id}
-              type="button"
-              className={styles.benchRow}
-              disabled={selected === null}
-              onClick={() => clickBench(p.player_id)}
-            >
-              <span className={styles.num}>{p.shirt_number ?? "-"}</span>
-              <span>
-                {displayName(p)} · {POS_LABEL[p.main_position]} <span className={styles.unverified}>(位置未校验)</span>
-              </span>
-              <span className={styles.muted}>{p.minutes} 分钟</span>
+        <div className={styles.benchToolbar}>
+          <span className={styles.muted}>
+            阵容池 {visible.length} 人{!showAll && hiddenCount ? `(已隐藏出场不足 ${MIN_MINUTES_DEFAULT} 分钟的 ${hiddenCount} 人)` : ""}
+          </span>
+          {hiddenCount ? (
+            <button type="button" className={styles.linkBtn} onClick={() => setShowAll(!showAll)}>
+              {showAll ? `隐藏不足 ${MIN_MINUTES_DEFAULT} 分钟` : "显示全部"}
             </button>
-          ))}
+          ) : null}
         </div>
+        {grouped.map((g) =>
+          g.players.length ? (
+            <div key={g.label} className={styles.benchGroup}>
+              <div className={styles.benchGroupTitle}>{g.label}</div>
+              <div className={styles.benchList}>
+                {g.players.map((p) => (
+                  <button
+                    key={p.player_id}
+                    type="button"
+                    className={styles.benchRow}
+                    disabled={selected === null}
+                    onClick={() => clickBench(p.player_id)}
+                  >
+                    <span className={styles.num}>{p.shirt_number ?? "-"}</span>
+                    <span>
+                      {displayName(p)} · {POS_LABEL[p.main_position]} <span className={styles.unverified}>(位置未校验)</span>
+                    </span>
+                    <span className={styles.muted}>{p.minutes} 分钟</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null,
+        )}
       </div>
     </div>
   );

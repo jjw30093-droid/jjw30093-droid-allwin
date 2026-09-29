@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
 import type { SimEvent, SingleResult } from "@/features/simulator/engine";
 import { mulberry32 } from "@/features/simulator/rng";
+import { cumulativeXg } from "@/features/simulator/xg";
 import styles from "./simulator.module.css";
 
 const DURATION_MS = 15000;
@@ -18,6 +19,16 @@ export const CHANNEL_LABEL: Record<string, string> = {
   owngoal: "乌龙球",
   gk_error: "门将失误",
 };
+
+function eventLabel(e: SimEvent): string {
+  if (e.kind === "red") return "红牌";
+  if (e.kind === "injury") return "伤病换人";
+  if (e.channel === "owngoal") return "乌龙球";
+  if (e.channel === "penalty") return e.kind === "goal" ? "点球命中" : "点球未进";
+  if (e.channel === "gk_error") return e.kind === "goal" ? "门将失误·进球" : "门将失误·射门";
+  const ch = CHANNEL_LABEL[e.channel ?? "open"];
+  return e.kind === "goal" ? `进球·${ch}` : `射门·${ch} xG ${(e.xg ?? 0).toFixed(2)}`;
+}
 
 // 射门点只是示意位置(数据里没有射门坐标),按事件序号取确定性伪随机,同一种子画面一致。
 function shotXY(e: SimEvent, i: number, seed: number): { left: number; top: number } {
@@ -97,7 +108,8 @@ export function MatchAnimation({
   const popTicks = Math.ceil((GOAL_POP_MS / DURATION_MS) * single.totalTicks);
   const popGoals = shown.filter((e) => e.kind === "goal" && tick - e.tick <= popTicks).reverse();
   const lastGoal = popGoals[0];
-  const feed = shown.filter((e) => e.kind !== "shot").slice(-5).reverse();
+  const xg = useMemo(() => cumulativeXg(single.events, tick), [single, tick]);
+  const ticker = [...shown].reverse();
 
   return (
     <section className={styles.card} data-testid="sim-animation">
@@ -108,6 +120,9 @@ export function MatchAnimation({
             {score[0]} : {score[1]}
           </div>
           <div className={styles.clock}>{tick >= single.totalTicks ? "全场结束" : clock}</div>
+          <div className={styles.liveXg} data-testid="live-xg">
+            xG {xg[0].toFixed(2)} : {xg[1].toFixed(2)}
+          </div>
         </div>
         <span className={styles.sbTeam}>{names[1]}</span>
       </div>
@@ -130,6 +145,7 @@ export function MatchAnimation({
               />
             );
           })}
+        <span className={styles.pitchNote}>射门位置为示意</span>
         {lastGoal ? (
           <div className={styles.goalPop} role="status">
             <div className={styles.goalPopTitle}>{lastGoal.channel === "owngoal" ? "乌龙球!" : "进球!"}</div>
@@ -142,19 +158,21 @@ export function MatchAnimation({
           </div>
         ) : null}
       </div>
-      <p className={styles.muted}>射门点为示意位置;青绿 = {names[0]},蓝 = {names[1]},金色 = 进球。</p>
-      <ul className={styles.feed}>
-        {feed.map((e, i) => (
-          <li key={i}>
-            {e.clock} {names[e.team]}{" "}
-            {e.kind === "goal"
-              ? `进球 ${e.playerName ?? ""}${e.channel === "owngoal" ? "(乌龙)" : `(${CHANNEL_LABEL[e.channel ?? "open"]})`}`
-              : e.kind === "red"
-                ? `红牌 ${e.playerName ?? ""}`
-                : "伤病换人"}
-          </li>
-        ))}
-      </ul>
+      <p className={styles.muted}>青绿 = {names[0]},蓝 = {names[1]},金色 = 进球。</p>
+      <ol className={styles.ticker} data-testid="event-ticker" aria-label="比赛事件">
+        {ticker.length === 0 ? <li className={styles.muted}>比赛开始</li> : null}
+        {ticker.map((e, i) => {
+          const key = e.kind === "goal" || e.kind === "red" || e.channel === "penalty" || e.channel === "owngoal";
+          return (
+            <li key={`${e.tick}-${i}`} className={`${styles.tickRow} ${key ? styles.tickKey : ""}`}>
+              <span className={styles.tickClock}>{e.clock}</span>
+              <span className={styles.tickTeam}>{names[e.team]}</span>
+              <span className={styles.tickType}>{eventLabel(e)}</span>
+              <span className={styles.tickPlayer}>{e.playerName ?? ""}</span>
+            </li>
+          );
+        })}
+      </ol>
       <div className={styles.row} style={{ justifyContent: "flex-end" }}>
         <button type="button" className={styles.secondaryBtn} onClick={onDone}>
           跳过动画
