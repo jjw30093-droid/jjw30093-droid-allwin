@@ -292,6 +292,11 @@ def main() -> None:
                 "second_half": rnd(sum(a90) / len(a90), 2) if a90 else DEFAULT_STOPPAGE[1],
                 "samples": [len(a45), len(a90)],
             },
+            # 每场模拟按此经验分布抽样补时(v0.2);键为补时分钟数,值为场次
+            "stoppage_distribution": {
+                "first_half": {str(k): v for k, v in sorted(Counter(a45).items())},
+                "second_half": {str(k): v for k, v in sorted(Counter(a90).items())},
+            },
         }
 
     # ---- 球队参数
@@ -355,9 +360,9 @@ def main() -> None:
         t["name_zh"] = nm.get("name_zh") or nm.get("name_en")
         t["name_en"] = nm.get("name_en")
 
-    # ---- 阵容(首发位置、阵型模板、最近一场首发、名单)
+    # ---- 阵容(位置映射表、阵型模板、最近一场首发、名单)
     lineup_rows = core.execute(
-        f"""SELECT Match_ID, Team_ID, formation, Player_ID, shirt_number, position_id,
+        f"""SELECT Match_ID, Team_ID, formation, Player_ID, player_name, shirt_number, position_id,
                    usual_position_id, is_starter, extra_json
               FROM fact_match_lineup WHERE Match_ID IN ({in_clause(by_id)})"""
     ).fetchall()
@@ -367,10 +372,10 @@ def main() -> None:
 
     formation_sets = defaultdict(Counter)
     formation_coords = defaultdict(list)
-    decode_cache: dict[tuple, dict | None] = {}
     player_pid_counts = defaultdict(Counter)  # player -> Counter[(formation, pid)]
     player_usual = {}
     player_shirt = {}
+    player_lineup_name = {}
     player_last_seen = {}
     squads = defaultdict(set)
     for (mid, tid), rows in team_match_lineup.items():
@@ -378,20 +383,20 @@ def main() -> None:
         starters = [r for r in rows if r["is_starter"] == 1 and r["position_id"] is not None]
         formation = rows[0]["formation"]
         pids = tuple(sorted(r["position_id"] for r in starters))
-        if m["status"] == "Finish" and formation and len(pids) == 11:
+        if formation and len(pids) == 11:
             formation_sets[formation][pids] += 1
-        key = (formation, pids)
-        if key not in decode_cache:
-            decode_cache[key] = decode_formation(formation, list(pids))
         for r in rows:
             p = str(r["Player_ID"])
-            if r["usual_position_id"] is not None:
+            prev = player_last_seen.get(p)
+            latest = prev is None or m["sort_key"] >= prev
+            if latest:
+                player_last_seen[p] = m["sort_key"]
+            if r["usual_position_id"] is not None and (latest or p not in player_usual):
                 player_usual[p] = r["usual_position_id"]
-            if r["shirt_number"] not in (None, ""):
-                prev = player_last_seen.get(p)
-                if prev is None or m["sort_key"] >= prev:
-                    player_last_seen[p] = m["sort_key"]
-                    player_shirt[p] = r["shirt_number"]
+            if r["shirt_number"] not in (None, "") and (latest or p not in player_shirt):
+                player_shirt[p] = r["shirt_number"]
+            if r["player_name"] and (latest or p not in player_lineup_name):
+                player_lineup_name[p] = r["player_name"]
             if m["Season"] == CURRENT_SEASON and team_league.get(tid) == m["League_ID"]:
                 squads[tid].add(p)
         for r in starters:
@@ -403,25 +408,49 @@ def main() -> None:
             if "x" in v and "y" in v:
                 formation_coords[(formation, r["position_id"])].append((v["x"], v["y"]))
 
-    formations_out = {}
+    # 单一映射表:(阵型, position_id) → 8 组。阵型模板、最近一场首发、球员主要位置全部只查这张表。
+    position_map: dict[str, dict[int, str]] = {}
+    undecodable_formations = []
+    variant_sets = 0
     for formation, cnt in formation_sets.items():
-        total = sum(cnt.values())
-        if total < MIN_FORMATION_SAMPLES:
-            continue
         pids, _ = cnt.most_common(1)[0]
         groups = decode_formation(formation, list(pids))
         if groups is None:
+            undecodable_formations.append(formation)
             continue
+        position_map[formation] = groups
+        variant_sets += len(cnt) - 1
+
+    def slot_group(formation: str | None, pid: int) -> str | None:
+        return position_map.get(formation or "", {}).get(pid)
+
+    formations_out = {}
+    for formation, cnt in formation_sets.items():
+        total = sum(cnt.values())
+        if total < MIN_FORMATION_SAMPLES or formation not in position_map:
+            continue
+        pids, _ = cnt.most_common(1)[0]
         slots = []
         for pid in pids:
             xy = formation_coords.get((formation, pid)) or []
             slots.append({
                 "position_id": pid,
-                "group": groups[pid],
                 "x": rnd(sum(a for a, _ in xy) / len(xy), 3) if xy else None,
                 "y": rnd(sum(b for _, b in xy) / len(xy), 3) if xy else None,
             })
         formations_out[formation] = {"samples": total, "slots": slots}
+
+    def top_start(p: str) -> tuple[str | None, int | None, int]:
+        """出场次数最多的 position_id,及它最常出现的阵型、次数。"""
+        cnt = player_pid_counts.get(p)
+        if not cnt:
+            return None, None, 0
+        by_pid = Counter()
+        for (_, pid), n in cnt.items():
+            by_pid[pid] += n
+        top_pid, n = by_pid.most_common(1)[0]
+        forms = Counter({f: k for (f, pid), k in cnt.items() if pid == top_pid})
+        return forms.most_common(1)[0][0], top_pid, n
 
     def main_position(p: str) -> tuple[str, str]:
         cnt = player_pid_counts.get(p)
@@ -432,9 +461,9 @@ def main() -> None:
             top_pid = by_pid.most_common(1)[0][0]
             forms = Counter({f: n for (f, pid), n in cnt.items() if pid == top_pid})
             for f, _ in forms.most_common():
-                for (kf, _), g in decode_cache.items():
-                    if kf == f and g and top_pid in g:
-                        return g[top_pid], "rule_decoded"
+                g = slot_group(f, top_pid)
+                if g:
+                    return g, "rule_decoded"
         u = player_usual.get(p)
         if u in USUAL_FALLBACK:
             return USUAL_FALLBACK[u], "usual_position_fallback"
@@ -449,16 +478,14 @@ def main() -> None:
             if len(starters) != 11:
                 continue
             formation = rows[0]["formation"]
-            pids = sorted(r["position_id"] for r in starters)
-            groups = decode_formation(formation, pids) or {}
             last_lineup[tid] = {
                 "match_id": m["Match_ID"],
                 "date": m["Date"],
                 "formation": formation,
                 "formation_has_template": formation in formations_out,
+                "formation_in_position_map": formation in position_map,
                 "starters": [
-                    {"player_id": str(r["Player_ID"]), "position_id": r["position_id"],
-                     "slot_group": groups.get(r["position_id"])}
+                    {"player_id": str(r["Player_ID"]), "position_id": r["position_id"]}
                     for r in sorted(starters, key=lambda r: r["position_id"])
                 ],
             }
@@ -495,9 +522,11 @@ def main() -> None:
             s["gk_conceded"] += r["goals_conceded"]
 
     player_league = {}
+    player_team = {}
     for tid, ps in squads.items():
         for p in ps:
             player_league[p] = team_league[tid]
+            player_team[p] = tid
     pos = {p: main_position(p) for p in wanted}
 
     def per90(v: float, mins: float) -> float | None:
@@ -568,10 +597,18 @@ def main() -> None:
             g_p = shrink(rw["g_raw"], s["gk_minutes"], K_GK_MIN, means[(lid, "GK")]["g"]) \
                 if rw["g_raw"] is not None else means[(lid, "GK")]["g"]
         nm = pnames.get(p, {})
+        name_en = nm.get("name_en") or nm.get("Player_Name") or player_lineup_name.get(p)
+        tf, tpid, tn = top_start(p)
         players_out[p] = {
             "player_id": p,
-            "name_zh": nm.get("name_zh_short") or nm.get("name_zh") or nm.get("name_en") or nm.get("Player_Name"),
-            "name_en": nm.get("name_en") or nm.get("Player_Name"),
+            "name_zh": nm.get("name_zh_short") or nm.get("name_zh"),
+            "name_en": name_en,
+            "team_id": player_team[p],
+            "usual_position_id": player_usual.get(p),
+            "top_formation": tf,
+            "top_position_id": tpid,
+            "top_position_starts": tn,
+            "starts": sum(player_pid_counts.get(p, Counter()).values()),
             "shirt_number": player_shirt.get(p),
             "main_position": g,
             "position_source": src,
@@ -590,6 +627,28 @@ def main() -> None:
             "g_p": rnd(g_p),
             "gk_minutes": s["gk_minutes"],
         }
+
+    # ---- 一致性检查:最近一场首发放回它的实际阵型,主要位置 ≠ 所放位置(f_pos < 1)的比例
+    consistency = []
+    for tid, ll in last_lineup.items():
+        rows_c = []
+        for st in ll["starters"]:
+            slot = slot_group(ll["formation"], st["position_id"])
+            main = players_out[st["player_id"]]["main_position"] if st["player_id"] in players_out else None
+            rows_c.append((st["player_id"], main, slot))
+        mism = [r for r in rows_c if r[1] != r[2]]
+        consistency.append({
+            "team_id": tid,
+            "name_zh": teams_out[str(tid)]["name_zh"],
+            "formation": ll["formation"],
+            "mismatch": len(mism),
+            "n": len(rows_c),
+            "detail": [f"{players_out.get(pid, {}).get('name_zh') or players_out.get(pid, {}).get('name_en')}:{a}→{b}"
+                       for pid, a, b in mism],
+        })
+    consistency.sort(key=lambda r: (-r["mismatch"], r["team_id"]))
+    total_mism = sum(r["mismatch"] for r in consistency)
+    total_n = sum(r["n"] for r in consistency)
 
     # ---- fixtures:未开赛最新 Crown 盘口 + 最近 14 天已完赛赛前收盘
     upcoming = [m for m in matches if m["status"] != "Finish" and m["kickoff_precision"] == "exact"
@@ -671,8 +730,19 @@ def main() -> None:
                 "players_without_minutes": sum(1 for p in players_out.values() if p["minutes"] == 0),
                 "players_without_xa_minutes": sum(1 for p in players_out.values()
                                                   if p["minutes"] > 0 and p["xa_minutes"] == 0),
+                "players_without_any_name": sum(1 for p in players_out.values()
+                                                if not p["name_zh"] and not p["name_en"]),
+                "undecodable_formations": undecodable_formations,
+                "formation_variant_slot_sets": variant_sets,
+                "lineup_consistency": {
+                    "total_mismatch": total_mism,
+                    "total_starters": total_n,
+                    "share": rnd(total_mism / total_n) if total_n else None,
+                    "teams": consistency,
+                },
             },
         },
+        "position_map": {f: {str(pid): g for pid, g in sorted(m.items())} for f, m in sorted(position_map.items())},
         "leagues": leagues_out,
         "formations": formations_out,
         "teams": teams_out,
