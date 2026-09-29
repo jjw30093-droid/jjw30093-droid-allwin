@@ -36,6 +36,10 @@ QUANTILE_PROBS = tuple(round(0.05 * i, 2) for i in range(1, 20))
 DEFAULT_STOPPAGE = (2.0, 5.0)
 USUAL_FALLBACK = {0: "GK", 1: "CB", 2: "CM", 3: "ST"}
 MIN_FORMATION_SAMPLES = 5
+# v0.3 第 7 条:强度回归的候选窗口(场数, 半衰期)与收缩 k;k=0 时强度为 0 取每场 0.05 下限
+STRENGTH_WINDOWS = ((10, 5.0), (20, 10.0), (38, 19.0))
+STRENGTH_KS = (0.0, 5.0)
+STRENGTH_FLOOR = 0.05
 POS_GROUPS = ("GK", "CB", "FB", "DM", "CM", "AM", "W", "ST")
 
 
@@ -305,9 +309,12 @@ def build(
         gb = goal_buckets[lid]
         mean_b = sum(gb) / 6
         a45, a90 = added[lid][45], added[lid][90]
+        goals_total = sum((m["home_score"] or 0) + (m["away_score"] or 0) for m in finished if m["League_ID"] == lid)
         leagues_out[str(lid)] = {
             "league_id": lid,
             "finished_matches": n_fin[lid],
+            "goals_per_team_match": rnd(goals_total / tm),
+            "xg_per_team_match": rnd(sum(mu.values())),
             "mu": {c: rnd(v) for c, v in mu.items()} | {"owngoal": rnd(own_goals[lid] / tm)},
             "shot_xg_quantiles": {"probs": list(QUANTILE_PROBS), **qs},
             "shot_xg_mean": exs,
@@ -517,6 +524,38 @@ def build(
             fa = sum(sum(team_for[(m["Match_ID"], opp(m, h))].values()) for m, h in last10)
             t["xg10"] = {"for": rnd(fx / len(last10)) if last10 else None,
                          "against": rnd(fa / len(last10)) if last10 else None, "n": len(last10)}
+        # v0.3 第 7 条:强度回归特征(按渠道合计的总量;xG 与实际进球;k ∈ {0, 5})
+        lg = leagues_out[str(lid)]
+        mu_tot = {"xg": sum(mu[c] for c in CHANNELS), "goals": lg["goals_per_team_match"]}
+        strength = {}
+        for n_win, hl in STRENGTH_WINDOWS:
+            win = list(reversed(team_hist[tid][-n_win:]))
+            wts = [0.5 ** (i / hl) for i in range(len(win))]
+            s1, s2 = sum(wts), sum(x * x for x in wts)
+            ne = (s1 * s1 / s2) if s2 else 0.0
+            per = {"xg": ([], []), "goals": ([], [])}
+            for (m, h) in win:
+                o = opp(m, h)
+                per["xg"][0].append(sum(team_for[(m["Match_ID"], tid)].values()))
+                per["xg"][1].append(sum(team_for[(m["Match_ID"], o)].values()))
+                gf, ga = (m["home_score"], m["away_score"]) if h else (m["away_score"], m["home_score"])
+                per["goals"][0].append(gf or 0)
+                per["goals"][1].append(ga or 0)
+            feat = {"n": len(win), "n_eff": rnd(ne, 3)}
+            for basis in ("xg", "goals"):
+                feat[basis] = {}
+                for side, vals in (("A", per[basis][0]), ("D", per[basis][1])):
+                    rawv = sum(w * v for w, v in zip(wts, vals)) / s1 if s1 else mu_tot[basis]
+                    out_k = []
+                    for k in STRENGTH_KS:
+                        v = shrink(rawv, ne, k, mu_tot[basis]) if s1 else mu_tot[basis]
+                        if v < STRENGTH_FLOOR:
+                            v = STRENGTH_FLOOR
+                            diag["strength_floor_hits"] = diag.get("strength_floor_hits", 0) + 1
+                        out_k.append(rnd(v))
+                    feat[basis][side] = out_k
+            strength[str(n_win)] = feat
+        t["strength"] = strength
         nm = raw.team_names.get(tid, (None, None))
         t["name_zh"] = nm[0] or nm[1]
         t["name_en"] = nm[1]

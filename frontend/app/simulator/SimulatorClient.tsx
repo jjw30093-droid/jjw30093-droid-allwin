@@ -169,7 +169,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
         <h1 className={styles.title}>比赛模拟器</h1>
         <span className={styles.badge} data-testid="uncalibrated-badge">未校准原型</span>
         <span className={styles.meta}>
-          模型 {params.meta.model_version} · 参数导出于 {params.meta.generated_at} · 全部参数为初始假设,尚未回测校准,结果不代表预测
+          模型 {params.meta.effective_version ?? params.meta.model_version} · 参数导出于 {params.meta.generated_at} · 全部参数为初始假设,尚未回测校准,结果不代表预测
         </span>
       </header>
 

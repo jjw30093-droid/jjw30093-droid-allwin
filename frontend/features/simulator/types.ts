@@ -129,7 +129,7 @@ export interface FixtureParams {
 }
 
 export interface SimParams {
-  meta: { generated_at: string; model_version: string; uncalibrated: boolean };
+  meta: { generated_at: string; effective_version?: string; model_version: string; uncalibrated: boolean };
   leagues: Record<string, LeagueParams>;
   formations: Record<string, { samples: number; slots: FormationSlot[] }>;
   position_map: Record<string, Record<string, PosGroup>>;
