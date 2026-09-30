@@ -1,12 +1,16 @@
 """模拟器参数导出(只读)。口径:docs/simulator-model.md(最新变更记录见文末)。
 
 只读打开 allwin.db / odds.db(sqlite URI mode=ro + query_only),输出到仓库外目录。
-范围:英超 47、西甲 87,赛季 2025/2026 + 2026/2027。参数计算在 params_core.build()
+范围:五大联赛(params_core.CALIBRATED_LEAGUES),赛季 2025/2026 + 2026/2027。参数计算在 params_core.build()
 (与 Phase 2 回测快照共用同一套函数)。
 
 用法(服务器):
   nice -n 19 python3 scripts/simulator/export_params.py \
       --data-dir /opt/allwin/shared/data --out-dir /opt/allwin/shared/exports/simulator
+发布(每日任务,见 backend/cli/simulator_params_export.py 与 docs/simulator-launch-plan.md §3.1):
+  ... --out-dir /opt/allwin/shared/exports/simulator/daily --publish --keep 7
+  写临时文件 → 校验 → 原子改名为 simulator_params_<北京日期>.json → 原子替换 current.json 软链 → 只保留最近 N 份;
+  任一步失败都不动 current.json,非零退出。
 
 位置分组为规则解码(阵型字符串 + 格子行列),输出里标 position_unverified=true。
 """
@@ -14,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -25,14 +30,71 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import load_xref, open_ro  # noqa: E402
 from features_market import fit_poisson, implied_two, load_timelines, pick_close  # noqa: E402
-from params_core import CHANNELS, K_TEAM, SITUATION_CHANNEL, build, load_raw, rnd  # noqa: E402
+from params_core import CALIBRATED_LEAGUES, CHANNELS, K_TEAM, SITUATION_CHANNEL, build, load_raw, rnd  # noqa: E402
 
 # 生效版本与校准值:显式维护在校准文件里(数值取自 Phase 2 回测结果),不从规格文档标题推导。
 CALIBRATION_PATH = Path(__file__).resolve().parent / "calibration_v0.3.json"
-LEAGUES = (47, 87)
+LEAGUES = CALIBRATED_LEAGUES
 SEASONS = ("2025/2026", "2026/2027")
 CURRENT_SEASON = "2026/2027"
 FIXTURE_LOOKBACK_DAYS = 14
+BJ = timezone(timedelta(hours=8))
+CURRENT_LINK = "current.json"
+PUBLISHED_PREFIX = "simulator_params_"
+MIN_TEAMS_PER_LEAGUE = 18
+MIN_LINEUP_SHARE = 0.9
+SIZE_RANGE = (500_000, 10_000_000)
+
+
+def validate_export(out: dict, size_bytes: int) -> list[str]:
+    """发布前校验(docs/simulator-launch-plan.md §3.1);返回问题清单,空表示通过。"""
+    errs = []
+    leagues = {int(k) for k in out.get("leagues", {})}
+    if leagues != set(CALIBRATED_LEAGUES):
+        errs.append(f"联赛集合 {sorted(leagues)} ≠ 五大联赛 {sorted(CALIBRATED_LEAGUES)}")
+    teams = out.get("teams", {})
+    for lid in CALIBRATED_LEAGUES:
+        ts = [t for t in teams.values() if t.get("league_id") == lid]
+        if len(ts) < MIN_TEAMS_PER_LEAGUE:
+            errs.append(f"联赛 {lid} 球队 {len(ts)} < {MIN_TEAMS_PER_LEAGUE}")
+    with_lineup = sum(1 for t in teams.values() if t.get("last_lineup"))
+    if teams and with_lineup / len(teams) < MIN_LINEUP_SHARE:
+        errs.append(f"有最近首发的球队 {with_lineup}/{len(teams)} < {MIN_LINEUP_SHARE:.0%}")
+    cal = out.get("calibration") or {}
+    meta = out.get("meta") or {}
+    if not cal or not meta.get("effective_version"):
+        errs.append("缺少 calibration 或 meta.effective_version")
+    if not (SIZE_RANGE[0] <= size_bytes <= SIZE_RANGE[1]):
+        errs.append(f"文件大小 {size_bytes} 不在 {SIZE_RANGE}")
+    return errs
+
+
+def publish(out: dict, out_dir: Path, keep: int, now: datetime) -> Path:
+    """临时文件 → 校验 → 原子改名 → 原子替换 current.json 软链 → 保留最近 keep 份。失败抛 SystemExit,不动 current。"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tmp = out_dir / f".tmp-{now.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.json"
+    try:
+        tmp.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        json.loads(tmp.read_text(encoding="utf-8"))
+        errs = validate_export(out, tmp.stat().st_size)
+        if errs:
+            raise SystemExit("参数校验未通过,不发布:" + ";".join(errs))
+        final = out_dir / f"{PUBLISHED_PREFIX}{now.astimezone(BJ).strftime('%Y%m%d')}.json"
+        os.replace(tmp, final)
+        link_tmp = out_dir / f".{CURRENT_LINK}.tmp-{os.getpid()}"
+        if link_tmp.is_symlink() or link_tmp.exists():
+            link_tmp.unlink()
+        os.symlink(final.name, link_tmp)
+        os.replace(link_tmp, out_dir / CURRENT_LINK)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    published = sorted(out_dir.glob(f"{PUBLISHED_PREFIX}*.json"))
+    current = (out_dir / CURRENT_LINK).resolve()
+    for old in published[:-keep] if keep > 0 else []:
+        if old.resolve() != current:
+            old.unlink()
+    return final
 
 
 def parse_utc(s: str | None) -> datetime | None:
@@ -79,6 +141,9 @@ def main() -> None:
     ap.add_argument("--data-dir", default="/opt/allwin/shared/data")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--out-name", default=None, help="输出文件名(默认 simulator_params_YYYYMMDD.json)")
+    ap.add_argument("--publish", action="store_true", help="校验后发布为 simulator_params_<北京日期>.json 并替换 current.json")
+    ap.add_argument("--keep", type=int, default=7, help="--publish 时保留最近几份(默认 7)")
+    ap.add_argument("--trigger-json", default=None, help="写入 meta.export_trigger 的 JSON(由每日任务传入)")
     args = ap.parse_args()
     data_dir = Path(args.data_dir)
     out_dir = Path(args.out_dir)
@@ -102,6 +167,8 @@ def main() -> None:
     position_map = p["position_map"]
     diag = p["diag"]
     finished = [m for m in raw.matches if m["status"] == "Finish"]
+    latest_ko = max((m["kickoff_at_utc"] for m in finished
+                     if m["kickoff_precision"] == "exact" and m["kickoff_at_utc"]), default=None)
 
     # ---- 一致性检查:最近一场首发放回它的实际阵型,主要位置 ≠ 所放位置(f_pos < 1)的比例
     consistency = []
@@ -170,6 +237,9 @@ def main() -> None:
             "data_window": {"first_match_date": min((m["Date"] for m in finished), default=None),
                             "last_match_date": max((m["Date"] for m in finished), default=None),
                             "finished_matches": len(finished)},
+            # 参数里纳入的已完赛比赛中最晚的精确开球时间(UTC)
+            "latest_included_kickoff_utc": latest_ko,
+            "export_trigger": json.loads(args.trigger_json) if args.trigger_json else {"trigger": "manual"},
             "channels": list(CHANNELS) + ["owngoal"],
             "situation_to_channel": SITUATION_CHANNEL,
             "position_decoding": "rule-based (formation string + grid row/col); unverified",
@@ -207,8 +277,11 @@ def main() -> None:
         "fixtures": fixtures_out,
         "calibration": calibration,
     }
-    path = out_dir / (args.out_name or f"simulator_params_{now.strftime('%Y%m%d')}.json")
-    path.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    if args.publish:
+        path = publish(out, out_dir, args.keep, now)
+    else:
+        path = out_dir / (args.out_name or f"simulator_params_{now.strftime('%Y%m%d')}.json")
+        path.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(json.dumps({
         "output": str(path),
         "bytes": path.stat().st_size,
@@ -221,6 +294,8 @@ def main() -> None:
         "diagnostics": {k: v for k, v in out["meta"]["diagnostics"].items() if k != "lineup_consistency"},
         "lineup_consistency_share": out["meta"]["diagnostics"]["lineup_consistency"]["share"],
         "league_mu": {k: v["mu"] for k, v in leagues_out.items()},
+        "latest_included_kickoff_utc": latest_ko,
+        "published": bool(args.publish),
     }, ensure_ascii=False, indent=1))
 
 

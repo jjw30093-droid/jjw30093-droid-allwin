@@ -1,0 +1,11 @@
+# 每 30 分钟(每小时 05、35 分)触发一次模拟器参数导出的到期判断(allwin-simparams.service)。
+# 错开 allwin-postmatch 等整点/半点附近的任务;Persistent=true:停机错过的触发开机后补一次。
+[Unit]
+Description=Run allwin simulator params export due-check every 30 minutes
+
+[Timer]
+OnCalendar=*-*-* *:05,35:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

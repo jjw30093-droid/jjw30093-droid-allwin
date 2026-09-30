@@ -41,6 +41,7 @@ notify 统一管理)。门的"发现问题"不等于本任务失败——任务�
 
 import argparse
 import json
+import os
 import sqlite3
 import statistics
 import sys
@@ -704,6 +705,28 @@ def _gate_fixture_round_gap(conn_core) -> dict:
             "violations": violations, "accepted_gaps": accepted}
 
 
+# ── G16 模拟器参数新鲜度 ─────────────────────────────────────────────
+G16_MAX_AGE_HOURS = 36
+
+
+def _gate_simulator_params_stale(params_dir: str | None, now_iso: str) -> dict:
+    """G16:模拟器每日参数(docs/simulator-launch-plan.md §3.3)。设置了 SIMULATOR_PARAMS_DIR 时,
+    current.json 缺失/读不出/meta.generated_at 早于 36 小时即 WARNING——覆盖"定时器没触发或被禁用"
+    这种 job_runs 里根本没有失败记录的情况;未设置(模拟器未上线)时跳过。"""
+    if not params_dir:
+        return {"gate": "simulator_params_stale", "level": OK, "skipped": True, "detail": "SIMULATOR_PARAMS_DIR unset"}
+    path = os.path.join(params_dir, "current.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            generated_at = json.load(f)["meta"]["generated_at"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {"gate": "simulator_params_stale", "level": WARNING, "detail": "unreadable",
+                "path": path, "error": type(exc).__name__}
+    age_h = (_parse_iso(now_iso) - _parse_iso(generated_at)).total_seconds() / 3600
+    return {"gate": "simulator_params_stale", "level": WARNING if age_h > G16_MAX_AGE_HOURS else OK,
+            "generated_at": generated_at, "age_hours": round(age_h, 1), "max_age_hours": G16_MAX_AGE_HOURS}
+
+
 # ── 汇总与告警 ───────────────────────────────────────────────────────
 
 # 门 → notify 的 source(P0 白名单来源见 backend/notify.P0_ALERT_SOURCES;
@@ -724,6 +747,7 @@ _GATE_ALERT_SOURCE = {
     "unknown_enum_value": "unknown_enum_value",
     "extra_json_unknown_key": "extra_json_unknown_key",
     "fixture_round_gap": "fixture_round_gap",
+    "simulator_params_stale": "simulator_params_stale",
 }
 
 
@@ -750,6 +774,7 @@ def run(now_iso: str | None = None, notify_alerts: bool = True) -> dict:
             ("unknown_enum_value", lambda: _gate_unknown_enum_value(conn_core)),
             ("extra_json_unknown_key", lambda: _gate_extra_json_unknown_key(conn_core, now)),
             ("fixture_round_gap", lambda: _gate_fixture_round_gap(conn_core)),
+            ("simulator_params_stale", lambda: _gate_simulator_params_stale(os.environ.get("SIMULATOR_PARAMS_DIR"), now)),
         )
         for gate_name, check in checks:
             try:

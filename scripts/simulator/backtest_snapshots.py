@@ -33,9 +33,9 @@ sys.path.insert(0, str(HERE))
 from common import load_xref, open_ro, parse_round, parse_utc  # noqa: E402
 from features_market import load_timelines  # noqa: E402
 from export_params import crown_entry  # noqa: E402
-from params_core import SITUATION_CHANNEL, build, decode_formation, load_raw, truncate  # noqa: E402
+from params_core import CALIBRATED_LEAGUES, SITUATION_CHANNEL, build, decode_formation, load_raw, truncate  # noqa: E402
 
-LEAGUES = (47, 87, 55, 54, 53)
+LEAGUES = CALIBRATED_LEAGUES
 SEASONS = ("2024/2025", "2025/2026")
 CURRENT = "2025/2026"
 K_GRID = (3, 5, 8, 12)

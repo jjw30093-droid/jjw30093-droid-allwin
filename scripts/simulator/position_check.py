@@ -1,13 +1,17 @@
 """Phase 2 之前的位置校验准备(只读本地参数 JSON,不连数据库)。
 
 a. 自动检查:规则解码的 8 组映射回 GK/DEF/MID/FWD,与 usual_position_id 比对。
-b. 按解码位置分层随机抽 60 名球员(每组 7–8 人),写 CSV 供人工核对。
+b. 分层随机抽样写 CSV 供人工核对:
+   - 默认:按解码位置分层抽 60 名(每组 7–8 人),写 position_check.csv;
+   - --per-league N:每个联赛抽 N 名、联赛内按 8 个位置组分层(N=16 即每组 2 人,某组人数不足时由同联赛人数最多的组补足),
+     写 position_check_leagues.csv(带联赛列);自动检查另按联赛分别报告。
 
-用法:python3 scripts/simulator/position_check.py .local-data/simulator/simulator_params_YYYYMMDD.json
-CSV 写到参数 JSON 同目录的 position_check.csv(.local-data/ 不进 git)。
+用法:python3 scripts/simulator/position_check.py .local-data/simulator/simulator_params_YYYYMMDD.json [--per-league 16]
+CSV 写到参数 JSON 同目录(.local-data/ 不进 git)。
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import random
@@ -18,6 +22,7 @@ from pathlib import Path
 GROUPS = ("GK", "CB", "FB", "DM", "CM", "AM", "W", "ST")
 TO_COARSE = {"GK": 0, "CB": 1, "FB": 1, "DM": 2, "CM": 2, "AM": 2, "W": 3, "ST": 3}
 USUAL_LABEL = {0: "门将", 1: "后卫", 2: "中场", 3: "前锋"}
+LEAGUE_NAME = {47: "英超", 87: "西甲", 55: "意甲", 54: "德甲", 53: "法甲"}
 SAMPLE_TOTAL = 60
 SEED = 20260929
 
@@ -34,8 +39,54 @@ def expected_mismatch(p: dict) -> str | None:
     return None
 
 
+def league_of(teams: dict, p: dict) -> int | None:
+    return teams.get(str(p["team_id"]), {}).get("league_id")
+
+
+def per_league_report(teams: dict, players: list[dict]) -> None:
+    print("按联赛(一致 / 可比;扣除预期内不一致后):")
+    for lid in sorted({league_of(teams, p) for p in players} - {None}, key=lambda x: list(LEAGUE_NAME).index(x) if x in LEAGUE_NAME else 99):
+        ps = [p for p in players if league_of(teams, p) == lid and p["usual_position_id"] in USUAL_LABEL]
+        ok = [p for p in ps if TO_COARSE[p["main_position"]] == p["usual_position_id"]]
+        exp = [p for p in ps if p not in ok and expected_mismatch(p)]
+        denom = len(ps) - len(exp)
+        print(f"  {LEAGUE_NAME.get(lid, lid)}:{len(ok)}/{len(ps)} = {len(ok) / len(ps):.1%};"
+              f"扣除预期内 {len(exp)} 人后 {len(ok)}/{denom} = {len(ok) / denom:.1%}(剩余不一致 {denom - len(ok)} 人)")
+
+
+def per_league_sample(path: Path, teams: dict, players: list[dict], per_league: int, name) -> None:
+    rng = random.Random(SEED)
+    out = path.parent / "position_check_leagues.csv"
+    rows, quotas = [], {}
+    for lid in LEAGUE_NAME:
+        lp = [p for p in players if league_of(teams, p) == lid]
+        pools = {g: sorted((p for p in lp if p["main_position"] == g), key=lambda p: p["player_id"]) for g in GROUPS}
+        quota = {g: min(per_league // len(GROUPS), len(pools[g])) for g in GROUPS}
+        rest = per_league - sum(quota.values())
+        for g in sorted(GROUPS, key=lambda g: -(len(pools[g]) - quota[g])):
+            add = min(rest, len(pools[g]) - quota[g])
+            quota[g] += add
+            rest -= add
+        quotas[LEAGUE_NAME[lid]] = quota
+        for g in GROUPS:
+            for p in rng.sample(pools[g], quota[g]):
+                u = p["usual_position_id"]
+                rows.append([LEAGUE_NAME[lid], name(p), teams.get(str(p["team_id"]), {}).get("name_zh", ""), g,
+                             f"{u} {USUAL_LABEL.get(u, '')}".strip() if u is not None else "",
+                             p["top_formation"], p["top_position_id"], "预期内" if expected_mismatch(p) else "", ""])
+    with out.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["联赛", "中文名", "球队", "解码位置", "usual_position", "出场次数最多的阵型", "position_id", "预期内差异", "人工核对结论"])
+        w.writerows(rows)
+    print(f"CSV 已写出:{out}({len(rows)} 人;每联赛配额 {quotas})")
+
+
 def main() -> None:
-    path = Path(sys.argv[1])
+    ap = argparse.ArgumentParser()
+    ap.add_argument("params")
+    ap.add_argument("--per-league", type=int, default=0, help="每个联赛抽样人数(联赛内按位置组分层);0 = 旧的全局 60 人抽样")
+    args = ap.parse_args()
+    path = Path(args.params)
     d = json.loads(path.read_text(encoding="utf-8"))
     teams = d["teams"]
     players = [p for p in d["players"].values() if p["position_source"] == "rule_decoded"]
@@ -78,7 +129,12 @@ def main() -> None:
         print(f"  {name(p)}|{t}|{p['main_position']}|{USUAL_LABEL[p['usual_position_id']]}|"
               f"{p['top_formation']}/{p['top_position_id']}/{p['top_position_starts']}")
 
+    per_league_report(teams, players)
+
     # ---- b. 分层抽样
+    if args.per_league:
+        per_league_sample(path, teams, players, args.per_league, name)
+        return
     rng = random.Random(SEED)
     pools = {g: sorted((p for p in players if p["main_position"] == g), key=lambda p: p["player_id"]) for g in GROUPS}
     order = sorted(GROUPS, key=lambda g: -len(pools[g]))

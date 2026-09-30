@@ -429,6 +429,20 @@ REGISTRY: dict[str, dict] = {
         "backoff_seconds": 0,
         "description": "联赛积分榜(fact_league_table)迟到刷新:最近一场完赛比赛开球+6h 到期即重新拉取一次(全部联赛,每轮最多刷新 5 个)",
     },
+    "simulator_params_export": {
+        "kind": "subprocess",
+        # 模拟器参数每日导出(docs/simulator-launch-plan.md §3.1),physical_stats_poll /
+        # standings_refresh_poll 同类的独立 timer 任务——不进 DEFAULT_CHAIN、不挂在 7 个
+        # 既有定时器上。worker 任务之间没有跨定时器的依赖机制,所以"采集完成之后再导出"
+        # 由 --due 的就绪检查表达:最近一次 fotmob_incremental_multi 成功 + 五大联赛
+        # 没有未完赛落库的比赛;12:00(北京)仍未就绪则按截止时间导出并告警。
+        "argv": [sys.executable, "-m", "backend.cli.simulator_params_export", "--due"],
+        "cwd": str(PROJECT_ROOT),
+        "max_attempts": 1,
+        "timeout_seconds": 900,
+        "backoff_seconds": 0,
+        "description": "模拟器参数每日导出:采集完成(五大联赛无未落库完赛场次)即导出,每天最多一次;12:00 截止兜底",
+    },
 }
 
 DEFAULT_CHAIN = [
@@ -457,8 +471,11 @@ DEFAULT_CHAIN = [
 # - standings_refresh_poll:由 allwin-standings.timer 每 30 分钟独立调度,
 #   同一先例——判断"最近一场完赛比赛开球+6h 是否已过、且尚未刷新"不需要
 #   比 30 分钟更密的检查频率,与 physical_stats_poll 选取同一节奏。
+# - simulator_params_export:由 allwin-simparams.timer 每 30 分钟独立调度,
+#   同一先例——到期判断在 --due 里(今天已发布 / 早于 04:30 / 采集未完成都跳过)。
 NON_CHAIN_JOBS = frozenset({
     "silver_build", "daily_digest", "physical_stats_poll", "standings_refresh_poll",
+    "simulator_params_export",
 })
 
 # 兼容别名:旧名 silver_build 指向 core_silver_build(不在默认链中)

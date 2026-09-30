@@ -13,6 +13,8 @@ import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+# v0.3 只在五大联赛上回测校准过(docs/simulator-model.md Phase 2);生产导出与回测快照都只用这五个联赛。
+CALIBRATED_LEAGUES = (47, 87, 55, 54, 53)
 CHANNELS = ("open", "counter", "setpiece", "penalty")
 SITUATION_CHANNEL = {
     "RegularPlay": "open",
