@@ -5,7 +5,7 @@
 import { create as createQr } from "qrcode";
 import { contrastRatioHex, nudgeForContrast } from "@/components/charts/colorContrast";
 import { FOCUS_LABEL, rarityTag, type SimEvent } from "./engine";
-import { ahText, kappaShort, type ResultSnapshot } from "./snapshot";
+import { ahText, type ResultSnapshot } from "./snapshot";
 
 export type ShareSize = 1350 | 1920;
 export const SHARE_WIDTH = 1080;
@@ -138,7 +138,7 @@ function goalLine(e: SimEvent): string {
 export function shareTexts(input: ShareImageInput): string {
   const { snap } = input;
   const parts: string[] = [
-    "模拟比赛 SIMULATED 非真实比赛 模拟 种子 补时 分钟 累计 xG 赛跑 半场 次模拟 胜平负 胜 平 主让 主受让 平手 模拟公平让球线 模拟公平大小球线 稀有度 随机强度 标准档 混乱模式 侧重点 无 休息不足3天 模型 参数 模拟结果,仅供娱乐 扫码自己模拟一场 等共球 乌龙 点球 …:·0123456789.+'%/",
+    "模拟比赛 SIMULATED 非真实比赛 模拟 种子 补时 分钟 累计 xG 赛跑 半场 次模拟 胜平负 胜 平 主让 主受让 平手 模拟让球 模拟大小球 主队让 主队受让 预计进球 编号 稀有度 侧重点 无 休息不足3天 模型 参数 模拟结果,仅供娱乐 扫码自己模拟一场 等共球 乌龙 点球 …:·0123456789.+'%/",
     input.siteName,
     input.siteUrl,
     snap.modelVersion,
@@ -504,10 +504,10 @@ function drawWdl(ctx: Ctx, L: Layout, f: ShareFonts, snap: ResultSnapshot, color
   ctx.fillText(`${fit(ctx, snap.teams[1].name, bw / 3 - 90)}胜 ${pct(many.pAway)}`, bx + bw, ly);
   // 盘口 · 稀有度 · 随机强度
   const items: [string, string][] = [
-    ["模拟公平让球线", ahText(many.fairAhLine)],
-    ["模拟公平大小球线", String(many.fairOuLine)],
+    ["模拟让球", ahText(many.fairAhLine)],
+    ["模拟大小球", String(many.fairOuLine)],
     ["稀有度", rarityTag(many.upset.scoreCount, many.runs)],
-    ["随机强度", kappaShort(snap.chaos)],
+    ["预计进球", `${snap.teams[0].expectedGoals.toFixed(1)} : ${snap.teams[1].expectedGoals.toFixed(1)}`],
   ];
   const iy = ly + 38 * L.s;
   const iw = bw / items.length;
@@ -552,7 +552,8 @@ function drawFooter(ctx: Ctx, L: Layout, f: ShareFonts, snap: ResultSnapshot, si
   ctx.fillStyle = C.ink2;
   ctx.fillText(fit(ctx, `${siteUrl.replace(/^https?:\/\//, "")} · 扫码自己模拟一场`, tw), x, y + 72 * L.s);
   ctx.fillStyle = C.ink3;
-  ctx.fillText(fit(ctx, `模型 ${snap.modelVersion} · 参数 ${snap.paramsDate.slice(0, 10)} · 种子 ${snap.seed}`, tw), x, y + 102 * L.s);
+  ctx.font = font(500, 17 * L.s, f.cn);
+  ctx.fillText(fit(ctx, `模型 ${snap.modelVersion} · 参数 ${snap.paramsDate.slice(0, 10)} · 编号 ${snap.seed}`, tw), x, y + 102 * L.s);
   ctx.font = font(500, 18 * L.s, f.cn);
   ctx.fillText("模拟结果,仅供娱乐", x, y + 132 * L.s);
 }

@@ -111,18 +111,13 @@ export function makeSnapshot(params: SimParams, setup: MatchSetup, config: Match
   };
 }
 
-export function kappaLabel(chaos: boolean, kappa: number): string {
-  if (chaos) return `混乱模式(κ=${kappa})`;
-  return kappa ? `标准档(κ=${kappa})` : "标准档(状态系数关闭)";
-}
-
-/** 分享图用的短档位名 */
-export function kappaShort(chaos: boolean): string {
-  return chaos ? "混乱模式" : "标准档";
-}
-
 // 库内口径:line > 0 = 主让(research/ah_signals/common.py 顶部注释)。
 export function ahText(line: number): string {
-  if (Math.abs(line) < 1e-9) return "平手 0";
-  return line > 0 ? `主让 ${line}` : `主受让 ${Math.abs(line)}`;
+  if (Math.abs(line) < 1e-9) return "平手";
+  return line > 0 ? `主队让 ${line}` : `主队受让 ${Math.abs(line)}`;
+}
+
+/** 随机强度档位(面向用户):标准 / 混乱模式 */
+export function kappaUserLabel(chaos: boolean): string {
+  return chaos ? "混乱模式(更随机)" : "标准";
 }

@@ -33,6 +33,7 @@ import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import type { FixtureIndexEntry } from "./loadParams";
 import { LineupEditor } from "./LineupEditor";
 import { MatchAnimation } from "./MatchAnimation";
+import { Fold } from "./Fold";
 import { ResultView } from "./ResultView";
 import styles from "./simulator.module.css";
 
@@ -256,7 +257,7 @@ export function SimulatorClient({
       {phase === "result" && result?.shared ? (
         <section className={`${styles.card} ${styles.linkNotice}`} data-testid="shared-notice">
           <p style={{ margin: 0 }}>
-            这是分享链接里的模拟结果,原样展示,未重新计算(模型 {result.snap.modelVersion} · 参数导出于 {result.snap.paramsDate} · 种子{" "}
+            这是分享链接里的模拟结果,原样展示,未重新计算(模型 {result.snap.modelVersion} · 参数导出于 {result.snap.paramsDate} · 模拟编号{" "}
             {result.snap.seed})。
           </p>
           {linkStale ? (
@@ -326,7 +327,7 @@ export function SimulatorClient({
               </label>
             </div>
             <p className={styles.muted} style={{ marginTop: 12 }}>
-              或选一场有 Crown 盘口的真实比赛(用于测试市场定锚):
+              或选一场有市场参考的真实比赛:
             </p>
             <div className={styles.fixtureList}>
               {fixtures.map((f) => {
@@ -361,7 +362,7 @@ export function SimulatorClient({
             {pairFixtures.length > 0 ? (
               <div className={styles.chips}>
                 <Chip active={useMarket} onClick={() => setUseMarket(!useMarket)}>
-                  {useMarket ? `已用 Crown 盘口定锚(w=${cal?.market_w ?? 1})` : "不用盘口定锚"}
+                  {useMarket ? "已按市场参考校准预计进球" : "不用市场参考"}
                 </Chip>
               </div>
             ) : null}
@@ -447,13 +448,38 @@ export function SimulatorClient({
               })}
             </div>
             <p className={styles.muted} style={{ marginTop: 12 }}>
-              胜率影响:同一种子各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥
+              胜率影响:各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥
               {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
             </p>
           </section>
 
           <section className={styles.card}>
-            <h2 className={styles.cardTitle}>预期进球 λ</h2>
+            <h2 className={styles.cardTitle}>预计进球</h2>
+            {prepared.ok ? (
+              <p className={styles.bigLine} data-testid="setup-expected">
+                {names[0]} {prepared.config.teams[0].breakdown.expectedGoals.toFixed(1)} :{" "}
+                {prepared.config.teams[1].breakdown.expectedGoals.toFixed(1)} {names[1]}
+              </p>
+            ) : (
+              <p className={styles.error}>{prepared.error}</p>
+            )}
+            <div className={styles.row} style={{ marginTop: 16 }}>
+              <Chip active={chaos} onClick={() => setChaos(!chaos)}>
+                {chaos ? "随机强度:混乱模式" : "随机强度:标准"}
+              </Chip>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                disabled={!prepared.ok || phase === "running"}
+                onClick={() => run(seed)}
+                data-testid="simulate-btn"
+              >
+                {phase === "running" ? "模拟中…" : "开始模拟"}
+              </button>
+            </div>
+          </section>
+
+          <Fold title="技术细节" testId="setup-tech">
             {prepared.ok ? (
               <table className={styles.lambdaTable}>
                 <thead>
@@ -467,7 +493,7 @@ export function SimulatorClient({
                   {(
                     [
                       ["数据模型 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaModel.toFixed(2)],
-                      ["Crown 反推 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaMarket?.toFixed(2) ?? "—"],
+                      ["市场参考 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaMarket?.toFixed(2) ?? "—"],
                       ["基准 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaBase.toFixed(2)],
                       ["进攻比 r_att", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.rAtt.toFixed(3)}`],
                       ["对手 λ 乘 m_def", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mDef.toFixed(3)}`],
@@ -484,15 +510,10 @@ export function SimulatorClient({
                   ))}
                 </tbody>
               </table>
-            ) : (
-              <p className={styles.error}>{prepared.error}</p>
-            )}
+            ) : null}
             <div className={styles.row} style={{ marginTop: 16 }}>
-              <Chip active={chaos} onClick={() => setChaos(!chaos)}>
-                {chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准档(κ=${cal.kappa})` : "标准档(状态系数关闭)"}
-              </Chip>
               <label className={styles.field} style={{ flex: "0 1 180px" }}>
-                种子
+                模拟编号(同一编号复现同一结果)
                 <input
                   className={styles.input}
                   inputMode="numeric"
@@ -501,19 +522,13 @@ export function SimulatorClient({
                 />
               </label>
               <button type="button" className={styles.secondaryBtn} onClick={() => setSeed(Math.floor(Math.random() * 2 ** 31))}>
-                随机种子
-              </button>
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                disabled={!prepared.ok || phase === "running"}
-                onClick={() => run(seed)}
-                data-testid="simulate-btn"
-              >
-                {phase === "running" ? "模拟中…" : "开始模拟"}
+                换一个编号
               </button>
             </div>
-          </section>
+            <p className={styles.muted} style={{ marginTop: 8 }}>
+              随机强度:{chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准(κ=${cal.kappa})` : "标准(状态系数关闭)"}
+            </p>
+          </Fold>
         </>
       ) : null}
     </main>

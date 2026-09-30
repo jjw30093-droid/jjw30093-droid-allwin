@@ -770,3 +770,86 @@
   border-radius: var(--r-card-sm);
   border: 1px solid var(--border);
 }
+
+/* ---- 折叠区(结果页"更多数据""技术细节"、排阵页"技术细节") ---- */
+.fold > .foldSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 44px;
+  margin: calc(-1 * var(--sp-2)) 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.fold > .foldSummary::-webkit-details-marker {
+  display: none;
+}
+
+.foldTitle {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+}
+
+.foldChevron {
+  margin-left: auto;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.fold[open] .foldChevron {
+  transform: rotate(-135deg);
+}
+
+.foldBody {
+  margin-top: var(--sp-3);
+}
+
+.fold[open] > .foldSummary {
+  margin-bottom: 0;
+}
+
+/* 一句话解读 */
+.verdict {
+  margin: var(--sp-3) 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.subsection + .subsection {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+
+.subTitle {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 var(--sp-2);
+}
+
+.bigLine {
+  font-size: 15px;
+  margin: 0;
+}
+
+/* 技术细节:手机上左右两栏会把长数值挤成多行,改为"小标题 + 数值"上下排列 */
+.techList {
+  margin: 0;
+}
+
+.techList dt {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.techList dd {
+  margin: 2px 0 var(--sp-3);
+  font-size: 14px;
+  color: var(--ink);
+}
