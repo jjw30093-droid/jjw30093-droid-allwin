@@ -89,7 +89,15 @@
     {
       "name": "frontend-prodapi",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3010"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3010"
+      ],
       "port": 3010,
       "env": {
         "INTERNAL_API_BASE": "https://miaomiaodi.vip",
@@ -99,7 +107,15 @@
     {
       "name": "frontend-localapi",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3011"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3011"
+      ],
       "port": 3011,
       "env": {
         "INTERNAL_API_BASE": "http://127.0.0.1:8000",
@@ -109,11 +125,19 @@
     {
       "name": "frontend-simulator",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "3020"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3020"
+      ],
       "port": 3020,
       "env": {
         "SIMULATOR_ENABLED": "1",
-        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_v03.json",
+        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_5leagues_20260930.json",
         "NEXT_PUBLIC_SITE_URL": "https://miaomiaodi.vip"
       }
     },
@@ -128,6 +152,59 @@
         "/Users/wanglujun/projects/miaomiaodi.vip/marketing/remotion-5795429-splitshow/exports"
       ],
       "port": 8765
+    },
+    {
+      "name": "simulator-prod-on",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "start",
+        "--",
+        "--port",
+        "3021"
+      ],
+      "port": 3021,
+      "env": {
+        "SIMULATOR_ENABLED": "1",
+        "SIMULATOR_PARAMS_DIR": "../.local-data/simulator/daily"
+      }
+    },
+    {
+      "name": "simulator-prod-paused",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "start",
+        "--",
+        "--port",
+        "3022"
+      ],
+      "port": 3022,
+      "env": {
+        "SIMULATOR_ENABLED": "0",
+        "SIMULATOR_PARAMS_DIR": "../.local-data/simulator/daily"
+      }
+    },
+    {
+      "name": "simulator-prod-absent",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "start",
+        "--",
+        "--port",
+        "3023"
+      ],
+      "port": 3023,
+      "env": {
+        "SIMULATOR_PARAMS_DIR": "../.local-data/simulator/daily"
+      }
     }
   ]
 }

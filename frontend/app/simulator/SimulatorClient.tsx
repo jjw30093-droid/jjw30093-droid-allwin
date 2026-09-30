@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import { Chip } from "@/components/ui/Chip";
 import {
   FOCUS_LABEL,
@@ -25,16 +26,19 @@ import {
   type SideImpact,
 } from "@/features/simulator/focusImpact";
 import { lastLineupSetup } from "@/features/simulator/formation";
-import { decodeResult, parseSetupQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
+import { decodeResult, parseSetupQuery, parseTeamsQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
 import { makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
 import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
+import type { FixtureIndexEntry } from "./loadParams";
 import { LineupEditor } from "./LineupEditor";
 import { MatchAnimation } from "./MatchAnimation";
 import { ResultView } from "./ResultView";
 import styles from "./simulator.module.css";
 
-const LEAGUE_NAME: Record<string, string> = { "47": "英超", "87": "西甲" };
+// 只开放 v0.3 校准过的五大联赛(docs/simulator-launch-plan.md §2)
+const LEAGUE_NAME: Record<string, string> = { "47": "英超", "87": "西甲", "55": "意甲", "54": "德甲", "53": "法甲" };
+const LEAGUE_ORDER = ["47", "87", "55", "54", "53"];
 const DEFAULT_SEED = 20260929;
 const RUNS = 1000;
 const IMPACT_DEBOUNCE_MS = 300;
@@ -58,9 +62,21 @@ function pickDefaultPair(params: SimParams, leagueId: string): [number, number] 
   return [ts[0].team_id, ts[1].team_id];
 }
 
-export function SimulatorClient({ params }: { params: SimParams }) {
-  const leagueIds = Object.keys(params.leagues);
-  const [leagueId, setLeagueId] = useState(leagueIds.includes("47") ? "47" : leagueIds[0]);
+// 参数按联赛下发(§3.2):params 只含当前联赛的球队/球员/赛程;切换联赛 = 跳转 /simulator?lg=<id>,服务端重新切片。
+export function SimulatorClient({
+  params,
+  leagueId: leagueNum,
+  fixtureIndex,
+  paramsStale,
+}: {
+  params: SimParams;
+  leagueId: number;
+  fixtureIndex: FixtureIndexEntry[];
+  paramsStale: boolean;
+}) {
+  const router = useRouter();
+  const leagueId = String(leagueNum);
+  const leagueIds = LEAGUE_ORDER.filter((id) => params.leagues[id]);
   const [pair, setPair] = useState<[number, number]>(() => pickDefaultPair(params, leagueId));
   const [home, setHome] = useState<TeamSetup>(() => lastLineupSetup(params, pair[0]));
   const [away, setAway] = useState<TeamSetup>(() => lastLineupSetup(params, pair[1]));
@@ -82,8 +98,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
     "--sim-away-pitch": teamColors.pitch[1],
   } as CSSProperties;
 
-  const setTeams = (lid: string, h: number, a: number, fixtureId: number | null = null) => {
-    setLeagueId(lid);
+  const setTeams = (h: number, a: number, fixtureId: number | null = null) => {
     setPair([h, a]);
     setHome(lastLineupSetup(params, h));
     setAway(lastLineupSetup(params, a));
@@ -93,10 +108,10 @@ export function SimulatorClient({ params }: { params: SimParams }) {
 
   const fixtures = useMemo(
     () =>
-      Object.values(params.fixtures)
-        .filter((f) => f.market_lambda)
-        .sort((a, b) => (a.status === b.status ? b.kickoff_at_utc.localeCompare(a.kickoff_at_utc) : a.status === "未开赛" ? -1 : 1)),
-    [params],
+      [...fixtureIndex].sort((a, b) =>
+        a.status === b.status ? b.kickoff_at_utc.localeCompare(a.kickoff_at_utc) : a.status === "未开赛" ? -1 : 1,
+      ),
+    [fixtureIndex],
   );
   const pairFixtures = matchingFixture(params, pair[0], pair[1]);
   const fixtureId = useMarket ? (pairFixtures.find((f) => f.match_id === fixtureChoice) ?? pairFixtures[0])?.match_id ?? null : null;
@@ -119,7 +134,9 @@ export function SimulatorClient({ params }: { params: SimParams }) {
         setResult({ snap: makeSnapshot(params, setupSnapshot, config, e.data.single, e.data.many), shared: false });
         setLinkError(null);
         // 新的模拟不再对应地址栏里的分享链接
-        if (window.location.search || window.location.hash) window.history.replaceState(null, "", window.location.pathname);
+        if (window.location.search !== `?lg=${leagueId}` || window.location.hash) {
+          window.history.replaceState(null, "", `${window.location.pathname}?lg=${leagueId}`);
+        }
         setPhase("animating");
         w.terminate();
         workerRef.current = null;
@@ -134,12 +151,19 @@ export function SimulatorClient({ params }: { params: SimParams }) {
     let cancelled = false;
     (async () => {
       const shared = parseSetupQuery(window.location.search);
+      const teamsOnly = shared ? null : parseTeamsQuery(window.location.search);
       const token = resultToken(window.location.hash);
-      if (!shared && !token) return;
+      if (!shared && !teamsOnly && !token) return;
       const snap = token ? await decodeResult(token) : null;
       if (cancelled) return;
-      if (shared && params.teams[String(shared.home.teamId)] && params.teams[String(shared.away.teamId)]) {
-        setLeagueId(String(shared.leagueId));
+      const inLeague = (h: number, a: number, lg: number) =>
+        lg === leagueNum && !!params.teams[String(h)] && !!params.teams[String(a)] && h !== a;
+      if (teamsOnly && inLeague(teamsOnly.home, teamsOnly.away, teamsOnly.leagueId)) {
+        // 只带两队(跨联赛点选真实比赛、第二次发版的比赛页入口):两队用各自最近一场首发
+        setTeams(teamsOnly.home, teamsOnly.away, teamsOnly.fixtureId);
+        setUseMarket(teamsOnly.fixtureId != null);
+      }
+      if (shared && inLeague(shared.home.teamId, shared.away.teamId, shared.leagueId)) {
         setPair([shared.home.teamId, shared.away.teamId]);
         setHome(toTeamSetup(params, shared.home));
         setAway(toTeamSetup(params, shared.away));
@@ -158,7 +182,9 @@ export function SimulatorClient({ params }: { params: SimParams }) {
     return () => {
       cancelled = true;
     };
-  }, [params]);
+    // setTeams 只依赖 params(与本 effect 相同);只在挂载时解析一次地址栏
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, leagueNum]);
   const linkStale =
     result?.shared && (result.snap.paramsDate !== params.meta.generated_at || result.snap.modelVersion !== modelVersionOf(params));
 
@@ -214,6 +240,11 @@ export function SimulatorClient({ params }: { params: SimParams }) {
             ? "进球率、主场系数与时段系数经 25/26 五大联赛回测校准;侧重点乘数未校准。结果不代表预测"
             : "全部参数为初始假设,尚未回测校准,结果不代表预测"}
         </span>
+        {paramsStale ? (
+          <span className={styles.hint} data-testid="params-stale">
+            参数不是最新的(上次更新 {params.meta.generated_at}),每日更新可能延迟。
+          </span>
+        ) : null}
       </header>
 
       {linkError ? <p className={styles.error}>{linkError}</p> : null}
@@ -264,10 +295,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
                 <select
                   className={styles.select}
                   value={leagueId}
-                  onChange={(e) => {
-                    const [h, a] = pickDefaultPair(params, e.target.value);
-                    setTeams(e.target.value, h, a);
-                  }}
+                  onChange={(e) => router.push(`/simulator?lg=${e.target.value}`)}
                 >
                   {leagueIds.map((id) => (
                     <option key={id} value={id}>
@@ -278,7 +306,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
               </label>
               <label className={styles.field}>
                 主队
-                <select className={styles.select} value={pair[0]} onChange={(e) => setTeams(leagueId, Number(e.target.value), pair[1])}>
+                <select className={styles.select} value={pair[0]} onChange={(e) => setTeams(Number(e.target.value), pair[1])}>
                   {teamList.map((t) => (
                     <option key={t.team_id} value={t.team_id} disabled={t.team_id === pair[1]}>
                       {t.name_zh}
@@ -288,7 +316,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
               </label>
               <label className={styles.field}>
                 客队
-                <select className={styles.select} value={pair[1]} onChange={(e) => setTeams(leagueId, pair[0], Number(e.target.value))}>
+                <select className={styles.select} value={pair[1]} onChange={(e) => setTeams(pair[0], Number(e.target.value))}>
                   {teamList.map((t) => (
                     <option key={t.team_id} value={t.team_id} disabled={t.team_id === pair[0]}>
                       {t.name_zh}
@@ -302,8 +330,8 @@ export function SimulatorClient({ params }: { params: SimParams }) {
             </p>
             <div className={styles.fixtureList}>
               {fixtures.map((f) => {
-                const h = params.teams[String(f.home_team_id)]?.name_zh ?? f.home_team_id;
-                const a = params.teams[String(f.away_team_id)]?.name_zh ?? f.away_team_id;
+                const h = f.home_name;
+                const a = f.away_name;
                 const active = fixtureId === f.match_id;
                 return (
                   <button
@@ -311,11 +339,15 @@ export function SimulatorClient({ params }: { params: SimParams }) {
                     type="button"
                     className={`${styles.fixtureBtn} ${active ? styles.fixtureBtnActive : ""}`}
                     onClick={() => {
+                      if (f.league_id !== leagueNum) {
+                        router.push(`/simulator?lg=${f.league_id}&h=${f.home_team_id}&a=${f.away_team_id}&fx=${f.match_id}`);
+                        return;
+                      }
                       setUseMarket(true);
-                      setTeams(String(f.league_id), f.home_team_id, f.away_team_id, f.match_id);
+                      setTeams(f.home_team_id, f.away_team_id, f.match_id);
                     }}
                   >
-                    [{f.status}] {LEAGUE_NAME[String(f.league_id)]} {h} vs {a} · {f.kickoff_at_utc.slice(0, 10)} · 让 {f.ah?.line ?? "—"} · 大小 {f.ou?.line ?? "—"}
+                    [{f.status}] {LEAGUE_NAME[String(f.league_id)]} {h} vs {a} · {f.kickoff_at_utc.slice(0, 10)} · 让 {f.ah_line ?? "—"} · 大小 {f.ou_line ?? "—"}
                     {f.final_score ? ` · 实际 ${f.final_score.join(":")}` : ""}
                   </button>
                 );

@@ -255,4 +255,15 @@ curl -s https://miaomiaodi.vip/simulator | grep -o "暂时下线"
 
 ## 9. 回测残留文件清理(待站长确认清单后再删)
 
-清单见本次实施汇报;确认本地 `.local-data/simulator/` 已有副本或可由脚本重新生成后,由站长确认再删。
+服务器 `/opt/allwin/shared/exports/simulator/` 下的文件(2026-09-30 核对;"本地副本"按 sha256 逐文件比对):
+
+| 路径 | 大小 | 本地副本 / 可否重新生成 |
+|---|---|---|
+| `backtest/`(181 个文件:逐日快照、outcomes、bet365_1x2、truncation_test) | 71,978,531 B | `.local-data/simulator/backtest/` 181/181 一致;也可由 `backtest_snapshots.py` 重新生成 |
+| `forward_2026-2027/`(34 个文件) | 8,461,176 B | `.local-data/simulator/forward_2026-2027/` 34/34 一致;每月 `forward_check.sh` 会重新生成 |
+| `enable_v03_after.json` | 645,819 B | 与 `.local-data/simulator/simulator_params_v03.json` 一致 |
+| `five_leagues_check.json` | 1,506,651 B | 与 `.local-data/simulator/simulator_params_5leagues_20260930.json` 一致 |
+| `enable_v03_before.json` | 645,028 B | **无本地副本**;启用 v0.3 前后对照用,结论(只差 3 项)已记录;依赖当时数据库状态,不可原样重新生成 |
+| `refactor_check_new.json` / `_old.json` / `_v3.json` / `_v4.json` | 629,450 / 629,465 / 629,450 / 645,028 B | **无本地副本**;重构前后对照用,结论(0 差异)已记录;不可原样重新生成 |
+
+待站长确认后再删;每月前瞻复检仍会在 `forward_2026-2027/` 重新写入。

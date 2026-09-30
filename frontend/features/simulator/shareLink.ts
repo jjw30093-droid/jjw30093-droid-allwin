@@ -85,6 +85,16 @@ export function parseSetupQuery(search: string): SharedSetup | null {
   };
 }
 
+/** 只带两队的轻量链接 ?lg=&h=&a=[&fx=](跨联赛点选真实比赛;第二次发版的比赛页入口):两队用各自最近一场首发。 */
+export function parseTeamsQuery(search: string): { leagueId: number; home: number; away: number; fixtureId: number | null } | null {
+  const q = new URLSearchParams(search);
+  const leagueId = int(q.get("lg"));
+  const home = int(q.get("h"));
+  const away = int(q.get("a"));
+  if (leagueId == null || home == null || away == null || home === away) return null;
+  return { leagueId, home, away, fixtureId: int(q.get("fx")) };
+}
+
 export function sharedSetupOf(snap: ResultSnapshot): SharedSetup {
   const t = (i: 0 | 1): SharedTeamSetup => ({
     teamId: snap.teams[i].teamId,
