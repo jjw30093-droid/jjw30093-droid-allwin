@@ -22,6 +22,7 @@ import { tokensFor } from "@/components/charts/chartMode";
 import type { ChartColors } from "@/components/charts/useChartColors";
 import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
 import { useMatchColors } from "@/components/charts/useMatchColors";
+import { niceYAxis, placeGoalLabels } from "@/components/matches/xgRaceLabels";
 import type { MatchReportResponse } from "@/lib/api-v1";
 
 type MatchReport = Extract<MatchReportResponse, { available: true }>;
@@ -97,6 +98,8 @@ export function buildOption(
   mode: ChartMode,
   c: ChartColors,
   stoppage?: StoppageAxis,
+  /** 图表容器尺寸(像素),用来摆放进球人名;不传时按最窄的手机宽度与默认高度估算 */
+  size?: { width?: number; height?: number },
 ): EChartsOption {
   const t = tokensFor(mode);
   // 曲线画到终场:补一个末端点,否则线在最后一次射门处就断了
@@ -107,23 +110,48 @@ export function buildOption(
   const h = extend(home);
   const a = extend(away);
 
-  // markPoint 用 coord 定位(value 只接受标量,数组会被当成"值"而不是坐标)
-  const goalMarks = (pts: Point[], color: string) =>
-    pts
-      .filter((p) => p.goal)
-      .map((p) => ({
-        coord: [p.minute, p.total] as [number, number],
-        name: p.goal?.player_name ?? "",
-        itemStyle: { color },
-      }));
+  const grid = {
+    left: mode === "export" ? 96 : 46,
+    right: mode === "export" ? 48 : 18,
+    top: mode === "export" ? 70 : 34,
+    bottom: mode === "export" ? 66 : 28,
+  };
+  // 进球人名:左上优先、放不下改右下,两处都不行再试其它方位(见 xgRaceLabels.ts 顶部的定位与实测);需要绘图区的像素几何
+  const labelFont = Math.max(12, Math.round(t.axisFont * 0.95));
+  const symbol = t.symbolSize + 4;
+  const plotW = (size?.width ?? (mode === "export" ? 1080 : 311)) - grid.left - grid.right;
+  const plotH = (size?.height ?? (mode === "export" ? 420 : 260)) - grid.top - grid.bottom;
+  const yAxisRange = niceYAxis(Math.max(0, ...h.map((p) => p.total), ...a.map((p) => p.total)), plotH, labelFont);
+  const geometry = { w: plotW, h: plotH, xMax: endMinute, yMax: yAxisRange.max, font: labelFont, r: symbol / 2 };
+  const goals = ([h, a] as const).flatMap((pts, team) =>
+    pts.filter((p) => p.goal).map((p) => ({ team: team as 0 | 1, minute: p.minute, total: p.total, name: p.goal?.player_name ?? "" })),
+  );
+  const placements = placeGoalLabels(goals, [h, a], geometry);
+
+  // markPoint 用 coord 定位(value 只接受标量,数组会被当成"值"而不是坐标);
+  // label.position 是相对标记外框左上角的像素坐标,所以锚点 = 外框中心(symbol/2)+ 偏移
+  const goalMarks = (team: 0 | 1, color: string) =>
+    goals.flatMap((g, i) =>
+      g.team !== team
+        ? []
+        : [
+            {
+              coord: [g.minute, g.total] as [number, number],
+              name: g.name,
+              itemStyle: { color },
+              label: {
+                position: [symbol / 2 + placements[i].ox, symbol / 2 + placements[i].oy] as [number, number],
+                align: placements[i].side === "UL" || placements[i].side === "LL" ? ("right" as const) : ("left" as const),
+                verticalAlign: placements[i].side === "UL" || placements[i].side === "UR" ? ("bottom" as const) : ("top" as const),
+              },
+            },
+          ],
+    );
+  // 人名描边:与图表底色同色,压到线上时文字仍然清楚
+  const labelHalo = { textBorderColor: c.surface, textBorderWidth: mode === "export" ? 6 : 3 };
 
   return {
-    grid: {
-      left: mode === "export" ? 96 : 46,
-      right: mode === "export" ? 48 : 18,
-      top: mode === "export" ? 70 : 34,
-      bottom: mode === "export" ? 66 : 28,
-    },
+    grid,
     legend: {
       data: [homeName, awayName],
       textStyle: { color: c.ink2, fontSize: t.legendFont },
@@ -176,6 +204,9 @@ export function buildOption(
         },
     yAxis: {
       type: "value",
+      min: 0,
+      max: yAxisRange.max,
+      interval: yAxisRange.interval,
       axisLabel: {
         color: c.ink2,
         fontSize: t.axisFont,
@@ -197,12 +228,12 @@ export function buildOption(
         markPoint: {
           symbol: "circle",
           symbolSize: t.symbolSize + 4,
-          data: goalMarks(home, c.teal),
+          data: goalMarks(0, c.teal),
           label: {
             show: true,
-            position: "top",
-            fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
+            fontSize: labelFont,
             color: c.teal,
+            ...labelHalo,
             formatter: ({ name }: { name: string }) => name,
           },
         },
@@ -231,12 +262,12 @@ export function buildOption(
         markPoint: {
           symbol: "circle",
           symbolSize: t.symbolSize + 4,
-          data: goalMarks(away, c.navy),
+          data: goalMarks(1, c.navy),
           label: {
             show: true,
-            position: "bottom",
-            fontSize: Math.max(12, Math.round(t.axisFont * 0.95)),
+            fontSize: labelFont,
             color: c.navy,
+            ...labelHalo,
             formatter: ({ name }: { name: string }) => name,
           },
         },
@@ -297,6 +328,19 @@ export function XgRaceChart({
     return () => io.disconnect();
   }, [mode]);
 
+  // 容器宽度:进球人名按真实绘图区摆放(量不到时 buildOption 按最窄手机宽度估算)
+  const [width, setWidth] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (w > 0) setWidth((prev) => (prev === w ? prev : w));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const home = useMemo(() => cumulativeSeries(shots, true, stoppage), [shots, stoppage]);
   const away = useMemo(() => cumulativeSeries(shots, false, stoppage), [shots, stoppage]);
   const endMinute = useMemo(
@@ -330,8 +374,12 @@ export function XgRaceChart({
   }, [home.length, away.length, hTotal, aTotal, homeName, awayName, homeScore, awayScore]);
 
   const option = useMemo(
-    () => buildOption(home, away, homeName, awayName, endMinute, mode, effectiveColors, stoppage),
-    [home, away, homeName, awayName, endMinute, mode, effectiveColors, stoppage],
+    () =>
+      buildOption(home, away, homeName, awayName, endMinute, mode, effectiveColors, stoppage, {
+        width,
+        height: height ?? (mode === "export" ? 420 : 260),
+      }),
+    [home, away, homeName, awayName, endMinute, mode, effectiveColors, stoppage, width, height],
   );
 
   if (home.length <= 1 && away.length <= 1) {
