@@ -1,20 +1,18 @@
 // Phase 2 回测与校准(本地 Node 运行,调用与页面同一套 engine.ts)。
 // 口径:docs/simulator-model.md「Phase 2 回测与校准方法」。
-// 用法:node run.mjs <ha-k|w|empirical|kappa|validate|focus> --dir <.local-data/simulator/backtest>
+// 用法:node run.mjs <ha-k|strength|w|rate-model|validate|focus|diag> --dir <.local-data/simulator/backtest> [--path A|B]
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FOCUS_LIST, focusError, prepareMatch, simulateMany, type Focus, type MatchConfig } from "../engine";
 import { mulberry32 } from "../rng";
-import type { LeagueParams, RateModel, ShotChannel, SimParams, StateMultipliers, StrengthModel } from "../types";
-import { setupFor, simParamsFor, V02_CAL, type Cal } from "./assemble";
+import type { LeagueParams, RateModel, ShotChannel, SimParams, StrengthModel } from "../types";
+import { setupFor, simParamsFor, BASE_CAL, type Cal } from "./assemble";
 import { brier3, calibrationSlope, goldenMax, mean, outcomeIndex, poisson1x2, poissonLogLik, timingBucket } from "./stats";
 import type { Outcome, Prematch, Snapshot } from "./types";
 
 const K_GRID = [3, 5, 8, 12];
 const W_GRID = [0.5, 0.7, 0.9, 1.0];
-/** 0 = 关闭状态系数(v0.3 第 2 条) */
-const KAPPA_GRID = [6, 8, 12, 16, 24, 32, 48, 0];
 const RUNS = 2000;
 const TRAIN: [number, number] = [4, 19];
 const VALID: [number, number] = [20, 38];
@@ -99,7 +97,7 @@ function prep(r: Row, params: SimParams, useMarket: boolean): MatchConfig | null
 /** v0.3 的校准链:a(合并 h、k)→ 强度回归 → b(w)→ rm(时段 / 比分状态 / 红牌回归);标准档 κ 关闭。 */
 function calFromResults(upTo: "a" | "strength" | "b" | "rm"): Cal {
   const a = loadRes<{ k: number; h: Record<string, number> }>("step_a.json");
-  let cal: Cal = { ...V02_CAL, k: a.k, h: a.h, kappa: 0 };
+  let cal: Cal = { ...BASE_CAL, k: a.k, h: a.h };
   if (upTo === "a") return cal;
   cal = { ...cal, strength_model: loadRes<{ strength_model: StrengthModel }>("step_strength.json").strength_model };
   if (upTo === "strength") return cal;
@@ -115,7 +113,7 @@ function stepA(rows: Row[]) {
   const byK: Record<string, { ll: number; h: number; n: number; skipped: number }> = {};
   const dataByK: Record<string, { bH: number; bA: number; og: number; yH: number; yA: number }[]> = {};
   for (const k of K_GRID) {
-    const get = paramsCache({ ...V02_CAL, k }, { useMarket: false, hOverride: 1 });
+    const get = paramsCache({ ...BASE_CAL, k }, { useMarket: false, hOverride: 1 });
     const data: { bH: number; bA: number; og: number; yH: number; yA: number }[] = [];
     let skipped = 0;
     for (const r of train) {
@@ -258,7 +256,7 @@ function stepB(rows: Row[]) {
   console.log(`选定 w=${best}`);
 }
 
-// ------------------------------------------------------------------ c. 红牌与比分状态(经验值)
+// ------------------------------------------------------------------ 实际比赛时间线(补时 = max(宣布, 观测))
 function matchTimeline(out: Outcome, league: LeagueParams) {
   const s1 = Math.max(out.stoppage_announced[0] ?? Math.round(league.stoppage_mean.first_half), out.stoppage_observed_max[0]);
   const s2 = Math.max(out.stoppage_announced[1] ?? Math.round(league.stoppage_mean.second_half), out.stoppage_observed_max[1]);
@@ -272,113 +270,6 @@ function matchTimeline(out: Outcome, league: LeagueParams) {
     return base + 45 + Math.min(Math.max(added, minute - 90), s2) - 1;
   };
   return { buckets, idx };
-}
-
-type StateKey = "0" | "+1" | "-1" | "<=-2" | ">=+2";
-const stateKey = (d: number): StateKey => (d === 0 ? "0" : d === 1 ? "+1" : d === -1 ? "-1" : d <= -2 ? "<=-2" : ">=+2");
-
-function stepC(rows: Row[]) {
-  const cal = calFromResults("b");
-  const get = paramsCache(cal, { useMarket: true });
-  const keys: StateKey[] = ["0", "+1", "-1", "<=-2", ">=+2"];
-  const E: Record<StateKey, Record<ShotChannel, number>> = Object.fromEntries(keys.map((k) => [k, { open: 0, counter: 0, setpiece: 0, penalty: 0 }])) as never;
-  const G: Record<StateKey, Record<string, number>> = Object.fromEntries(keys.map((k) => [k, {}])) as never;
-  const red = { ownGb: 0, ownEb: 0, ownGa: 0, ownEa: 0, oppGb: 0, oppEb: 0, oppGa: 0, oppEa: 0, events: 0, skipped: 0 };
-  let used = 0;
-  let skipped = 0;
-  for (const r of rows.filter((x) => inRange(x, TRAIN))) {
-    const params = get(r.snap);
-    const cfg = prep(r, params, true);
-    if (!cfg) {
-      skipped++;
-      continue;
-    }
-    used++;
-    const { buckets, idx } = matchTimeline(r.out, params.leagues[String(r.pm.league_id)]);
-    const timing = cfg.timing;
-    const sumT = buckets.reduce((s, b) => s + timing[b], 0);
-    const lam = [cfg.teams[0].lambda, cfg.teams[1].lambda];
-    const exp = (tick: number, team: number, c: ShotChannel) => (lam[team][c] * timing[buckets[tick]]) / sumT;
-    const goals = r.out.goals.map((g, i) => ({ ...g, t: Math.min(idx(g.minute, g.added), buckets.length - 1), i })).sort((a, b) => a.t - b.t || a.i - b.i);
-    const reds = r.out.reds.map((x) => ({ ...x, t: Math.min(idx(x.minute, x.added), buckets.length - 1) }));
-    const firstRed = [0, 1].map((team) => Math.min(...reds.filter((x) => x.team === team).map((x) => x.t), Infinity));
-    const anyRed = Math.min(firstRed[0], firstRed[1]);
-
-    // 比分状态(双方都未吃红牌的分钟)
-    const score = [0, 0];
-    let gi = 0;
-    for (let t = 0; t < buckets.length; t++) {
-      if (t < anyRed) {
-        for (const team of [0, 1]) {
-          const k = stateKey(score[team] - score[1 - team]);
-          for (const c of SHOT) E[k][c] += exp(t, team, c);
-        }
-      }
-      while (gi < goals.length && goals[gi].t === t) {
-        const g = goals[gi++];
-        if (!g.own_goal && t < anyRed) {
-          const k = stateKey(score[g.team] - score[1 - g.team]);
-          G[k][g.channel] = (G[k][g.channel] ?? 0) + 1;
-          G[k].all = (G[k].all ?? 0) + 1;
-        }
-        score[g.team] += 1;
-      }
-    }
-
-    // 红牌(常规时间的第一张;对方已先吃红牌的事件跳过;对方后吃红牌时窗口截止)
-    for (const team of [0, 1]) {
-      const first = r.out.reds.filter((x) => x.team === team).sort((a, b) => a.minute - b.minute)[0];
-      if (!first) continue;
-      if (first.added !== 0 || first.minute > 90) continue;
-      const t0 = firstRed[team];
-      const other = firstRed[1 - team];
-      if (other <= t0) {
-        red.skipped++;
-        continue;
-      }
-      const end = Math.min(other, buckets.length);
-      red.events++;
-      const o = 1 - team;
-      for (let t = 0; t < end; t++) {
-        const eo = SHOT.reduce((s, c) => s + exp(t, team, c), 0);
-        const ep = SHOT.reduce((s, c) => s + exp(t, o, c), 0);
-        if (t < t0) {
-          red.ownEb += eo;
-          red.oppEb += ep;
-        } else {
-          red.ownEa += eo;
-          red.oppEa += ep;
-        }
-      }
-      for (const g of goals) {
-        if (g.own_goal || g.t >= end) continue;
-        const after = g.t >= t0;
-        if (g.team === team) {
-          if (after) red.ownGa++;
-          else red.ownGb++;
-        } else if (after) red.oppGa++;
-        else red.oppGb++;
-      }
-    }
-  }
-  const allE = (k: StateKey) => SHOT.reduce((s, c) => s + E[k][c], 0);
-  const rate = (k: StateKey, c: ShotChannel | "all") => (G[k][c] ?? 0) / (c === "all" ? allE(k) : E[k][c]);
-  const ratio = (k: StateKey, c: ShotChannel | "all") => rate(k, c) / rate("0", c);
-  const state: StateMultipliers = {
-    trail1_open: ratio("-1", "open"),
-    trail1_counter: ratio("-1", "counter"),
-    lead1_all: ratio("+1", "all"),
-    trail2_all: ratio("<=-2", "all"),
-    lead2_all: ratio(">=+2", "all"),
-  };
-  const red_own = red.ownGa / red.ownEa / (red.ownGb / red.ownEb);
-  const red_opp = red.oppGa / red.oppEa / (red.oppGb / red.oppEb);
-  const detail = Object.fromEntries(keys.map((k) => [k, {
-    expected: { ...Object.fromEntries(SHOT.map((c) => [c, +E[k][c].toFixed(2)])), all: +allE(k).toFixed(2) },
-    goals: G[k],
-  }]));
-  save("step_c.json", { state, red_own, red_opp, red_counts: red, state_detail: detail, matches_used: used, skipped });
-  console.log(JSON.stringify({ state, red_own, red_opp, red_counts: red, matches_used: used, skipped }, null, 1));
 }
 
 // ------------------------------------------------------------------ v0.3:时段 / 比分状态 / 红牌 Poisson 回归
@@ -614,27 +505,6 @@ function bigMargin(sims: SimRow[]) {
   };
 }
 
-// ------------------------------------------------------------------ d. κ
-function stepD(rows: Row[]) {
-  const base = calFromResults("rm");
-  const train = rows.filter((r) => inRange(r, TRAIN));
-  // v0.3 第 8 条起标准档固定关闭 ε;本命令保留供对照
-  const byK: Record<string, unknown> = {};
-  let best = { kappa: KAPPA_GRID[0], sse: Infinity };
-  for (const kappa of KAPPA_GRID) {
-    const t0 = Date.now();
-    const { sims, skipped } = simulateRows(train, { ...base, kappa });
-    const big = bigMargin(sims);
-    const fav = favNotWin(sims);
-    const sse = (big.sim - big.act) ** 2 + (fav.sim - fav.act) ** 2;
-    byK[String(kappa)] = { big, fav, sse, n: sims.length, skipped };
-    console.log(`κ=${kappa === 0 ? "关闭" : kappa}: 净胜≥3 模拟 ${(big.sim * 100).toFixed(2)}% / 实际 ${(big.act * 100).toFixed(2)}%;热门不胜 模拟 ${(fav.sim * 100).toFixed(2)}% / 实际 ${(fav.act * 100).toFixed(2)}% (n=${fav.n});SSE=${sse.toExponential(3)};${((Date.now() - t0) / 1000).toFixed(0)}s`);
-    if (sse < best.sse) best = { kappa, sse };
-  }
-  save("step_d.json", { kappa: best.kappa, by_kappa: byK });
-  console.log(`选定 κ=${best.kappa === 0 ? "关闭" : best.kappa}`);
-}
-
 // ------------------------------------------------------------------ 闸门(验证集)
 function validate(rows: Row[]) {
   // 路径 A:w 取训练集选出的值(有盘口时定锚);路径 B:w = 0(只用数据模型)
@@ -803,7 +673,7 @@ function focusTest(rows: Row[]) {
 
 // ------------------------------------------------------------------ 诊断:跳过原因
 function diagnose(rows: Row[]) {
-  const get = paramsCache(V02_CAL, { useMarket: true });
+  const get = paramsCache(BASE_CAL, { useMarket: true });
   const reasons: Record<string, number> = {};
   const examples: Record<string, string[]> = {};
   for (const r of rows.filter((x) => inRange(x, TRAIN) || inRange(x, VALID))) {
@@ -829,10 +699,8 @@ const rows = loadRows();
 console.log(`载入 ${rows.length} 场(训练 ${rows.filter((r) => inRange(r, TRAIN)).length},验证 ${rows.filter((r) => inRange(r, VALID)).length})`);
 if (cmd === "ha-k") stepA(rows);
 else if (cmd === "w") stepB(rows);
-else if (cmd === "empirical") stepC(rows);
 else if (cmd === "rate-model") stepRateModel(rows);
 else if (cmd === "strength") stepStrength(rows);
-else if (cmd === "kappa") stepD(rows);
 else if (cmd === "validate") validate(rows);
 else if (cmd === "focus") focusTest(rows);
 else if (cmd === "diag") diagnose(rows);

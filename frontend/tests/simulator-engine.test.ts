@@ -151,19 +151,21 @@ describe("侧重点互斥 §5", () => {
 });
 
 describe("λ 组装", () => {
-  it("数据模型 λ = μ·(A/μ)·(D_opp/μ)·HA", () => {
+  it("数据模型 λ = μ·(A/μ)·(D_opp/μ)·HA(未给主场系数时 HA = 1)", () => {
     const r = prepareMatch(buildParams(), setup());
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const open = 0.8 * (1.0 / 0.8) * (0.9 / 0.8) * 1.08;
+    const open = 0.8 * (1.0 / 0.8) * (0.9 / 0.8);
     expect(r.config.teams[0].lambda.open).toBeCloseTo(open, 9);
     expect(r.config.teams[0].lambda.owngoal).toBe(0.05);
     expect(r.config.teams[0].breakdown.rAtt).toBeCloseTo(1, 9);
     expect(r.config.teams[0].breakdown.mDef).toBeCloseTo(1, 9);
   });
 
-  it("有 Crown λ 时先扣乌龙再按 w=0.7 混合,乌龙另外叠加(v0.2 第 3 条)", () => {
-    const r = prepareMatch(buildParams(), setup({ fixtureId: 99 }));
+  it("有 Crown λ 时先扣乌龙再按 w 混合,乌龙另外叠加", () => {
+    const p = buildParams();
+    p.calibration = { market_w: 0.7 };
+    const r = prepareMatch(p, setup({ fixtureId: 99 }));
     if (!r.ok) throw new Error(r.error);
     const b = r.config.teams[0].breakdown;
     expect(b.lambdaBase).toBeCloseTo(0.7 * (1.6 - 0.05) + 0.3 * b.lambdaModel, 9);
@@ -214,28 +216,34 @@ describe("λ 组装", () => {
 });
 
 describe("校准参数注入(Phase 2)", () => {
-  it("缺省时与 v0.2 一致;home_advantage=h 时主队 ×h、客队 ×1/h", () => {
+  it("缺省时中性(HA = 1、κ 关闭);home_advantage=h 时主队 ×h、客队 ×1/h", () => {
     const base = prepareMatch(buildParams(), setup());
     if (!base.ok) throw new Error(base.error);
     const p = buildParams();
     p.leagues["1"].home_advantage = 1.2;
     const r = prepareMatch(p, setup());
     if (!r.ok) throw new Error(r.error);
-    expect(r.config.teams[0].breakdown.lambdaModel).toBeCloseTo((base.config.teams[0].breakdown.lambdaModel / 1.08) * 1.2, 9);
-    expect(r.config.teams[1].breakdown.lambdaModel).toBeCloseTo((base.config.teams[1].breakdown.lambdaModel / 0.93) / 1.2, 9);
-    expect(base.config.kappa).toBe(12);
-    expect(base.config.redOwn).toBe(0.75);
+    expect(r.config.teams[0].breakdown.lambdaModel).toBeCloseTo(base.config.teams[0].breakdown.lambdaModel * 1.2, 9);
+    expect(r.config.teams[1].breakdown.lambdaModel).toBeCloseTo(base.config.teams[1].breakdown.lambdaModel / 1.2, 9);
+    expect(base.config.kappa).toBe(0);
   });
 
-  it("calibration 字段覆盖 w、κ、红牌与比分状态乘数", () => {
+  it("calibration.home_advantage 在联赛未给值时生效", () => {
+    const base = prepareMatch(buildParams(), setup());
+    if (!base.ok) throw new Error(base.error);
     const p = buildParams();
-    p.calibration = { market_w: 1, kappa: 16, red_own: 0.6, red_opp: 1.4, state: { lead1_all: 0.8 } as never };
+    p.calibration = { home_advantage: 1.1 };
+    const r = prepareMatch(p, setup());
+    if (!r.ok) throw new Error(r.error);
+    expect(r.config.teams[0].breakdown.lambdaModel).toBeCloseTo(base.config.teams[0].breakdown.lambdaModel * 1.1, 9);
+  });
+
+  it("calibration 字段覆盖 w 与 κ", () => {
+    const p = buildParams();
+    p.calibration = { market_w: 1, kappa: 16 };
     const r = prepareMatch(p, setup({ fixtureId: 99 }));
     if (!r.ok) throw new Error(r.error);
     expect(r.config.kappa).toBe(16);
-    expect(r.config.redOwn).toBe(0.6);
-    expect(r.config.state.lead1_all).toBe(0.8);
-    expect(r.config.state.trail1_open).toBe(1.12);
     expect(r.config.teams[0].breakdown.lambdaBase).toBeCloseTo(1.6 - 0.05, 9);
   });
 });
@@ -297,17 +305,7 @@ describe("v0.3 时段 / 比分状态 / 红牌回归模式", () => {
   }, 60000);
 });
 
-describe("进球率归一化(v0.2 第 1 条)", () => {
-  it("关闭全部事件时,模拟进球 ÷ 期望进球在 [0.99, 1.01]", () => {
-    const r = prepareMatch(buildParams(), setup({ effects: NO_EFFECTS }));
-    if (!r.ok) throw new Error(r.error);
-    const m = simulateMany(r.config, 99, 20000, [0, 0]);
-    const expected = r.config.teams[0].breakdown.expectedGoals + r.config.teams[1].breakdown.expectedGoals;
-    const ratio = (m.meanGoals[0] + m.meanGoals[1]) / expected;
-    expect(ratio).toBeGreaterThanOrEqual(0.99);
-    expect(ratio).toBeLessThanOrEqual(1.01);
-  }, 60000);
-
+describe("补时", () => {
   it("补时按分布抽样,落在分布支撑内", () => {
     const r = prepareMatch(buildParams(), setup());
     if (!r.ok) throw new Error(r.error);

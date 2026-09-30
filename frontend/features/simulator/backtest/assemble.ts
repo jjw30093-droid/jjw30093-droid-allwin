@@ -1,23 +1,22 @@
 // 快照 + 校准值 → 引擎输入(SimParams / MatchSetup)。只做拼装,模型计算全部在 engine.ts。
 
-import { ALL_EFFECTS, V02_STATE, type Effects, type MatchSetup } from "../engine";
-import type { FixtureParams, RateModel, SimParams, StateMultipliers, StrengthModel } from "../types";
+import { ALL_EFFECTS, type Effects, type MatchSetup } from "../engine";
+import type { FixtureParams, RateModel, SimParams, StrengthModel } from "../types";
 import type { Prematch, Snapshot } from "./types";
 
 export interface Cal {
   k: number;
-  /** 每联赛主场系数 h;null = 用 v0.2 的 1.08 / 0.93 */
+  /** 每联赛主场系数 h;null = 中性(1) */
   h: Record<string, number> | null;
   w: number;
+  /** 0 = 关闭状态系数 */
   kappa: number;
-  red_own: number;
-  red_opp: number;
-  state: StateMultipliers;
   rate_model?: RateModel;
   strength_model?: StrengthModel;
 }
 
-export const V02_CAL: Cal = { k: 5, h: null, w: 0.7, kappa: 12, red_own: 0.75, red_opp: 1.25, state: V02_STATE };
+/** 拟合阶段的起点:k = 5、中性主场系数、完全按市场定锚、ε 关闭,尚无强度回归与时段回归。 */
+export const BASE_CAL: Cal = { k: 5, h: null, w: 1, kappa: 0 };
 
 export function simParamsFor(snap: Snapshot, cal: Cal, opts: { useMarket: boolean; hOverride?: number }): SimParams {
   const leagues: SimParams["leagues"] = {};
@@ -55,7 +54,7 @@ export function simParamsFor(snap: Snapshot, cal: Cal, opts: { useMarket: boolea
     teams,
     players: snap.params.players,
     fixtures,
-    calibration: { market_w: cal.w, kappa: cal.kappa, red_own: cal.red_own, red_opp: cal.red_opp, state: cal.state, rate_model: cal.rate_model, strength_model: cal.strength_model },
+    calibration: { market_w: cal.w, kappa: cal.kappa, rate_model: cal.rate_model, strength_model: cal.strength_model },
   };
 }
 

@@ -46,15 +46,6 @@ export interface StrengthModel {
   beta_home: number;
 }
 
-/** 比分状态乘数(§7.2):落后 1 球 open / counter,领先 1 球、落后 ≥2、领先 ≥2 作用于全部渠道。 */
-export interface StateMultipliers {
-  trail1_open: number;
-  trail1_counter: number;
-  lead1_all: number;
-  trail2_all: number;
-  lead2_all: number;
-}
-
 /** v0.3:时段 / 比分状态 / 红牌的 Poisson 回归系数(对数乘数,相对 λ/90)。 */
 export interface RateModel {
   /** 1–15、16–30、31–45+、46–60、61–75 五个时段(持平状态) */
@@ -76,9 +67,6 @@ export interface Calibration {
   strength_model: StrengthModel;
   /** 合并主场系数(联赛未单独给 home_advantage 时使用) */
   home_advantage: number;
-  red_own: number;
-  red_opp: number;
-  state: StateMultipliers;
 }
 
 // 位置分组不在模板里重复存:一律查 SimParams.position_map(单一映射表,规格 v0.2 第 5 条)。

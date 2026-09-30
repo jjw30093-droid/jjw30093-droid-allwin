@@ -13,12 +13,11 @@ import {
   type RateModel,
   type ShotChannel,
   type SimParams,
-  type StateMultipliers,
 } from "./types";
 
-const HA_HOME = 1.08;
-const HA_AWAY = 0.93;
-const MARKET_W = 0.7;
+// 缺少 v0.3 校准(只在回测的拟合阶段出现)时的中性取值:无主场系数、完全按市场定锚、ε 关闭
+const NEUTRAL_HA = 1;
+const NEUTRAL_MARKET_W = 1;
 const R_ATT_CLAMP: [number, number] = [0.85, 1.15];
 const M_DEF_SLOPE = 0.08;
 const M_DEF_UNIT = 0.3;
@@ -29,11 +28,16 @@ const FOCUS_OWN_CAP: [number, number] = [0.85, 1.15];
 const FOCUS_OPP_CAP: [number, number] = [0.88, 1.12];
 const REST_OWN = 0.96;
 const REST_OPP = 1.02;
-const KAPPA_STANDARD = 12;
+const KAPPA_STANDARD = 0;
 const KAPPA_CHAOS = 4;
-const RED_OWN = 0.75;
-const RED_OPP = 1.25;
-export const V02_STATE: StateMultipliers = { trail1_open: 1.12, trail1_counter: 1.1, lead1_all: 0.92, trail2_all: 1.15, lead2_all: 0.9 };
+/** 回归系数缺失时的中性模型:每分钟 = λ/90 */
+export const NEUTRAL_RATE_MODEL: RateModel = {
+  periods: [0, 0, 0, 0, 0],
+  early_state: { trail2: 0, trail1: 0, lead1: 0, lead2: 0 },
+  late: { level: 0, trail1: 0, trail2: 0, lead1: 0, lead2: 0 },
+  red_own_down: 0,
+  red_opp_down: 0,
+};
 const COLLAPSE_MULT = 1.15;
 const COLLAPSE_WINDOW = 10;
 const GK_ERROR_P = 0.02;
@@ -169,12 +173,8 @@ export interface TeamConfig {
 export interface MatchConfig {
   kappa: number;
   effects: Effects;
-  redOwn: number;
-  redOpp: number;
-  state: StateMultipliers;
-  /** v0.3 回归系数;null 时按 v0.2 的 timing 归一化与乘数运行 */
-  rateModel: RateModel | null;
-  timing: number[];
+  /** v0.3 时段 / 比分状态 / 红牌回归系数 */
+  rateModel: RateModel;
   /** 补时经验分布:[分钟数[], 累计概率[]],上下半场各一份 */
   stoppageDist: [[number[], number[]], [number[], number[]]];
   xgQuantiles: Record<ShotChannel, number[]>;
@@ -237,8 +237,9 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
   const mu = league.mu;
   const cal = params.calibration ?? {};
   const h = league.home_advantage ?? cal.home_advantage;
-  const ha = h ? [h, 1 / h] : [HA_HOME, HA_AWAY];
-  const marketW = cal.market_w ?? MARKET_W;
+  const hh = h ?? NEUTRAL_HA;
+  const ha = [hh, 1 / hh];
+  const marketW = cal.market_w ?? NEUTRAL_MARKET_W;
   // §2 数据模型
   const lamModel = [0, 1].map((t) => {
     const o = 1 - t;
@@ -458,12 +459,8 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
     ok: true,
     config: {
       kappa: setup.chaos ? KAPPA_CHAOS : (cal.kappa ?? KAPPA_STANDARD),
-      redOwn: cal.red_own ?? RED_OWN,
-      redOpp: cal.red_opp ?? RED_OPP,
-      state: { ...V02_STATE, ...(cal.state ?? {}) },
-      rateModel: cal.rate_model ?? null,
+      rateModel: cal.rate_model ?? NEUTRAL_RATE_MODEL,
       effects: setup.effects ?? ALL_EFFECTS,
-      timing: league.goal_timing.factor,
       stoppageDist: [
         dist(league.stoppage_distribution?.first_half, Math.round(league.stoppage_mean.first_half)),
         dist(league.stoppage_distribution?.second_half, Math.round(league.stoppage_mean.second_half)),
@@ -546,23 +543,6 @@ function sampleXg(cfg: MatchConfig, c: ShotChannel, rng: Rng): number {
   return Math.min(0.95, v * cfg.xgScale[c]);
 }
 
-// §7.2:以 T 视角的净胜球 d,给出 T 在渠道 c 上的乘数(落后 1 球时 open、counter 各有乘数)。
-function stateMult(d: number, c: Channel, st: StateMultipliers): number {
-  if (d === -1) return c === "open" ? st.trail1_open : c === "counter" ? st.trail1_counter : 1;
-  if (d === 1) return st.lead1_all;
-  if (d <= -2) return st.trail2_all;
-  if (d >= 2) return st.lead2_all;
-  return 1;
-}
-
-// v0.2 第 4 条:乌龙渠道只吃"作用于本队所有渠道"的比分状态乘数。
-function stateMultAll(d: number, st: StateMultipliers): number {
-  if (d === 1) return st.lead1_all;
-  if (d <= -2) return st.trail2_all;
-  if (d >= 2) return st.lead2_all;
-  return 1;
-}
-
 interface Scheduled {
   red: { half: 1 | 2; minute: number } | null;
   injury: { half: 1 | 2; minute: number } | null;
@@ -591,15 +571,12 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
   const fx = cfg.effects;
   const stoppage: [number, number] = [sampleStoppage(rng, cfg.stoppageDist[0]), sampleStoppage(rng, cfg.stoppageDist[1])];
   const ticks = buildTicks(stoppage);
-  // v0.2 第 1 条:按本场实际模拟的全部分钟归一化,关闭所有事件时期望进球恰好等于 λ。
-  const timingSum = ticks.reduce((acc, tk) => acc + cfg.timing[tk.bucket], 0);
   const eps: [number, number] = fx.epsilon && cfg.kappa > 0
     ? [gamma(rng, cfg.kappa, 1 / cfg.kappa), gamma(rng, cfg.kappa, 1 / cfg.kappa)]
     : [1, 1];
-  const rm = cfg.rateModel;
+  const r = cfg.rateModel;
   // v0.3:η = 时段(或末段格子)+ 75 分钟前的比分状态 + 红牌,均为回归系数
   const eta = (tk: MinuteTick, d: number, ownDown: boolean, oppDown: boolean): number => {
-    const r = rm as RateModel;
     let e: number;
     if (tk.bucket === 5) {
       e = d === 0 ? r.late.level : d === 1 ? r.late.lead1 : d === -1 ? r.late.trail1 : d >= 2 ? r.late.lead2 : r.late.trail2;
@@ -676,14 +653,11 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
       const d = score[t] - score[o];
       const press = team.pressLate && tk.half === 2 && tk.minute > PRESS_LATE_FROM ? PRESS_LATE_MULT : 1;
       const otherEvents = (injured[t] ? INJURY_MULT : 1) * (tk.tick <= collapseUntil[t] ? COLLAPSE_MULT : 1);
-      // v0.2:timing 归一化 × 分渠道比分状态 × 红牌乘数;v0.3:exp(η)/90(对所有渠道相同)
-      const minuteMult = rm ? Math.exp(eta(tk, fx.scoreState ? d : 0, red[t], red[o])) / 90 : cfg.timing[tk.bucket] / timingSum;
-      const eventMult = rm ? 1 : (red[t] ? cfg.redOwn : 1) * (red[o] ? cfg.redOpp : 1);
-      const shotEventMult = eventMult * otherEvents;
+      // 每分钟 = λ/90 × exp(η),对所有渠道相同(v0.3 第 1 条)
+      const minuteMult = Math.exp(eta(tk, fx.scoreState ? d : 0, red[t], red[o])) / 90;
 
       for (const c of SHOT_CHANNELS) {
-        const state = rm || !fx.scoreState ? 1 : stateMult(d, c, cfg.state);
-        const rate = team.lambda[c] * minuteMult * eps[t] * state * shotEventMult * press;
+        const rate = team.lambda[c] * minuteMult * eps[t] * otherEvents * press;
         const perShot = cfg.xgMean[c] * team.xgMult[c];
         const n = poisson(rng, rate / perShot);
         if (c === "penalty") penalties += n;
@@ -701,8 +675,7 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
         }
       }
 
-      const ogState = rm || !fx.scoreState ? 1 : stateMultAll(d, cfg.state);
-      const ogRate = team.lambda.owngoal * minuteMult * ogState * eventMult;
+      const ogRate = team.lambda.owngoal * minuteMult;
       const nOg = poisson(rng, ogRate);
       for (let k = 0; k < nOg; k++) {
         addGoal(t, tk);
