@@ -10,7 +10,6 @@ import {
   prepareMatch,
   type Focus,
   type ManyResult,
-  type MatchConfig,
   type MatchSetup,
   type SingleResult,
   type TeamSetup,
@@ -26,6 +25,8 @@ import {
   type SideImpact,
 } from "@/features/simulator/focusImpact";
 import { lastLineupSetup } from "@/features/simulator/formation";
+import { decodeResult, parseSetupQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
+import { makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
 import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import { LineupEditor } from "./LineupEditor";
@@ -69,12 +70,9 @@ export function SimulatorClient({ params }: { params: SimParams }) {
   const [seed, setSeed] = useState(DEFAULT_SEED);
   const [selected, setSelected] = useState<{ side: 0 | 1; i: number } | null>(null);
   const [phase, setPhase] = useState<Phase>("setup");
-  const [result, setResult] = useState<{
-    single: SingleResult;
-    many: ManyResult;
-    config: MatchConfig;
-    setup: MatchSetup;
-  } | null>(null);
+  // shared = 来自分享链接的结果(原样展示,未重新计算)
+  const [result, setResult] = useState<{ snap: ResultSnapshot; shared: boolean } | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const teamColors = useSimTeamColors();
   const colorVars = {
@@ -118,15 +116,51 @@ export function SimulatorClient({ params }: { params: SimParams }) {
       const config = prepared.config;
       const setupSnapshot: MatchSetup = { leagueId: Number(leagueId), home, away, fixtureId, chaos };
       w.onmessage = (e: MessageEvent<{ single: SingleResult; many: ManyResult }>) => {
-        setResult({ ...e.data, config, setup: setupSnapshot });
+        setResult({ snap: makeSnapshot(params, setupSnapshot, config, e.data.single, e.data.many), shared: false });
+        setLinkError(null);
+        // 新的模拟不再对应地址栏里的分享链接
+        if (window.location.search || window.location.hash) window.history.replaceState(null, "", window.location.pathname);
         setPhase("animating");
         w.terminate();
         workerRef.current = null;
       };
       w.postMessage({ config, seed: runSeed, runs: RUNS });
     },
-    [prepared, leagueId, home, away, fixtureId, chaos],
+    [prepared, params, leagueId, home, away, fixtureId, chaos],
   );
+
+  // 打开分享链接:查询参数恢复设定;# 片段里有结果时在浏览器端解压并原样展示(不重新计算)。
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const shared = parseSetupQuery(window.location.search);
+      const token = resultToken(window.location.hash);
+      if (!shared && !token) return;
+      const snap = token ? await decodeResult(token) : null;
+      if (cancelled) return;
+      if (shared && params.teams[String(shared.home.teamId)] && params.teams[String(shared.away.teamId)]) {
+        setLeagueId(String(shared.leagueId));
+        setPair([shared.home.teamId, shared.away.teamId]);
+        setHome(toTeamSetup(params, shared.home));
+        setAway(toTeamSetup(params, shared.away));
+        setUseMarket(shared.fixtureId != null);
+        setFixtureChoice(shared.fixtureId);
+        setChaos(shared.chaos);
+        setSeed(shared.seed);
+      }
+      if (snap) {
+        setResult({ snap, shared: true });
+        setPhase("result");
+      } else if (token) {
+        setLinkError("分享链接中的结果无法解析,只恢复了设定。");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params]);
+  const linkStale =
+    result?.shared && (result.snap.paramsDate !== params.meta.generated_at || result.snap.modelVersion !== modelVersionOf(params));
 
   const finishAnimation = useCallback(() => setPhase("result"), []);
 
@@ -182,17 +216,35 @@ export function SimulatorClient({ params }: { params: SimParams }) {
         </span>
       </header>
 
+      {linkError ? <p className={styles.error}>{linkError}</p> : null}
+
       {phase === "animating" && result ? (
-        <MatchAnimation single={result.single} names={[result.config.teams[0].name, result.config.teams[1].name]} onDone={finishAnimation} />
+        <MatchAnimation single={result.snap.single} names={[result.snap.teams[0].name, result.snap.teams[1].name]} onDone={finishAnimation} />
+      ) : null}
+
+      {phase === "result" && result?.shared ? (
+        <section className={`${styles.card} ${styles.linkNotice}`} data-testid="shared-notice">
+          <p style={{ margin: 0 }}>
+            这是分享链接里的模拟结果,原样展示,未重新计算(模型 {result.snap.modelVersion} · 参数导出于 {result.snap.paramsDate} · 种子{" "}
+            {result.snap.seed})。
+          </p>
+          {linkStale ? (
+            <div className={styles.row} style={{ marginTop: 8 }} data-testid="params-updated">
+              <span className={styles.hint} style={{ marginTop: 0 }}>
+                参数已更新:当前参数导出于 {params.meta.generated_at}(模型 {modelVersionOf(params)})。
+              </span>
+              <button type="button" className={styles.primaryBtn} disabled={!prepared.ok} onClick={() => run(result.snap.seed)}>
+                用最新参数重新模拟
+              </button>
+              {!prepared.ok ? <span className={styles.error}>{prepared.error}</span> : null}
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {phase === "result" && result ? (
         <ResultView
-          params={params}
-          single={result.single}
-          many={result.many}
-          config={result.config}
-          setup={result.setup}
+          snap={result.snap}
           onRerun={() => {
             const s = Math.floor(Math.random() * 2 ** 31);
             setSeed(s);

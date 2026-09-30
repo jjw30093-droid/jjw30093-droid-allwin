@@ -1,44 +1,25 @@
 "use client";
 
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
-import { FOCUS_LABEL, rarityTag, type ManyResult, type MatchConfig, type MatchSetup, type SingleResult } from "@/features/simulator/engine";
-import type { SimParams } from "@/features/simulator/types";
+import { FOCUS_LABEL, rarityTag } from "@/features/simulator/engine";
+import { ahText, kappaLabel, type ResultSnapshot } from "@/features/simulator/snapshot";
 import { cumulativeXg, toReportShots } from "@/features/simulator/xg";
-import { displayName, POS_LABEL } from "./LineupEditor";
+import { POS_LABEL } from "./LineupEditor";
 import { CHANNEL_LABEL } from "./MatchAnimation";
+import { SharePanel } from "./SharePanel";
 import styles from "./simulator.module.css";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
-// 库内口径:line > 0 = 主让(research/ah_signals/common.py 顶部注释)。
-function ahText(line: number): string {
-  if (Math.abs(line) < 1e-9) return "平手 0";
-  return line > 0 ? `主让 ${line}` : `主受让 ${Math.abs(line)}`;
-}
-
 const OUTCOME_LABEL = { H: "主胜", D: "平局", A: "客胜" } as const;
 
-export function ResultView({
-  params,
-  single,
-  many,
-  config,
-  setup,
-  onRerun,
-  onBack,
-}: {
-  params: SimParams;
-  single: SingleResult;
-  many: ManyResult;
-  config: MatchConfig;
-  setup: MatchSetup;
-  onRerun: () => void;
-  onBack: () => void;
-}) {
-  const names: [string, string] = [config.teams[0].name, config.teams[1].name];
+// 只读快照:本页刚模拟的结果与分享链接打开的结果走同一套展示,保证分享出去的内容与本页一致。
+export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; onRerun: () => void; onBack: () => void }) {
+  const { single, many } = snap;
+  const names: [string, string] = [snap.teams[0].name, snap.teams[1].name];
   const goals = single.events.filter((e) => e.kind === "goal");
   const reds = single.events.filter((e) => e.kind === "red");
-  const teamIds: [number, number] = [config.teams[0].teamId, config.teams[1].teamId];
+  const teamIds: [number, number] = [snap.teams[0].teamId, snap.teams[1].teamId];
   const shots = toReportShots(single.events, teamIds, single.halfTimeTick);
   const xgTotal = cumulativeXg(single.events);
   const tag = rarityTag(many.upset.scoreCount, many.runs);
@@ -125,7 +106,7 @@ export function ResultView({
             </dd>
             <dt>期望进球(含对方门将、乌龙)</dt>
             <dd>
-              {config.teams[0].breakdown.expectedGoals.toFixed(2)} / {config.teams[1].breakdown.expectedGoals.toFixed(2)}
+              {snap.teams[0].expectedGoals.toFixed(2)} / {snap.teams[1].expectedGoals.toFixed(2)}
             </dd>
             {many.crown ? (
               <>
@@ -136,10 +117,10 @@ export function ResultView({
               </>
             ) : null}
           </dl>
-          {config.market ? (
+          {snap.market ? (
             <p className={styles.muted}>
-              市场定锚:Crown {config.market.status}
-              {config.market.finalScore ? `,实际比分 ${config.market.finalScore.join(" : ")};本场参数包含赛后数据,仅供演示` : ""}
+              市场定锚:Crown {snap.market.status}
+              {snap.market.finalScore ? `,实际比分 ${snap.market.finalScore.join(" : ")};本场参数包含赛后数据,仅供演示` : ""}
             </p>
           ) : (
             <p className={styles.muted}>本对阵没有 Crown 盘口,λ 只用数据模型。</p>
@@ -176,7 +157,7 @@ export function ResultView({
         <section className={styles.card} data-testid="sim-settings">
           <h2 className={styles.cardTitle}>本场设定</h2>
           <div className={styles.teams}>
-            {([setup.home, setup.away] as const).map((t, i) => (
+            {snap.teams.map((t, i) => (
               <div key={i}>
                 <div className={styles.teamName} style={{ color: i === 0 ? "var(--sim-home)" : "var(--sim-away)" }}>
                   {names[i]} · {t.formation}
@@ -187,22 +168,20 @@ export function ResultView({
                 </p>
                 <p className={styles.settingsLine}>
                   首发:
-                  {t.slots
-                    .map((sl) => {
-                      const p = sl.playerId ? params.players[sl.playerId] : null;
-                      return `${p ? displayName(p) : "空位"}(${POS_LABEL[sl.group]})`;
-                    })
-                    .join("、")}
+                  {t.lineup.map((sl) => `${sl.name}(${POS_LABEL[sl.group]})`).join("、")}
                 </p>
               </div>
             ))}
           </div>
           <p className={styles.settingsLine}>
-            随机强度:{setup.chaos ? "混乱模式(κ=4)" : "标准档(κ=12)"} · 种子 {single.seed} · 补时 {single.stoppage[0]} / {single.stoppage[1]} 分钟
-            {config.market ? ` · Crown 盘口定锚(${config.market.status})` : " · 未用盘口定锚"}
+            随机强度:{kappaLabel(snap.chaos, snap.kappa)} · 种子 {single.seed} · 补时 {single.stoppage[0]} / {single.stoppage[1]} 分钟
+            {snap.market ? ` · Crown 盘口定锚(${snap.market.status})` : " · 未用盘口定锚"}
+            {` · 模型 ${snap.modelVersion} · 参数导出于 ${snap.paramsDate}`}
           </p>
         </section>
       </div>
+
+      <SharePanel snap={snap} />
 
       <div className={styles.row}>
         <button type="button" className={styles.primaryBtn} onClick={onRerun}>

@@ -31,23 +31,26 @@ export function formationChoices(params: SimParams): string[] {
   return [...core, ...rest];
 }
 
+/** 某阵型的一个槽位:分组查 position_map,坐标取模板(没有模板时按格子行列摆放)。 */
+export function slotAt(params: SimParams, formation: string, positionId: number, playerId: string | null): SlotAssign {
+  const t = params.formations[formation]?.slots.find((x) => x.position_id === positionId);
+  const g = gridXY(positionId);
+  return {
+    positionId,
+    group: params.position_map[formation]?.[String(positionId)] as PosGroup,
+    playerId,
+    x: t?.x ?? g.x,
+    y: t?.y ?? g.y,
+  };
+}
+
 /** 最近一场联赛首发(没有则用兜底阵型的空槽位);侧重点与休息设定保留调用方的值。 */
 export function lastLineupSetup(params: SimParams, teamId: number, keep?: Pick<TeamSetup, "focuses" | "shortRest">): TeamSetup {
   const team = params.teams[String(teamId)];
   const ll = team.last_lineup;
   const formation = ll?.formation ?? FALLBACK_FORMATION;
   const tpl = params.formations[formation];
-  const slotOf = (positionId: number, playerId: string | null): SlotAssign => {
-    const t = tpl?.slots.find((x) => x.position_id === positionId);
-    const g = gridXY(positionId);
-    return {
-      positionId,
-      group: params.position_map[formation]?.[String(positionId)] as PosGroup,
-      playerId,
-      x: t?.x ?? g.x,
-      y: t?.y ?? g.y,
-    };
-  };
+  const slotOf = (positionId: number, playerId: string | null) => slotAt(params, formation, positionId, playerId);
   return {
     teamId,
     formation,

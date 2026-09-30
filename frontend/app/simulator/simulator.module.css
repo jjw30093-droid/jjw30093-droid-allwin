@@ -734,3 +734,39 @@
   justify-content: space-between;
   gap: var(--sp-2);
 }
+
+/* ---- 分享(Phase 5) ---- */
+.linkNotice {
+  border-left: 4px solid var(--brand-gold);
+  font-size: 14px;
+}
+
+.shareLinkBox {
+  margin-top: var(--sp-3);
+}
+
+.shareLink {
+  width: 100%;
+  padding: var(--sp-2);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+  resize: vertical;
+}
+
+.sharePreviewBox {
+  margin-top: var(--sp-3);
+}
+
+.sharePreview {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  border-radius: var(--r-card-sm);
+  border: 1px solid var(--border);
+}
