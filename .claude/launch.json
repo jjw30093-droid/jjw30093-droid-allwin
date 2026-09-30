@@ -113,7 +113,8 @@
       "port": 3020,
       "env": {
         "SIMULATOR_ENABLED": "1",
-        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_v03.json"
+        "SIMULATOR_PARAMS_PATH": "../.local-data/simulator/simulator_params_v03.json",
+        "NEXT_PUBLIC_SITE_URL": "https://miaomiaodi.vip"
       }
     },
     {

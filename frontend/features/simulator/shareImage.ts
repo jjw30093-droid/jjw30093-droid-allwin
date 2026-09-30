@@ -57,7 +57,7 @@ export function pageFonts(): ShareFonts {
 }
 
 // ------------------------------------------------------------------ 版式
-interface Layout {
+export interface Layout {
   pad: number;
   gap: number;
   bar: number;
@@ -70,7 +70,7 @@ interface Layout {
   s: number; // 字号倍率
 }
 
-function layoutFor(size: ShareSize): Layout {
+export function layoutFor(size: ShareSize): Layout {
   if (size === 1920) {
     const l = { pad: 48, gap: 22, bar: 112, score: 326, xg: 300, wdl: 244, footer: 200, maxScorers: 4, s: 1.15 };
     const used = l.bar + l.score + l.xg + l.wdl + l.footer + l.gap * 6 + 8;
@@ -138,7 +138,7 @@ function goalLine(e: SimEvent): string {
 export function shareTexts(input: ShareImageInput): string {
   const { snap } = input;
   const parts: string[] = [
-    "模拟比赛 SIMULATED 非真实比赛 模拟 种子 补时 分钟 累计 xG 赛跑 半场 次模拟 胜平负 胜 平 主让 主受让 平手 模拟公平让球线 模拟公平大小球线 稀有度 随机强度 标准档 混乱模式 侧重点 无 休息不足3天 模型 参数 模拟结果,仅供娱乐 扫码访问 等共球 乌龙 点球 …:·0123456789.+'%",
+    "模拟比赛 SIMULATED 非真实比赛 模拟 种子 补时 分钟 累计 xG 赛跑 半场 次模拟 胜平负 胜 平 主让 主受让 平手 模拟公平让球线 模拟公平大小球线 稀有度 随机强度 标准档 混乱模式 侧重点 无 休息不足3天 模型 参数 模拟结果,仅供娱乐 扫码自己模拟一场 等共球 乌龙 点球 …:·0123456789.+'%/",
     input.siteName,
     input.siteUrl,
     snap.modelVersion,
@@ -149,6 +149,107 @@ export function shareTexts(input: ShareImageInput): string {
   }
   for (const e of snap.single.events) if (e.kind === "goal") parts.push(goalLine(e));
   return parts.join(" ");
+}
+
+// ------------------------------------------------------------------ 可测试的排版纯函数
+/** 文字宽度测量(绘制时用 canvas measureText;测试里可注入近似测量)。 */
+export type Measure = (text: string, px: number) => number;
+
+export const NAME_GAP = 6;
+export const NAME_MIN_PX = 13;
+
+/**
+ * 同一排球员名字:先用该排统一字号放下全部名字(相邻名字之间至少 NAME_GAP、不越出球场左右边);
+ * 放不下就逐步缩小该排字号(下限 NAME_MIN_PX);到下限仍放不下,再按各自可用宽度截断并加省略号。
+ * 名字以徽章圆心为中心,所以某个名字可用宽度 = min(到左右相邻圆心的距离 − 间距, 到左右边界距离 × 2)。
+ */
+export function fitRowNames(
+  items: { cx: number; name: string }[],
+  opts: { left: number; right: number; basePx: number; minPx?: number; gap?: number; measure: Measure },
+): { px: number; texts: string[] } {
+  const gap = opts.gap ?? NAME_GAP;
+  const minPx = opts.minPx ?? NAME_MIN_PX;
+  const order = items.map((_, i) => i).sort((a, b) => items[a].cx - items[b].cx);
+  const fits = (px: number) => {
+    const w = order.map((i) => opts.measure(items[i].name, px));
+    for (let k = 0; k < order.length; k++) {
+      const c = items[order[k]].cx;
+      if (c - w[k] / 2 < opts.left || c + w[k] / 2 > opts.right) return false;
+      if (k > 0 && (w[k - 1] + w[k]) / 2 + gap > c - items[order[k - 1]].cx) return false;
+    }
+    return true;
+  };
+  for (let px = opts.basePx; px >= minPx - 1e-9; px -= 0.5) {
+    if (fits(px)) return { px, texts: items.map((it) => it.name) };
+  }
+  const px = minPx;
+  const texts = items.map((it) => it.name);
+  order.forEach((i, k) => {
+    const c = items[i].cx;
+    let maxW = Math.min(2 * (c - opts.left), 2 * (opts.right - c));
+    if (k > 0) maxW = Math.min(maxW, c - items[order[k - 1]].cx - gap);
+    if (k < order.length - 1) maxW = Math.min(maxW, items[order[k + 1]].cx - c - gap);
+    let t = items[i].name;
+    if (opts.measure(t, px) > maxW) {
+      while (t.length > 1 && opts.measure(`${t}…`, px) > maxW) t = t.slice(0, -1);
+      t = `${t}…`;
+    }
+    texts[i] = t;
+  });
+  return { px, texts };
+}
+
+export interface LaidOutPlayer {
+  cx: number;
+  cy: number;
+  r: number;
+  num: string | null;
+  text: string;
+  px: number;
+  nameY: number;
+}
+
+/** 阵容图:纵向按"排"均匀分布(模板 y 值相近的归为同一排),每排单独决定名字字号。 */
+export function lineupLayout(
+  lineup: ResultSnapshot["teams"][number]["lineup"],
+  box: { x: number; py: number; w: number; ph: number },
+  s: number,
+  measure: Measure,
+): LaidOutPlayer[] {
+  const r = 18 * s;
+  const rowKey = (y: number) => Math.round(y * 20);
+  const rows = [...new Set(lineup.map((p) => rowKey(p.y)))].sort((a, b) => a - b);
+  const top = box.py + r + 12;
+  const bottom = box.py + box.ph - r - 30 * s;
+  const rowY = (k: number) => (rows.length === 1 ? (top + bottom) / 2 : bottom - (k / (rows.length - 1)) * (bottom - top));
+  const out: LaidOutPlayer[] = lineup.map((p) => {
+    const cy = rowY(rows.indexOf(rowKey(p.y)));
+    return { cx: box.x + 30 + p.x * (box.w - 60), cy, r, num: p.num, text: p.name, px: 17 * Math.min(s, 1.05), nameY: cy + r + 20 * s };
+  });
+  rows.forEach((key) => {
+    const idx = lineup.map((p, i) => (rowKey(p.y) === key ? i : -1)).filter((i) => i >= 0);
+    const fitted = fitRowNames(
+      idx.map((i) => ({ cx: out[i].cx, name: lineup[i].name })),
+      { left: box.x + 4, right: box.x + box.w - 4, basePx: 17 * Math.min(s, 1.05), measure },
+    );
+    idx.forEach((i, k) => {
+      out[i].px = fitted.px;
+      out[i].text = fitted.texts[k];
+    });
+  });
+  return out;
+}
+
+/** xG 赛跑图末端两个数值标签:纵向距离小于 minGap(字高)时以两者中点为轴上下错开,较大值在上;不越出 [lo, hi]。 */
+export function separateEndLabels(y: [number, number], minGap: number, lo: number, hi: number): [number, number] {
+  if (Math.abs(y[0] - y[1]) >= minGap) return y;
+  const upper = y[0] <= y[1] ? 0 : 1; // y 越小越靠上 = 数值越大;相等时主队在上
+  let mid = (y[0] + y[1]) / 2;
+  mid = Math.min(Math.max(mid, lo + minGap / 2), hi - minGap / 2);
+  const out: [number, number] = [0, 0];
+  out[upper] = mid - minGap / 2;
+  out[1 - upper] = mid + minGap / 2;
+  return out;
 }
 
 // ------------------------------------------------------------------ 分区
@@ -235,23 +336,15 @@ function drawPitch(ctx: Ctx, L: Layout, f: ShareFonts, team: ResultSnapshot["tea
   const boxH = ph * 0.14;
   ctx.strokeRect(x + (w - boxW) / 2, py + m, boxW, boxH);
   ctx.strokeRect(x + (w - boxW) / 2, py + ph - m - boxH, boxW, boxH);
-  // 球员:号码徽章 + 中文名。纵向按"排"均匀分布(模板 y 值相近的归为同一排),
-  // 避免模板里相距很近的两排(如后卫 0.29 与后腰 0.48)在矮球场上压到一起。
-  const r = 18 * L.s;
-  const nameW = w / 4.7;
-  const rowKey = (y: number) => Math.round(y * 20);
-  const rows = [...new Set(team.lineup.map((p) => rowKey(p.y)))].sort((a, b) => a - b);
-  const top = py + r + 12;
-  const bottom = py + ph - r - 30 * L.s;
-  const rowY = (y: number) => {
-    const k = rows.indexOf(rowKey(y));
-    return rows.length === 1 ? (top + bottom) / 2 : bottom - (k / (rows.length - 1)) * (bottom - top);
+  // 球员:号码徽章 + 中文名(位置与每排字号见 lineupLayout)
+  const measure: Measure = (text, px) => {
+    ctx.font = font(500, px, f.cn);
+    return ctx.measureText(text).width;
   };
-  for (const p of team.lineup) {
-    const cx = x + 30 + p.x * (w - 60);
-    const cy = rowY(p.y);
+  const lay = lineupLayout(team.lineup, { x, py, w, ph }, L.s, measure);
+  for (const p of lay) {
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.arc(p.cx, p.cy, p.r, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.lineWidth = 4;
@@ -261,11 +354,11 @@ function drawPitch(ctx: Ctx, L: Layout, f: ShareFonts, team: ResultSnapshot["tea
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = font(700, 17 * L.s, f.latin);
-    ctx.fillText(p.num ?? "–", cx, cy + 1);
+    ctx.fillText(p.num ?? "–", p.cx, p.cy + 1);
     ctx.textBaseline = "alphabetic";
-    ctx.font = font(500, 17 * Math.min(L.s, 1.05), f.cn);
+    ctx.font = font(500, p.px, f.cn);
     ctx.fillStyle = C.ink;
-    ctx.fillText(fit(ctx, p.name, nameW), cx, cy + r + 20 * L.s);
+    ctx.fillText(p.text, p.cx, p.nameY);
   }
   // 侧重点
   ctx.textAlign = "left";
@@ -350,11 +443,16 @@ function drawXg(ctx: Ctx, L: Layout, f: ShareFonts, snap: ResultSnapshot, colors
       }
     });
     ctx.stroke();
+  });
+  // 末端数值标签:相距不足一个字高时上下错开
+  const labelPx = 20 * L.s;
+  const ly = separateEndLabels([py(total[0]), py(total[1])], labelPx * 1.15, cy0, cy1);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.font = font(700, labelPx, f.latin);
+  ([0, 1] as const).forEach((i) => {
     ctx.fillStyle = colors[i];
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.font = font(700, 20 * L.s, f.latin);
-    ctx.fillText(total[i].toFixed(2), cx1 + 8, py(total[i]) + (total[0] === total[1] ? (i ? 10 : -10) : 0));
+    ctx.fillText(total[i].toFixed(2), cx1 + 8, ly[i]);
   });
   for (const g of goals) {
     ctx.beginPath();
@@ -452,7 +550,7 @@ function drawFooter(ctx: Ctx, L: Layout, f: ShareFonts, snap: ResultSnapshot, si
   ctx.fillText(siteName, x, y + 40 * L.s);
   ctx.font = font(500, 20 * L.s, f.cn);
   ctx.fillStyle = C.ink2;
-  ctx.fillText(fit(ctx, `${siteUrl.replace(/^https?:\/\//, "")} · 扫码访问`, tw), x, y + 72 * L.s);
+  ctx.fillText(fit(ctx, `${siteUrl.replace(/^https?:\/\//, "")} · 扫码自己模拟一场`, tw), x, y + 72 * L.s);
   ctx.fillStyle = C.ink3;
   ctx.fillText(fit(ctx, `模型 ${snap.modelVersion} · 参数 ${snap.paramsDate.slice(0, 10)} · 种子 ${snap.seed}`, tw), x, y + 102 * L.s);
   ctx.font = font(500, 18 * L.s, f.cn);

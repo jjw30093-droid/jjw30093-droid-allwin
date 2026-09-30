@@ -9,6 +9,8 @@ import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import styles from "./simulator.module.css";
 
 const SITE_NAME = "喵弟数据研究室";
+// 二维码与图上地址指向模拟器页(生产域名来自构建期 NEXT_PUBLIC_SITE_URL)
+const SIMULATOR_URL = `${SITE_URL}/simulator`;
 const SIZES: ShareSize[] = [1350, 1920];
 
 export function SharePanel({ snap }: { snap: ResultSnapshot }) {
@@ -27,7 +29,7 @@ export function SharePanel({ snap }: { snap: ResultSnapshot }) {
     setBusy(size);
     setError(null);
     try {
-      const blob = await renderShareImage({ snap, size, teamColors: colors, fonts: pageFonts(), siteName: SITE_NAME, siteUrl: SITE_URL });
+      const blob = await renderShareImage({ snap, size, teamColors: colors, fonts: pageFonts(), siteName: SITE_NAME, siteUrl: SIMULATOR_URL });
       setImg({ url: URL.createObjectURL(blob), size, bytes: blob.size });
     } catch (e) {
       setError(`生成分享图失败:${e instanceof Error ? e.message : String(e)}`);
