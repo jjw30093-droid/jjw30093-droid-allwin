@@ -2,18 +2,18 @@
 
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
 import { FOCUS_LABEL } from "@/features/simulator/engine";
-import { ahText, kappaUserLabel, type ResultSnapshot } from "@/features/simulator/snapshot";
+import { ahText, type ResultSnapshot } from "@/features/simulator/snapshot";
 import { verdictOf } from "@/features/simulator/verdict";
 import { cumulativeXg, toReportShots } from "@/features/simulator/xg";
 import { Fold } from "./Fold";
-import { CHANNEL_LABEL } from "./MatchAnimation";
 import { SharePanel } from "./SharePanel";
 import styles from "./simulator.module.css";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 // 只读快照:本页刚模拟的结果与分享链接打开的结果走同一套展示,保证分享出去的内容与本页一致。
-// 三层:默认显示(比分、进球者、一句话解读、胜平负、xG 赛跑、分享)→ "更多数据"(默认收起)→ "技术细节"(默认收起,页面最下方)。
+// 两层:默认显示(比分、进球者、一句话解读、胜平负、xG 赛跑、分享)→ "更多数据"(默认收起)。
+// "技术细节"(模拟编号、λ、市场参考让球/大小球、模型版本等)按站长要求不在前端展示。
 // 面向用户的文字不出现任何博彩公司名称,统一称"市场参考"。
 export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; onRerun: () => void; onBack: () => void }) {
   const { single, many } = snap;
@@ -53,6 +53,12 @@ export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; on
         <p className={styles.verdict} data-testid="sim-verdict" data-kind={verdict.kind}>
           {verdict.text}
         </p>
+        {/* 技术细节已不在前端展示;用了已完赛比赛的参数必须如实告知(分享链接打开的人看不到排阵页的提示) */}
+        {snap.market?.finalScore ? (
+          <p className={styles.hint} data-testid="sim-postmatch">
+            本场参数包含赛后数据(实际比分 {snap.market.finalScore.join(" : ")}),仅供演示。
+          </p>
+        ) : null}
       </section>
 
       <section className={styles.card}>
@@ -147,52 +153,6 @@ export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; on
         </button>
       </div>
 
-      <Fold title="技术细节" testId="sim-tech">
-        <dl className={styles.techList}>
-          <dt>模拟编号</dt>
-          <dd>{single.seed}(同一编号复现同一结果)</dd>
-          <dt>补时</dt>
-          <dd>
-            上半场 {single.stoppage[0]} 分钟 · 下半场 {single.stoppage[1]} 分钟
-          </dd>
-          <dt>预期进球 / 模拟均值</dt>
-          <dd>
-            {names[0]} {expected[0].toFixed(2)} / {many.meanGoals[0].toFixed(2)} · {names[1]} {expected[1].toFixed(2)} /{" "}
-            {many.meanGoals[1].toFixed(2)}
-          </dd>
-          <dt>市场参考</dt>
-          <dd>
-            {snap.market
-              ? `已用市场参考校准预计进球(${snap.market.status})${snap.market.finalScore ? `,实际比分 ${snap.market.finalScore.join(" : ")};本场参数包含赛后数据,仅供演示` : ""}`
-              : "本对阵没有市场参考,预计进球只用数据模型"}
-          </dd>
-          {many.crown ? (
-            <>
-              <dt>市场参考让球 {many.crown.ahLine != null ? ahText(many.crown.ahLine) : "—"}</dt>
-              <dd>主队赢盘概率 {many.crown.pEffAhHome != null ? pct(many.crown.pEffAhHome) : "—"}</dd>
-              <dt>市场参考大小球 {many.crown.ouLine ?? "—"}</dt>
-              <dd>大球概率 {many.crown.pEffOver != null ? pct(many.crown.pEffOver) : "—"}</dd>
-            </>
-          ) : null}
-          <dt>模型版本与参数</dt>
-          <dd>
-            {snap.modelVersion} · 参数导出于 {snap.paramsDate}
-          </dd>
-          <dt>随机强度</dt>
-          <dd>{kappaUserLabel(snap.chaos)}</dd>
-        </dl>
-        {goals.length ? (
-          <p className={styles.muted} style={{ marginTop: 8 }}>
-            进球明细:
-            {goals
-              .map(
-                (g) =>
-                  `${g.clock} ${g.playerName ?? ""}(${g.channel === "owngoal" ? "乌龙" : CHANNEL_LABEL[g.channel ?? "open"]}${g.xg !== undefined ? `,xG ${g.xg.toFixed(2)}` : ""})`,
-              )
-              .join(";")}
-          </p>
-        ) : null}
-      </Fold>
     </div>
   );
 }

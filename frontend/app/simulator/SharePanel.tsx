@@ -12,6 +12,8 @@ const SITE_NAME = "喵弟数据研究室";
 // 二维码与图上地址指向模拟器页(生产域名来自构建期 NEXT_PUBLIC_SITE_URL)
 const SIMULATOR_URL = `${SITE_URL}/simulator`;
 const SIZES: ShareSize[] = [1350, 1920];
+// 1080×1350(4:5)适合小红书竖图,1080×1920(9:16)适合抖音;按钮只写平台名,尺寸留在预览说明里
+const SIZE_LABEL: Record<ShareSize, string> = { 1350: "分享到小红书", 1920: "分享到抖音" };
 
 export function SharePanel({ snap }: { snap: ResultSnapshot }) {
   const colors = useSimTeamColors().surface;
@@ -66,7 +68,7 @@ export function SharePanel({ snap }: { snap: ResultSnapshot }) {
             onClick={() => generate(size)}
             data-testid={`share-img-${size}`}
           >
-            {busy === size ? "生成中…" : `生成分享图 1080×${size}`}
+            {busy === size ? "生成中…" : SIZE_LABEL[size]}
           </button>
         ))}
         <button type="button" className={styles.secondaryBtn} onClick={makeLink} data-testid="share-link-btn">

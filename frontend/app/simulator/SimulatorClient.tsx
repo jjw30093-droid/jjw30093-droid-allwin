@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useRouter } from "next/navigation";
 import { Chip } from "@/components/ui/Chip";
 import { FOCUS_LABEL, matchingFixture, prepareMatch, type ManyResult, type MatchSetup, type SingleResult, type TeamSetup } from "@/features/simulator/engine";
-import { FIT_THRESHOLD_PP, IMPACT_RUNS, impactJobs, summarizeImpact, type ImpactJob, type SideImpact } from "@/features/simulator/focusImpact";
+import { IMPACT_RUNS, impactJobs, summarizeImpact, type ImpactJob, type SideImpact } from "@/features/simulator/focusImpact";
 import { lastLineupSetup } from "@/features/simulator/formation";
 import { decodeResult, parseSetupQuery, parseTeamsQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
 import type { BadgeMode } from "@/features/simulator/slotBadge";
@@ -227,7 +227,6 @@ export function SimulatorClient({
   }, [phase, prepared.ok, params, impactSetup, impactKey, seed]);
   useEffect(() => () => impactWorkerRef.current?.terminate(), []);
   const impactNow = impact?.key === impactKey ? impact.sides : null;
-  const cal = params.calibration;
 
   const names: [string, string] = [
     params.teams[String(home.teamId)].name_zh ?? "",
@@ -250,7 +249,7 @@ export function SimulatorClient({
       <header className={styles.header}>
         <h1 className={styles.title}>比赛模拟器</h1>
         <span className={styles.badge} data-testid="uncalibrated-badge">{params.calibration ? "原型" : "未校准原型"}</span>
-        {/* 模型版本、参数导出时间与校准范围在第 2 步「技术细节」里 */}
+        {/* 技术细节(λ、模拟编号、模型版本与校准范围等)按站长要求不在前端展示 */}
         <span className={styles.meta} data-testid="sim-meta">
           目前支持五大联赛,结果不代表预测
         </span>
@@ -475,81 +474,6 @@ export function SimulatorClient({
                     </div>
                   </section>
 
-                  <Fold title="技术细节" testId="setup-tech">
-                    {prepared.ok ? (
-                      <table className={styles.lambdaTable}>
-                        <thead>
-                          <tr>
-                            <th />
-                            <th>{names[0]}</th>
-                            <th>{names[1]}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(
-                            [
-                              ["数据模型 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaModel.toFixed(2)],
-                              ["市场参考 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaMarket?.toFixed(2) ?? "—"],
-                              ["基准 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaBase.toFixed(2)],
-                              ["进攻比 r_att", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.rAtt.toFixed(3)}`],
-                              ["对手 λ 乘 m_def", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mDef.toFixed(3)}`],
-                              ["对手进球率乘 m_gk", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mGk.toFixed(3)}`],
-                              ["最终 λ(含乌龙)", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaFinal.toFixed(2)],
-                              ["期望进球(含对方门将 m_gk)", (i: 0 | 1) => prepared.config.teams[i].breakdown.expectedGoals.toFixed(2)],
-                            ] as [string, (i: 0 | 1) => string][]
-                          ).map(([label, fn]) => (
-                            <tr key={label}>
-                              <td>{label}</td>
-                              <td>{fn(0)}</td>
-                              <td>{fn(1)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : null}
-                    <div className={styles.row} style={{ marginTop: 16 }}>
-                      <label className={styles.field} style={{ flex: "0 1 180px" }}>
-                        模拟编号(同一编号复现同一结果)
-                        <input
-                          className={styles.input}
-                          inputMode="numeric"
-                          value={seed}
-                          onChange={(e) => setSeed(Number(e.target.value.replace(/\D/g, "")) || 0)}
-                        />
-                      </label>
-                      <button type="button" className={styles.secondaryBtn} onClick={() => setSeed(Math.floor(Math.random() * 2 ** 31))}>
-                        随机编号
-                      </button>
-                    </div>
-                    <dl className={styles.techList} style={{ marginTop: 16 }}>
-                      <dt>模型与参数</dt>
-                      <dd data-testid="setup-model">
-                        模型 {params.meta.effective_version ?? params.meta.model_version} · 参数导出于 {params.meta.generated_at}。
-                        {params.calibration
-                          ? "进球率、主场系数与时段系数经 25/26 五大联赛回测校准;侧重点乘数未校准。"
-                          : "全部参数为初始假设,尚未回测校准。"}
-                      </dd>
-                      <dt>市场参考</dt>
-                      <dd data-testid="setup-market">
-                        {fixtureId != null
-                          ? `已参考本场市场数据(${params.fixtures[String(fixtureId)]?.status ?? ""}),市场权重 w=${cal?.market_w ?? 1}:基准预计进球按市场参考 λ 与数据模型 λ 加权`
-                          : pairFixtures.length
-                            ? "本对阵有市场数据,当前未参考(w=0),预计进球只用数据模型"
-                            : "本对阵没有市场数据,预计进球只用数据模型"}
-                      </dd>
-                      <dt>侧重点的计算方法</dt>
-                      <dd>
-                        胜率影响:同一模拟编号各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥{" "}
-                        {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
-                      </dd>
-                      <dt>位置解码</dt>
-                      <dd>
-                        球员的主要位置由阵型字符串与首发格子行列按规则解码(8 组:门将、中卫、边后卫、后腰、中场、前腰、边锋、中锋),尚未人工校验;球员被放到非主要位置时按 f_pos 打折(相邻位置 ×0.9、其它 ×0.7、门将互换 ×0.3)。
-                      </dd>
-                      <dt>随机强度</dt>
-                      <dd>{chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准(κ=${cal.kappa})` : "标准(状态系数关闭)"}</dd>
-                    </dl>
-                  </Fold>
                   <p className={styles.muted} data-testid="position-note">
                     球员位置为规则解码,尚未人工校验。
                   </p>
