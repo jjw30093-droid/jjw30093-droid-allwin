@@ -11,6 +11,8 @@ export interface Cal {
   w: number;
   /** 0 = 关闭状态系数 */
   kappa: number;
+  /** 合并主场系数(生产校准文件口径);h 为 null 时生效 */
+  home_advantage?: number;
   rate_model?: RateModel;
   strength_model?: StrengthModel;
 }
@@ -54,7 +56,13 @@ export function simParamsFor(snap: Snapshot, cal: Cal, opts: { useMarket: boolea
     teams,
     players: snap.params.players,
     fixtures,
-    calibration: { market_w: cal.w, kappa: cal.kappa, rate_model: cal.rate_model, strength_model: cal.strength_model },
+    calibration: {
+      market_w: cal.w,
+      kappa: cal.kappa,
+      home_advantage: cal.home_advantage,
+      rate_model: cal.rate_model,
+      strength_model: cal.strength_model,
+    },
   };
 }
 

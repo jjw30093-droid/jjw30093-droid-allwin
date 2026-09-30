@@ -1,6 +1,7 @@
 // Phase 2 回测与校准(本地 Node 运行,调用与页面同一套 engine.ts)。
 // 口径:docs/simulator-model.md「Phase 2 回测与校准方法」。
 // 用法:node run.mjs <ha-k|strength|w|rate-model|validate|focus|diag> --dir <.local-data/simulator/backtest> [--path A|B]
+// 前瞻复检:node run.mjs forward --dir <.local-data/simulator/forward_2026-2027> --cal-file <calibration_v0.3.json> --path A|B
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,6 +17,8 @@ const W_GRID = [0.5, 0.7, 0.9, 1.0];
 const RUNS = 2000;
 const TRAIN: [number, number] = [4, 19];
 const VALID: [number, number] = [20, 38];
+/** 前瞻复检:第 1–3 轮冷启动不评估(与 Phase 2 同口径),其余全部已完赛轮次 */
+const FORWARD: [number, number] = [4, 99];
 const H_RANGE: [number, number] = [0.8, 1.5];
 const SHOT: ShotChannel[] = ["open", "counter", "setpiece", "penalty"];
 
@@ -29,6 +32,7 @@ const args = process.argv.slice(2);
 const cmd = args[0];
 const path: "A" | "B" = args.includes("--path") ? (args[args.indexOf("--path") + 1] as "A" | "B") : "A";
 const dir = args[args.indexOf("--dir") + 1];
+const calFile = args.includes("--cal-file") ? args[args.indexOf("--cal-file") + 1] : null;
 const resDir = join(dir, "results");
 mkdirSync(resDir, { recursive: true });
 
@@ -104,6 +108,27 @@ function calFromResults(upTo: "a" | "strength" | "b" | "rm"): Cal {
   cal = { ...cal, w: loadRes<{ w: number }>("step_b.json").w };
   if (upTo === "b") return cal;
   return { ...cal, rate_model: loadRes<{ rate_model: RateModel }>("step_rm.json").rate_model };
+}
+
+/** 生产校准文件(scripts/simulator/calibration_v0.3.json)→ Cal;前瞻复检用,不做任何拟合。 */
+function calFromFile(p: string): Cal {
+  const c = readJson<{
+    k_team: number;
+    home_advantage: number;
+    market_w: number;
+    kappa: number;
+    strength_model: StrengthModel;
+    rate_model: RateModel;
+  }>(p);
+  return {
+    k: c.k_team,
+    h: null,
+    home_advantage: c.home_advantage,
+    w: c.market_w,
+    kappa: c.kappa,
+    strength_model: c.strength_model,
+    rate_model: c.rate_model,
+  };
 }
 
 // ------------------------------------------------------------------ a. HA 与 k
@@ -506,11 +531,11 @@ function bigMargin(sims: SimRow[]) {
 }
 
 // ------------------------------------------------------------------ 闸门(验证集)
-function validate(rows: Row[]) {
+function validate(rows: Row[], opts: { cal?: Cal; range?: [number, number]; tag?: "forward" } = {}) {
   // 路径 A:w 取训练集选出的值(有盘口时定锚);路径 B:w = 0(只用数据模型)
-  const cal0 = calFromResults("rm");
+  const cal0 = opts.cal ?? calFromResults("rm");
   const cal = path === "B" ? { ...cal0, w: 0 } : cal0;
-  const valid = rows.filter((r) => inRange(r, VALID));
+  const valid = rows.filter((r) => inRange(r, opts.range ?? VALID));
   const t0 = Date.now();
   const { sims, skipped } = simulateRows(valid, cal, path === "A");
   const pct = (x: number) => +(x * 100).toFixed(2);
@@ -607,10 +632,13 @@ function validate(rows: Row[]) {
     brier_sim_all: brierSim,
     fair_ah_vs_crown: { agree_share: agree, n: withAh.length, diff_distribution: Object.fromEntries(Object.entries(diffs).sort((a, b) => +a[0] - +b[0])) },
   };
-  save(`validation_${path}.json`, { path, calibration: cal, n: sims.length, skipped, gates, report, seconds: (Date.now() - t0) / 1000 });
+  const rounds = [...new Set(sims.map((s) => `${s.r.pm.league_id}:${s.r.pm.round}`))].length;
+  const lastDate = sims.reduce((d, s) => (s.r.pm.date > d ? s.r.pm.date : d), "");
+  save(`${opts.tag ?? "validation"}_${path}.json`, { path, calibration: cal, n: sims.length, skipped, league_rounds: rounds, last_date: lastDate, gates, report, seconds: (Date.now() - t0) / 1000 });
   for (const g of gates) console.log(`${g.pass ? "通过" : "未通过"}  ${g.name}  ${JSON.stringify(g.value, (k, v) => (k === "table" ? undefined : typeof v === "number" ? +v.toFixed(4) : v))}`);
   console.log("如实报告:", JSON.stringify(report, (_k, v) => (typeof v === "number" ? +v.toFixed(4) : v)));
-  console.log(`路径 ${path}:验证集 ${sims.length} 场,跳过 ${skipped};全部通过 = ${gates.every((g) => g.pass)}`);
+  const label = opts.tag === "forward" ? `前瞻复检(第 ${(opts.range ?? VALID)[0]} 轮起,截至 ${lastDate})` : "验证集";
+  console.log(`路径 ${path}:${label} ${sims.length} 场,跳过 ${skipped};全部通过 = ${gates.every((g) => g.pass)}`);
 }
 
 // ------------------------------------------------------------------ 侧重点合理性
@@ -702,6 +730,12 @@ else if (cmd === "w") stepB(rows);
 else if (cmd === "rate-model") stepRateModel(rows);
 else if (cmd === "strength") stepStrength(rows);
 else if (cmd === "validate") validate(rows);
+else if (cmd === "forward") {
+  if (!calFile) throw new Error("forward 需要 --cal-file");
+  const byRound = (lo: number, hi: number) => rows.filter((r) => r.pm.round != null && r.pm.round >= lo && r.pm.round <= hi).length;
+  console.log(`前瞻复检:已完赛 ${rows.length} 场;第 1–3 轮冷启动不评估 ${byRound(1, 3)} 场;无轮次 ${rows.filter((r) => r.pm.round == null).length} 场`);
+  validate(rows, { cal: calFromFile(calFile), range: FORWARD, tag: "forward" });
+}
 else if (cmd === "focus") focusTest(rows);
 else if (cmd === "diag") diagnose(rows);
 else console.log("未知命令", cmd);

@@ -9,6 +9,10 @@
 用法:
   nice -n 19 python3 scripts/simulator/backtest_snapshots.py \
       --data-dir /opt/allwin/shared/data --out-dir /opt/allwin/shared/exports/simulator/backtest
+
+前瞻复检(26/27 起,每月一次;快照口径完全相同,只换赛季,并同时写出 Bet365 1x2 收盘):
+  nice -n 19 python3 scripts/simulator/backtest_snapshots.py --season 2026/2027 \
+      --data-dir /opt/allwin/shared/data --out-dir /opt/allwin/shared/exports/simulator/forward_2026-2027
 """
 from __future__ import annotations
 
@@ -152,8 +156,15 @@ def bet365_closes(tl, matches) -> dict:
     return {"matches": out, "missing": dict(missing), "gap_over_120min": stale}
 
 
+def seasons_for(season: str) -> tuple[str, str]:
+    """(上一季, 本季):参数计算与 Phase 2 相同,只看本季与上一季。"""
+    y0, y1 = (int(x) for x in season.split("/"))
+    return (f"{y0 - 1}/{y1 - 1}", season)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--season", default=CURRENT, help="回测赛季(默认 Phase 2 的 2025/2026)")
     ap.add_argument("--data-dir", default="/opt/allwin/shared/data")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--only-truncation", action="store_true")
@@ -166,10 +177,11 @@ def main() -> None:
     t0 = time.time()
     core = open_ro(Path(args.data_dir) / "allwin.db")
     odds = open_ro(Path(args.data_dir) / "odds.db")
-    raw = load_raw(core, LEAGUES, SEASONS)
-    cur = [m for m in raw.matches if m["Season"] == CURRENT and m["status"] == "Finish"]
+    current = args.season
+    raw = load_raw(core, LEAGUES, seasons_for(current))
+    cur = [m for m in raw.matches if m["Season"] == current and m["status"] == "Finish"]
     dates = sorted({m["Date"] for m in cur})
-    print(f"loaded {len(raw.matches)} matches ({len(cur)} in {CURRENT}, {len(dates)} dates) in {time.time() - t0:.1f}s",
+    print(f"loaded {len(raw.matches)} matches ({len(cur)} in {current}, {len(dates)} dates) in {time.time() - t0:.1f}s",
           flush=True)
 
     if args.only_bet365:
@@ -181,10 +193,10 @@ def main() -> None:
                           "gap_over_120min": res["gap_over_120min"]}), flush=True)
         return
 
-    kwargs = dict(leagues=LEAGUES, current_season=CURRENT, k_grid=K_GRID, extras=True)
+    kwargs = dict(leagues=LEAGUES, current_season=current, k_grid=K_GRID, extras=True)
 
-    # ---- 截断测试
-    sample = sorted(random.Random(SEED).sample(dates, TRUNCATION_DAYS))
+    # ---- 截断测试(比赛日不足 20 个时全部检查)
+    sample = sorted(random.Random(SEED).sample(dates, min(TRUNCATION_DAYS, len(dates))))
     trunc_rows = []
     for d in sample:
         day = [m for m in cur if m["Date"] == d]
@@ -207,6 +219,11 @@ def main() -> None:
     pmid_to_mid = {str(x["provider_match_id"]): mid for mid, x in ok_xref.items() if not x["home_away_inverted"]}
     tl = load_timelines(odds, pmid_to_mid)
     now = datetime.now(timezone.utc)
+    if current != CURRENT:
+        b365 = bet365_closes(tl, cur)
+        (out_dir / "bet365_1x2.json").write_text(dumps(b365), encoding="utf-8")
+        print(json.dumps({"bet365_with_close": len(b365["matches"]), "of": len(cur), "missing": b365["missing"],
+                          "gap_over_120min": b365["gap_over_120min"]}), flush=True)
 
     # ---- 逐日快照
     crown_with_lambda = 0
@@ -238,6 +255,7 @@ def main() -> None:
     (out_dir / "outcomes.json").write_text(dumps(outcomes), encoding="utf-8")
     bad = [o["match_id"] for o in outcomes if not o["goals_consistent"]]
     print(json.dumps({
+        "season": current,
         "snapshots": len(dates),
         "matches": len(cur),
         "by_league": dict(Counter(m["League_ID"] for m in cur)),
