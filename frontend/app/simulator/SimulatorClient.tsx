@@ -277,6 +277,7 @@ export function SimulatorClient({
             single={result.snap.single}
             names={[result.snap.teams[0].name, result.snap.teams[1].name]}
             crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
+            realShots={Boolean(params.shot_samples)}
             onDone={finishAnimation}
           />
         )

@@ -42,6 +42,7 @@ export function MatchAnimation({
   crests = [null, null],
   onDone,
   mode = "inline",
+  realShots = false,
 }: {
   single: SingleResult;
   names: [string, string];
@@ -50,6 +51,8 @@ export function MatchAnimation({
   onDone: () => void;
   /** inline = 页面内(横版球场、速度与跳过按钮);record = 录屏模式(竖版球场、无按钮、文字直播只留最近几条) */
   mode?: "inline" | "record";
+  /** 参数里有真实射门样本库(射门位置与结果取自真实射门);没有时如实写"示意" */
+  realShots?: boolean;
 }) {
   const orientation: StageOrientation = mode === "record" ? "portrait" : "landscape";
   const plan = useMemo(() => buildPlan(single), [single]);
@@ -268,7 +271,7 @@ export function MatchAnimation({
       {!record ? (
         <p className={styles.muted}>
           <span style={{ color: "var(--sim-home)" }}>● {names[0]}</span> <span style={{ color: "var(--sim-away)" }}>● {names[1]}</span>
-          ;带金边的大圆点 = 进球。射门位置与结果取自五大联赛真实射门。
+          ;带金边的大圆点 = 进球。{realShots ? "射门位置与结果取自五大联赛真实射门。" : "射门位置为示意。"}
         </p>
       ) : null}
 
