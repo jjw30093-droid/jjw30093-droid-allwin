@@ -3,38 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Chip } from "@/components/ui/Chip";
-import {
-  FOCUS_LABEL,
-  FOCUS_LIST,
-  focusError,
-  matchingFixture,
-  prepareMatch,
-  type Focus,
-  type ManyResult,
-  type MatchSetup,
-  type SingleResult,
-  type TeamSetup,
-} from "@/features/simulator/engine";
-import {
-  channelDeltas,
-  FIT_THRESHOLD_PP,
-  formatDeltas,
-  IMPACT_RUNS,
-  impactJobs,
-  summarizeImpact,
-  type ImpactJob,
-  type SideImpact,
-} from "@/features/simulator/focusImpact";
+import { FOCUS_LABEL, matchingFixture, prepareMatch, type ManyResult, type MatchSetup, type SingleResult, type TeamSetup } from "@/features/simulator/engine";
+import { FIT_THRESHOLD_PP, IMPACT_RUNS, impactJobs, summarizeImpact, type ImpactJob, type SideImpact } from "@/features/simulator/focusImpact";
 import { lastLineupSetup } from "@/features/simulator/formation";
 import { decodeResult, parseSetupQuery, parseTeamsQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
+import type { BadgeMode } from "@/features/simulator/slotBadge";
 import { makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
 import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
-import type { FixtureIndexEntry } from "./loadParams";
-import { LineupEditor } from "./LineupEditor";
-import { MatchAnimation } from "./MatchAnimation";
+import { emptySlots, lineupIssue, pairWithAway, pairWithHome, type WizardStep } from "@/features/simulator/wizard";
 import { Fold } from "./Fold";
+import { LineupPitchCard } from "./LineupPitchCard";
+import type { FixtureIndexEntry } from "./loadParams";
+import { MatchAnimation } from "./MatchAnimation";
 import { ResultView } from "./ResultView";
+import { TeamFocusCard } from "./TeamFocusCard";
+import { WizardSteps } from "./WizardSteps";
 import styles from "./simulator.module.css";
 
 // 只开放 v0.3 校准过的五大联赛(docs/simulator-launch-plan.md §2)
@@ -43,9 +27,6 @@ const LEAGUE_ORDER = ["47", "87", "55", "54", "53"];
 const DEFAULT_SEED = 20260929;
 const RUNS = 1000;
 const IMPACT_DEBOUNCE_MS = 300;
-
-const pct1 = (x: number) => `${(x * 100).toFixed(1)}%`;
-const signedPp = (pp: number) => `${pp > 0 ? "+" : pp < 0 ? "−" : "±"}${Math.abs(pp).toFixed(1)} 个百分点`;
 
 type Phase = "setup" | "running" | "animating" | "result";
 
@@ -64,20 +45,25 @@ function pickDefaultPair(params: SimParams, leagueId: string): [number, number] 
 }
 
 // 参数按联赛下发(§3.2):params 只含当前联赛的球队/球员/赛程;切换联赛 = 跳转 /simulator?lg=<id>,服务端重新切片。
+// 三步向导(参照 FotMob Lineup Builder):第 1 步主队 → 第 2 步客队(页底开始模拟)→ 动画 → 结果。step 不进 URL(URL 是分享链接的语义)。
 export function SimulatorClient({
   params,
   leagueId: leagueNum,
   fixtureIndex,
   paramsStale,
+  initialStep,
 }: {
   params: SimParams;
   leagueId: number;
   fixtureIndex: FixtureIndexEntry[];
   paramsStale: boolean;
+  initialStep: WizardStep;
 }) {
   const router = useRouter();
   const leagueId = String(leagueNum);
   const leagueIds = LEAGUE_ORDER.filter((id) => params.leagues[id]);
+  const teamList = useMemo(() => teamsOf(params, leagueId), [params, leagueId]);
+  const teamIds = useMemo(() => teamList.map((t) => t.team_id), [teamList]);
   const [pair, setPair] = useState<[number, number]>(() => pickDefaultPair(params, leagueId));
   const [home, setHome] = useState<TeamSetup>(() => lastLineupSetup(params, pair[0]));
   const [away, setAway] = useState<TeamSetup>(() => lastLineupSetup(params, pair[1]));
@@ -85,7 +71,9 @@ export function SimulatorClient({
   const [fixtureChoice, setFixtureChoice] = useState<number | null>(null);
   const [chaos, setChaos] = useState(false);
   const [seed, setSeed] = useState(DEFAULT_SEED);
-  const [selected, setSelected] = useState<{ side: 0 | 1; i: number } | null>(null);
+  const [step, setStep] = useState<WizardStep>(initialStep);
+  const [badge, setBadge] = useState<BadgeMode>("position");
+  const [showIssue, setShowIssue] = useState(false);
   const [phase, setPhase] = useState<Phase>("setup");
   // shared = 来自分享链接的结果(原样展示,未重新计算)
   const [result, setResult] = useState<{ snap: ResultSnapshot; shared: boolean } | null>(null);
@@ -99,12 +87,32 @@ export function SimulatorClient({
     "--sim-away-pitch": teamColors.pitch[1],
   } as CSSProperties;
 
-  const setTeams = (h: number, a: number, fixtureId: number | null = null) => {
+  const goStep = useCallback((s: WizardStep) => {
+    setStep(s);
+    setShowIssue(false);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  // 换一边的球队只重置这一边;撞队时把另一边换成列表里第一支不同的队(另一边已编辑的阵容因此丢失,属预期)
+  const setHomeTeam = (h: number) => {
+    const next = pairWithHome(pair, h, teamIds);
+    setPair(next);
+    setHome(lastLineupSetup(params, next[0], { focuses: home.focuses, shortRest: home.shortRest }));
+    if (next[1] !== pair[1]) setAway(lastLineupSetup(params, next[1]));
+    setFixtureChoice(null);
+  };
+  const setAwayTeam = (a: number) => {
+    const next = pairWithAway(pair, a, teamIds);
+    setPair(next);
+    setAway(lastLineupSetup(params, next[1], { focuses: away.focuses, shortRest: away.shortRest }));
+    if (next[0] !== pair[0]) setHome(lastLineupSetup(params, next[0]));
+    setFixtureChoice(null);
+  };
+  const setBothTeams = (h: number, a: number, fixtureId: number | null = null) => {
     setPair([h, a]);
     setHome(lastLineupSetup(params, h));
     setAway(lastLineupSetup(params, a));
     setFixtureChoice(fixtureId);
-    setSelected(null);
   };
 
   const fixtures = useMemo(
@@ -139,6 +147,7 @@ export function SimulatorClient({
           window.history.replaceState(null, "", `${window.location.pathname}?lg=${leagueId}`);
         }
         setPhase("animating");
+        window.scrollTo({ top: 0 });
         w.terminate();
         workerRef.current = null;
       };
@@ -147,7 +156,7 @@ export function SimulatorClient({
     [prepared, params, leagueId, home, away, fixtureId, chaos],
   );
 
-  // 打开分享链接:查询参数恢复设定;# 片段里有结果时在浏览器端解压并原样展示(不重新计算)。
+  // 打开分享链接:查询参数恢复设定(进第 2 步);# 片段里有结果时在浏览器端解压并原样展示(不重新计算)。
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -161,8 +170,9 @@ export function SimulatorClient({
         lg === leagueNum && !!params.teams[String(h)] && !!params.teams[String(a)] && h !== a;
       if (teamsOnly && inLeague(teamsOnly.home, teamsOnly.away, teamsOnly.leagueId)) {
         // 只带两队(跨联赛点选真实比赛、第二次发版的比赛页入口):两队用各自最近一场首发
-        setTeams(teamsOnly.home, teamsOnly.away, teamsOnly.fixtureId);
+        setBothTeams(teamsOnly.home, teamsOnly.away, teamsOnly.fixtureId);
         setUseMarket(teamsOnly.fixtureId != null);
+        setStep(2);
       }
       if (shared && inLeague(shared.home.teamId, shared.away.teamId, shared.leagueId)) {
         setPair([shared.home.teamId, shared.away.teamId]);
@@ -172,6 +182,7 @@ export function SimulatorClient({
         setFixtureChoice(shared.fixtureId);
         setChaos(shared.chaos);
         setSeed(shared.seed);
+        setStep(2);
       }
       if (snap) {
         setResult({ snap, shared: true });
@@ -183,7 +194,7 @@ export function SimulatorClient({
     return () => {
       cancelled = true;
     };
-    // setTeams 只依赖 params(与本 effect 相同);只在挂载时解析一次地址栏
+    // setBothTeams 只依赖 params(与本 effect 相同);只在挂载时解析一次地址栏
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, leagueNum]);
   const linkStale =
@@ -218,17 +229,21 @@ export function SimulatorClient({
   const impactNow = impact?.key === impactKey ? impact.sides : null;
   const cal = params.calibration;
 
-  const toggleFocus = (side: 0 | 1, f: Focus) => {
-    const cur = side === 0 ? home : away;
-    const focuses = cur.focuses.includes(f) ? cur.focuses.filter((x) => x !== f) : [...cur.focuses, f];
-    (side === 0 ? setHome : setAway)({ ...cur, focuses });
-  };
-
-  const teamList = teamsOf(params, leagueId);
   const names: [string, string] = [
     params.teams[String(home.teamId)].name_zh ?? "",
     params.teams[String(away.teamId)].name_zh ?? "",
   ];
+  const homeIssue = lineupIssue(params, home);
+  const awayIssue = lineupIssue(params, away);
+  const fmtFocuses = (t: TeamSetup) => (t.focuses.length ? t.focuses.map((f) => FOCUS_LABEL[f]).join("、") : "未选");
+
+  const tryNext = () => {
+    if (homeIssue) {
+      setShowIssue(true);
+      return;
+    }
+    goStep(2);
+  };
 
   return (
     <main className={styles.page} style={colorVars}>
@@ -282,271 +297,258 @@ export function SimulatorClient({
             setSeed(s);
             run(s);
           }}
-          onBack={() => setPhase("setup")}
+          onBack={() => {
+            setPhase("setup");
+            goStep(2);
+          }}
         />
       ) : null}
 
       {phase === "setup" || phase === "running" ? (
         <>
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>选择对阵</h2>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                联赛
-                <select
-                  className={styles.select}
-                  value={leagueId}
-                  onChange={(e) => router.push(`/simulator?lg=${e.target.value}`)}
-                >
-                  {leagueIds.map((id) => (
-                    <option key={id} value={id}>
-                      {LEAGUE_NAME[id] ?? id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.field}>
-                主队
-                <select className={styles.select} value={pair[0]} onChange={(e) => setTeams(Number(e.target.value), pair[1])}>
-                  {teamList.map((t) => (
-                    <option key={t.team_id} value={t.team_id} disabled={t.team_id === pair[1]}>
-                      {t.name_zh}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.field}>
-                客队
-                <select className={styles.select} value={pair[1]} onChange={(e) => setTeams(pair[0], Number(e.target.value))}>
-                  {teamList.map((t) => (
-                    <option key={t.team_id} value={t.team_id} disabled={t.team_id === pair[0]}>
-                      {t.name_zh}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <p className={styles.muted} style={{ marginTop: 12 }}>
-              或选一场有市场参考的真实比赛:
-            </p>
-            <div className={styles.fixtureList}>
-              {fixtures.map((f) => {
-                const h = f.home_name;
-                const a = f.away_name;
-                const active = fixtureId === f.match_id;
-                return (
-                  <button
-                    key={f.match_id}
-                    type="button"
-                    className={`${styles.fixtureBtn} ${active ? styles.fixtureBtnActive : ""}`}
-                    onClick={() => {
-                      if (f.league_id !== leagueNum) {
-                        router.push(`/simulator?lg=${f.league_id}&h=${f.home_team_id}&a=${f.away_team_id}&fx=${f.match_id}`);
-                        return;
-                      }
-                      setUseMarket(true);
-                      setTeams(f.home_team_id, f.away_team_id, f.match_id);
-                    }}
-                  >
-                    [{f.status}] {LEAGUE_NAME[String(f.league_id)]} {h} vs {a} · {f.kickoff_at_utc.slice(0, 10)} · 让 {f.ah_line ?? "—"} · 大小 {f.ou_line ?? "—"}
-                    {f.final_score ? ` · 实际 ${f.final_score.join(":")}` : ""}
-                  </button>
-                );
-              })}
-            </div>
-            {fixtureId != null && params.fixtures[String(fixtureId)]?.status !== "未开赛" ? (
-              <p className={styles.hint} data-testid="postmatch-notice">
-                本场参数包含赛后数据,仅供演示。
-              </p>
-            ) : null}
-            {pairFixtures.length > 0 ? (
-              <div className={styles.chips}>
-                <Chip active={useMarket} onClick={() => setUseMarket(!useMarket)}>
-                  {useMarket ? "已参考市场数据" : "不参考市场数据"}
-                </Chip>
+          <WizardSteps step={step} canGoStep2={!homeIssue} onGo={goStep} />
+
+          {step === 1 ? (
+            <>
+              <div className={styles.row}>
+                <label className={styles.field} style={{ flex: "0 1 220px" }}>
+                  联赛
+                  <select className={styles.select} value={leagueId} onChange={(e) => router.push(`/simulator?lg=${e.target.value}`)} data-testid="league-select">
+                    {leagueIds.map((id) => (
+                      <option key={id} value={id}>
+                        {LEAGUE_NAME[id] ?? id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
-            ) : null}
-          </section>
+              <Fold title="或选一场有市场参考的真实比赛" testId="fixture-fold">
+                <div className={styles.fixtureList}>
+                  {fixtures.map((f) => (
+                    <button
+                      key={f.match_id}
+                      type="button"
+                      className={styles.fixtureBtn}
+                      onClick={() => {
+                        if (f.league_id !== leagueNum) {
+                          router.push(`/simulator?lg=${f.league_id}&h=${f.home_team_id}&a=${f.away_team_id}&fx=${f.match_id}`);
+                          return;
+                        }
+                        setUseMarket(true);
+                        setBothTeams(f.home_team_id, f.away_team_id, f.match_id);
+                        goStep(2);
+                      }}
+                    >
+                      [{f.status}] {LEAGUE_NAME[String(f.league_id)]} {f.home_name} vs {f.away_name} · {f.kickoff_at_utc.slice(0, 10)} · 让 {f.ah_line ?? "—"} · 大小 {f.ou_line ?? "—"}
+                      {f.final_score ? ` · 实际 ${f.final_score.join(":")}` : ""}
+                    </button>
+                  ))}
+                </div>
+              </Fold>
 
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>排阵</h2>
-            <div className={styles.teams}>
-              {([0, 1] as const).map((side) => {
-                const setup = side === 0 ? home : away;
-                return (
-                  <LineupEditor
-                    key={`${side}-${setup.teamId}`}
+              <div className={styles.wizardGrid}>
+                <div>
+                  <LineupPitchCard
+                    key={`home-${home.teamId}`}
                     params={params}
-                    sideLabel={side === 0 ? "主队" : "客队"}
-                    setup={setup}
-                    lastLineupDate={params.teams[String(setup.teamId)].last_lineup?.date ?? null}
-                    selected={selected?.side === side ? selected.i : null}
-                    onSelect={(i) => setSelected(i === null ? null : { side, i })}
-                    onChange={side === 0 ? setHome : setAway}
-                    showHint={side === 0}
+                    sideLabel="主队"
+                    setup={home}
+                    teams={teamList}
+                    disabledTeamId={away.teamId}
+                    badge={badge}
+                    onBadge={setBadge}
+                    flaggedSlots={showIssue ? emptySlots(home) : []}
+                    onChange={setHome}
+                    onTeamChange={setHomeTeam}
                   />
-                );
-              })}
-            </div>
-            <p className={styles.muted} style={{ marginTop: 12 }} data-testid="position-note">
-              球员位置为规则解码,尚未人工校验。
-            </p>
-          </section>
+                </div>
+                <div>
+                  <TeamFocusCard
+                    params={params}
+                    side={0}
+                    setup={home}
+                    opponentName={names[1]}
+                    impactSetup={impactSetup}
+                    impact={impactNow?.[0] ?? null}
+                    preparedOk={prepared.ok}
+                    onChange={setHome}
+                  />
+                  <div className={styles.row}>
+                    <button type="button" className={styles.primaryBtn} onClick={tryNext} data-testid="next-step">
+                      下一步:选择客队 →
+                    </button>
+                  </div>
+                  {showIssue && homeIssue ? (
+                    <p className={styles.error} data-testid="lineup-issue">
+                      {homeIssue}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          ) : null}
 
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>侧重点(每队最多 2 个)</h2>
-            <div className={styles.teams}>
-              {([0, 1] as const).map((side) => {
-                const setup = side === 0 ? home : away;
-                const err = focusError(setup.focuses);
-                const ch = err ? null : channelDeltas(params, impactSetup, side);
-                const imp = impactNow?.[side] ?? null;
-                return (
-                  <div key={side} data-testid={`focus-side-${side}`}>
-                    <div className={styles.teamName}>{names[side]}</div>
-                    <div className={styles.chips}>
-                      {FOCUS_LIST.map((f) => {
-                        const gain = imp?.singlePp[f];
-                        const fit = gain !== undefined && gain >= FIT_THRESHOLD_PP;
-                        return (
-                          <Chip key={f} active={setup.focuses.includes(f)} onClick={() => toggleFocus(side, f)}>
-                            {FOCUS_LABEL[f]}
-                            {fit ? (
-                              <span className={styles.fitTag} data-testid="focus-fit-tag">
-                                适合本场对手
-                              </span>
-                            ) : null}
-                          </Chip>
-                        );
-                      })}
-                    </div>
-                    {err ? <p className={styles.hint}>{err}</p> : null}
-                    {ch ? (
-                      <div className={styles.focusEffect} data-testid="focus-channels">
-                        <div>本队预期进球:{ch.own.length ? formatDeltas(ch.own) : "各渠道不变"}</div>
-                        {ch.opp.length ? <div>对手预期进球:{formatDeltas(ch.opp)}</div> : null}
-                      </div>
+          {step === 2 ? (
+            <>
+              <section className={`${styles.card} ${styles.summaryStrip}`} data-testid="home-summary">
+                <span>
+                  <strong style={{ color: "var(--sim-home)" }}>主队 {names[0]}</strong> · {home.formation} · 侧重点 {fmtFocuses(home)}
+                </span>
+                <button type="button" className={styles.linkBtn} onClick={() => goStep(1)} data-testid="edit-home">
+                  修改
+                </button>
+              </section>
+
+              <div className={styles.wizardGrid}>
+                <div>
+                  <LineupPitchCard
+                    key={`away-${away.teamId}`}
+                    params={params}
+                    sideLabel="客队"
+                    setup={away}
+                    teams={teamList}
+                    disabledTeamId={home.teamId}
+                    badge={badge}
+                    onBadge={setBadge}
+                    flaggedSlots={showIssue ? emptySlots(away) : []}
+                    onChange={setAway}
+                    onTeamChange={setAwayTeam}
+                  />
+                </div>
+                <div>
+                  <TeamFocusCard
+                    params={params}
+                    side={1}
+                    setup={away}
+                    opponentName={names[0]}
+                    impactSetup={impactSetup}
+                    impact={impactNow?.[1] ?? null}
+                    preparedOk={prepared.ok}
+                    onChange={setAway}
+                  />
+
+                  <section className={styles.card}>
+                    <h2 className={styles.cardTitle}>预计进球</h2>
+                    {prepared.ok ? (
+                      <p className={styles.bigLine} data-testid="setup-expected">
+                        {names[0]} {prepared.config.teams[0].breakdown.expectedGoals.toFixed(1)} :{" "}
+                        {prepared.config.teams[1].breakdown.expectedGoals.toFixed(1)} {names[1]}
+                      </p>
+                    ) : (
+                      <p className={styles.error}>{awayIssue ?? homeIssue ?? prepared.error}</p>
+                    )}
+                    {fixtureId != null && params.fixtures[String(fixtureId)]?.status !== "未开赛" ? (
+                      <p className={styles.hint} data-testid="postmatch-notice">
+                        本场参数包含赛后数据,仅供演示。
+                      </p>
                     ) : null}
-                    <div className={styles.focusEffect} data-testid="focus-winrate">
-                      {!prepared.ok ? null : !imp ? (
-                        <span className={styles.muted}>胜率影响计算中…</span>
-                      ) : imp.selected != null ? (
-                        <>
-                          本队胜率 {pct1(imp.base)} → <strong>{pct1(imp.selected)}</strong>(
-                          {signedPp((imp.selected - imp.base) * 100)})
-                        </>
-                      ) : (
-                        <>未选侧重点:本队胜率 {pct1(imp.base)}</>
-                      )}
-                    </div>
                     <div className={styles.chips}>
-                      <Chip
-                        active={setup.shortRest}
-                        onClick={() => (side === 0 ? setHome : setAway)({ ...setup, shortRest: !setup.shortRest })}
-                      >
-                        休息不足 3 天(假设设定)
+                      {pairFixtures.length > 0 ? (
+                        <Chip active={useMarket} onClick={() => setUseMarket(!useMarket)}>
+                          {useMarket ? "已参考市场数据" : "不参考市场数据"}
+                        </Chip>
+                      ) : null}
+                      <Chip active={chaos} onClick={() => setChaos(!chaos)}>
+                        {chaos ? "随机强度:混乱模式" : "随机强度:标准"}
                       </Chip>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+                    <div className={styles.row} style={{ marginTop: 16 }}>
+                      <button type="button" className={styles.secondaryBtn} onClick={() => goStep(1)}>
+                        ← 上一步
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.primaryBtn}
+                        disabled={!prepared.ok || phase === "running"}
+                        onClick={() => {
+                          if (awayIssue) {
+                            setShowIssue(true);
+                            return;
+                          }
+                          run(seed);
+                        }}
+                        data-testid="simulate-btn"
+                      >
+                        {phase === "running" ? "模拟中…" : "开始模拟"}
+                      </button>
+                    </div>
+                  </section>
 
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>预计进球</h2>
-            {prepared.ok ? (
-              <p className={styles.bigLine} data-testid="setup-expected">
-                {names[0]} {prepared.config.teams[0].breakdown.expectedGoals.toFixed(1)} :{" "}
-                {prepared.config.teams[1].breakdown.expectedGoals.toFixed(1)} {names[1]}
-              </p>
-            ) : (
-              <p className={styles.error}>{prepared.error}</p>
-            )}
-            <div className={styles.row} style={{ marginTop: 16 }}>
-              <Chip active={chaos} onClick={() => setChaos(!chaos)}>
-                {chaos ? "随机强度:混乱模式" : "随机强度:标准"}
-              </Chip>
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                disabled={!prepared.ok || phase === "running"}
-                onClick={() => run(seed)}
-                data-testid="simulate-btn"
-              >
-                {phase === "running" ? "模拟中…" : "开始模拟"}
-              </button>
-            </div>
-          </section>
-
-          <Fold title="技术细节" testId="setup-tech">
-            {prepared.ok ? (
-              <table className={styles.lambdaTable}>
-                <thead>
-                  <tr>
-                    <th />
-                    <th>{names[0]}</th>
-                    <th>{names[1]}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(
-                    [
-                      ["数据模型 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaModel.toFixed(2)],
-                      ["市场参考 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaMarket?.toFixed(2) ?? "—"],
-                      ["基准 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaBase.toFixed(2)],
-                      ["进攻比 r_att", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.rAtt.toFixed(3)}`],
-                      ["对手 λ 乘 m_def", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mDef.toFixed(3)}`],
-                      ["对手进球率乘 m_gk", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mGk.toFixed(3)}`],
-                      ["最终 λ(含乌龙)", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaFinal.toFixed(2)],
-                      ["期望进球(含对方门将 m_gk)", (i: 0 | 1) => prepared.config.teams[i].breakdown.expectedGoals.toFixed(2)],
-                    ] as [string, (i: 0 | 1) => string][]
-                  ).map(([label, fn]) => (
-                    <tr key={label}>
-                      <td>{label}</td>
-                      <td>{fn(0)}</td>
-                      <td>{fn(1)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : null}
-            <div className={styles.row} style={{ marginTop: 16 }}>
-              <label className={styles.field} style={{ flex: "0 1 180px" }}>
-                模拟编号(同一编号复现同一结果)
-                <input
-                  className={styles.input}
-                  inputMode="numeric"
-                  value={seed}
-                  onChange={(e) => setSeed(Number(e.target.value.replace(/\D/g, "")) || 0)}
-                />
-              </label>
-              <button type="button" className={styles.secondaryBtn} onClick={() => setSeed(Math.floor(Math.random() * 2 ** 31))}>
-                随机编号
-              </button>
-            </div>
-            <dl className={styles.techList} style={{ marginTop: 16 }}>
-              <dt>市场参考</dt>
-              <dd data-testid="setup-market">
-                {fixtureId != null
-                  ? `已参考本场市场数据(${params.fixtures[String(fixtureId)]?.status ?? ""}),市场权重 w=${cal?.market_w ?? 1}:基准预计进球按市场参考 λ 与数据模型 λ 加权`
-                  : pairFixtures.length
-                    ? "本对阵有市场数据,当前未参考(w=0),预计进球只用数据模型"
-                    : "本对阵没有市场数据,预计进球只用数据模型"}
-              </dd>
-              <dt>侧重点的计算方法</dt>
-              <dd>
-                胜率影响:同一模拟编号各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥{" "}
-                {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
-              </dd>
-              <dt>位置解码</dt>
-              <dd>
-                球员的主要位置由阵型字符串与首发格子行列按规则解码(8 组:门将、中卫、边后卫、后腰、中场、前腰、边锋、中锋),尚未人工校验;球员被放到非主要位置时按 f_pos 打折(相邻位置 ×0.9、其它 ×0.7、门将互换 ×0.3)。
-              </dd>
-              <dt>随机强度</dt>
-              <dd>{chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准(κ=${cal.kappa})` : "标准(状态系数关闭)"}</dd>
-            </dl>
-          </Fold>
+                  <Fold title="技术细节" testId="setup-tech">
+                    {prepared.ok ? (
+                      <table className={styles.lambdaTable}>
+                        <thead>
+                          <tr>
+                            <th />
+                            <th>{names[0]}</th>
+                            <th>{names[1]}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(
+                            [
+                              ["数据模型 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaModel.toFixed(2)],
+                              ["市场参考 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaMarket?.toFixed(2) ?? "—"],
+                              ["基准 λ", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaBase.toFixed(2)],
+                              ["进攻比 r_att", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.rAtt.toFixed(3)}`],
+                              ["对手 λ 乘 m_def", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mDef.toFixed(3)}`],
+                              ["对手进球率乘 m_gk", (i: 0 | 1) => `×${prepared.config.teams[i].breakdown.mGk.toFixed(3)}`],
+                              ["最终 λ(含乌龙)", (i: 0 | 1) => prepared.config.teams[i].breakdown.lambdaFinal.toFixed(2)],
+                              ["期望进球(含对方门将 m_gk)", (i: 0 | 1) => prepared.config.teams[i].breakdown.expectedGoals.toFixed(2)],
+                            ] as [string, (i: 0 | 1) => string][]
+                          ).map(([label, fn]) => (
+                            <tr key={label}>
+                              <td>{label}</td>
+                              <td>{fn(0)}</td>
+                              <td>{fn(1)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : null}
+                    <div className={styles.row} style={{ marginTop: 16 }}>
+                      <label className={styles.field} style={{ flex: "0 1 180px" }}>
+                        模拟编号(同一编号复现同一结果)
+                        <input
+                          className={styles.input}
+                          inputMode="numeric"
+                          value={seed}
+                          onChange={(e) => setSeed(Number(e.target.value.replace(/\D/g, "")) || 0)}
+                        />
+                      </label>
+                      <button type="button" className={styles.secondaryBtn} onClick={() => setSeed(Math.floor(Math.random() * 2 ** 31))}>
+                        随机编号
+                      </button>
+                    </div>
+                    <dl className={styles.techList} style={{ marginTop: 16 }}>
+                      <dt>市场参考</dt>
+                      <dd data-testid="setup-market">
+                        {fixtureId != null
+                          ? `已参考本场市场数据(${params.fixtures[String(fixtureId)]?.status ?? ""}),市场权重 w=${cal?.market_w ?? 1}:基准预计进球按市场参考 λ 与数据模型 λ 加权`
+                          : pairFixtures.length
+                            ? "本对阵有市场数据,当前未参考(w=0),预计进球只用数据模型"
+                            : "本对阵没有市场数据,预计进球只用数据模型"}
+                      </dd>
+                      <dt>侧重点的计算方法</dt>
+                      <dd>
+                        胜率影响:同一模拟编号各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥{" "}
+                        {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
+                      </dd>
+                      <dt>位置解码</dt>
+                      <dd>
+                        球员的主要位置由阵型字符串与首发格子行列按规则解码(8 组:门将、中卫、边后卫、后腰、中场、前腰、边锋、中锋),尚未人工校验;球员被放到非主要位置时按 f_pos 打折(相邻位置 ×0.9、其它 ×0.7、门将互换 ×0.3)。
+                      </dd>
+                      <dt>随机强度</dt>
+                      <dd>{chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准(κ=${cal.kappa})` : "标准(状态系数关闭)"}</dd>
+                    </dl>
+                  </Fold>
+                  <p className={styles.muted} data-testid="position-note">
+                    球员位置为规则解码,尚未人工校验。
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : null}
         </>
       ) : null}
     </main>

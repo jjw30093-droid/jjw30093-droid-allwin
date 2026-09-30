@@ -131,6 +131,13 @@ export function swapSlots(setup: TeamSetup, a: number, b: number): TeamSetup {
   return { ...setup, slots };
 }
 
+/** 选人面板选中:该球员已在首发 → 与目标位置互换;否则换上(原位置球员回到阵容池)。 */
+export function applyPick(setup: TeamSetup, slot: number, playerId: string): TeamSetup {
+  const j = setup.slots.findIndex((s) => s.playerId === playerId);
+  if (j >= 0) return swapSlots(setup, slot, j);
+  return placeFromPool(setup, slot, playerId);
+}
+
 /** 阵容池球员换上某个位置(原位置球员回到阵容池)。 */
 export function placeFromPool(setup: TeamSetup, slot: number, playerId: string): TeamSetup {
   if (setup.slots.some((s) => s.playerId === playerId)) return setup;

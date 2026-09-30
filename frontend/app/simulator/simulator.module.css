@@ -111,25 +111,8 @@
   font-size: 12px;
 }
 
-.teams {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--sp-4);
-}
 
-@media (min-width: 900px) {
-  .teams {
-    grid-template-columns: 1fr 1fr;
-  }
-}
 
-.teamHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-}
 
 .teamName {
   font-size: var(--fs-h2);
@@ -167,37 +150,11 @@
   color: #fff;
 }
 
-.dot {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--brand-navy);
-  border: 2px solid #fff;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-}
 
-.slotSelected .dot {
-  background: var(--brand-gold);
-  color: var(--on-gold);
-}
 
 /* ---- 拖拽排阵(Phase 3) ---- */
-.formationBar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-}
 
 /* 球场是绿色底:可落位提示用白色光圈;当前悬停的落点整块加虚线框(拖动浮层会盖住圆点) */
-.slotDropTarget .dot {
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
-}
 
 .slotDropOver {
   outline: 2px dashed #fff;
@@ -205,11 +162,6 @@
   border-radius: var(--r-control);
 }
 
-.slotDropOver .dot {
-  background: var(--brand-gold);
-  color: var(--on-gold);
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85);
-}
 
 .dragSource {
   opacity: 0.4;
@@ -240,6 +192,7 @@
 }
 
 .slotName {
+  width: max-content;
   font-size: 12px;
   line-height: 1.2;
   max-width: 76px;
@@ -249,70 +202,394 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
-.slotGroup {
+
+
+/* ---- 球场卡片(参照 FotMob Lineup Builder) ---- */
+.pitchCard {
+  padding: var(--sp-3);
+}
+
+.pitchHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.teamPick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 var(--sp-2) 0 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.teamPickSide {
   font-size: 12px;
+  color: var(--ink-3);
+}
+
+.teamPickName {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+}
+
+.teamPickChevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: rotate(45deg);
+  margin-top: -4px;
+}
+
+.pitchBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+/* 头像 + 右上角徽标 */
+.face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.faceEmpty {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-size: 20px;
   line-height: 1;
+}
+
+.slotFlagged .faceEmpty {
+  border-color: var(--pending);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pending) 55%, transparent);
+}
+
+/* 徽标挂在头像右侧、垂直居中:只占头像自身的高度,不会伸进上一排的名字里 */
+.slotBadge {
+  position: absolute;
+  top: 50%;
+  left: calc(100% - 4px);
+  transform: translateY(-50%);
   padding: 1px 5px;
   border-radius: var(--r-pill);
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
-.slotWarn {
+.slotBadgeWarn {
   background: var(--pending);
+  color: #fff;
 }
 
-/* 窄屏:半场高度只有约 260px,相邻两条线只隔约 50px,位置标签只在错位时显示 */
+/* 靠右边线的位置把徽标翻到左侧,免得出球场。球场上一律只放短徽标(×0.9 / 2125' / 0.37):
+   长形式(CB→FB ×0.9,约 95px)在 740px 半场里无论翻不翻都会撞上邻座
+   (曼城 4-2-3-1 右后卫翻过去撞中卫,4-3-3 / 3-4-3 中场不翻撞右邻,实测),完整文字走 title */
+.slotRightEdge .slotBadge {
+  left: auto;
+  right: calc(100% - 4px);
+}
+
+/* 5 人一排时翻过去会撞上左邻,改为不翻、往里收 8px(-4px 时最长的分钟徽标出界 0.7px) */
+.pitchDense .slotRightEdge .slotBadge {
+  left: calc(100% - 8px);
+  right: auto;
+}
+
+.slotDropTarget .face {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.slotDropOver .face {
+  box-shadow: 0 0 0 4px var(--brand-gold), 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* 窄屏:半场按 68/52.5 只有约 250px 高,5 排(锋线到门将)放不下"头像 32 + 名字 14";
+   把容器拉高到 68/66(约 315px,球场线条随之纵向拉伸约 26%,接近 FotMob 的竖向整场观感),每排约 51px */
 @media (max-width: 600px) {
   .pitch {
-    --slot-bottom: 30px;
-  }
-
-  /* 错位折扣挂在圆点右侧(与圆点同高),不占名字下方的高度,也不压到上一排的名字 */
-  .slotWarn {
-    position: absolute;
-    top: 4px;
-    left: calc(50% + 14px);
-  }
-
-  /* 靠右边线的位置,折扣挂到圆点左侧,避免被球场边缘裁掉 */
-  .slotRightEdge .slotWarn {
-    left: auto;
-    right: calc(50% + 14px);
+    aspect-ratio: 68 / 66;
+    --slot-bottom: 48px;
   }
 
   .slot {
     width: 64px;
-    transform: translate(-50%, -13px);
+    gap: 0;
+    transform: translate(-50%, -15px);
   }
 
-  .warnLong {
+  /* 头像缩到 28px:PlayerAvatar 的尺寸类固定 px,这里用更高优先级的后代选择器压过去;白边画在 32px 盒子内部,名字紧贴盒子底 */
+  .face {
+    width: 32px;
+    height: 32px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+
+  .pitch .face > :first-child {
+    width: 28px;
+    height: 28px;
+  }
+
+  .faceEmpty {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+
+  /* 位置正确时不显示位置徽标(5 人一排时会压到邻座) */
+  .slotBadgeQuiet {
     display: none;
-  }
-
-  .dot {
-    width: 26px;
-    height: 26px;
   }
 
   .slotName {
     max-width: 64px;
+    font-size: 12px;
+    line-height: 1.15;
   }
 
-  .slotGroup:not(.slotWarn) {
-    display: none;
+  /* 手机上任何位置都放得下短徽标,一律不翻转;徽标半压在头像右缘(FotMob 同款) */
+  .slotBadge {
+    left: calc(100% - 6px);
+    padding: 0 4px;
+    line-height: 1.25;
+  }
+
+  /* 靠右边线的位置:不翻转(翻过去会撞左邻),改为压在头像右半上,保证不出球场 */
+  .slotRightEdge .slotBadge,
+  .pitchDense .slotRightEdge .slotBadge {
+    left: calc(100% - 18px);
+    right: auto;
   }
 }
 
-.bench {
-  margin-top: var(--sp-3);
-}
-
-.benchToolbar {
+/* ---- 向导 ---- */
+.steps {
   display: flex;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  flex: 1 1 0;
+}
+
+.stepInner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-3);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+button.stepInner {
+  cursor: pointer;
+}
+
+.stepNum {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.stepActive .stepInner {
+  color: var(--ink);
+  border-color: var(--brand-teal);
+}
+
+.stepActive .stepNum,
+.stepDone .stepNum {
+  background: var(--brand-teal);
+  color: #fff;
+}
+
+.stepDone .stepInner {
+  color: var(--ink-2);
+}
+
+.wizardGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 var(--sp-4);
+}
+
+@media (min-width: 900px) {
+  .wizardGrid {
+    grid-template-columns: minmax(0, 520px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.summaryStrip {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 14px;
+}
+
+/* ---- 面板(选人 / 选队) ---- */
+.sheetOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(13, 32, 41, 0.45);
+}
+
+.sheet {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-4) calc(24px + env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  color: var(--ink);
+  animation: sheetUp 0.22s ease-out;
+}
+
+@media (min-width: 600px) {
+  .sheetOverlay {
+    align-items: center;
+  }
+
+  .sheet {
+    width: min(480px, calc(100% - 32px));
+    max-height: 80vh;
+    border-radius: var(--r-card);
+    padding-bottom: var(--sp-4);
+  }
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+
+.sheetHead {
+  display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin: var(--sp-2) 0;
+  margin-bottom: var(--sp-2);
+}
+
+.sheetSearch {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.sheetTitle {
+  margin: 0 0 var(--sp-2);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sheetSection {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickRow:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pickRowActive .pickName {
+  color: var(--brand-teal);
+}
+
+.pickMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pickName {
+  font-weight: 700;
+}
+
+.pickWarn {
+  color: var(--pending);
+  font-weight: 700;
 }
 
 .linkBtn {
@@ -326,49 +603,11 @@
   cursor: pointer;
 }
 
-.benchGroup {
-  margin-top: var(--sp-2);
-}
 
-.benchGroupTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-2);
-  margin-bottom: 4px;
-}
 
-.benchList {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 
-.benchRow {
-  display: grid;
-  grid-template-columns: 32px 1fr auto;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: 40px;
-  padding: 4px var(--sp-2);
-  border-radius: var(--r-control);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
 
-.benchRow:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
 
-.num {
-  font-weight: 700;
-  color: var(--ink-2);
-  text-align: center;
-}
 
 
 .chips {
