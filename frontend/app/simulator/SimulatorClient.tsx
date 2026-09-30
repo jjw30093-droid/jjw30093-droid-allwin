@@ -362,7 +362,7 @@ export function SimulatorClient({
             {pairFixtures.length > 0 ? (
               <div className={styles.chips}>
                 <Chip active={useMarket} onClick={() => setUseMarket(!useMarket)}>
-                  {useMarket ? "已按市场参考校准预计进球" : "不用市场参考"}
+                  {useMarket ? "已参考市场数据" : "不参考市场数据"}
                 </Chip>
               </div>
             ) : null}
@@ -383,10 +383,14 @@ export function SimulatorClient({
                     selected={selected?.side === side ? selected.i : null}
                     onSelect={(i) => setSelected(i === null ? null : { side, i })}
                     onChange={side === 0 ? setHome : setAway}
+                    showHint={side === 0}
                   />
                 );
               })}
             </div>
+            <p className={styles.muted} style={{ marginTop: 12 }} data-testid="position-note">
+              球员位置为规则解码,尚未人工校验。
+            </p>
           </section>
 
           <section className={styles.card}>
@@ -447,10 +451,6 @@ export function SimulatorClient({
                 );
               })}
             </div>
-            <p className={styles.muted} style={{ marginTop: 12 }}>
-              胜率影响:各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥
-              {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
-            </p>
           </section>
 
           <section className={styles.card}>
@@ -522,12 +522,30 @@ export function SimulatorClient({
                 />
               </label>
               <button type="button" className={styles.secondaryBtn} onClick={() => setSeed(Math.floor(Math.random() * 2 ** 31))}>
-                换一个编号
+                随机编号
               </button>
             </div>
-            <p className={styles.muted} style={{ marginTop: 8 }}>
-              随机强度:{chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准(κ=${cal.kappa})` : "标准(状态系数关闭)"}
-            </p>
+            <dl className={styles.techList} style={{ marginTop: 16 }}>
+              <dt>市场参考</dt>
+              <dd data-testid="setup-market">
+                {fixtureId != null
+                  ? `已参考本场市场数据(${params.fixtures[String(fixtureId)]?.status ?? ""}),市场权重 w=${cal?.market_w ?? 1}:基准预计进球按市场参考 λ 与数据模型 λ 加权`
+                  : pairFixtures.length
+                    ? "本对阵有市场数据,当前未参考(w=0),预计进球只用数据模型"
+                    : "本对阵没有市场数据,预计进球只用数据模型"}
+              </dd>
+              <dt>侧重点的计算方法</dt>
+              <dd>
+                胜率影响:同一模拟编号各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥{" "}
+                {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
+              </dd>
+              <dt>位置解码</dt>
+              <dd>
+                球员的主要位置由阵型字符串与首发格子行列按规则解码(8 组:门将、中卫、边后卫、后腰、中场、前腰、边锋、中锋),尚未人工校验;球员被放到非主要位置时按 f_pos 打折(相邻位置 ×0.9、其它 ×0.7、门将互换 ×0.3)。
+              </dd>
+              <dt>随机强度</dt>
+              <dd>{chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准(κ=${cal.kappa})` : "标准(状态系数关闭)"}</dd>
+            </dl>
           </Fold>
         </>
       ) : null}

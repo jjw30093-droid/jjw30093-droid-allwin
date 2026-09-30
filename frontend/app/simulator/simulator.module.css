@@ -370,11 +370,6 @@
   text-align: center;
 }
 
-.unverified {
-  font-size: 12px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
 
 .chips {
   display: flex;

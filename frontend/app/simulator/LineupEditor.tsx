@@ -116,7 +116,7 @@ function PoolRow({ p, onClick }: { p: PlayerParams; onClick: () => void }) {
     >
       <span className={styles.num}>{p.shirt_number ?? "-"}</span>
       <span>
-        {displayName(p)} · {POS_LABEL[p.main_position]} <span className={styles.unverified}>(位置未校验)</span>
+        {displayName(p)} · {POS_LABEL[p.main_position]}
       </span>
       <span className={styles.muted}>{p.minutes} 分钟</span>
     </button>
@@ -131,6 +131,7 @@ export function LineupEditor({
   selected,
   onSelect,
   onChange,
+  showHint = false,
 }: {
   params: SimParams;
   sideLabel: string;
@@ -139,6 +140,8 @@ export function LineupEditor({
   selected: number | null;
   onSelect: (i: number | null) => void;
   onChange: (next: TeamSetup) => void;
+  /** 操作说明全页只显示一次(主队编辑器);选中位置时各队仍显示自己的点选提示 */
+  showHint?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -249,11 +252,13 @@ export function LineupEditor({
           ))}
         </div>
         <div className={styles.bench}>
-          <p className={styles.muted}>
-            {selected === null
-              ? "把阵容池球员拖到球场位置换上,或把一名首发拖到另一名首发身上互换(手机上长按拖动);也可以点选:点球场上的球员选中位置,再点替补换上,连点两名首发互换。球员位置为规则解码,位置未校验。"
-              : `已选中 ${POS_LABEL[setup.slots[selected].group]} 位置,点下面的替补换上,或再点一名首发互换。`}
-          </p>
+          {selected !== null ? (
+            <p className={styles.muted}>{`已选中 ${POS_LABEL[setup.slots[selected].group]} 位置,点下面的替补换上,或再点一名首发互换。`}</p>
+          ) : showHint ? (
+            <p className={styles.muted} data-testid="lineup-hint">
+              拖动球员换人或互换位置（手机长按拖动，也可点选）
+            </p>
+          ) : null}
           <div className={styles.benchToolbar}>
             <span className={styles.muted}>
               阵容池 {visible.length} 人{!showAll && hiddenCount ? `(已隐藏出场不足 ${MIN_MINUTES_DEFAULT} 分钟的 ${hiddenCount} 人)` : ""}
