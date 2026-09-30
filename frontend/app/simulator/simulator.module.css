@@ -701,134 +701,206 @@ button.stepInner {
   font-variant-numeric: tabular-nums;
 }
 
-.momentum {
-  display: flex;
-  height: 10px;
-  border-radius: var(--r-pill);
-  overflow: hidden;
-  margin: var(--sp-3) 0;
-  background: var(--surface-2);
+.liveStats {
+  display: grid;
+  gap: 2px;
+  max-width: 280px;
+  margin: var(--sp-3) auto;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
-.momHome {
-  background: var(--sim-home);
-  transition: width 0.3s ease;
+.liveStatRow {
+  display: grid;
+  grid-template-columns: 1fr 56px 1fr;
+  align-items: center;
+  text-align: center;
 }
 
-.momAway {
-  background: var(--sim-away);
-  transition: width 0.3s ease;
+.liveStatRow dt {
+  color: var(--ink-3);
+  font-size: 12px;
 }
 
-.animPitch {
+.liveStatRow dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.liveStatRow dd:first-child {
+  color: var(--sim-home);
+  text-align: right;
+}
+
+.liveStatRow dd:last-child {
+  color: var(--sim-away);
+  text-align: left;
+}
+
+/* 画布 = 球场 + 两端各 3 米(球网);球场底图缩进 3 米,画布铺满 */
+.animStage {
   position: relative;
   width: 100%;
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
-  aspect-ratio: 105 / 68;
   border-radius: var(--r-card-sm);
   overflow: hidden;
 }
 
-.animPitch > svg {
+.animStagePortrait {
+  max-width: none;
+  height: 100%;
+  width: auto;
+  margin: 0 auto;
+}
+
+.animPitchInner {
+  position: absolute;
+  inset: 0;
+}
+
+.animPitchInner > svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.shot {
+.animCanvas {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  border: 1.5px solid var(--surface);
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.shotHome {
-  background: var(--sim-home-pitch);
+/* 进球:画面闪一下、比分跳动、射手卡片 */
+.goalFlash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--brand-gold);
+  animation: goalFlash 0.6s ease-out forwards;
 }
 
-.shotAway {
-  background: var(--sim-away-pitch);
+@keyframes goalFlash {
+  0% {
+    opacity: 0.45;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }
 
-.shotGoal {
-  width: 20px;
-  height: 20px;
-  border: 3px solid var(--brand-gold);
+.animFlashing {
+  position: relative;
 }
 
-.goalPop {
+.scoreBump {
+  display: inline-block;
+  animation: scoreBump 0.5s ease-out;
+}
+
+@keyframes scoreBump {
+  0% {
+    transform: scale(1);
+  }
+
+  35% {
+    transform: scale(1.35);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.scorerCard {
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  bottom: 8%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: 88%;
+  padding: var(--sp-2) var(--sp-4);
+  border: 2px solid var(--brand-gold);
+  border-radius: var(--r-card);
   background: var(--surface);
   color: var(--ink);
-  border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
-  padding: var(--sp-3) var(--sp-5);
-  text-align: center;
-  border: 2px solid var(--brand-gold);
+  transform: translateX(-50%);
+  animation: cardIn 0.3s ease-out;
 }
 
-.goalPopTitle {
-  font-size: 22px;
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.scorerCardTitle {
+  font-size: 18px;
   font-weight: 800;
+  line-height: 1.2;
 }
 
-.feed {
-  list-style: none;
-  padding: 0;
-  margin: var(--sp-3) 0 0;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.scorerCardName {
+  font-size: 15px;
+  font-weight: 700;
 }
 
-.liveXg {
-  font-size: 13px;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
+@media (prefers-reduced-motion: reduce) {
+  .goalFlash,
+  .scoreBump,
+  .scorerCard {
+    animation: none;
+  }
+
+  .goalFlash {
+    display: none;
+  }
 }
 
-.pitchNote {
-  position: absolute;
-  right: 8px;
-  bottom: 6px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-.ticker {
+/* 文字直播 */
+.commentary {
   list-style: none;
   margin: var(--sp-3) 0 0;
   padding: 0;
-  max-height: 168px;
+  max-height: 220px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--r-control);
-  font-size: 13px;
+  font-size: 14px;
 }
 
-.tickRow {
+.commentRow {
   display: grid;
-  grid-template-columns: 52px 72px 1fr auto;
+  grid-template-columns: 44px 1fr;
   gap: var(--sp-2);
-  align-items: center;
-  padding: 6px var(--sp-3);
+  padding: 8px var(--sp-3);
   border-bottom: 1px solid var(--border);
   color: var(--ink-2);
+  line-height: 1.5;
 }
 
-.tickKey {
+.commentKey {
   background: var(--gold-hi-accent);
   color: var(--ink);
   font-weight: 700;
+}
+
+.commentText {
+  min-width: 0;
 }
 
 .tickHome {
@@ -841,13 +913,43 @@ button.stepInner {
 
 .tickClock {
   font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
 }
 
-.tickTeam,
-.tickPlayer {
+.animControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.speedGroup {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.speedBtn {
+  min-width: 56px;
+  min-height: 44px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.speedBtn + .speedBtn {
+  border-left: 1px solid var(--border-strong);
+}
+
+.speedBtnOn {
+  background: var(--brand-teal, var(--ink));
+  color: #fff;
+  font-weight: 700;
 }
 
 /* ---- 结果 ---- */
@@ -1259,4 +1361,105 @@ button.stepInner {
   .shareBtns > button {
     flex: 0 0 auto;
   }
+}
+
+/* ---- 录屏模式:铺满屏幕的 9:16 竖屏画面,盖住导航栏 ---- */
+.recOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  background: var(--bg, var(--surface));
+}
+
+.recFrame {
+  display: flex;
+  flex-direction: column;
+  width: min(100vw, calc(100dvh * 9 / 16));
+  height: 100dvh;
+  padding: var(--sp-4) var(--sp-3);
+  box-sizing: border-box;
+}
+
+.recAnim {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.recAnim .animStage {
+  flex: 1 1 0;
+  min-height: 0;
+  align-self: center;
+  max-width: 100%;
+}
+
+.recTag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.commentaryRecord {
+  flex: none;
+  max-height: none;
+  overflow: hidden;
+  min-height: 150px;
+  font-size: 15px;
+}
+
+.recResult {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  animation: cardIn 0.3s ease-out;
+}
+
+.recResultTop {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: var(--sp-2);
+}
+
+.recResultScore {
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.recBrand {
+  margin: var(--sp-4) 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.recExit {
+  align-self: center;
+  min-height: 44px;
+  margin-top: var(--sp-4);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
 }

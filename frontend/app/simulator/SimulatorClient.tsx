@@ -9,7 +9,7 @@ import { IMPACT_RUNS, impactJobs, summarizeImpact, type ImpactJob, type SideImpa
 import { lastLineupSetup } from "@/features/simulator/formation";
 import { decodeResult, parseSetupQuery, parseTeamsQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
 import type { BadgeMode } from "@/features/simulator/slotBadge";
-import { makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
+import { ensureShotDetails, makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
 import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import { emptySlots, lineupIssue, marketStatus, pairWithAway, pairWithHome, type WizardStep } from "@/features/simulator/wizard";
@@ -17,6 +17,7 @@ import { Fold } from "./Fold";
 import { LineupPitchCard } from "./LineupPitchCard";
 import type { FixtureIndexEntry } from "./loadParams";
 import { MatchAnimation } from "./MatchAnimation";
+import { RecordStage } from "./RecordStage";
 import { ResultView } from "./ResultView";
 import { TeamFocusCard } from "./TeamFocusCard";
 import { WizardSteps } from "./WizardSteps";
@@ -71,6 +72,7 @@ export function SimulatorClient({
   const [useMarket, setUseMarket] = useState(true);
   const [fixtureChoice, setFixtureChoice] = useState<number | null>(null);
   const [chaos, setChaos] = useState(false);
+  const [recordMode, setRecordMode] = useState(false);
   const [seed, setSeed] = useState(DEFAULT_SEED);
   const [step, setStep] = useState<WizardStep>(initialStep);
   const [badge, setBadge] = useState<BadgeMode>("position");
@@ -186,7 +188,7 @@ export function SimulatorClient({
         setStep(2);
       }
       if (snap) {
-        setResult({ snap, shared: true });
+        setResult({ snap: ensureShotDetails(snap, params), shared: true });
         setPhase("result");
       } else if (token) {
         setLinkError("分享链接中的结果无法解析,只恢复了设定。");
@@ -264,12 +266,20 @@ export function SimulatorClient({
       {linkError ? <p className={styles.error}>{linkError}</p> : null}
 
       {phase === "animating" && result ? (
-        <MatchAnimation
-          single={result.snap.single}
-          names={[result.snap.teams[0].name, result.snap.teams[1].name]}
-          crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
-          onDone={finishAnimation}
-        />
+        recordMode ? (
+          <RecordStage
+            snap={result.snap}
+            crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
+            onExit={finishAnimation}
+          />
+        ) : (
+          <MatchAnimation
+            single={result.snap.single}
+            names={[result.snap.teams[0].name, result.snap.teams[1].name]}
+            crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
+            onDone={finishAnimation}
+          />
+        )
       ) : null}
 
       {phase === "result" && result?.shared ? (
@@ -458,6 +468,9 @@ export function SimulatorClient({
                       <Chip active={chaos} onClick={() => setChaos(!chaos)}>
                         {chaos ? "随机强度:混乱模式" : "随机强度:标准"}
                       </Chip>
+                      <Chip active={recordMode} onClick={() => setRecordMode(!recordMode)} testId="record-mode">
+                        {recordMode ? "录屏模式:开" : "录屏模式:关"}
+                      </Chip>
                     </div>
                     <div className={styles.row} style={{ marginTop: 16 }}>
                       <button type="button" className={styles.secondaryBtn} onClick={() => goStep(1)}>
@@ -472,6 +485,8 @@ export function SimulatorClient({
                             setShowIssue(true);
                             return;
                           }
+                          // 录屏模式:在点击这一刻请求全屏(浏览器只允许在用户操作里请求);不支持时照样铺满视口
+                          if (recordMode) document.documentElement.requestFullscreen?.().catch(() => {});
                           run(seed);
                         }}
                         data-testid="simulate-btn"

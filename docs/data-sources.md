@@ -324,6 +324,28 @@ canonical payload 会让每场比赛在与本次采集无关的时间点凭空�
   球员本人,不存在归属模糊的空间。**可以按球员使用**(场均、排名皆可),姆巴佩
   系列 P2 页"西甲前场场均大机会错失最多"这条既有结论不受影响,不需要撤回。
 
+### 1.4.3 射门表 `fact_shotmap` 字段语义与覆盖(2026-09-30,模拟器射门样本库核验)
+
+生产库只读核查(`mode=ro` + `query_only`),范围 = 五大联赛(47/87/55/54/53)× 2025/26、2026/27,
+共 51,251 脚(2025/26 44,182 / 1,752 场;2026/27 7,069 / 250 场)。
+
+| 字段 | 含义 | 覆盖 / NULL 含义 |
+|---|---|---|
+| `X_Coord` / `Y_Coord` | 射门点,米。X 0–105,**进攻方向 = X 增大,被攻球门在 X=105**;Y 0–68 | 0 NULL。**Y < 34 = 进攻方右路,Y > 34 = 左路**:右边锋萨卡/萨拉赫/亚马尔运动战射门均值 Y 25–28,左路的维尼修斯/姆巴佩 40–42 |
+| `xG` | 射门 xG | 141 NULL(0.3%),**全部是乌龙球**(见 CLAUDE.md §11.3:乌龙记在"打进自家球门"一方名下,X≈5) |
+| `Situation` | 进攻方式 | 0 NULL。RegularPlay 31,939 / FromCorner 8,379 / FastBreak 3,933 / SetPiece 3,147 / ThrowInSetPiece 1,385 / FreeKick 1,363 / Penalty 610 / IndividualPlay 495 |
+| `Shot_Type` | 射门方式 | 0 NULL。RightFoot 25,215 / LeftFoot 16,750 / Header 9,112 / OtherBodyParts 174 |
+| `Outcome` | 结果 | 0 NULL。只有 AttemptSaved 25,850 / Miss 18,797 / Goal 5,605 / Post 999 四种;**AttemptSaved = 门将扑救 + 后卫封堵,两者混在一起** |
+| `Is_Blocked` / `Is_On_Target` / `Is_From_Inside_Box` | 封堵 / 射正 / 禁区内 | 2025/26 **32,062 NULL(72.6%)**:列是后加的,只回填了 2025-12-06 之后的比赛;2026/27 0 NULL。已知的行里 AttemptSaved 约一半 `Is_Blocked=1`(封堵),Miss/Post/Goal 恒为 0 |
+| `Is_Own_Goal` | 乌龙 | 2025/26 44,119 NULL(同上,后加列);2026/27 738 NULL、27 行 =1。判乌龙以 `xG IS NULL` 为准 |
+| `Goal_Crossed_Y` / `Goal_Crossed_Z` | 球越过门线的位置:Y 同 `Y_Coord` 坐标系,Z = 离地高度(米) | 基本只在 2026/27 有(约 90%);2025/26 只有 63 行。门框范围实测 Y 30.3–37.7、Z ≤ 2.5(扑救/进球/门框),偏出的 Y 0–68、Z 最高 7.6 |
+| `Blocked_X` / `Blocked_Y` | 封堵位置 | 2026/27 封堵射门约 90% 有值;其余 NULL |
+| `On_Goal_Shot_X/Y`、`xGOT` | 门框内落点(0–2 × 0–0.68 的归一化门面坐标)、射正 xG | `On_Goal_Shot_*` 与 `Goal_Crossed_*` 同一批行有值;`xGOT` 几乎全覆盖 |
+
+用于模拟器"射门样本库"(`scripts/simulator/shot_samples.py`)时的取舍:只用 `Is_Blocked` 非空、
+`xG` 非空且非乌龙的射门(19,136 脚),否则扑救/封堵分不清、比例失真;越线点/封堵点缺失的样本
+由前端按结果补示意终点,并在样本里如实标为"无终点"(数组长度 4)。
+
 ## 2. NowGoal(部分验证,逐项标注)
 
 ### 2.1 端点与格式

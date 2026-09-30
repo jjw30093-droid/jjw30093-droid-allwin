@@ -143,8 +143,22 @@ export interface FixtureParams {
   market_lambda: { home: number; away: number } | null;
 }
 
+/** 真实射门样本:[x, y, 射门方式, 结果] 或 [x, y, 射门方式, 结果, a, b](scripts/simulator/shot_samples.py)。
+ *  x 0–105(被攻球门在 x=105)、y 0–68(y<34 = 进攻方右路);射门方式 0 右脚 / 1 左脚 / 2 头球 / 3 其它;
+ *  结果 0 进球 / 1 扑救 / 2 封堵 / 3 偏出 / 4 门框;封堵时 (a,b) = 封堵点 (x,y),否则 = 越过门线的 (y, 离地高度 z)。 */
+export type ShotSample = [number, number, number, number] | [number, number, number, number, number, number];
+
+export interface ShotSampleLibrary {
+  version: 1;
+  fields: string[];
+  source?: Record<string, unknown>;
+  channels: Record<ShotChannel, { edges: number[]; bins: ShotSample[][] }>;
+}
+
 export interface SimParams {
   meta: { generated_at: string; effective_version?: string; model_version: string; uncalibrated: boolean };
+  /** 动画用真实射门样本库(五个联赛共用);旧参数文件没有,动画退回示意位置 */
+  shot_samples?: ShotSampleLibrary;
   leagues: Record<string, LeagueParams>;
   formations: Record<string, { samples: number; slots: FormationSlot[] }>;
   position_map: Record<string, Record<string, PosGroup>>;

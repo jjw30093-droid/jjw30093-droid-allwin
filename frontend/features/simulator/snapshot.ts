@@ -2,6 +2,7 @@
 // 打开分享链接时直接展示链接里的快照,不依赖当前参数重新计算,保证"原样展示这次结果"。
 
 import type { Focus, ManyResult, MatchConfig, MatchSetup, SingleResult } from "./engine";
+import { withShotDetails } from "./shotDetail";
 import type { PosGroup, SimParams } from "./types";
 
 export interface SnapLineupEntry {
@@ -84,7 +85,13 @@ export function makeSnapshot(params: SimParams, setup: MatchSetup, config: Match
     single: {
       ...single,
       epsilon: [r(single.epsilon[0], 4), r(single.epsilon[1], 4)],
-      events: single.events.map((e) => (e.xg === undefined ? e : { ...e, xg: r(e.xg, 3) })),
+      // 射门细节(真实射门位置/结果,供动画)在这里抽好写进快照;分享链接打开时原样使用。
+      // 先把 xG 取整再抽:与旧链接补细节(ensureShotDetails,只能看到取整后的 xG)输入完全相同
+      events: withShotDetails(
+        single.events.map((e) => (e.xg === undefined ? e : { ...e, xg: r(e.xg, 3) })),
+        single.seed,
+        params.shot_samples,
+      ),
     },
     many: {
       ...many,
@@ -120,4 +127,10 @@ export function ahText(line: number): string {
 /** 随机强度档位(面向用户):标准 / 混乱模式 */
 export function kappaUserLabel(chaos: boolean): string {
   return chaos ? "混乱模式(更随机)" : "标准";
+}
+
+/** 旧分享链接(射门细节上线前生成的)里没有射门细节:用当前参数的样本库按同一规则补上(确定性)。 */
+export function ensureShotDetails(snap: ResultSnapshot, params: SimParams): ResultSnapshot {
+  if (snap.single.events.every((e) => e.sd || (e.kind !== "shot" && e.kind !== "goal"))) return snap;
+  return { ...snap, single: { ...snap.single, events: withShotDetails(snap.single.events, snap.seed, params.shot_samples) } };
 }

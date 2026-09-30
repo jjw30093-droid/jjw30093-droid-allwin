@@ -12,6 +12,7 @@ import {
   type PosGroup,
   type RateModel,
   type ShotChannel,
+  type ShotSample,
   type SimParams,
 } from "./types";
 
@@ -494,6 +495,9 @@ export interface SimEvent {
   xg?: number;
   isGoal?: boolean;
   score?: [number, number];
+  /** 动画用的射门细节(位置 / 射门方式 / 结果 / 终点),模拟结束后由 shotDetail.ts 另行抽取写入;
+   *  引擎本身从不设置它,也不读它——同一模拟编号的比分与事件与此前完全一致。 */
+  sd?: ShotSample;
 }
 
 export interface SingleResult {

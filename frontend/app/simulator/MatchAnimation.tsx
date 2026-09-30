@@ -2,15 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
+import { commentLine, fullTimeLine, halfTimeLine, kickoffLine, liveStats } from "@/features/simulator/commentary";
 import type { SimEvent, SingleResult } from "@/features/simulator/engine";
-import { mulberry32 } from "@/features/simulator/rng";
-import { cumulativeXg } from "@/features/simulator/xg";
+import { buildPlan, GOAL_HOLD_MS, NET_MARGIN, resolvedOrder, stageSize, tickAt, type StageOrientation } from "@/features/simulator/playback";
+import { shotEnd } from "@/features/simulator/shotDetail";
+import { drawFrame, readColors, type ShotAnim } from "./pitchCanvas";
 import styles from "./simulator.module.css";
 
-const DURATION_MS = 15000;
-const GOAL_POP_MS = 1600;
-const MOMENTUM_WINDOW = 8;
+/** 计时器间隔:约 30 帧/秒。用 setInterval + 真实时钟(不依赖 requestAnimationFrame:隐藏标签页时 rAF 会停,动画会卡住) */
+const FRAME_MS = 33;
 
 export const CHANNEL_LABEL: Record<string, string> = {
   open: "运动战",
@@ -21,34 +23,17 @@ export const CHANNEL_LABEL: Record<string, string> = {
   gk_error: "门将失误",
 };
 
-function eventLabel(e: SimEvent): string {
-  if (e.kind === "red") return "红牌";
-  if (e.kind === "injury") return "伤病换人";
-  if (e.channel === "owngoal") return "乌龙球";
-  if (e.channel === "penalty") return e.kind === "goal" ? "点球命中" : "点球未进";
-  if (e.channel === "gk_error") return e.kind === "goal" ? "门将失误·进球" : "门将失误·射门";
-  const ch = CHANNEL_LABEL[e.channel ?? "open"];
-  return e.kind === "goal" ? `进球·${ch}` : `射门·${ch} xG ${(e.xg ?? 0).toFixed(2)}`;
-}
+type Speed = 1 | 2;
 
-// 射门点只是示意位置(数据里没有射门坐标),按事件序号取确定性伪随机,同一种子画面一致。
-function shotXY(e: SimEvent, i: number, seed: number): { left: number; top: number } {
-  const r = mulberry32((seed + i * 7919) >>> 0);
-  let x: number;
-  let y: number;
-  if (e.channel === "penalty") {
-    x = 94;
-    y = 34;
-  } else if (e.channel === "owngoal") {
-    x = 101;
-    y = 30 + r() * 8;
-  } else {
-    const close = Math.min(e.xg ?? 0.1, 0.6) / 0.6;
-    x = 105 - (4 + (1 - close) * 19 + r() * 3);
-    y = 34 + (r() - 0.5) * (40 - close * 22);
-  }
-  if (e.team === 1) x = 105 - x;
-  return { left: (x / 105) * 100, top: (y / 68) * 100 };
+interface View {
+  tick: number;
+  /** 已落定的事件数(按落定时间排序的前缀) */
+  resolved: number;
+  halfTime: boolean;
+  fullTime: boolean;
+  /** 正在展示射手卡片的进球(事件序号) */
+  goalCard: number | null;
+  flying: number;
 }
 
 export function MatchAnimation({
@@ -56,67 +41,166 @@ export function MatchAnimation({
   names,
   crests = [null, null],
   onDone,
+  mode = "inline",
 }: {
   single: SingleResult;
   names: [string, string];
   /** 同源队徽地址;没有时显示队名首字 */
   crests?: [string | null, string | null];
   onDone: () => void;
+  /** inline = 页面内(横版球场、速度与跳过按钮);record = 录屏模式(竖版球场、无按钮、文字直播只留最近几条) */
+  mode?: "inline" | "record";
 }) {
-  const [tick, setTick] = useState(0);
-  const startRef = useRef<number | null>(null);
+  const orientation: StageOrientation = mode === "record" ? "portrait" : "landscape";
+  const plan = useMemo(() => buildPlan(single), [single]);
+  const order = useMemo(() => resolvedOrder(plan), [plan]);
+  const shots = useMemo<ShotAnim[]>(
+    () =>
+      single.events.flatMap((e, i) =>
+        (e.kind === "shot" || e.kind === "goal") && e.sd
+          ? [{ index: i, team: e.team, sd: e.sd, end: shotEnd(e.sd, single.seed, i), start: plan.eventStart[i] }]
+          : [],
+      ),
+    [single, plan],
+  );
+
+  const [view, setView] = useState<View>({ tick: 0, resolved: 0, halfTime: false, fullTime: false, goalCard: null, flying: 0 });
+  const [speed, setSpeed] = useState<Speed>(1);
+  const speedRef = useRef<Speed>(1);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const doneRef = useRef(false);
-
-  // 按墙钟推进(不用 requestAnimationFrame:页面在后台时 rAF 会暂停,动画永远播不完)。
+  const onDoneRef = useRef(onDone);
   useEffect(() => {
-    startRef.current = performance.now();
-    const id = setInterval(() => {
-      const t = Math.min(1, (performance.now() - (startRef.current ?? 0)) / DURATION_MS);
-      setTick(Math.floor(t * single.totalTicks));
-      if (t >= 1 && !doneRef.current) {
-        doneRef.current = true;
-        clearInterval(id);
-        setTimeout(onDone, 800);
-      }
-    }, 50);
-    return () => clearInterval(id);
-  }, [single, onDone]);
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
-  const shown = useMemo(() => single.events.filter((e) => e.tick <= tick), [single, tick]);
+  const changeSpeed = (s: Speed) => {
+    speedRef.current = s;
+    setSpeed(s);
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const stage = stageRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !stage || !ctx) return;
+    let colors = readColors(stage);
+    let pxPerM = 1;
+    const fit = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const rect = stage.getBoundingClientRect();
+      const { w } = stageSize(orientation);
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      pxPerM = (rect.width * dpr) / w;
+      colors = readColors(stage);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(stage);
+
+    let playMs = 0;
+    let last = performance.now();
+    let prev: View = { tick: -1, resolved: -1, halfTime: false, fullTime: false, goalCard: null, flying: -1 };
+    const frame = () => {
+      const now = performance.now();
+      playMs += (now - last) * speedRef.current;
+      last = now;
+      const ms = Math.min(playMs, plan.total);
+      const { flying } = drawFrame(ctx, orientation, pxPerM, ms, shots, colors);
+      let resolved = prev.resolved < 0 ? 0 : prev.resolved;
+      while (resolved < order.length && plan.eventResolved[order[resolved]] <= ms) resolved += 1;
+      let goalCard: number | null = null;
+      for (let k = resolved - 1; k >= 0; k--) {
+        const i = order[k];
+        if (single.events[i].kind !== "goal") continue;
+        if (ms - plan.eventResolved[i] < GOAL_HOLD_MS) goalCard = i;
+        break;
+      }
+      const next: View = {
+        tick: tickAt(plan, ms),
+        resolved,
+        halfTime: plan.halfTimeAt !== null && ms >= plan.halfTimeAt,
+        fullTime: ms >= plan.fullTimeAt,
+        goalCard,
+        flying: Math.min(flying, 1),
+      };
+      if (
+        next.tick !== prev.tick ||
+        next.resolved !== prev.resolved ||
+        next.halfTime !== prev.halfTime ||
+        next.fullTime !== prev.fullTime ||
+        next.goalCard !== prev.goalCard ||
+        next.flying !== prev.flying
+      ) {
+        prev = next;
+        setView(next);
+      }
+      if (playMs >= plan.total && !doneRef.current) {
+        doneRef.current = true;
+        onDoneRef.current();
+      }
+    };
+    frame();
+    const id = window.setInterval(frame, FRAME_MS);
+    return () => {
+      window.clearInterval(id);
+      ro.disconnect();
+    };
+  }, [plan, order, shots, orientation, single]);
+
+  const resolvedEvents = useMemo(() => order.slice(0, view.resolved).map((i) => single.events[i]), [order, view.resolved, single]);
   const score = useMemo(() => {
     const s: [number, number] = [0, 0];
-    for (const e of shown) if (e.kind === "goal") s[e.team] += 1;
+    for (const e of resolvedEvents) if (e.kind === "goal") s[e.team] += 1;
     return s;
-  }, [shown]);
+  }, [resolvedEvents]);
+  const stats = useMemo(() => liveStats(resolvedEvents, Infinity), [resolvedEvents]);
 
-  const clock = useMemo(() => {
-    const last = [...shown].reverse().find((e) => e.tick === tick);
-    if (last) return last.clock;
-    const half = tick >= single.halfTimeTick ? 2 : 1;
-    const m = half === 1 ? tick + 1 : 46 + (tick - single.halfTimeTick);
-    return half === 1 ? `${Math.min(m, 45)}'` : `${Math.min(m, 90)}'`;
-  }, [shown, tick, single.halfTimeTick]);
+  const clock = view.fullTime
+    ? "全场结束"
+    : view.halfTime && view.tick < single.halfTimeTick
+      ? "半场"
+      : clockOf(view.tick, single.halfTimeTick, single.events);
 
-  const momentum = useMemo(() => {
-    let h = 0;
-    let a = 0;
-    for (const e of shown) {
-      if (e.tick < tick - MOMENTUM_WINDOW || e.xg === undefined) continue;
-      if (e.team === 0) h += e.xg;
-      else a += e.xg;
+  // 文字直播:最新在上;开场 / 半场 / 终场各一句
+  const lines = useMemo(() => {
+    const out: { key: string; clock: string; text: string; team: 0 | 1 | null; key2: boolean }[] = [];
+    out.push({ key: "ko", clock: "0'", text: kickoffLine(single.seed, names), team: null, key2: false });
+    const ht = single.halfTimeTick;
+    let htDone = false;
+    const htScore: [number, number] = [0, 0];
+    for (let k = 0; k < view.resolved; k++) {
+      const i = order[k];
+      const e = single.events[i];
+      if (!htDone && view.halfTime && e.tick >= ht) {
+        out.push({ key: "ht", clock: "半场", text: halfTimeLine(single.seed, names, htScore), team: null, key2: true });
+        htDone = true;
+      }
+      if (e.kind === "goal" && e.tick < ht) htScore[e.team] += 1;
+      const text = commentLine(single.events, i, single.seed, names);
+      if (text) out.push({ key: `e${i}`, clock: e.clock, text, team: e.team, key2: e.kind === "goal" || e.kind === "red" });
     }
-    return h + a > 0 ? h / (h + a) : 0.5;
-  }, [shown, tick]);
+    if (!htDone && view.halfTime) out.push({ key: "ht", clock: "半场", text: halfTimeLine(single.seed, names, htScore), team: null, key2: true });
+    if (view.fullTime) out.push({ key: "ft", clock: "终场", text: fullTimeLine(single.seed, names, score), team: null, key2: true });
+    return out.reverse();
+  }, [single, names, order, view.resolved, view.halfTime, view.fullTime, score]);
 
-  // 弹窗列出窗口内的全部进球(最新在上):两球相隔很近时后一个不会把前一个顶掉。
-  const popTicks = Math.ceil((GOAL_POP_MS / DURATION_MS) * single.totalTicks);
-  const popGoals = shown.filter((e) => e.kind === "goal" && tick - e.tick <= popTicks).reverse();
-  const lastGoal = popGoals[0];
-  const xg = useMemo(() => cumulativeXg(single.events, tick), [single, tick]);
-  const ticker = [...shown].reverse();
+  const card = view.goalCard !== null ? single.events[view.goalCard] : null;
+  const { w, h } = stageSize(orientation);
+  const inset = `${(NET_MARGIN / (orientation === "landscape" ? w : h)) * 100}%`;
+  const record = mode === "record";
 
   return (
-    <section className={styles.card} data-testid="sim-animation">
+    <section
+      className={`${record ? styles.recAnim : styles.card} ${card ? styles.animFlashing : ""}`}
+      data-testid="sim-animation"
+      data-flying={view.flying}
+      data-goal-card={card ? "1" : "0"}
+      data-full-time={view.fullTime ? "1" : "0"}
+    >
+      {card ? <div key={view.goalCard} className={styles.goalFlash} aria-hidden="true" /> : null}
       <div className={styles.scoreboard}>
         <span className={`${styles.sbTeam} ${styles.sbTeamCol}`} style={{ color: "var(--sim-home)" }}>
           <TeamBadge teamName={names[0]} crestUrl={crests[0]} size={40} eager />
@@ -124,76 +208,111 @@ export function MatchAnimation({
         </span>
         <div>
           <div className={styles.sbScore}>
-            {score[0]} : {score[1]}
+            <span key={`s${score[0]}-${score[1]}`} className={styles.scoreBump} data-testid="anim-score">
+              {score[0]} : {score[1]}
+            </span>
           </div>
-          <div className={styles.clock}>{tick >= single.totalTicks ? "全场结束" : clock}</div>
-          <div className={styles.liveXg} data-testid="live-xg">
-            xG {xg[0].toFixed(2)} : {xg[1].toFixed(2)}
-          </div>
+          <div className={styles.clock}>{clock}</div>
+          {record ? <div className={styles.recTag}>模拟</div> : null}
         </div>
         <span className={`${styles.sbTeam} ${styles.sbTeamCol}`} style={{ color: "var(--sim-away)" }}>
           <TeamBadge teamName={names[1]} crestUrl={crests[1]} size={40} eager />
           {names[1]}
         </span>
       </div>
-      <div className={styles.momentum} aria-label={`势头 主队 ${Math.round(momentum * 100)}%`}>
-        <span className={styles.momHome} style={{ width: `${momentum * 100}%` }} />
-        <span className={styles.momAway} style={{ width: `${(1 - momentum) * 100}%` }} />
-      </div>
-      <div className={styles.animPitch}>
-        <FootballPitchBackground orientation="landscape" variant="neutral" />
-        {shown
-          .map((e, i) => ({ e, i }))
-          .filter(({ e }) => e.kind === "shot" || e.kind === "goal")
-          .map(({ e, i }) => {
-            const { left, top } = shotXY(e, i, single.seed);
-            return (
-              <span
-                key={i}
-                className={`${styles.shot} ${e.team === 0 ? styles.shotHome : styles.shotAway} ${e.kind === "goal" ? styles.shotGoal : ""}`}
-                style={{ left: `${left}%`, top: `${top}%` }}
-              />
-            );
-          })}
-        <span className={styles.pitchNote}>射门位置为示意</span>
-        {lastGoal ? (
-          <div className={styles.goalPop} role="status">
-            <div className={styles.goalPopTitle}>{lastGoal.channel === "owngoal" ? "乌龙球!" : "进球!"}</div>
-            {popGoals.map((g, i) => (
-              <div key={i}>
-                {names[g.team]} · {g.clock} · {g.playerName ?? ""}
-                {g.channel === "owngoal" ? "(乌龙)" : ` · ${CHANNEL_LABEL[g.channel ?? "open"]}`}
+
+      <dl className={styles.liveStats} data-testid="live-stats">
+        {(
+          [
+            ["射门", stats.shots[0], stats.shots[1]],
+            ["射正", stats.onTarget[0], stats.onTarget[1]],
+            ["xG", stats.xg[0].toFixed(2), stats.xg[1].toFixed(2)],
+          ] as [string, number | string, number | string][]
+        ).map(([label, a, b]) => (
+          <div key={label} className={styles.liveStatRow} data-testid={label === "xG" ? "live-xg" : undefined}>
+            <dd>{a}</dd>
+            <dt>{label}</dt>
+            <dd>{b}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div
+        ref={stageRef}
+        className={`${styles.animStage} ${record ? styles.animStagePortrait : ""}`}
+        style={{ aspectRatio: `${w} / ${h}` }}
+      >
+        <div
+          className={styles.animPitchInner}
+          style={orientation === "landscape" ? { left: inset, right: inset } : { top: inset, bottom: inset }}
+        >
+          <FootballPitchBackground orientation={orientation === "landscape" ? "landscape" : "portrait-full"} variant="neutral" />
+        </div>
+        <canvas ref={canvasRef} className={styles.animCanvas} aria-hidden="true" />
+        {card ? (
+          <div className={styles.scorerCard} role="status" data-testid="scorer-card">
+            {card.playerId ? <PlayerAvatar playerId={card.playerId} playerName={card.playerName ?? ""} size={40} eager /> : null}
+            <div>
+              <div className={styles.scorerCardTitle}>{card.channel === "owngoal" ? "乌龙球!" : "进球!"}</div>
+              <div className={styles.scorerCardName}>
+                {card.playerName ?? names[card.team]} <span className={styles.muted}>{card.clock}</span>
               </div>
-            ))}
+              <div className={styles.muted}>
+                {card.channel === "owngoal" ? `${names[card.team]}受益` : `${names[card.team]} · ${CHANNEL_LABEL[card.channel ?? "open"]}`}
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
-      <p className={styles.muted}>
-        <span style={{ color: "var(--sim-home)" }}>● {names[0]}</span> <span style={{ color: "var(--sim-away)" }}>● {names[1]}</span>
-        ;带金边的大圆点 = 进球。
-      </p>
-      <ol className={styles.ticker} data-testid="event-ticker" aria-label="比赛事件">
-        {ticker.length === 0 ? <li className={styles.muted}>比赛开始</li> : null}
-        {ticker.map((e, i) => {
-          const key = e.kind === "goal" || e.kind === "red" || e.channel === "penalty" || e.channel === "owngoal";
-          return (
-            <li
-              key={`${e.tick}-${i}`}
-              className={`${styles.tickRow} ${key ? styles.tickKey : ""} ${e.team === 0 ? styles.tickHome : styles.tickAway}`}
-            >
-              <span className={styles.tickClock}>{e.clock}</span>
-              <span className={styles.tickTeam}>{names[e.team]}</span>
-              <span className={styles.tickType}>{eventLabel(e)}</span>
-              <span className={styles.tickPlayer}>{e.playerName ?? ""}</span>
-            </li>
-          );
-        })}
+
+      {!record ? (
+        <p className={styles.muted}>
+          <span style={{ color: "var(--sim-home)" }}>● {names[0]}</span> <span style={{ color: "var(--sim-away)" }}>● {names[1]}</span>
+          ;带金边的大圆点 = 进球。射门位置与结果取自五大联赛真实射门。
+        </p>
+      ) : null}
+
+      <ol className={`${styles.commentary} ${record ? styles.commentaryRecord : ""}`} data-testid="event-ticker" aria-label="文字直播" aria-live="polite">
+        {(record ? lines.slice(0, 3) : lines).map((l) => (
+          <li
+            key={l.key}
+            className={`${styles.commentRow} ${l.key2 ? styles.commentKey : ""} ${l.team === 0 ? styles.tickHome : l.team === 1 ? styles.tickAway : ""}`}
+          >
+            <span className={styles.tickClock}>{l.clock}</span>
+            <span className={styles.commentText}>{l.text}</span>
+          </li>
+        ))}
       </ol>
-      <div className={styles.row} style={{ justifyContent: "flex-end" }}>
-        <button type="button" className={styles.secondaryBtn} onClick={onDone}>
-          跳过动画
-        </button>
-      </div>
+
+      {!record ? (
+        <div className={styles.animControls}>
+          <div className={styles.speedGroup} role="group" aria-label="播放速度">
+            {([1, 2] as Speed[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`${styles.speedBtn} ${speed === s ? styles.speedBtnOn : ""}`}
+                aria-pressed={speed === s}
+                onClick={() => changeSpeed(s)}
+                data-testid={`speed-${s}`}
+              >
+                {s} 倍
+              </button>
+            ))}
+          </div>
+          <button type="button" className={styles.secondaryBtn} onClick={onDone}>
+            跳过动画
+          </button>
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function clockOf(tick: number, halfTimeTick: number, events: SimEvent[]): string {
+  const hit = events.find((e) => e.tick === tick);
+  if (hit) return hit.clock;
+  const half = tick >= halfTimeTick ? 2 : 1;
+  const m = half === 1 ? tick + 1 : 46 + (tick - halfTimeTick);
+  return half === 1 ? `${Math.min(m, 45)}'` : `${Math.min(m, 90)}'`;
 }
