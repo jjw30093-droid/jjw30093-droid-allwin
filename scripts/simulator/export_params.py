@@ -27,10 +27,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "research" / "ah_signals"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(REPO))
 
 from common import load_xref, open_ro  # noqa: E402
 from features_market import fit_poisson, implied_two, load_timelines, pick_close  # noqa: E402
 from params_core import CALIBRATED_LEAGUES, CHANNELS, K_TEAM, SITUATION_CHANNEL, build, load_raw, rnd  # noqa: E402
+
+from backend.media.team_crests import TeamCrestError, resolve_team_crest_url  # noqa: E402
 
 # 生效版本与校准值:显式维护在校准文件里(数值取自 Phase 2 回测结果),不从规格文档标题推导。
 CALIBRATION_PATH = Path(__file__).resolve().parent / "calibration_v0.3.json"
@@ -95,6 +98,19 @@ def publish(out: dict, out_dir: Path, keep: int, now: datetime) -> Path:
         if old.resolve() != current:
             old.unlink()
     return final
+
+
+def attach_crests(teams_out: dict, resolver=resolve_team_crest_url) -> int:
+    """给每支球队写 crest_url(同源自托管队徽,带内容哈希;ALLWIN_MEDIA_DIR 里没有就是 None,
+    页面回退为队名首字)。队徽缺失或媒体目录异常都不影响导出。返回有队徽的球队数。"""
+    n = 0
+    for tid, t in teams_out.items():
+        try:
+            t["crest_url"] = resolver("fotmob", int(tid))
+        except TeamCrestError:
+            t["crest_url"] = None
+        n += t["crest_url"] is not None
+    return n
 
 
 def parse_utc(s: str | None) -> datetime | None:
@@ -164,6 +180,7 @@ def main() -> None:
     raw = load_raw(core, LEAGUES, SEASONS)
     p = build(raw, leagues=LEAGUES, current_season=CURRENT_SEASON)
     leagues_out, teams_out, players_out = p["leagues"], p["teams"], p["players"]
+    teams_with_crest = attach_crests(teams_out)
     position_map = p["position_map"]
     diag = p["diag"]
     finished = [m for m in raw.matches if m["status"] == "Finish"]
@@ -287,6 +304,7 @@ def main() -> None:
         "bytes": path.stat().st_size,
         "teams": len(teams_out),
         "teams_by_league": dict(Counter(t["league_id"] for t in teams_out.values())),
+        "teams_with_crest": teams_with_crest,
         "players": len(players_out),
         "formations": sorted(p["formations"]),
         "fixtures": dict(Counter(f["status"] for f in fixtures_out.values())),

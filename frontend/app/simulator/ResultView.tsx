@@ -1,6 +1,9 @@
 "use client";
 
 import { XgRaceChart } from "@/components/matches/XgRaceChart";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { TeamBadge } from "@/components/teams/TeamBadge";
+import type { SimEvent } from "@/features/simulator/engine";
 import { FOCUS_LABEL } from "@/features/simulator/engine";
 import { ahText, type ResultSnapshot } from "@/features/simulator/snapshot";
 import { verdictOf } from "@/features/simulator/verdict";
@@ -10,86 +13,132 @@ import { SharePanel } from "./SharePanel";
 import styles from "./simulator.module.css";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+const pct0 = (x: number) => `${Math.round(x * 100)}%`;
 
 // 只读快照:本页刚模拟的结果与分享链接打开的结果走同一套展示,保证分享出去的内容与本页一致。
-// 两层:默认显示(比分、进球者、一句话解读、胜平负、xG 赛跑、分享)→ "更多数据"(默认收起)。
+// 版式参照 FotMob 比赛页头:队徽 + 大比分,进球者(头像 + 分钟)列在各自球队下方;
+// 一句话解读与胜平负放进同一张卡;然后是操作、分享、xG 走势;其余数据收进"更多数据"。
 // "技术细节"(模拟编号、λ、市场参考让球/大小球、模型版本等)按站长要求不在前端展示。
-// 面向用户的文字不出现任何博彩公司名称,统一称"市场参考"。
-export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; onRerun: () => void; onBack: () => void }) {
+// 面向用户的文字不出现任何博彩公司名称。
+export function ResultView({
+  snap,
+  crests,
+  onRerun,
+  onBack,
+}: {
+  snap: ResultSnapshot;
+  /** 同源队徽地址(来自参数文件);没有时显示队名首字 */
+  crests: [string | null, string | null];
+  onRerun: () => void;
+  onBack: () => void;
+}) {
   const { single, many } = snap;
   const names: [string, string] = [snap.teams[0].name, snap.teams[1].name];
-  const goals = single.events.filter((e) => e.kind === "goal");
-  const reds = single.events.filter((e) => e.kind === "red");
   const teamIds: [number, number] = [snap.teams[0].teamId, snap.teams[1].teamId];
   const shots = toReportShots(single.events, teamIds, single.halfTimeTick);
   const xgTotal = cumulativeXg(single.events);
   const verdict = verdictOf(snap);
   const expected = snap.teams.map((t) => t.expectedGoals);
+  // 进球/红牌按"记在哪一队名下"分两列(乌龙记在受益方,与比分一致)
+  const sideEvents = ([0, 1] as const).map((t) => single.events.filter((e) => e.team === t && (e.kind === "goal" || e.kind === "red")));
+  const noGoals = single.score[0] + single.score[1] === 0;
   return (
     <div data-testid="sim-result">
-      <section className={styles.card}>
-        <h2 className={styles.cardTitle}>本次模拟</h2>
-        <div className={styles.scoreboard}>
-          <span className={styles.sbTeam} style={{ color: "var(--sim-home)" }}>{names[0]}</span>
-          <div className={styles.sbScore}>
-            {single.score[0]} : {single.score[1]}
+      <section className={`${styles.card} ${styles.resultHero}`}>
+        <div className={styles.rhTop}>
+          {([0, 1] as const).map((t) => (
+            <div key={t} className={styles.rhTeam} style={{ order: t === 0 ? 0 : 2 }}>
+              <TeamBadge teamName={names[t]} crestUrl={crests[t]} size={56} eager />
+              <span className={styles.rhName} style={{ color: t === 0 ? "var(--sim-home)" : "var(--sim-away)" }}>
+                {names[t]}
+              </span>
+            </div>
+          ))}
+          <div className={styles.rhScore} style={{ order: 1 }}>
+            <span className={styles.rhScoreNum} data-testid="sim-score">
+              {single.score[0]} - {single.score[1]}
+            </span>
+            <span className={styles.rhTag}>模拟</span>
           </div>
-          <span className={styles.sbTeam} style={{ color: "var(--sim-away)" }}>{names[1]}</span>
         </div>
-        <ul className={styles.feed}>
-          {goals.map((g, i) => (
-            <li key={i}>
-              {g.clock} {names[g.team]} {g.playerName ?? ""}
-              {g.channel === "owngoal" ? "(乌龙)" : g.channel === "penalty" ? "(点球)" : ""}
-            </li>
-          ))}
-          {reds.map((r, i) => (
-            <li key={`r${i}`}>
-              {r.clock} {names[r.team]} 红牌 {r.playerName ?? ""}
-            </li>
-          ))}
-          {goals.length === 0 ? <li className={styles.muted}>本场没有进球</li> : null}
-        </ul>
+
+        {noGoals && !sideEvents[0].length && !sideEvents[1].length ? (
+          <p className={styles.rhNoGoal}>本场没有进球</p>
+        ) : (
+          <div className={styles.rhEvents} data-testid="sim-events">
+            {([0, 1] as const).map((t) => (
+              <ul key={t} className={`${styles.rhEventList} ${t === 1 ? styles.rhEventListAway : ""}`}>
+                {sideEvents[t].map((e, i) => (
+                  <li key={i} className={styles.rhEvent}>
+                    <EventAvatar snap={snap} e={e} />
+                    <span className={styles.rhEventName}>
+                      {e.playerName ?? ""}
+                      {e.kind === "red" ? <span className={styles.redCard} aria-label="红牌" /> : null}
+                      {e.channel === "owngoal" ? "(乌龙)" : e.channel === "penalty" ? "(点球)" : ""}
+                    </span>
+                    <span className={styles.rhEventMin}>{e.clock}</span>
+                  </li>
+                ))}
+              </ul>
+            ))}
+          </div>
+        )}
+
         <p className={styles.verdict} data-testid="sim-verdict" data-kind={verdict.kind}>
           {verdict.text}
         </p>
-        {/* 技术细节已不在前端展示;用了已完赛比赛的参数必须如实告知(分享链接打开的人看不到排阵页的提示) */}
+        {/* 用了已完赛比赛的参数必须如实告知(分享链接打开的人看不到排阵页的提示) */}
         {snap.market?.finalScore ? (
           <p className={styles.hint} data-testid="sim-postmatch">
             本场参数包含赛后数据(实际比分 {snap.market.finalScore.join(" : ")}),仅供演示。
           </p>
         ) : null}
+
+        <div className={styles.rhWdl}>
+          <p className={styles.rhWdlTitle}>再模拟 {many.runs} 次</p>
+          <div className={styles.wdl} role="img" aria-label={`${names[0]}胜 ${pct(many.pHome)},平 ${pct(many.pDraw)},${names[1]}胜 ${pct(many.pAway)}`}>
+            <span className={styles.wdlHome} style={{ width: pct(many.pHome) }}>
+              {many.pHome >= 0.12 ? pct0(many.pHome) : ""}
+            </span>
+            <span className={styles.wdlDraw} style={{ width: pct(many.pDraw) }}>
+              {many.pDraw >= 0.12 ? pct0(many.pDraw) : ""}
+            </span>
+            <span className={styles.wdlAway} style={{ width: pct(many.pAway) }}>
+              {many.pAway >= 0.12 ? pct0(many.pAway) : ""}
+            </span>
+          </div>
+          <div className={styles.wdlLegend}>
+            <span>{names[0]}胜</span>
+            <span>平</span>
+            <span>{names[1]}胜</span>
+          </div>
+        </div>
       </section>
 
-      <section className={styles.card}>
-        <h2 className={styles.cardTitle}>{many.runs} 次模拟 · 胜平负</h2>
-        <div className={styles.wdl} role="img" aria-label={`${names[0]}胜 ${pct(many.pHome)},平 ${pct(many.pDraw)},${names[1]}胜 ${pct(many.pAway)}`}>
-          <span className={styles.wdlHome} style={{ width: pct(many.pHome) }} />
-          <span className={styles.wdlDraw} style={{ width: pct(many.pDraw) }} />
-          <span className={styles.wdlAway} style={{ width: pct(many.pAway) }} />
-        </div>
-        <div className={styles.wdlLegend}>
-          <span>
-            {names[0]}胜 {pct(many.pHome)}
-          </span>
-          <span>平 {pct(many.pDraw)}</span>
-          <span>
-            {names[1]}胜 {pct(many.pAway)}
-          </span>
-        </div>
-      </section>
+      <div className={styles.resultActions}>
+        <button type="button" className={styles.primaryBtn} onClick={onRerun} data-testid="sim-rerun">
+          再模拟一次
+        </button>
+        <button type="button" className={styles.secondaryBtn} onClick={onBack} data-testid="sim-back">
+          改阵容
+        </button>
+      </div>
+
+      <SharePanel snap={snap} />
 
       <section className={styles.card}>
-        <h2 className={styles.cardTitle}>xG 赛跑</h2>
-        <p className={styles.muted} style={{ marginTop: 0 }}>
-          累计 xG:{names[0]} {xgTotal[0].toFixed(2)},{names[1]} {xgTotal[1].toFixed(2)}
+        <h2 className={styles.cardTitle}>xG 走势</h2>
+        <p className={styles.muted} style={{ marginTop: 0 }} data-testid="sim-xg-line">
+          {names[0]} {xgTotal[0].toFixed(2)} : {xgTotal[1].toFixed(2)} {names[1]}
         </p>
-        {/* 不传比分:该组件的文字摘要把比分写成"实际比分",不适用于模拟 */}
+        {/* 不传比分:该组件的文字摘要把比分写成"实际比分",不适用于模拟;长解释只留给读屏 */}
         <XgRaceChart
           shots={shots}
           homeName={names[0]}
           awayName={names[1]}
           stoppage={{ firstHalf: single.stoppage[0], secondHalf: single.stoppage[1] }}
+          height={220}
+          showSummary={false}
         />
       </section>
 
@@ -114,12 +163,13 @@ export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; on
           </ol>
         </div>
         <div className={styles.subsection}>
-          <h3 className={styles.subTitle}>球员至少进 1 球的概率</h3>
+          <h3 className={styles.subTitle}>谁最可能进球</h3>
           <ol className={styles.list}>
             {many.scorerProb.map((s) => (
               <li key={`${s.team}:${s.playerId}`}>
-                <span>
-                  {s.name}{" "}
+                <span className={styles.scorerRow}>
+                  <PlayerAvatar playerId={s.playerId} playerName={s.name} shirtNumber={numOf(snap, s.playerId)} size={28} />
+                  {s.name}
                   <span className={styles.muted} style={{ color: s.team === 0 ? "var(--sim-home)" : "var(--sim-away)" }}>
                     {names[s.team]}
                   </span>
@@ -128,7 +178,6 @@ export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; on
               </li>
             ))}
           </ol>
-          <p className={styles.muted}>不含乌龙球。</p>
         </div>
         <div className={styles.subsection} data-testid="sim-settings">
           <h3 className={styles.subTitle}>本场设定</h3>
@@ -136,23 +185,25 @@ export function ResultView({ snap, onRerun, onBack }: { snap: ResultSnapshot; on
             <p key={i} className={styles.settingsLine}>
               <span style={{ color: i === 0 ? "var(--sim-home)" : "var(--sim-away)", fontWeight: 700 }}>{names[i]}</span> {t.formation} ·
               侧重点:{t.focuses.length ? t.focuses.map((f) => FOCUS_LABEL[f]).join("、") : "无"}
-              {t.shortRest ? " · 休息不足 3 天(假设设定)" : ""}
+              {t.shortRest ? " · 休息不足 3 天" : ""}
             </p>
           ))}
         </div>
       </Fold>
-
-      <SharePanel snap={snap} />
-
-      <div className={styles.row} style={{ marginBottom: "var(--sp-4)" }}>
-        <button type="button" className={styles.primaryBtn} onClick={onRerun}>
-          再模拟一次
-        </button>
-        <button type="button" className={styles.secondaryBtn} onClick={onBack}>
-          回到排阵
-        </button>
-      </div>
-
     </div>
   );
+}
+
+function numOf(snap: ResultSnapshot, playerId: string | null | undefined): string | null {
+  if (!playerId) return null;
+  for (const t of snap.teams) {
+    const hit = t.lineup.find((x) => x.playerId === playerId);
+    if (hit) return hit.num;
+  }
+  return null;
+}
+
+function EventAvatar({ snap, e }: { snap: ResultSnapshot; e: SimEvent }) {
+  if (!e.playerId) return <span className={styles.rhEventDot} aria-hidden="true" />;
+  return <PlayerAvatar playerId={e.playerId} playerName={e.playerName ?? ""} shirtNumber={numOf(snap, e.playerId)} size={28} />;
 }

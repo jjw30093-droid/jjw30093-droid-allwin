@@ -86,6 +86,8 @@ export interface TeamParams {
   league_id: number;
   name_zh: string | null;
   name_en: string | null;
+  /** 同源自托管队徽(/api/v1/media/team-crests/...?v=哈希);旧参数文件没有这个字段,缺失时显示队名首字 */
+  crest_url?: string | null;
   A: Record<ShotChannel, number>;
   D: Record<ShotChannel, number>;
   window_matches: number;

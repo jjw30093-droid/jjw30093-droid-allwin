@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/core";
 import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { TeamBadge } from "@/components/teams/TeamBadge";
 import { Chip } from "@/components/ui/Chip";
 import { ChipRow } from "@/components/ui/ChipRow";
 import type { SlotAssign, TeamSetup } from "@/features/simulator/engine";
@@ -172,6 +173,7 @@ export function LineupPitchCard({
         <div className={styles.pitchHead}>
           <button type="button" className={styles.teamPick} onClick={() => setTeamPicker(true)} data-testid={`team-pick-${sideLabel}`}>
             <span className={styles.teamPickSide}>{sideLabel}</span>
+            <TeamBadge teamName={team.name_zh ?? ""} crestUrl={team.crest_url} size={28} eager />
             <span className={styles.teamPickName}>{team.name_zh}</span>
             <span className={styles.teamPickChevron} aria-hidden="true" />
           </button>

@@ -75,7 +75,7 @@ export function TeamFocusCard({
       </div>
       <div className={styles.chips}>
         <Chip active={setup.shortRest} onClick={() => onChange({ ...setup, shortRest: !setup.shortRest })}>
-          休息不足 3 天(假设设定)
+          休息不足 3 天
         </Chip>
       </div>
     </section>

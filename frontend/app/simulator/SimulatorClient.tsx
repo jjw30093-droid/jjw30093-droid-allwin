@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { TeamBadge } from "@/components/teams/TeamBadge";
 import { Chip } from "@/components/ui/Chip";
 import { FOCUS_LABEL, matchingFixture, prepareMatch, type ManyResult, type MatchSetup, type SingleResult, type TeamSetup } from "@/features/simulator/engine";
 import { IMPACT_RUNS, impactJobs, summarizeImpact, type ImpactJob, type SideImpact } from "@/features/simulator/focusImpact";
@@ -263,22 +264,24 @@ export function SimulatorClient({
       {linkError ? <p className={styles.error}>{linkError}</p> : null}
 
       {phase === "animating" && result ? (
-        <MatchAnimation single={result.snap.single} names={[result.snap.teams[0].name, result.snap.teams[1].name]} onDone={finishAnimation} />
+        <MatchAnimation
+          single={result.snap.single}
+          names={[result.snap.teams[0].name, result.snap.teams[1].name]}
+          crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
+          onDone={finishAnimation}
+        />
       ) : null}
 
       {phase === "result" && result?.shared ? (
         <section className={`${styles.card} ${styles.linkNotice}`} data-testid="shared-notice">
-          <p style={{ margin: 0 }}>
-            这是分享链接里的模拟结果,原样展示,未重新计算(模型 {result.snap.modelVersion} · 参数导出于 {result.snap.paramsDate} · 模拟编号{" "}
-            {result.snap.seed})。
-          </p>
+          <p style={{ margin: 0 }}>这是朋友分享的一次模拟结果。想自己试试?点下面的「改阵容」或「再模拟一次」。</p>
           {linkStale ? (
             <div className={styles.row} style={{ marginTop: 8 }} data-testid="params-updated">
               <span className={styles.hint} style={{ marginTop: 0 }}>
-                参数已更新:当前参数导出于 {params.meta.generated_at}(模型 {modelVersionOf(params)})。
+                球队数据已更新,重新模拟结果可能不同。
               </span>
               <button type="button" className={styles.primaryBtn} disabled={!prepared.ok} onClick={() => run(result.snap.seed)}>
-                用最新参数重新模拟
+                用最新数据重新模拟
               </button>
               {!prepared.ok ? <span className={styles.error}>{prepared.error}</span> : null}
             </div>
@@ -289,6 +292,7 @@ export function SimulatorClient({
       {phase === "result" && result ? (
         <ResultView
           snap={result.snap}
+          crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
           onRerun={() => {
             const s = Math.floor(Math.random() * 2 ** 31);
             setSeed(s);
@@ -388,8 +392,11 @@ export function SimulatorClient({
           {step === 2 ? (
             <>
               <section className={`${styles.card} ${styles.summaryStrip}`} data-testid="home-summary">
-                <span>
-                  <strong style={{ color: "var(--sim-home)" }}>主队 {names[0]}</strong> · {home.formation} · 侧重点 {fmtFocuses(home)}
+                <span className={styles.summaryMain}>
+                  <TeamBadge teamName={names[0]} crestUrl={params.teams[String(home.teamId)]?.crest_url} size={28} eager />
+                  <span>
+                    <strong style={{ color: "var(--sim-home)" }}>{names[0]}</strong> · {home.formation} · {home.focuses.length ? `侧重点 ${fmtFocuses(home)}` : "未选侧重点"}
+                  </span>
                 </span>
                 <button type="button" className={styles.linkBtn} onClick={() => goStep(1)} data-testid="edit-home">
                   修改
@@ -475,7 +482,7 @@ export function SimulatorClient({
                   </section>
 
                   <p className={styles.muted} data-testid="position-note">
-                    球员位置为规则解码,尚未人工校验。
+                    球员位置由系统推断,可能不准。
                   </p>
                 </div>
               </div>
@@ -485,4 +492,9 @@ export function SimulatorClient({
       ) : null}
     </main>
   );
+}
+
+// 队徽取自参数文件(每日导出时解析的同源地址);分享链接打开的比赛不在本联赛参数里时显示队名首字
+function crestsOf(params: SimParams, home: number, away: number): [string | null, string | null] {
+  return [params.teams[String(home)]?.crest_url ?? null, params.teams[String(away)]?.crest_url ?? null];
 }

@@ -152,6 +152,32 @@ def test_failed_validation_keeps_current(ep, tmp_path):
     assert not list(tmp_path.glob(".tmp-*"))
 
 
+def test_attach_crests_null_when_missing_or_media_broken(ep):
+    from backend.media.team_crests import TeamCrestError
+
+    def resolver(provider, team_id):
+        assert provider == "fotmob"
+        if team_id == 1:
+            return "/api/v1/media/team-crests/fotmob/1.png?v=abcdefabcdef"
+        if team_id == 3:
+            raise TeamCrestError("unsafe media directory")
+        return None
+
+    teams = {"1": {}, "2": {}, "3": {}}
+    assert ep.attach_crests(teams, resolver) == 1
+    assert teams["1"]["crest_url"].endswith("1.png?v=abcdefabcdef")
+    assert teams["2"]["crest_url"] is None
+    assert teams["3"]["crest_url"] is None
+
+
+def test_attach_crests_real_resolver_uses_media_dir(ep, tmp_path, monkeypatch):
+    # 空媒体目录:真实解析器返回 None,不抛错(导出不因队徽缺失失败)
+    monkeypatch.setenv("ALLWIN_MEDIA_DIR", str(tmp_path))
+    teams = {"9825": {}}
+    assert ep.attach_crests(teams) == 0
+    assert teams["9825"]["crest_url"] is None
+
+
 # ------------------------------------------------------------------ G16 新鲜度质量门
 def test_gate_simulator_params_stale(tmp_path):
     from backend.cli.pipeline_gates import _gate_simulator_params_stale

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
+import { TeamBadge } from "@/components/teams/TeamBadge";
 import type { SimEvent, SingleResult } from "@/features/simulator/engine";
 import { mulberry32 } from "@/features/simulator/rng";
 import { cumulativeXg } from "@/features/simulator/xg";
@@ -53,10 +54,13 @@ function shotXY(e: SimEvent, i: number, seed: number): { left: number; top: numb
 export function MatchAnimation({
   single,
   names,
+  crests = [null, null],
   onDone,
 }: {
   single: SingleResult;
   names: [string, string];
+  /** 同源队徽地址;没有时显示队名首字 */
+  crests?: [string | null, string | null];
   onDone: () => void;
 }) {
   const [tick, setTick] = useState(0);
@@ -114,7 +118,10 @@ export function MatchAnimation({
   return (
     <section className={styles.card} data-testid="sim-animation">
       <div className={styles.scoreboard}>
-        <span className={styles.sbTeam} style={{ color: "var(--sim-home)" }}>{names[0]}</span>
+        <span className={`${styles.sbTeam} ${styles.sbTeamCol}`} style={{ color: "var(--sim-home)" }}>
+          <TeamBadge teamName={names[0]} crestUrl={crests[0]} size={40} eager />
+          {names[0]}
+        </span>
         <div>
           <div className={styles.sbScore}>
             {score[0]} : {score[1]}
@@ -124,7 +131,10 @@ export function MatchAnimation({
             xG {xg[0].toFixed(2)} : {xg[1].toFixed(2)}
           </div>
         </div>
-        <span className={styles.sbTeam} style={{ color: "var(--sim-away)" }}>{names[1]}</span>
+        <span className={`${styles.sbTeam} ${styles.sbTeamCol}`} style={{ color: "var(--sim-away)" }}>
+          <TeamBadge teamName={names[1]} crestUrl={crests[1]} size={40} eager />
+          {names[1]}
+        </span>
       </div>
       <div className={styles.momentum} aria-label={`势头 主队 ${Math.round(momentum * 100)}%`}>
         <span className={styles.momHome} style={{ width: `${momentum * 100}%` }} />

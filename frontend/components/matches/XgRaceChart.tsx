@@ -258,6 +258,7 @@ export function XgRaceChart({
   mode = "interactive",
   height,
   stoppage,
+  showSummary,
 }: {
   shots: XgRaceShot[];
   homeName: string;
@@ -274,6 +275,9 @@ export function XgRaceChart({
   height?: number;
   /** 可选:展开补时横轴(默认不展开,行为与此前一致)。 */
   stoppage?: StoppageAxis;
+  /** 可选:是否在图下显示文字摘要(默认同此前:export 模式不显示,其余显示)。
+   *  模拟器结果页自己在图上方给出一行累计 xG,关掉这段长解释;读屏摘要照常保留。 */
+  showSummary?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(mode === "export");
@@ -342,7 +346,7 @@ export function XgRaceChart({
           height={height ?? (mode === "export" ? 420 : 260)}
           ariaSummary={ariaSummary}
           mode={mode}
-          showSummary={mode !== "export"}
+          showSummary={showSummary ?? mode !== "export"}
         />
       ) : (
         <div style={{ height: height ?? 260 }} aria-hidden />

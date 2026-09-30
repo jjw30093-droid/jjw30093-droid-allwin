@@ -18,7 +18,7 @@ const SIZE_LABEL: Record<ShareSize, string> = { 1350: "分享到小红书", 1920
 export function SharePanel({ snap }: { snap: ResultSnapshot }) {
   const colors = useSimTeamColors().surface;
   const [busy, setBusy] = useState<ShareSize | null>(null);
-  const [img, setImg] = useState<{ url: string; size: ShareSize; bytes: number } | null>(null);
+  const [img, setImg] = useState<{ url: string; size: ShareSize } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean | null>(null);
@@ -32,7 +32,7 @@ export function SharePanel({ snap }: { snap: ResultSnapshot }) {
     setError(null);
     try {
       const blob = await renderShareImage({ snap, size, teamColors: colors, fonts: pageFonts(), siteName: SITE_NAME, siteUrl: SIMULATOR_URL });
-      setImg({ url: URL.createObjectURL(blob), size, bytes: blob.size });
+      setImg({ url: URL.createObjectURL(blob), size });
     } catch (e) {
       setError(`生成分享图失败:${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -58,7 +58,7 @@ export function SharePanel({ snap }: { snap: ResultSnapshot }) {
   return (
     <section className={styles.card} data-testid="share-panel">
       <h2 className={styles.cardTitle}>分享</h2>
-      <div className={styles.row}>
+      <div className={styles.shareBtns}>
         {SIZES.map((size) => (
           <button
             key={size}
@@ -72,18 +72,15 @@ export function SharePanel({ snap }: { snap: ResultSnapshot }) {
           </button>
         ))}
         <button type="button" className={styles.secondaryBtn} onClick={makeLink} data-testid="share-link-btn">
-          复制分享链接
+          复制链接
         </button>
       </div>
-      <p className={styles.muted}>
-        分享图在浏览器里生成,不上传服务器;分享链接把设定写在网址里、本次结果压缩后写在 # 之后,打开时原样展示这次结果,不经服务器、不写数据库。
-      </p>
       {error ? <p className={styles.error}>{error}</p> : null}
       {link ? (
         <div className={styles.shareLinkBox}>
           <textarea className={styles.shareLink} readOnly value={link} rows={3} onFocus={(e) => e.currentTarget.select()} data-testid="share-link" />
           <p className={styles.muted}>
-            链接长度 {link.length} 字符{copied === true ? " · 已复制到剪贴板" : copied === false ? " · 浏览器未允许自动复制,请手动复制" : ""}
+            {copied === true ? "已复制,发给朋友打开就是这次结果" : copied === false ? "浏览器没有允许自动复制,请长按上面的链接手动复制" : ""}
           </p>
         </div>
       ) : null}
@@ -92,11 +89,10 @@ export function SharePanel({ snap }: { snap: ResultSnapshot }) {
           {/* eslint-disable-next-line @next/next/no-img-element -- 本地 blob 预览,不走 next/image 优化 */}
           <img className={styles.sharePreview} src={img.url} alt={`分享图 1080×${img.size}`} data-testid="share-img" />
           <p className={styles.muted}>
-            1080×{img.size} · {(img.bytes / 1024).toFixed(0)} KB ·{" "}
             <a className={styles.linkBtn} href={img.url} download={fileName}>
               下载图片
             </a>{" "}
-            · 手机上也可以长按图片保存
+            · 手机上长按图片保存
           </p>
         </div>
       ) : null}

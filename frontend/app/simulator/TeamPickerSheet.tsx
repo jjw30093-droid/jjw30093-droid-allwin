@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TeamBadge } from "@/components/teams/TeamBadge";
 import type { TeamParams } from "@/features/simulator/types";
 import { Sheet } from "./Sheet";
 import styles from "./simulator.module.css";
@@ -41,6 +42,7 @@ export function TeamPickerSheet({
             onClick={() => onPick(t.team_id)}
             data-testid={`team-${t.team_id}`}
           >
+            <TeamBadge teamName={t.name_zh ?? ""} crestUrl={t.crest_url} size={32} />
             <span className={styles.pickMain}>
               <span className={styles.pickName}>{t.name_zh}</span>
               <span className={styles.muted}>{t.last_lineup ? `最近首发 ${t.last_lineup.date}` : "上一场首发阵容不可用"}</span>
