@@ -724,7 +724,7 @@ function diagnose(rows: Row[]) {
 }
 
 const rows = loadRows();
-console.log(`载入 ${rows.length} 场(训练 ${rows.filter((r) => inRange(r, TRAIN)).length},验证 ${rows.filter((r) => inRange(r, VALID)).length})`);
+if (cmd !== "forward") console.log(`载入 ${rows.length} 场(训练 ${rows.filter((r) => inRange(r, TRAIN)).length},验证 ${rows.filter((r) => inRange(r, VALID)).length})`);
 if (cmd === "ha-k") stepA(rows);
 else if (cmd === "w") stepB(rows);
 else if (cmd === "rate-model") stepRateModel(rows);
