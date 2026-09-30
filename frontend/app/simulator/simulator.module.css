@@ -249,12 +249,97 @@
   margin-top: -4px;
 }
 
-.pitchBar {
+/* 球场底栏并进球场卡(FotMob 同款):比球场底色略深的一条,左阵型胶囊、右徽标分段按钮 */
+.pitchCard .pitch {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.pitchFooter {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-2) var(--sp-3);
-  margin-top: var(--sp-3);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px;
+  border-radius: 0 0 var(--r-card-sm) var(--r-card-sm);
+  background: color-mix(in srgb, var(--pitch-lineup-bg) 78%, #000);
+}
+
+.formationPill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.formationPill select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 44px;
+  padding: 0 34px 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.formationPill select option {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.formationChevron {
+  position: absolute;
+  right: 14px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-2px) rotate(45deg);
+  pointer-events: none;
+}
+
+.segmented {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.segBtn {
+  min-width: 52px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segBtnOn {
+  background: #fff;
+  color: #0d2c3d;
+  font-weight: 700;
+}
+
+.formationPill select:focus-visible,
+.segBtn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.lineupHint {
+  margin: var(--sp-2) 2px 0;
+  color: var(--ink-3);
+  font-size: 12px;
 }
 
 /* 头像 + 右上角徽标 */
@@ -623,21 +708,183 @@ button.stepInner {
   margin-top: var(--sp-2);
 }
 
-.fitTag {
-  margin-left: 6px;
-  padding: 0 6px;
-  border: 1px solid currentColor;
-  border-radius: var(--r-pill);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
+/* 战术侧重卡片 */
+.focusHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
 }
 
-.focusEffect {
-  margin-top: var(--sp-2);
-  font-size: 13px;
-  line-height: 1.6;
+.focusHeadNote {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.focusWin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-height: 32px;
+  margin-bottom: var(--sp-3);
+}
+
+.focusWinLabel {
   color: var(--ink-2);
+  font-size: 13px;
+}
+
+.focusWinNum {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.focusWinNew {
+  color: var(--brand-teal);
+}
+
+.focusWinArrow {
+  color: var(--ink-3);
+}
+
+.focusUp {
+  color: var(--brand-teal);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.focusFlat {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.focusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.focusTile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.focusTileOn {
+  padding: 7px 9px;
+  border: 2px solid var(--brand-teal);
+  background: color-mix(in srgb, var(--brand-teal) 8%, var(--surface));
+}
+
+.focusTileBlocked {
+  border-style: dashed;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.focusTileBlocked .focusTileDesc {
+  color: var(--ink-3);
+}
+
+.focusTile:focus-visible {
+  outline: 2px solid var(--brand-teal);
+  outline-offset: 2px;
+}
+
+.focusTileTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.focusTileName {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.focusTileDesc {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.focusRest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+/* 开关:整块 44px 高的触控区域,视觉上是 40×24 的滑块 */
+.switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.switch::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 10px;
+  width: 40px;
+  height: 24px;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+  transition: background 0.15s ease;
+}
+
+.switchOn::before {
+  background: var(--brand-teal);
+}
+
+.switchKnob {
+  position: absolute;
+  left: 5px;
+  top: 13px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.switchOn .switchKnob {
+  transform: translateX(16px);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--brand-teal);
+  outline-offset: 0;
+  border-radius: var(--r-control);
 }
 
 .hint {

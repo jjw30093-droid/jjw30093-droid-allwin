@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -19,12 +19,10 @@ import {
 import { FootballPitchBackground } from "@/components/matches/FootballPitchBackground";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { Chip } from "@/components/ui/Chip";
-import { ChipRow } from "@/components/ui/ChipRow";
 import type { SlotAssign, TeamSetup } from "@/features/simulator/engine";
 import { applyDrop, applyPick, formationChoices, lastLineupSetup, reassignFormation, slotId } from "@/features/simulator/formation";
 import { displayName, POS_LABEL, slotScreenX } from "@/features/simulator/labels";
-import { BADGE_LABEL, BADGE_MODES, slotBadge, type BadgeMode } from "@/features/simulator/slotBadge";
+import { BADGE_LABEL, BADGE_MODES, BADGE_SHORT, slotBadge, type BadgeMode } from "@/features/simulator/slotBadge";
 import type { PlayerParams, SimParams, TeamParams } from "@/features/simulator/types";
 import { PlayerPickerSheet } from "./PlayerPickerSheet";
 import { TeamPickerSheet } from "./TeamPickerSheet";
@@ -34,6 +32,19 @@ import styles from "./simulator.module.css";
 const MEASURING = { droppable: { measure: getClientRect } };
 /** 拖完 150ms 内的点击忽略:把球员拖回自己位置时,不要顺手把选人面板弹出来 */
 const CLICK_AFTER_DRAG_MS = 150;
+/** 操作提示:用户自己换过一次人(点选或拖动)后不再显示;只记在本浏览器(读写失败就照常显示) */
+const HINT_KEY = "sim-lineup-hint-done";
+function readHintDone(): boolean {
+  try {
+    return window.localStorage.getItem(HINT_KEY) === "1";
+  } catch {
+    return false; // 隐私模式等读不到本地存储:照常显示提示
+  }
+}
+function subscribeStorage(cb: () => void): () => void {
+  window.addEventListener("storage", cb);
+  return () => window.removeEventListener("storage", cb);
+}
 
 /** 拖动时的浮层中心对准指针。 */
 const centerOnPointer: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
@@ -137,6 +148,22 @@ export function LineupPitchCard({
   const [teamPicker, setTeamPicker] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const justDragged = useRef(false);
+  // 服务端渲染与首帧按"未看过"渲染,客户端再读本地存储(避免水合不一致)
+  const storedHintDone = useSyncExternalStore(subscribeStorage, readHintDone, () => false);
+  const [hintDoneNow, setHintDoneNow] = useState(false);
+  const hintDone = storedHintDone || hintDoneNow;
+  /** 用户自己换人:提交阵容并记住"已会用",之后不再显示操作提示 */
+  const commitUserChange = (next: TeamSetup) => {
+    onChange(next);
+    if (!hintDone) {
+      setHintDoneNow(true);
+      try {
+        window.localStorage.setItem(HINT_KEY, "1");
+      } catch {
+        // 写不进去也无妨,本次页面内已隐藏
+      }
+    }
+  };
   // 鼠标移动 6px 才开始拖动(点击照常是点选);触屏长按 250ms 才开始拖动,轻点仍是点选,滑动仍是滚动页面
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -163,7 +190,7 @@ export function LineupPitchCard({
       justDragged.current = false;
     }, CLICK_AFTER_DRAG_MS);
     const next = applyDrop(setup, String(e.active.id), e.over ? String(e.over.id) : null);
-    if (next) onChange(next);
+    if (next) commitUserChange(next);
   };
   const activePlayer = activeId?.startsWith("slot:") ? params.players[setup.slots[Number(activeId.slice(5))]?.playerId ?? ""] : null;
 
@@ -202,12 +229,12 @@ export function LineupPitchCard({
             />
           ))}
         </div>
-        <div className={styles.pitchBar}>
-          <label className={styles.field} style={{ flex: "0 1 150px", minWidth: 120 }}>
-            阵型
+        {/* 底栏并进球场(FotMob 同款):左边阵型胶囊按钮,右边球员徽标分段按钮 */}
+        <div className={styles.pitchFooter}>
+          <label className={styles.formationPill}>
             <select
-              className={styles.select}
               value={setup.formation}
+              aria-label="阵型"
               data-testid={`formation-${sideLabel}`}
               onChange={(e) => {
                 const next = reassignFormation(params, setup, e.target.value);
@@ -220,18 +247,30 @@ export function LineupPitchCard({
                 </option>
               ))}
             </select>
+            <span className={styles.formationChevron} aria-hidden="true" />
           </label>
-          <ChipRow ariaLabel="球员徽标">
+          <div className={styles.segmented} role="group" aria-label="球员徽标">
             {BADGE_MODES.map((m) => (
-              <Chip key={m} active={badge === m} onClick={() => onBadge(m)} testId={`badge-${m}`}>
-                {BADGE_LABEL[m]}
-              </Chip>
+              <button
+                key={m}
+                type="button"
+                className={`${styles.segBtn} ${badge === m ? styles.segBtnOn : ""}`}
+                aria-pressed={badge === m}
+                aria-label={BADGE_LABEL[m]}
+                title={BADGE_LABEL[m]}
+                onClick={() => onBadge(m)}
+                data-testid={`badge-${m}`}
+              >
+                {BADGE_SHORT[m]}
+              </button>
             ))}
-          </ChipRow>
+          </div>
         </div>
-        <p className={styles.muted} data-testid="lineup-hint">
-          点位置换人,拖动两名首发可互换(手机长按拖动)。
-        </p>
+        {!hintDone ? (
+          <p className={styles.lineupHint} data-testid="lineup-hint">
+            点球员换人,拖动两名球员可互换(手机长按拖动)
+          </p>
+        ) : null}
       </section>
       <DragOverlay dropAnimation={null} modifiers={[centerOnPointer]} className={styles.dragOverlayBox}>
         {activePlayer ? (
@@ -247,7 +286,7 @@ export function LineupPitchCard({
           setup={setup}
           slot={picker}
           onPick={(pid) => {
-            onChange(applyPick(setup, picker, pid));
+            commitUserChange(applyPick(setup, picker, pid));
             setPicker(null);
           }}
           onClose={() => setPicker(null)}

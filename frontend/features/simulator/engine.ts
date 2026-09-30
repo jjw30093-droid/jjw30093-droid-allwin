@@ -84,6 +84,15 @@ export const FOCUS_LABEL: Record<Focus, string> = {
 };
 const EXCLUSIVE: [Focus, Focus][] = [["possession", "counter"], ["press", "lowblock"]];
 
+/** 与 f 互斥的侧重点(没有则 null);界面用来把互斥选项置灰并写明原因 */
+export function exclusiveWith(f: Focus): Focus | null {
+  for (const [a, b] of EXCLUSIVE) {
+    if (a === f) return b;
+    if (b === f) return a;
+  }
+  return null;
+}
+
 export function focusError(focuses: Focus[]): string | null {
   if (focuses.length > 2) return "每队最多选 2 个侧重点";
   for (const [a, b] of EXCLUSIVE) {

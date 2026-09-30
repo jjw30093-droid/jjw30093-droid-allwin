@@ -1,5 +1,6 @@
 // 位置组中文名与球员显示名(纯函数,无 "use client":服务端组件与客户端组件都可 import,CLAUDE.md §11.4)。
 
+import type { Focus } from "./engine";
 import type { PlayerParams, PosGroup } from "./types";
 
 export const POS_LABEL: Record<PosGroup, string> = {
@@ -22,3 +23,13 @@ export function displayName(p: PlayerParams): string {
 export function slotScreenX(x: number): number {
   return 1 - x;
 }
+
+/** 战术侧重的一句话说明(与 docs/simulator-model.md §5 各侧重点的乘数方向一致,只说方向不说数值) */
+export const FOCUS_DESC: Record<Focus, string> = {
+  setpiece: "角球、任意球机会更多",
+  counter: "反击更多,运动战略少",
+  possession: "运动战更多,反击更少",
+  press: "抢断反击多,70 分钟后体能下降",
+  crossing: "射门更多、质量略低,头球更多",
+  lowblock: "双方运动战都减少,本队反击更多",
+};

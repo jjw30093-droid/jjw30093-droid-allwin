@@ -1,21 +1,27 @@
 "use client";
 
-import { Chip } from "@/components/ui/Chip";
-import { FOCUS_LABEL, FOCUS_LIST, focusError, type Focus, type MatchSetup, type TeamSetup } from "@/features/simulator/engine";
-import { channelDeltas, FIT_THRESHOLD_PP, formatDeltas, type SideImpact } from "@/features/simulator/focusImpact";
+import { exclusiveWith, FOCUS_LABEL, FOCUS_LIST, focusError, type Focus, type MatchSetup, type TeamSetup } from "@/features/simulator/engine";
+import { FIT_THRESHOLD_PP, type SideImpact } from "@/features/simulator/focusImpact";
+import { FOCUS_DESC } from "@/features/simulator/labels";
 import type { SimParams } from "@/features/simulator/types";
 import styles from "./simulator.module.css";
 
 const pct1 = (x: number) => `${(x * 100).toFixed(1)}%`;
-const signedPp = (pp: number) => `${pp > 0 ? "+" : pp < 0 ? "−" : "±"}${Math.abs(pp).toFixed(1)} 个百分点`;
+/** 胜率变化(百分点),带正负号;不写单位,卡片顶部的"本队胜率"已说明是胜率 */
+const signed = (pp: number) => `${pp > 0.05 ? "+" : pp < -0.05 ? "−" : "±"}${Math.abs(pp).toFixed(1)}`;
+const MAX_FOCUSES = 2;
+/** 置灰原因里用的短名(手机上方块只有约 150px 宽,"与高位逼抢互斥"会折成两行) */
+const FOCUS_SHORT: Record<Focus, string> = { setpiece: "定位球", counter: "反击", possession: "控球", press: "逼抢", crossing: "传中", lowblock: "稳守" };
 
-/** 单队侧重点卡片(从原来的两队并排块原样抽出):侧重点 Chip + 适合本场对手、渠道变化、胜率影响、休息不足。 */
+/**
+ * 单队战术侧重卡片:最上面是本队胜率(选了侧重点显示变化),下面 2 列方块,每块 = 名字 + 一句话说明 + 单选它时的胜率变化;
+ * 与已选互斥、或已选满 2 个时置灰并写明原因;"休息不足 3 天"不是战术,单独一行开关放在最下面。
+ * 胜率变化来自排阵阶段后台 worker 已算好的 SideImpact(同一模拟编号各 1000 次),这里只展示。
+ */
 export function TeamFocusCard({
-  params,
   side,
   setup,
   opponentName,
-  impactSetup,
   impact,
   preparedOk,
   onChange,
@@ -30,53 +36,105 @@ export function TeamFocusCard({
   onChange: (next: TeamSetup) => void;
 }) {
   const err = focusError(setup.focuses);
-  const ch = err ? null : channelDeltas(params, impactSetup, side);
   const toggle = (f: Focus) => {
     const focuses = setup.focuses.includes(f) ? setup.focuses.filter((x) => x !== f) : [...setup.focuses, f];
     onChange({ ...setup, focuses });
   };
+  const blockedReason = (f: Focus): string | null => {
+    if (setup.focuses.includes(f)) return null;
+    const other = exclusiveWith(f);
+    if (other && setup.focuses.includes(other)) return `与${FOCUS_SHORT[other]}互斥`;
+    if (setup.focuses.length >= MAX_FOCUSES) return `最多 ${MAX_FOCUSES} 个`;
+    return null;
+  };
+
   return (
     <section className={styles.card} data-testid={`focus-side-${side}`}>
-      <h2 className={styles.cardTitle}>侧重点(最多 2 个)</h2>
-      <div className={styles.chips}>
+      <div className={styles.focusHead}>
+        <h2 className={styles.cardTitle} style={{ margin: 0 }}>
+          战术侧重 <span className={styles.focusHeadNote}>最多 {MAX_FOCUSES} 个</span>
+        </h2>
+        <span className={styles.focusHeadNote}>
+          对阵{opponentName}
+          {side === 0 ? "(暂定)" : ""}
+        </span>
+      </div>
+
+      <div className={styles.focusWin} data-testid="focus-winrate">
+        {!preparedOk ? null : !impact ? (
+          <span className={styles.muted}>本队胜率计算中…</span>
+        ) : (
+          <>
+            <span className={styles.focusWinLabel}>本队胜率</span>
+            <span className={styles.focusWinNum}>{pct1(impact.base)}</span>
+            {impact.selected != null ? (
+              <>
+                <span className={styles.focusWinArrow} aria-hidden="true">
+                  →
+                </span>
+                <span className={`${styles.focusWinNum} ${styles.focusWinNew}`}>{pct1(impact.selected)}</span>
+                <span className={(impact.selected - impact.base) * 100 > 0.05 ? styles.focusUp : styles.focusFlat}>
+                  {signed((impact.selected - impact.base) * 100)}
+                </span>
+              </>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <div className={styles.focusGrid}>
         {FOCUS_LIST.map((f) => {
+          const on = setup.focuses.includes(f);
+          const blocked = blockedReason(f);
           const gain = impact?.singlePp[f];
           const fit = gain !== undefined && gain >= FIT_THRESHOLD_PP;
           return (
-            <Chip key={f} active={setup.focuses.includes(f)} onClick={() => toggle(f)}>
-              {FOCUS_LABEL[f]}
-              {fit ? (
-                <span className={styles.fitTag} data-testid="focus-fit-tag">
-                  适合本场对手
-                </span>
-              ) : null}
-            </Chip>
+            <button
+              key={f}
+              type="button"
+              className={`${styles.focusTile} ${on ? styles.focusTileOn : ""} ${blocked ? styles.focusTileBlocked : ""}`}
+              aria-pressed={on}
+              aria-disabled={blocked ? true : undefined}
+              onClick={() => {
+                if (!blocked) toggle(f);
+              }}
+              data-testid={`focus-${f}`}
+            >
+              <span className={styles.focusTileTop}>
+                <span className={styles.focusTileName}>{FOCUS_LABEL[f]}</span>
+                {blocked ? (
+                  <span className={styles.focusFlat}>{blocked}</span>
+                ) : !preparedOk ? null : gain === undefined ? (
+                  <span className={styles.focusFlat}>…</span>
+                ) : (
+                  <span className={gain > 0.05 ? styles.focusUp : styles.focusFlat} data-testid={fit ? "focus-fit-tag" : undefined}>
+                    {signed(gain)}
+                    {fit ? " · 适合本场" : ""}
+                  </span>
+                )}
+              </span>
+              <span className={styles.focusTileDesc}>{FOCUS_DESC[f]}</span>
+            </button>
           );
         })}
       </div>
       {err ? <p className={styles.hint}>{err}</p> : null}
-      {ch ? (
-        <div className={styles.focusEffect} data-testid="focus-channels">
-          <div>本队预期进球:{ch.own.length ? formatDeltas(ch.own) : "各渠道不变"}</div>
-          {ch.opp.length ? <div>对手预期进球:{formatDeltas(ch.opp)}</div> : null}
-        </div>
-      ) : null}
-      <div className={styles.focusEffect} data-testid="focus-winrate">
-        {!preparedOk ? null : !impact ? (
-          <span className={styles.muted}>胜率影响计算中…</span>
-        ) : impact.selected != null ? (
-          <>
-            本队胜率 {pct1(impact.base)} → <strong>{pct1(impact.selected)}</strong>({signedPp((impact.selected - impact.base) * 100)})
-          </>
-        ) : (
-          <>未选侧重点:本队胜率 {pct1(impact.base)}</>
-        )}
-        {preparedOk && impact && side === 0 ? <span className={styles.muted}>(对阵 {opponentName},下一步可更换)</span> : null}
-      </div>
-      <div className={styles.chips}>
-        <Chip active={setup.shortRest} onClick={() => onChange({ ...setup, shortRest: !setup.shortRest })}>
-          休息不足 3 天
-        </Chip>
+
+      <div className={styles.focusRest}>
+        <span>
+          赛程密集 <span className={styles.focusHeadNote}>休息不足 3 天</span>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={setup.shortRest}
+          aria-label="休息不足 3 天"
+          className={`${styles.switch} ${setup.shortRest ? styles.switchOn : ""}`}
+          onClick={() => onChange({ ...setup, shortRest: !setup.shortRest })}
+          data-testid={`short-rest-${side}`}
+        >
+          <span className={styles.switchKnob} />
+        </button>
       </div>
     </section>
   );

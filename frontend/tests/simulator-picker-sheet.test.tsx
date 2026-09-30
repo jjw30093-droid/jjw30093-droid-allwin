@@ -118,3 +118,25 @@ describe("左右方向", () => {
     expect(left(7)).toBeGreaterThan(50); // 83 右边锋(x 0.16)
   });
 });
+
+describe("球场底栏与操作提示", () => {
+  afterEach(() => window.localStorage.clear());
+  it("徽标是一组分段按钮(短名,完整名在读屏文字里)", () => {
+    renderCard();
+    const btn = screen.getByTestId("badge-minutes");
+    expect(btn.textContent).toBe("出场");
+    expect(btn.getAttribute("aria-label")).toBe("出场时间");
+    expect(screen.getByTestId("badge-position").getAttribute("aria-pressed")).toBe("true");
+  });
+  it("第一次自己换人之后不再显示操作提示,并记在本浏览器", () => {
+    renderCard();
+    expect(screen.getByTestId("lineup-hint")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("slot-10"));
+    fireEvent.click(screen.getByTestId("pick-b1"));
+    expect(screen.queryByTestId("lineup-hint")).toBeNull();
+    expect(window.localStorage.getItem("sim-lineup-hint-done")).toBe("1");
+    cleanup();
+    renderCard();
+    expect(screen.queryByTestId("lineup-hint")).toBeNull();
+  });
+});

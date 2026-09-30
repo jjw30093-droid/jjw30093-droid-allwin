@@ -6,6 +6,8 @@ import type { PlayerParams, PosGroup } from "./types";
 export type BadgeMode = "position" | "minutes" | "xg";
 export const BADGE_MODES: BadgeMode[] = ["position", "minutes", "xg"];
 export const BADGE_LABEL: Record<BadgeMode, string> = { position: "位置", minutes: "出场时间", xg: "场均 xG" };
+/** 球场底栏分段按钮用的短名(手机一行放得下);完整名放在 title / 读屏文字里 */
+export const BADGE_SHORT: Record<BadgeMode, string> = { position: "位置", minutes: "出场", xg: "xG" };
 
 export interface SlotBadge {
   /** 短文本(手机) */
