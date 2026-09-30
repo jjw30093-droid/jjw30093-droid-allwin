@@ -22,7 +22,6 @@ const METADATA_EXPORT_RE = /export\s+(const\s+metadata|(async\s+)?function\s+gen
 
 // path 相对 app/ 目录。理由见各条注释。
 const ALLOWLIST: Record<string, string> = {
-  "page.tsx": "首页,走根 layout 的 title.default,不需要自己的 metadata",
   "admin/page.tsx": "内部管理后台,robots.ts 已 Disallow,不进 sitemap,标题无产品价值",
   "studio/page.tsx": "Creator Studio 内部工具,同上",
   "studio/matches/[matchId]/page.tsx": "Creator Studio 内部工具,同上",

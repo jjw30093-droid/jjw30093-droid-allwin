@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,6 +23,9 @@ import { PublicPicksBanner } from "@/components/home/PublicPicksBanner";
 import { RecordHighlightBanner } from "@/components/home/RecordHighlightBanner";
 import { pickLatestSettledSlip, type RecapSlip } from "@/lib/home-recap";
 import styles from "./page.module.css";
+
+// 首页 canonical(2026-09-30):自指 canonical,也让发版的公开域名验收能在首页 HTML 里核到本域名(deploy/scripts/release.sh::verify_public_urls)。
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 type RecoOverview = GetJson<"/api/v1/reco/overview">;
 type TrackRecord = GetJson<"/api/v1/reco/track-record">;

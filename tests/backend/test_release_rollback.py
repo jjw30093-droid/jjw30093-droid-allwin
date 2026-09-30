@@ -1348,10 +1348,11 @@ switch_current() {{ ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"; }}
 verify_live() {{ echo "verify_live" >> "{order_marker}"; return 0; }}
 warm_up_live() {{ echo "warm_up_live" >> "{order_marker}"; return 0; }}
 business_smoke() {{ echo "business_smoke" >> "{order_marker}"; return 0; }}
+verify_public_urls() {{ echo "verify_public_urls" >> "{order_marker}"; return 0; }}
 cleanup_old_releases() {{ :; }}
 cleanup_old_backups() {{ :; }}
 main
 '''
         r = _run(script, _base_env(app_root), timeout=60)
         assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
-        assert order_marker.read_text().splitlines() == ["verify_live", "warm_up_live", "business_smoke"]
+        assert order_marker.read_text().splitlines() == ["verify_live", "warm_up_live", "business_smoke", "verify_public_urls"]

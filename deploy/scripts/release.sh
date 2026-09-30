@@ -15,7 +15,7 @@
 # 流程:preflight → rsync 代码(不可变 release,拒绝覆盖已存在的同 SHA 目录)
 #       → 装 .venv → 前端构建 → 浏览器产物门禁 → 三库严格备份(缺一律失败)
 #       → migration → 候选进程冒烟 → 切 current 软链 → 重启 systemd
-#       → 线上 healthz/readyz/首页验收 → 业务冒烟 → 失败在任一阶段自动回滚
+#       → 线上 healthz/readyz/首页验收 → 业务冒烟 → 公开域名验收 → 失败在任一阶段自动回滚
 #       上一 release 并重新验收 → 成功后清理旧 release(current/previous 永不清理)。
 #
 # 用法(在服务器上):
@@ -55,6 +55,10 @@ SMOKE_RETRIES="${SMOKE_RETRIES:-30}"
 SMOKE_INTERVAL="${SMOKE_INTERVAL:-1}"
 BUSINESS_SMOKE_RETRIES="${BUSINESS_SMOKE_RETRIES:-18}"
 BUSINESS_SMOKE_INTERVAL="${BUSINESS_SMOKE_INTERVAL:-10}"
+# 线上公开域名验收(2026-09-30):经公网域名取 sitemap.xml 与首页,必须含本域名、不得含本机地址。
+PUBLIC_SITE_URL="${PUBLIC_SITE_URL:-https://miaomiaodi.vip}"
+PUBLIC_CHECK_RETRIES="${PUBLIC_CHECK_RETRIES:-6}"
+PUBLIC_CHECK_INTERVAL="${PUBLIC_CHECK_INTERVAL:-5}"
 
 # systemd 单元一致性检查(2026-09-27):这几个单元文件此前多次改了仓库版本,却漏了在服务器上
 # 手动 `cp` 到 /etc/systemd/system/(unit 文件不随 release.sh 自动安装,见 README/CLAUDE.md
@@ -499,6 +503,37 @@ business_smoke() {
   return 0
 }
 
+# ── 阶段 6c:公开域名验收(经 Cloudflare → Nginx → Next 的真实公网路径) ─────
+# 2026-09-30:生产 .env 缺 NEXT_PUBLIC_SITE_URL,sitemap/robots/llms 指向 http://localhost:3000
+# 而构建期检查未拦住。这里在切换后经公网域名再核一次:sitemap.xml 与首页 HTML 都必须包含
+# $PUBLIC_SITE_URL,且不得含 localhost / 127.0.0.1 / 0.0.0.0;不满足则本次发版失败(回滚)。
+# 带 ?release=<sha> 绕开 Cloudflare 可能缓存的旧版本(缓存键含查询串)。与 business_smoke 同理,
+# 全程不用管道(pipefail + grep -q 会误判),响应先收进变量再用 bash 模式匹配。
+verify_public_urls() {
+  local tag i sitemap home ok
+  tag="$(basename "${RELEASE_DIR:-unknown}")"
+  for i in $(seq 1 "$PUBLIC_CHECK_RETRIES"); do
+    ok=1
+    if ! sitemap="$(curl -sf --max-time 30 "$PUBLIC_SITE_URL/sitemap.xml?release=$tag")"; then
+      log "公开域名验收:sitemap.xml 取不到,重试 $i/$PUBLIC_CHECK_RETRIES"; ok=0
+    elif [[ "$sitemap" != *"<loc>$PUBLIC_SITE_URL/"* ]]; then
+      log "公开域名验收:sitemap.xml 不含 <loc>$PUBLIC_SITE_URL/,重试 $i/$PUBLIC_CHECK_RETRIES"; ok=0
+    elif [[ "$sitemap" == *localhost* || "$sitemap" == *127.0.0.1* || "$sitemap" == *0.0.0.0* ]]; then
+      log "公开域名验收:sitemap.xml 含本机地址,重试 $i/$PUBLIC_CHECK_RETRIES"; ok=0
+    elif ! home="$(curl -sf --max-time 30 "$PUBLIC_SITE_URL/?release=$tag")"; then
+      log "公开域名验收:首页取不到,重试 $i/$PUBLIC_CHECK_RETRIES"; ok=0
+    elif [[ "$home" != *"$PUBLIC_SITE_URL"* ]]; then
+      log "公开域名验收:首页 HTML 不含 $PUBLIC_SITE_URL(canonical 缺失?),重试 $i/$PUBLIC_CHECK_RETRIES"; ok=0
+    elif [[ "$home" == *localhost:* || "$home" == *127.0.0.1* || "$home" == *0.0.0.0* ]]; then
+      log "公开域名验收:首页 HTML 含本机地址,重试 $i/$PUBLIC_CHECK_RETRIES"; ok=0
+    fi
+    [ "$ok" -eq 1 ] && return 0
+    sleep "$PUBLIC_CHECK_INTERVAL"
+  done
+  log "公开域名验收失败:$PUBLIC_SITE_URL 的 sitemap.xml / 首页未指向本域名或含本机地址"
+  return 1
+}
+
 # ── 回滚:切回 previous 并重新验收(不是切完就假定成功) ───────────────
 rollback() {
   if [ -z "${PREVIOUS:-}" ] || [ ! -d "$PREVIOUS" ]; then
@@ -581,6 +616,11 @@ main() {
 
   log "业务冒烟:/api/v1/products、/api/v1/matches JSON + 首页 API 数据标志"
   if ! business_smoke; then
+    rollback
+  fi
+
+  log "公开域名验收:$PUBLIC_SITE_URL/sitemap.xml 与首页含本域名、不含本机地址"
+  if ! verify_public_urls; then
     rollback
   fi
 

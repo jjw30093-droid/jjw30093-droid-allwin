@@ -10,7 +10,12 @@
 # 用法:
 #   bash deploy/scripts/check_public_urls.sh [frontend目录]
 # 默认检查仓库内 frontend/;release.sh 传入 release 目录下的 frontend/。
-# 退出码:0 = 干净;1 = 产物缺失、含占位域名或三者 host 不一致。
+# 退出码:0 = 干净;1 = 产物缺失、含占位域名 / 本机地址 / 非 https 链接,或三者 host 不一致。
+#
+# 2026-09-30 加严:此前只拦 example.com 类占位域名,而 lib/site.ts 的回退值是
+# http://localhost:3000——生产 .env 缺 NEXT_PUBLIC_SITE_URL 时产物指向 localhost,
+# 本脚本却报 OK(2026-09-13 起留存的 17 份发版日志全部如此)。现在拒绝
+# localhost / 127.0.0.1 / 0.0.0.0 以及任何 http://(生产必须是 https)。
 
 set -euo pipefail
 
@@ -44,6 +49,20 @@ if grep -RIlsqiE -- 'example\.(com|org|net)' "$SITEMAP" "$ROBOTS" "$LLMS"; then
   exit 1
 fi
 
+# 本机地址检查:三份产物都不得出现 localhost / 127.0.0.1 / 0.0.0.0。
+if grep -RIlsqiE -- '(localhost|127\.0\.0\.1|0\.0\.0\.0)' "$SITEMAP" "$ROBOTS" "$LLMS"; then
+  log "FAIL: 产物包含本机地址(NEXT_PUBLIC_SITE_URL 未在构建前设置为 https://miaomiaodi.vip):" >&2
+  grep -RInsiE -- '(localhost|127\.0\.0\.1|0\.0\.0\.0)' "$SITEMAP" "$ROBOTS" "$LLMS" | head -n 5 >&2 || true
+  exit 1
+fi
+
+# https 检查:除 sitemap 固定的 XML 命名空间(http://www.sitemaps.org/...)外,不得出现任何 http:// 链接。
+if grep -RIsE -- 'http://' "$SITEMAP" "$ROBOTS" "$LLMS" | grep -vqE -- 'http://www\.sitemaps\.org/schemas/'; then
+  log "FAIL: 产物包含非 https 链接(生产必须是 https):" >&2
+  grep -RInsE -- 'http://' "$SITEMAP" "$ROBOTS" "$LLMS" | grep -vE -- 'http://www\.sitemaps\.org/schemas/' | head -n 5 >&2 || true
+  exit 1
+fi
+
 # host 一致性检查:sitemap 的 <loc>、robots 的 Sitemap: 行、llms 的链接必须
 # 指向同一个 host(同一个 SITE_URL)。
 extract_host() {
@@ -70,4 +89,4 @@ if [ "$sitemap_host" != "$robots_host" ] || [ "$sitemap_host" != "$llms_host" ];
   exit 1
 fi
 
-log "OK: sitemap.xml/robots.txt/llms.txt 均指向 $sitemap_host,不含占位域名"
+log "OK: sitemap.xml/robots.txt/llms.txt 均指向 $sitemap_host(https,不含占位域名与本机地址)"
