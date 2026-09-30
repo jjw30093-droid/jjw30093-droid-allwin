@@ -13,6 +13,7 @@ import {
   type MatchSetup,
   type SlotAssign,
 } from "@/features/simulator/engine";
+import { channelDeltas, formatDeltas, impactJobs, summarizeImpact } from "@/features/simulator/focusImpact";
 import { cumulativeXg, toReportShots } from "@/features/simulator/xg";
 import { marginDist, pEff, poissonPmf, totalDist } from "@/features/simulator/market";
 import type { PlayerParams, PosGroup, SimParams, TeamParams } from "@/features/simulator/types";
@@ -212,6 +213,48 @@ describe("λ 组装", () => {
     const ratio = r.config.teams[0].breakdown.focusOwnRatio;
     expect(ratio).toBeGreaterThanOrEqual(0.85 - 1e-12);
     expect(ratio).toBeLessThanOrEqual(1.15 + 1e-12);
+  });
+});
+
+describe("侧重点展示(只读引擎结果)", () => {
+  it("渠道变化与引擎乘数一致:定位球 ×(1+0.2s)、运动战 ×0.95,总量截断按比例缩放", () => {
+    const d = channelDeltas(buildParams(), setup({ home: { ...setup().home, focuses: ["setpiece"] } }), 0);
+    if (!d) throw new Error("no deltas");
+    const sp = d.own.find((x) => x.channel === "setpiece")!.change;
+    const open = d.own.find((x) => x.channel === "open")!.change;
+    const s = (0.4 / 0.35) * (0.4 / 0.35);
+    expect((1 + sp) / (1 + open)).toBeCloseTo((1 + 0.2 * s) / 0.95, 9);
+    expect(sp).toBeGreaterThan(0);
+    expect(open).toBeLessThan(0);
+    expect(d.opp).toEqual([]);
+  });
+
+  it("对手渠道变化来自本队侧重点;本队未选侧重点时不展示", () => {
+    const d = channelDeltas(buildParams(), setup({ away: { ...setup().away, focuses: ["counter"] } }), 1);
+    expect(d?.opp.find((x) => x.channel === "open")?.change).toBeGreaterThan(0);
+    expect(channelDeltas(buildParams(), setup(), 0)).toBeNull();
+  });
+
+  it("文案格式", () => {
+    expect(formatDeltas([{ channel: "setpiece", change: 0.18 }, { channel: "open", change: -0.05 }])).toBe("定位球 +18%，运动战 −5%");
+  });
+
+  it("胜率对照:每队一个对照 + 6 个单一侧重点,已选组合另算;单一侧重点按百分点相对对照", () => {
+    expect(impactJobs(buildParams(), setup())).toHaveLength(14);
+    const jobs = impactJobs(buildParams(), setup({ home: { ...setup().home, focuses: ["setpiece", "press"] } }));
+    expect(jobs).toHaveLength(15);
+    expect(jobs.filter((j) => j.side === 0 && j.kind === "base")[0].config.teams[0].breakdown.focusOwnRatio).toBe(1);
+    const [h, a] = summarizeImpact([
+      { side: 0, kind: "base", win: 0.4 },
+      { side: 0, kind: "selected", win: 0.43 },
+      { side: 0, kind: "setpiece", win: 0.435 },
+      { side: 1, kind: "base", win: 0.3 },
+      { side: 1, kind: "press", win: 0.29 },
+    ]);
+    expect(h?.selected).toBe(0.43);
+    expect(h?.singlePp.setpiece).toBeCloseTo(3.5, 9);
+    expect(a?.selected).toBeNull();
+    expect(a?.singlePp.press).toBeCloseTo(-1, 9);
   });
 });
 

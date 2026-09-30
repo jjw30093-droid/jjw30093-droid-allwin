@@ -335,6 +335,23 @@
   margin-top: var(--sp-2);
 }
 
+.fitTag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.focusEffect {
+  margin-top: var(--sp-2);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
 .hint {
   color: var(--pending);
   font-size: 13px;

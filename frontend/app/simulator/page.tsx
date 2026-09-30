@@ -14,7 +14,7 @@ function enabled(): boolean {
 // 用 generateMetadata 而不是静态 metadata:静态导出即使页面 notFound() 也会把标题写进生产响应。
 export async function generateMetadata(): Promise<Metadata> {
   if (!enabled()) return { robots: { index: false, follow: false } };
-  return { title: "比赛模拟器(未校准原型)", robots: { index: false, follow: false } };
+  return { title: "比赛模拟器(原型)", robots: { index: false, follow: false } };
 }
 
 export default async function SimulatorPage() {

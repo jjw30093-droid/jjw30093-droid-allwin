@@ -1,10 +1,9 @@
 import { simulateMany, simulateOnce, type MatchConfig } from "./engine";
+import { winRate, type ImpactJob } from "./focusImpact";
 
-interface Req {
-  config: MatchConfig;
-  seed: number;
-  runs: number;
-}
+type Req =
+  | { kind?: "run"; config: MatchConfig; seed: number; runs: number }
+  | { kind: "impact"; jobs: ImpactJob[]; seed: number; runs: number };
 
 const ctx = self as unknown as {
   onmessage: ((e: MessageEvent<Req>) => void) | null;
@@ -12,7 +11,13 @@ const ctx = self as unknown as {
 };
 
 ctx.onmessage = (e) => {
-  const { config, seed, runs } = e.data;
+  const req = e.data;
+  if (req.kind === "impact") {
+    const results = req.jobs.map((j) => ({ side: j.side, kind: j.kind, win: winRate(j.config, j.side, req.seed, req.runs) }));
+    ctx.postMessage({ kind: "impact", results });
+    return;
+  }
+  const { config, seed, runs } = req;
   const single = simulateOnce(config, seed);
   const many = simulateMany(config, seed, runs, single.score);
   ctx.postMessage({ single, many });

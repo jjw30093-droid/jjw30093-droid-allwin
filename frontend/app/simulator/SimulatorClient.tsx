@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Chip } from "@/components/ui/Chip";
 import {
   FOCUS_LABEL,
@@ -16,6 +16,16 @@ import {
   type SingleResult,
   type TeamSetup,
 } from "@/features/simulator/engine";
+import {
+  channelDeltas,
+  FIT_THRESHOLD_PP,
+  formatDeltas,
+  IMPACT_RUNS,
+  impactJobs,
+  summarizeImpact,
+  type ImpactJob,
+  type SideImpact,
+} from "@/features/simulator/focusImpact";
 import type { PosGroup, SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import { LineupEditor } from "./LineupEditor";
@@ -27,6 +37,10 @@ const LEAGUE_NAME: Record<string, string> = { "47": "英超", "87": "西甲" };
 const DEFAULT_SEED = 20260929;
 const RUNS = 1000;
 const FALLBACK_FORMATION = "4-2-3-1";
+const IMPACT_DEBOUNCE_MS = 300;
+
+const pct1 = (x: number) => `${(x * 100).toFixed(1)}%`;
+const signedPp = (pp: number) => `${pp > 0 ? "+" : pp < 0 ? "−" : "±"}${Math.abs(pp).toFixed(1)} 个百分点`;
 
 type Phase = "setup" | "running" | "animating" | "result";
 
@@ -151,6 +165,33 @@ export function SimulatorClient({ params }: { params: SimParams }) {
 
   const finishAnimation = useCallback(() => setPhase("result"), []);
 
+  // 侧重点的胜率净影响:排阵阶段在后台 worker 里算(同一种子、每个配置 1000 次),结果按设定 key 对齐,过期结果不展示。
+  const impactSetup: MatchSetup = useMemo(
+    () => ({ leagueId: Number(leagueId), home, away, fixtureId, chaos }),
+    [leagueId, home, away, fixtureId, chaos],
+  );
+  const impactKey = useMemo(() => JSON.stringify([impactSetup, seed]), [impactSetup, seed]);
+  const [impact, setImpact] = useState<{ key: string; sides: [SideImpact | null, SideImpact | null] } | null>(null);
+  const impactWorkerRef = useRef<Worker | null>(null);
+  useEffect(() => {
+    if (phase !== "setup" || !prepared.ok) return;
+    const timer = window.setTimeout(() => {
+      impactWorkerRef.current?.terminate();
+      const w = new Worker(new URL("../../features/simulator/simulator.worker.ts", import.meta.url), { type: "module" });
+      impactWorkerRef.current = w;
+      w.onmessage = (e: MessageEvent<{ results: { side: 0 | 1; kind: ImpactJob["kind"]; win: number }[] }>) => {
+        setImpact({ key: impactKey, sides: summarizeImpact(e.data.results) });
+        w.terminate();
+        if (impactWorkerRef.current === w) impactWorkerRef.current = null;
+      };
+      w.postMessage({ kind: "impact", jobs: impactJobs(params, impactSetup), seed, runs: IMPACT_RUNS });
+    }, IMPACT_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [phase, prepared.ok, params, impactSetup, impactKey, seed]);
+  useEffect(() => () => impactWorkerRef.current?.terminate(), []);
+  const impactNow = impact?.key === impactKey ? impact.sides : null;
+  const cal = params.calibration;
+
   const toggleFocus = (side: 0 | 1, f: Focus) => {
     const cur = side === 0 ? home : away;
     const focuses = cur.focuses.includes(f) ? cur.focuses.filter((x) => x !== f) : [...cur.focuses, f];
@@ -167,9 +208,12 @@ export function SimulatorClient({ params }: { params: SimParams }) {
     <main className={styles.page} style={colorVars}>
       <header className={styles.header}>
         <h1 className={styles.title}>比赛模拟器</h1>
-        <span className={styles.badge} data-testid="uncalibrated-badge">未校准原型</span>
+        <span className={styles.badge} data-testid="uncalibrated-badge">{params.calibration ? "原型" : "未校准原型"}</span>
         <span className={styles.meta}>
-          模型 {params.meta.effective_version ?? params.meta.model_version} · 参数导出于 {params.meta.generated_at} · 全部参数为初始假设,尚未回测校准,结果不代表预测
+          模型 {params.meta.effective_version ?? params.meta.model_version} · 参数导出于 {params.meta.generated_at} ·{" "}
+          {params.calibration
+            ? "进球率、主场系数与时段系数经 25/26 五大联赛回测校准;侧重点乘数未校准。结果不代表预测"
+            : "全部参数为初始假设,尚未回测校准,结果不代表预测"}
         </span>
       </header>
 
@@ -268,7 +312,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
             {pairFixtures.length > 0 ? (
               <div className={styles.chips}>
                 <Chip active={useMarket} onClick={() => setUseMarket(!useMarket)}>
-                  {useMarket ? "已用 Crown 盘口定锚(w=0.7)" : "不用盘口定锚"}
+                  {useMarket ? `已用 Crown 盘口定锚(w=${cal?.market_w ?? 1})` : "不用盘口定锚"}
                 </Chip>
               </div>
             ) : null}
@@ -301,17 +345,46 @@ export function SimulatorClient({ params }: { params: SimParams }) {
               {([0, 1] as const).map((side) => {
                 const setup = side === 0 ? home : away;
                 const err = focusError(setup.focuses);
+                const ch = err ? null : channelDeltas(params, impactSetup, side);
+                const imp = impactNow?.[side] ?? null;
                 return (
-                  <div key={side}>
+                  <div key={side} data-testid={`focus-side-${side}`}>
                     <div className={styles.teamName}>{names[side]}</div>
                     <div className={styles.chips}>
-                      {FOCUS_LIST.map((f) => (
-                        <Chip key={f} active={setup.focuses.includes(f)} onClick={() => toggleFocus(side, f)}>
-                          {FOCUS_LABEL[f]}
-                        </Chip>
-                      ))}
+                      {FOCUS_LIST.map((f) => {
+                        const gain = imp?.singlePp[f];
+                        const fit = gain !== undefined && gain >= FIT_THRESHOLD_PP;
+                        return (
+                          <Chip key={f} active={setup.focuses.includes(f)} onClick={() => toggleFocus(side, f)}>
+                            {FOCUS_LABEL[f]}
+                            {fit ? (
+                              <span className={styles.fitTag} data-testid="focus-fit-tag">
+                                适合本场对手
+                              </span>
+                            ) : null}
+                          </Chip>
+                        );
+                      })}
                     </div>
                     {err ? <p className={styles.hint}>{err}</p> : null}
+                    {ch ? (
+                      <div className={styles.focusEffect} data-testid="focus-channels">
+                        <div>本队预期进球:{ch.own.length ? formatDeltas(ch.own) : "各渠道不变"}</div>
+                        {ch.opp.length ? <div>对手预期进球:{formatDeltas(ch.opp)}</div> : null}
+                      </div>
+                    ) : null}
+                    <div className={styles.focusEffect} data-testid="focus-winrate">
+                      {!prepared.ok ? null : !imp ? (
+                        <span className={styles.muted}>胜率影响计算中…</span>
+                      ) : imp.selected != null ? (
+                        <>
+                          本队胜率 {pct1(imp.base)} → <strong>{pct1(imp.selected)}</strong>(
+                          {signedPp((imp.selected - imp.base) * 100)})
+                        </>
+                      ) : (
+                        <>未选侧重点:本队胜率 {pct1(imp.base)}</>
+                      )}
+                    </div>
                     <div className={styles.chips}>
                       <Chip
                         active={setup.shortRest}
@@ -324,6 +397,10 @@ export function SimulatorClient({ params }: { params: SimParams }) {
                 );
               })}
             </div>
+            <p className={styles.muted} style={{ marginTop: 12 }}>
+              胜率影响:同一种子各模拟 {IMPACT_RUNS} 次,与本队不选侧重点对比(对手侧重点保持当前设定);单一侧重点使本队胜率提升 ≥
+              {FIT_THRESHOLD_PP} 个百分点时标注「适合本场对手」。侧重点乘数为 v0 设定值,未经数据校准,只通过了合理性测试。
+            </p>
           </section>
 
           <section className={styles.card}>
@@ -363,7 +440,7 @@ export function SimulatorClient({ params }: { params: SimParams }) {
             )}
             <div className={styles.row} style={{ marginTop: 16 }}>
               <Chip active={chaos} onClick={() => setChaos(!chaos)}>
-                {chaos ? "混乱模式(κ=4)" : "标准档(κ=12)"}
+                {chaos ? "混乱模式(κ=4)" : cal?.kappa ? `标准档(κ=${cal.kappa})` : "标准档(状态系数关闭)"}
               </Chip>
               <label className={styles.field} style={{ flex: "0 1 180px" }}>
                 种子
