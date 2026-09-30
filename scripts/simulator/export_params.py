@@ -34,6 +34,7 @@ from features_market import fit_poisson, implied_two, load_timelines, pick_close
 from params_core import CALIBRATED_LEAGUES, CHANNELS, K_TEAM, SITUATION_CHANNEL, build, load_raw, rnd  # noqa: E402
 
 from backend.media.team_crests import TeamCrestError, resolve_team_crest_url  # noqa: E402
+from shot_samples import build_shot_samples, load_shots, summarize  # noqa: E402
 
 # 生效版本与校准值:显式维护在校准文件里(数值取自 Phase 2 回测结果),不从规格文档标题推导。
 CALIBRATION_PATH = Path(__file__).resolve().parent / "calibration_v0.3.json"
@@ -181,6 +182,12 @@ def main() -> None:
     p = build(raw, leagues=LEAGUES, current_season=CURRENT_SEASON)
     leagues_out, teams_out, players_out = p["leagues"], p["teams"], p["players"]
     teams_with_crest = attach_crests(teams_out)
+    # 动画用的真实射门样本库(五个联赛合并);只影响动画观感,出错就不带,不让每日导出失败
+    try:
+        shot_samples = build_shot_samples(load_shots(core, LEAGUES, SEASONS), LEAGUES, SEASONS)
+    except Exception as exc:  # noqa: BLE001
+        print(f"shot_samples 构建失败,本次不带样本库:{type(exc).__name__}: {exc}", file=sys.stderr)
+        shot_samples = None
     position_map = p["position_map"]
     diag = p["diag"]
     finished = [m for m in raw.matches if m["status"] == "Finish"]
@@ -294,6 +301,8 @@ def main() -> None:
         "fixtures": fixtures_out,
         "calibration": calibration,
     }
+    if shot_samples is not None:
+        out["shot_samples"] = shot_samples
     if args.publish:
         path = publish(out, out_dir, args.keep, now)
     else:
@@ -305,6 +314,7 @@ def main() -> None:
         "teams": len(teams_out),
         "teams_by_league": dict(Counter(t["league_id"] for t in teams_out.values())),
         "teams_with_crest": teams_with_crest,
+        "shot_samples": summarize(shot_samples) if shot_samples is not None else None,
         "players": len(players_out),
         "formations": sorted(p["formations"]),
         "fixtures": dict(Counter(f["status"] for f in fixtures_out.values())),
