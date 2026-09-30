@@ -1025,6 +1025,20 @@ button.stepInner {
   font-weight: 700;
 }
 
+/* 标题下一行小字说明:收起时也看得见 */
+.foldHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-1) 0;
+}
+
+.foldHint {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
 .foldChevron {
   margin-left: auto;
   width: 9px;

@@ -48,3 +48,15 @@ export function lineupIssue(params: SimParams, setup: TeamSetup): string | null 
 export function emptySlots(setup: TeamSetup): number[] {
   return setup.slots.map((s, i) => (s.playerId ? -1 : i)).filter((i) => i >= 0);
 }
+
+/** 第 2 步「预计进球」卡片里的盘口状态:无论是否匹配都显示一行,免得用户以为用上了盘口。
+ *  fixtureId = 当前实际参考的比赛(关掉参考时为 null);pairHasFixture = 这对主客队在参数里有没有带盘口的比赛。 */
+export function marketStatus(params: SimParams, fixtureId: number | null, pairHasFixture: boolean): string {
+  if (fixtureId != null) {
+    return params.fixtures[String(fixtureId)]?.status === "未开赛"
+      ? "已参考本场盘口(未开赛)"
+      : "已参考本场赛前盘口(比赛已踢完)";
+  }
+  if (pairHasFixture) return "本场有盘口,当前未参考,只用数据模型";
+  return "这对球队近期没有盘口数据,只用数据模型";
+}

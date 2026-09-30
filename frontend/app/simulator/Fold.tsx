@@ -7,8 +7,10 @@ export function Fold({ title, hint, children, testId }: { title: string; hint?: 
   return (
     <details className={`${styles.card} ${styles.fold}`} data-testid={testId}>
       <summary className={styles.foldSummary}>
-        <span className={styles.foldTitle}>{title}</span>
-        {hint ? <span className={styles.muted}>{hint}</span> : null}
+        <span className={styles.foldHead}>
+          <span className={styles.foldTitle}>{title}</span>
+          {hint ? <span className={styles.foldHint}>{hint}</span> : null}
+        </span>
         <span className={styles.foldChevron} aria-hidden="true" />
       </summary>
       <div className={styles.foldBody}>{children}</div>

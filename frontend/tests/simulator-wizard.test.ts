@@ -4,7 +4,7 @@ import { applyPick } from "@/features/simulator/formation";
 import { matchesPlayerQuery, pickerRows } from "@/features/simulator/picker";
 import { slotBadge } from "@/features/simulator/slotBadge";
 import type { PlayerParams, PosGroup, SimParams } from "@/features/simulator/types";
-import { emptySlots, lineupIssue, pairWithAway, pairWithHome, stepForQuery } from "@/features/simulator/wizard";
+import { emptySlots, lineupIssue, marketStatus, pairWithAway, pairWithHome, stepForQuery } from "@/features/simulator/wizard";
 
 // 与 simulator-engine.test.ts 同构的最小参数:4-4-2,主队 10(h*)、客队 20(a*)
 const SLOTS: [number, PosGroup][] = [
@@ -168,5 +168,16 @@ describe("球场徽标", () => {
     expect(slotBadge(player("x", "CM", { npxg90: null }), "CM", "xg")?.text).toBe("—");
     expect(slotBadge(player("x", "CM", { npxg90: 0 }), "CM", "xg")?.text).toBe("0.00");
     expect(slotBadge(null, "CM", "xg")).toBeNull();
+  });
+});
+
+describe("盘口状态行", () => {
+  const p = params();
+  (p as unknown as { fixtures: Record<string, { status: string }> }).fixtures = { "1": { status: "未开赛" }, "2": { status: "已完赛（赛前盘口）" } };
+  it("匹配 / 关掉参考 / 没有盘口 三种情况都有一行字", () => {
+    expect(marketStatus(p, 1, true)).toBe("已参考本场盘口(未开赛)");
+    expect(marketStatus(p, 2, true)).toBe("已参考本场赛前盘口(比赛已踢完)");
+    expect(marketStatus(p, null, true)).toContain("当前未参考");
+    expect(marketStatus(p, null, false)).toBe("这对球队近期没有盘口数据,只用数据模型");
   });
 });

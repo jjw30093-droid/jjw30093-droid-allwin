@@ -11,7 +11,7 @@ import type { BadgeMode } from "@/features/simulator/slotBadge";
 import { makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
 import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
-import { emptySlots, lineupIssue, pairWithAway, pairWithHome, type WizardStep } from "@/features/simulator/wizard";
+import { emptySlots, lineupIssue, marketStatus, pairWithAway, pairWithHome, type WizardStep } from "@/features/simulator/wizard";
 import { Fold } from "./Fold";
 import { LineupPitchCard } from "./LineupPitchCard";
 import type { FixtureIndexEntry } from "./loadParams";
@@ -250,11 +250,9 @@ export function SimulatorClient({
       <header className={styles.header}>
         <h1 className={styles.title}>比赛模拟器</h1>
         <span className={styles.badge} data-testid="uncalibrated-badge">{params.calibration ? "原型" : "未校准原型"}</span>
-        <span className={styles.meta}>
-          模型 {params.meta.effective_version ?? params.meta.model_version} · 参数导出于 {params.meta.generated_at} ·{" "}
-          {params.calibration
-            ? "进球率、主场系数与时段系数经 25/26 五大联赛回测校准;侧重点乘数未校准。结果不代表预测"
-            : "全部参数为初始假设,尚未回测校准,结果不代表预测"}
+        {/* 模型版本、参数导出时间与校准范围在第 2 步「技术细节」里 */}
+        <span className={styles.meta} data-testid="sim-meta">
+          目前支持五大联赛,结果不代表预测
         </span>
         {paramsStale ? (
           <span className={styles.hint} data-testid="params-stale">
@@ -322,7 +320,7 @@ export function SimulatorClient({
                   </select>
                 </label>
               </div>
-              <Fold title="或选一场有市场参考的真实比赛" testId="fixture-fold">
+              <Fold title="快捷选择:近期真实比赛" hint="手动选两队也会自动匹配盘口" testId="fixture-fold">
                 <div className={styles.fixtureList}>
                   {fixtures.map((f) => (
                     <button
@@ -437,6 +435,9 @@ export function SimulatorClient({
                     ) : (
                       <p className={styles.error}>{awayIssue ?? homeIssue ?? prepared.error}</p>
                     )}
+                    <p className={styles.muted} style={{ fontSize: 13, margin: "4px 0 0" }} data-testid="market-status">
+                      {marketStatus(params, fixtureId, pairFixtures.length > 0)}
+                    </p>
                     {fixtureId != null && params.fixtures[String(fixtureId)]?.status !== "未开赛" ? (
                       <p className={styles.hint} data-testid="postmatch-notice">
                         本场参数包含赛后数据,仅供演示。
@@ -521,6 +522,13 @@ export function SimulatorClient({
                       </button>
                     </div>
                     <dl className={styles.techList} style={{ marginTop: 16 }}>
+                      <dt>模型与参数</dt>
+                      <dd data-testid="setup-model">
+                        模型 {params.meta.effective_version ?? params.meta.model_version} · 参数导出于 {params.meta.generated_at}。
+                        {params.calibration
+                          ? "进球率、主场系数与时段系数经 25/26 五大联赛回测校准;侧重点乘数未校准。"
+                          : "全部参数为初始假设,尚未回测校准。"}
+                      </dd>
                       <dt>市场参考</dt>
                       <dd data-testid="setup-market">
                         {fixtureId != null
