@@ -44,24 +44,25 @@ class TestDecide:
         assert spe.decide(utc("2026-09-21T00:00:00Z"), True, OK, [])["reason"] == "today_published"
 
     def test_before_window(self):
-        # 北京 04:00 < 04:30
-        assert spe.decide(utc("2026-09-20T20:00:00Z"), False, OK, [])["reason"] == "before_window"
+        # 北京 11:55 < 12:00:采集早已完成也不导出
+        assert spe.decide(utc("2026-09-21T03:55:00Z"), False, OK, [])["reason"] == "before_window"
+        # 北京 06:35(旧口径会导出的时刻)
+        assert spe.decide(utc("2026-09-20T22:35:00Z"), False, OK, [])["reason"] == "before_window"
 
-    def test_ready_after_collection(self):
-        d = spe.decide(utc("2026-09-20T22:35:00Z"), False, OK, [])  # 北京 06:35
-        assert d["due"] and d["trigger"] == "ready"
+    def test_scheduled_at_noon(self):
+        d = spe.decide(utc("2026-09-21T04:05:00Z"), False, OK, [])  # 北京 12:05
+        assert d["due"] and d["trigger"] == "scheduled"
 
-    def test_waits_for_unresolved_match(self):
-        d = spe.decide(utc("2026-09-20T22:35:00Z"), False, OK, [5103641])
-        assert not d["due"] and d["reason"] == "waiting_for_collection" and d["unresolved_match_ids"] == [5103641]
+    def test_noon_exact_boundary(self):
+        assert spe.decide(utc("2026-09-21T04:00:00Z"), False, OK, [])["due"]  # 北京 12:00 整
 
-    def test_waits_when_last_collection_failed(self):
-        d = spe.decide(utc("2026-09-20T22:35:00Z"), False, {"status": "failed"}, [])
-        assert not d["due"]
+    def test_incomplete_still_exports_at_noon(self):
+        d = spe.decide(utc("2026-09-21T04:05:00Z"), False, OK, [5103641])
+        assert d["due"] and d["trigger"] == "incomplete" and d["unresolved_match_ids"] == [5103641]
 
-    def test_deadline_exports_anyway(self):
-        d = spe.decide(utc("2026-09-21T04:05:00Z"), False, OK, [5103641])  # 北京 12:05
-        assert d["due"] and d["trigger"] == "deadline"
+    def test_incomplete_when_last_collection_failed(self):
+        d = spe.decide(utc("2026-09-21T04:05:00Z"), False, {"status": "failed"}, [])
+        assert d["due"] and d["trigger"] == "incomplete"
 
     def test_published_name_uses_beijing_date(self):
         assert spe.published_name(utc("2026-09-20T17:00:00Z")) == "simulator_params_20260921.json"
@@ -97,7 +98,7 @@ def test_export_argv_publishes(monkeypatch, tmp_path):
 def test_main_not_due_does_not_export(monkeypatch, tmp_path):
     monkeypatch.setattr(spe, "last_collection_run", lambda: OK)
     monkeypatch.setattr(spe, "unresolved_matches", lambda now_iso: [1])
-    monkeypatch.setattr(spe, "decide", lambda *a: {"due": False, "reason": "waiting_for_collection"})
+    monkeypatch.setattr(spe, "decide", lambda *a: {"due": False, "reason": "before_window"})
     called = []
     monkeypatch.setattr(spe, "run_export", lambda *a: called.append(a) or 0)
     assert spe.main(["--due", "--out-dir", str(tmp_path)]) == 0

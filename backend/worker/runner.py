@@ -441,7 +441,7 @@ REGISTRY: dict[str, dict] = {
         "max_attempts": 1,
         "timeout_seconds": 900,
         "backoff_seconds": 0,
-        "description": "模拟器参数每日导出:采集完成(五大联赛无未落库完赛场次)即导出,每天最多一次;12:00 截止兜底",
+        "description": "模拟器参数每日导出:每天北京时间 12:00 导出一次;届时仍有未落库完赛场次则照常导出并告警",
     },
 }
 
@@ -472,7 +472,7 @@ DEFAULT_CHAIN = [
 #   同一先例——判断"最近一场完赛比赛开球+6h 是否已过、且尚未刷新"不需要
 #   比 30 分钟更密的检查频率,与 physical_stats_poll 选取同一节奏。
 # - simulator_params_export:由 allwin-simparams.timer 每 30 分钟独立调度,
-#   同一先例——到期判断在 --due 里(今天已发布 / 早于 04:30 / 采集未完成都跳过)。
+#   同一先例——到期判断在 --due 里(今天已发布 / 早于北京时间 12:00 都跳过)。
 NON_CHAIN_JOBS = frozenset({
     "silver_build", "daily_digest", "physical_stats_poll", "standings_refresh_poll",
     "simulator_params_export",

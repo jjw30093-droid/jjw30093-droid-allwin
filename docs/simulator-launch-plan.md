@@ -92,15 +92,13 @@ v0.3 只在五大联赛(英超 47、西甲 87、意甲 55、德甲 54、法甲 5
 - `allwin-simparams.timer`:`OnCalendar=*:05,35`(每 30 分钟,错开 postmatch 的整点/半点附近),`Persistent=true`。
 - 到期判断(`--due`,全部只读):
   1. 今天(北京日期)的参数已发布(`daily/simulator_params_<北京日期>.json` 存在)→ 不到期,跳过;
-  2. 北京时间早于 04:30 → 跳过(避开 04:00 的 maintenance,也避免在当晚比赛还没结束时就导出);
-  3. **就绪**:最近一次 `fotmob_incremental_multi` 运行成功,且五大联赛里没有"开球已超过 2.5 小时但仍未完赛落库"的比赛(与 postmatch 同一判据 `league_stale_unresolved_match_ids`,扣除 `postmatch_retry_state` 里已耗尽重试的场次)→ 立即导出,`trigger = "ready"`;
-  4. 未就绪且北京时间早于 12:00 → 跳过(等下一轮);
-  5. 未就绪但已到 12:00 → 仍然导出(`trigger = "deadline"`),在 meta 里列出未就绪的场次,并发一条 WARN 告警。
-- 没有比赛的日子,04:35 那一轮就会就绪并导出。
+  2. 北京时间早于 12:00 → 跳过;
+  3. 已到 12:00 → 导出(每天第一次是 12:05 那一轮)。采集是否完成只用来标注:最近一次 `fotmob_incremental_multi` 运行成功,且五大联赛里没有"开球已超过 2.5 小时但仍未完赛落库"的比赛(与 postmatch 同一判据 `league_stale_unresolved_match_ids`,扣除 `postmatch_retry_state` 里已耗尽重试的场次)→ `trigger = "scheduled"`;否则 `trigger = "incomplete"`,在 meta 里列出未就绪的场次,并发一条 WARN 告警。
+- **2026-09-30 站长改为固定每天 12:00 导出**(原方案是"04:30 起采集完成即导出、12:00 截止兜底")。理由:欧洲晚场(西甲有北京时间凌晨三四点开球的场次)到中午早已完赛落库,固定时间更好理解;代价是当天上午页面仍用前一天的参数。
 
 **导出结果的 meta 新增**:
 - `latest_included_kickoff_utc`:参数中纳入的已完赛比赛里最晚的精确开球时间(UTC);
-- `export_trigger`:`{"trigger": "ready" | "deadline" | "manual", "checked_at": …, "unresolved_match_ids": [...], "last_collection_run": {...}}`。
+- `export_trigger`:`{"trigger": "scheduled" | "incomplete" | "manual", "checked_at": …, "unresolved_match_ids": [...], "last_collection_run": {...}}`。
 
 **systemd 单元**(与 `allwin-standings.service` 同构):
 - `User=allwin`、`Group=allwin`;`EnvironmentFile=/opt/allwin/shared/.env`;`WorkingDirectory=/opt/allwin/current`;
@@ -125,7 +123,7 @@ v0.3 只在五大联赛(英超 47、西甲 87、意甲 55、德甲 54、法甲 5
 ### 3.3 导出失败如何发现
 
 - `job_runs` 记 failed → runner 失败分支立即发 CRITICAL(ServerChan,与其它任务同一去重);
-- 12:00 截止仍未就绪 → WARN(列出未就绪场次);
+- 12:00 导出时采集仍未完成 → WARN(列出未就绪场次);
 - 每日 23:30 管道日报"失败任务(24h)"会列出它;
 - 日志:`journalctl -u allwin-simparams.service`;页面读取失败在 `journalctl -u allwin-web`;
 - 新鲜度质量门:`pipeline_gates` 新增一条——设置了 `SIMULATOR_PARAMS_DIR` 时,`current.json` 的 `meta.generated_at` 早于 36 小时即 WARN(覆盖"定时器没触发 / 被禁用"这种 `job_runs` 里根本没有失败记录的情况);未设置时跳过。

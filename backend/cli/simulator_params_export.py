@@ -1,14 +1,14 @@
-"""模拟器参数每日导出:采集完成即导出(docs/simulator-launch-plan.md §3.1)。
+"""模拟器参数每日导出:每天北京时间 12:00 导出一次(docs/simulator-launch-plan.md §3.1)。
 
 由 allwin-simparams.timer 每 30 分钟经 worker 任务 simulator_params_export 调用(`--due`),
 每次只做"到期判断",真正导出每天最多一次:
 
   1. 今天(北京日期)的参数已发布 → 不到期;
-  2. 北京时间早于 04:30 → 不到期(避开 04:00 maintenance,也不在当晚比赛结束前导出);
-  3. 就绪 = 最近一次 fotmob_incremental_multi 运行成功,且五大联赛没有"开球已超 2.5 小时仍未完赛落库"
-     的比赛(与 postmatch 同一判据 league_stale_unresolved_match_ids,扣除已耗尽重试的场次)→ 导出,trigger=ready;
-  4. 未就绪且早于北京时间 12:00 → 不到期(等下一轮);
-  5. 未就绪但已到 12:00 → 仍导出(trigger=deadline),meta 列出未就绪场次并发一条 WARN。
+  2. 北京时间早于 12:00 → 不到期(2026-09-30 站长定:固定中午导出,欧洲晚场——含西甲北京时间凌晨
+     三四点开球的场次——此时早已完赛落库;不再"采集完成即导出");
+  3. 已到 12:00 → 导出。采集是否完成只用来标注:最近一次 fotmob_incremental_multi 运行成功,且五大联赛
+     没有"开球已超 2.5 小时仍未完赛落库"的比赛(与 postmatch 同一判据 league_stale_unresolved_match_ids,
+     扣除已耗尽重试的场次)→ trigger=scheduled;否则 trigger=incomplete,meta 列出未就绪场次并发一条 WARN。
 
 判断全部只读(connect_ro);导出本身由 scripts/simulator/export_params.py --publish 完成(同样只读打开数据库),
 失败时非零退出 → worker 记 failed → CRITICAL 告警。
@@ -37,8 +37,7 @@ EXPORT_SCRIPT = PROJECT_ROOT / "scripts" / "simulator" / "export_params.py"
 # 与 scripts/simulator/params_core.py::CALIBRATED_LEAGUES 一致(tests/backend/test_simulator_params_export.py 断言)
 CALIBRATED_LEAGUES = (47, 87, 55, 54, 53)
 BJ = timezone(timedelta(hours=8))
-WINDOW_START = time(4, 30)
-DEADLINE = time(12, 0)
+EXPORT_AT = time(12, 0)
 COLLECTION_JOB = "fotmob_incremental_multi"
 DEFAULT_OUT_DIR = "/opt/allwin/shared/exports/simulator/daily"
 DEFAULT_KEEP = 7
@@ -55,14 +54,10 @@ def decide(now_utc: datetime, published_today: bool, last_collection: dict | Non
             "last_collection_run": last_collection, "unresolved_match_ids": sorted(unresolved)}
     if published_today:
         return {"due": False, "reason": "today_published", **base}
-    if bj.time() < WINDOW_START:
+    if bj.time() < EXPORT_AT:
         return {"due": False, "reason": "before_window", **base}
     collection_ok = bool(last_collection) and last_collection.get("status") == "succeeded"
-    if collection_ok and not unresolved:
-        return {"due": True, "trigger": "ready", **base}
-    if bj.time() < DEADLINE:
-        return {"due": False, "reason": "waiting_for_collection", **base}
-    return {"due": True, "trigger": "deadline", **base}
+    return {"due": True, "trigger": "scheduled" if collection_ok and not unresolved else "incomplete", **base}
 
 
 def last_collection_run() -> dict | None:
@@ -98,7 +93,7 @@ def run_export(out_dir: Path, keep: int, trigger: dict) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="模拟器参数每日导出(采集完成即导出)")
+    ap = argparse.ArgumentParser(description="模拟器参数每日导出(每天北京时间 12:00)")
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--due", action="store_true", help="到期判断,到期才导出(定时任务)")
     mode.add_argument("--force", action="store_true", help="跳过判断立即导出(人工)")
@@ -118,15 +113,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     trigger = {k: v for k, v in decision.items() if k != "due"}
     rc = run_export(out_dir, args.keep, trigger)
-    if rc == 0 and decision.get("trigger") == "deadline":
+    if rc == 0 and decision.get("trigger") == "incomplete":
         from backend import notify
 
         notify.notify(
             level="WARNING",
             source="simulator_params_export",
-            title="模拟器参数:12:00 仍有未完赛落库的比赛,已按截止时间导出",
+            title="模拟器参数:12:00 导出时仍有未完赛落库的比赛",
             body=f"未就绪场次:{decision['unresolved_match_ids']}\n最近一次采集:{decision['last_collection_run']}",
-            dedup_key=f"simulator_params_export:deadline:{now.astimezone(BJ).strftime('%Y-%m-%d')}",
+            dedup_key=f"simulator_params_export:incomplete:{now.astimezone(BJ).strftime('%Y-%m-%d')}",
         )
     return rc
 

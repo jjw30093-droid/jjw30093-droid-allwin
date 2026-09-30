@@ -1,10 +1,10 @@
-# 模拟器参数每日导出(oneshot,由 allwin-simparams.timer 每 30 分钟触发到期判断)。
+# 模拟器参数每日导出(oneshot,由 allwin-simparams.timer 每 30 分钟触发到期判断;每天北京时间 12:00 导出)。
 # 口径:docs/simulator-launch-plan.md §3.1。
 #
 # 经 worker(runner --job)执行:job_runs 全生命周期记录、单任务锁、超时;失败即 CRITICAL 告警。
-# 到期判断在 backend.cli.simulator_params_export --due:今天(北京日期)已发布 / 早于 04:30 /
-# 采集未完成(最近一次 fotmob_incremental_multi 未成功,或五大联赛仍有开球超 2.5h 未完赛落库的场次)
-# 都跳过;12:00 仍未就绪则按截止时间导出并发 WARNING。每天最多真正导出一次。
+# 到期判断在 backend.cli.simulator_params_export --due:今天(北京日期)已发布 / 早于北京时间 12:00
+# 都跳过;12:00 之后第一轮(12:05)导出。届时采集仍未完成(最近一次 fotmob_incremental_multi 未成功,
+# 或五大联赛仍有开球超 2.5h 未完赛落库的场次)照常导出并发 WARNING。每天最多真正导出一次。
 # 数据库一律只读打开(mode=ro + query_only);data 目录可写只为 job_runs(platform.db)。
 # 输出:/opt/allwin/shared/exports/simulator/daily/(SIMULATOR_PARAMS_DIR),current.json 软链 + 最近 7 份。
 #
