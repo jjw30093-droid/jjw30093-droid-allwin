@@ -8,7 +8,6 @@ import {
   focusError,
   matchingFixture,
   prepareMatch,
-  slotGroup,
   type Focus,
   type ManyResult,
   type MatchConfig,
@@ -26,7 +25,8 @@ import {
   type ImpactJob,
   type SideImpact,
 } from "@/features/simulator/focusImpact";
-import type { PosGroup, SimParams } from "@/features/simulator/types";
+import { lastLineupSetup } from "@/features/simulator/formation";
+import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import { LineupEditor } from "./LineupEditor";
 import { MatchAnimation } from "./MatchAnimation";
@@ -36,47 +36,12 @@ import styles from "./simulator.module.css";
 const LEAGUE_NAME: Record<string, string> = { "47": "英超", "87": "西甲" };
 const DEFAULT_SEED = 20260929;
 const RUNS = 1000;
-const FALLBACK_FORMATION = "4-2-3-1";
 const IMPACT_DEBOUNCE_MS = 300;
 
 const pct1 = (x: number) => `${(x * 100).toFixed(1)}%`;
 const signedPp = (pp: number) => `${pp > 0 ? "+" : pp < 0 ? "−" : "±"}${Math.abs(pp).toFixed(1)} 个百分点`;
 
 type Phase = "setup" | "running" | "animating" | "result";
-
-function gridXY(pid: number): { x: number; y: number } {
-  const col = pid % 10;
-  const row = Math.floor(pid / 10);
-  return { x: Math.min(0.92, Math.max(0.08, (col - 1) / 8)), y: Math.min(0.9, row / 12) };
-}
-
-// 槽位分组只查 position_map(单一映射表);模板只提供坐标,查不到时按格子行列摆放。
-function initialSetup(params: SimParams, teamId: number): TeamSetup {
-  const team = params.teams[String(teamId)];
-  const ll = team.last_lineup;
-  const formation = ll?.formation ?? FALLBACK_FORMATION;
-  const tpl = params.formations[formation];
-  const slotOf = (positionId: number, playerId: string | null) => {
-    const t = tpl?.slots.find((x) => x.position_id === positionId);
-    const g = gridXY(positionId);
-    return {
-      positionId,
-      group: slotGroup(params, formation, positionId) as PosGroup,
-      playerId,
-      x: t?.x ?? g.x,
-      y: t?.y ?? g.y,
-    };
-  };
-  return {
-    teamId,
-    formation,
-    focuses: [],
-    shortRest: false,
-    slots: ll
-      ? ll.starters.map((s) => slotOf(s.position_id, s.player_id))
-      : (tpl?.slots ?? []).map((s) => slotOf(s.position_id, null)),
-  };
-}
 
 function teamsOf(params: SimParams, leagueId: string) {
   return Object.values(params.teams)
@@ -96,8 +61,8 @@ export function SimulatorClient({ params }: { params: SimParams }) {
   const leagueIds = Object.keys(params.leagues);
   const [leagueId, setLeagueId] = useState(leagueIds.includes("47") ? "47" : leagueIds[0]);
   const [pair, setPair] = useState<[number, number]>(() => pickDefaultPair(params, leagueId));
-  const [home, setHome] = useState<TeamSetup>(() => initialSetup(params, pair[0]));
-  const [away, setAway] = useState<TeamSetup>(() => initialSetup(params, pair[1]));
+  const [home, setHome] = useState<TeamSetup>(() => lastLineupSetup(params, pair[0]));
+  const [away, setAway] = useState<TeamSetup>(() => lastLineupSetup(params, pair[1]));
   const [useMarket, setUseMarket] = useState(true);
   const [fixtureChoice, setFixtureChoice] = useState<number | null>(null);
   const [chaos, setChaos] = useState(false);
@@ -122,8 +87,8 @@ export function SimulatorClient({ params }: { params: SimParams }) {
   const setTeams = (lid: string, h: number, a: number, fixtureId: number | null = null) => {
     setLeagueId(lid);
     setPair([h, a]);
-    setHome(initialSetup(params, h));
-    setAway(initialSetup(params, a));
+    setHome(lastLineupSetup(params, h));
+    setAway(lastLineupSetup(params, a));
     setFixtureChoice(fixtureId);
     setSelected(null);
   };

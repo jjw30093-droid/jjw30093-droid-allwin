@@ -185,6 +185,60 @@
   color: var(--on-gold);
 }
 
+/* ---- 拖拽排阵(Phase 3) ---- */
+.formationBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+/* 球场是绿色底:可落位提示用白色光圈;当前悬停的落点整块加虚线框(拖动浮层会盖住圆点) */
+.slotDropTarget .dot {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+.slotDropOver {
+  outline: 2px dashed #fff;
+  outline-offset: 3px;
+  border-radius: var(--r-control);
+}
+
+.slotDropOver .dot {
+  background: var(--brand-gold);
+  color: var(--on-gold);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85);
+}
+
+.dragSource {
+  opacity: 0.4;
+}
+
+/* DragOverlay 的外框与被拖元素同尺寸;浮层放在外框正中,配合 centerOnPointer 对准指针 */
+.dragOverlayBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.dragOverlay {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-3) 4px 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: grabbing;
+  white-space: nowrap;
+}
+
 .slotName {
   font-size: 12px;
   line-height: 1.2;
