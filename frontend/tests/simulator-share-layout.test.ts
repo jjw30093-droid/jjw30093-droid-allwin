@@ -5,7 +5,7 @@ import type { SnapLineupEntry } from "@/features/simulator/snapshot";
 // 近似测量:中文字宽 = 字号,ASCII 0.55 字号,省略号 1 字号(与 Noto Sans SC 的方块字宽一致)
 const measure: Measure = (t, px) => [...t].reduce((w, ch) => w + (/[\u0000-\u007f]/.test(ch) ? 0.55 * px : px), 0);
 
-// 阿森纳最近一场首发(4-2-3-1,模板坐标);后卫线从左到右:廷伯、孔萨、加布里埃尔、卡拉菲奥里
+// 阿森纳最近一场首发(4-2-3-1,模板坐标,FotMob x 小 = 该队右路);画面上后卫线从左到右:卡拉菲奥里、加布里埃尔、孔萨、廷伯
 const ARSENAL: SnapLineupEntry[] = [
   [11, "GK", "拉亚", "1", 0.5, 0.1],
   [32, "FB", "廷伯", "12", 0.12, 0.29],
@@ -103,5 +103,17 @@ describe("xG 赛跑图末端数值标签错开", () => {
     expect(eq[0]).toBeLessThan(eq[1]);
     const edge = separateEndLabels([3, 5], 20, 0, 200);
     expect(Math.min(...edge)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("分享图阵容左右方向", () => {
+  it("左后卫卡拉菲奥里在左、右后卫廷伯在右;右边锋萨卡在右", () => {
+    const { L, box } = homeBox(1350);
+    const out = lineupLayout(ARSENAL, box, L.s, measure);
+    const cx = (name: string) => out[ARSENAL.findIndex((p) => p.name === name)].cx;
+    expect(cx("卡拉菲奥里")).toBeLessThan(cx("加布里埃尔"));
+    expect(cx("加布里埃尔")).toBeLessThan(cx("孔萨"));
+    expect(cx("孔萨")).toBeLessThan(cx("廷伯"));
+    expect(cx("萨卡")).toBeGreaterThan(cx("佐利斯"));
   });
 });

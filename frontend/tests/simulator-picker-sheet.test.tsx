@@ -107,3 +107,14 @@ describe("选人面板", () => {
     expect(screen.getByTestId("team-10")).toBeTruthy();
   });
 });
+
+describe("左右方向", () => {
+  it("左后卫(38,FotMob x=0.88)在画面左侧,右后卫(32,x=0.12)在右侧", () => {
+    renderCard();
+    const left = (i: number) => parseFloat((screen.getByTestId(`slot-${i}`) as HTMLElement).style.left);
+    expect(left(4)).toBeCloseTo(12, 5); // 38 左后卫
+    expect(left(1)).toBeCloseTo(88, 5); // 32 右后卫
+    expect(left(9)).toBeLessThan(50); // 87 左边锋(x 0.84)
+    expect(left(7)).toBeGreaterThan(50); // 83 右边锋(x 0.16)
+  });
+});

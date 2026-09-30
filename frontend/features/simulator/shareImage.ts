@@ -6,6 +6,7 @@ import { create as createQr } from "qrcode";
 import { contrastRatioHex, nudgeForContrast } from "@/components/charts/colorContrast";
 import { FOCUS_LABEL, rarityTag, type SimEvent } from "./engine";
 import { ahText, type ResultSnapshot } from "./snapshot";
+import { slotScreenX } from "./labels";
 
 export type ShareSize = 1350 | 1920;
 export const SHARE_WIDTH = 1080;
@@ -224,7 +225,7 @@ export function lineupLayout(
   const rowY = (k: number) => (rows.length === 1 ? (top + bottom) / 2 : bottom - (k / (rows.length - 1)) * (bottom - top));
   const out: LaidOutPlayer[] = lineup.map((p) => {
     const cy = rowY(rows.indexOf(rowKey(p.y)));
-    return { cx: box.x + 30 + p.x * (box.w - 60), cy, r, num: p.num, text: p.name, px: 17 * Math.min(s, 1.05), nameY: cy + r + 20 * s };
+    return { cx: box.x + 30 + slotScreenX(p.x) * (box.w - 60), cy, r, num: p.num, text: p.name, px: 17 * Math.min(s, 1.05), nameY: cy + r + 20 * s };
   });
   rows.forEach((key) => {
     const idx = lineup.map((p, i) => (rowKey(p.y) === key ? i : -1)).filter((i) => i >= 0);

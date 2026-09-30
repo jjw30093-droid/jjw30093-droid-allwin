@@ -23,7 +23,7 @@ import { Chip } from "@/components/ui/Chip";
 import { ChipRow } from "@/components/ui/ChipRow";
 import type { SlotAssign, TeamSetup } from "@/features/simulator/engine";
 import { applyDrop, applyPick, formationChoices, lastLineupSetup, reassignFormation, slotId } from "@/features/simulator/formation";
-import { displayName, POS_LABEL } from "@/features/simulator/labels";
+import { displayName, POS_LABEL, slotScreenX } from "@/features/simulator/labels";
 import { BADGE_LABEL, BADGE_MODES, slotBadge, type BadgeMode } from "@/features/simulator/slotBadge";
 import type { PlayerParams, SimParams, TeamParams } from "@/features/simulator/types";
 import { PlayerPickerSheet } from "./PlayerPickerSheet";
@@ -77,9 +77,9 @@ function PitchSlot({
       {...attributes}
       {...listeners}
       type="button"
-      className={`${styles.slot} ${slot.x > 0.75 ? styles.slotRightEdge : ""} ${isOver && !isDragging ? styles.slotDropOver : ""} ${isDragging ? styles.dragSource : ""} ${dragging ? styles.slotDropTarget : ""} ${flagged ? styles.slotFlagged : ""}`}
+      className={`${styles.slot} ${slotScreenX(slot.x) > 0.75 ? styles.slotRightEdge : ""} ${isOver && !isDragging ? styles.slotDropOver : ""} ${isDragging ? styles.dragSource : ""} ${dragging ? styles.slotDropTarget : ""} ${flagged ? styles.slotFlagged : ""}`}
       // 纵向按可用高度等比缩放(不是把门将夹到底边):所有排都均匀上移,不会让被夹上去的门将撞进后卫排
-      style={{ left: `${slot.x * 100}%`, top: `calc(${(1 - slot.y).toFixed(4)} * (100% - var(--slot-bottom, 58px)))` }}
+      style={{ left: `${slotScreenX(slot.x) * 100}%`, top: `calc(${(1 - slot.y).toFixed(4)} * (100% - var(--slot-bottom, 58px)))` }}
       onClick={onClick}
       aria-label={`${POS_LABEL[slot.group]}位置:${player ? displayName(player) : "空,点击选择球员"}`}
       data-testid={`slot-${i}`}

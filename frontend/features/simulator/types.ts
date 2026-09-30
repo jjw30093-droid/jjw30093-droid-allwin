@@ -72,6 +72,7 @@ export interface Calibration {
 // 位置分组不在模板里重复存:一律查 SimParams.position_map(单一映射表,规格 v0.2 第 5 条)。
 export interface FormationSlot {
   position_id: number;
+  /** FotMob verticalLayout.x:x 小 = 该队右路。画"向上进攻"的球场时用 labels.ts::slotScreenX 换算 */
   x: number | null;
   y: number | null;
 }
