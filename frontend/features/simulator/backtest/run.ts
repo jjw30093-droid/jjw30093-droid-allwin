@@ -9,7 +9,7 @@ import { FOCUS_LIST, focusError, prepareMatch, simulateMany, type Focus, type Ma
 import { mulberry32 } from "../rng";
 import type { LeagueParams, RateModel, ShotChannel, SimParams, StrengthModel } from "../types";
 import { setupFor, simParamsFor, BASE_CAL, type Cal } from "./assemble";
-import { brier3, calibrationSlope, goldenMax, mean, outcomeIndex, poisson1x2, poissonLogLik, timingBucket } from "./stats";
+import { binomTwoSidedP, brier3, calibrationSlope, goldenMax, mean, outcomeIndex, poisson1x2, poissonLogLik, timingBucket } from "./stats";
 import type { Outcome, Prematch, Snapshot } from "./types";
 
 const K_GRID = [3, 5, 8, 12];
@@ -494,10 +494,25 @@ function favNotWinSelf(sims: SimRow[]) {
   };
 }
 
-/** v0.3 第 17 条:比例类闸门容差 = max(原容差, 1.96 × SE),SE = sqrt(p(1−p)/n),p 为实际比例。 */
+/** v0.3 第 17 条:进球时间分布各时段(第 22 条沿用)容差 = max(原容差, 1.96 × SE),SE = sqrt(p(1−p)/N),p 为实际占比。 */
 function propTol(orig: number, p: number, n: number) {
   const se = Math.sqrt((p * (1 - p)) / n);
   return { se, tol: Math.max(orig, 1.96 * se) };
+}
+
+/** v0.3 第 20–21 条:比例类闸门。原假设"模型校准正确",SE 按模拟比例 p_sim;n ≥ 50 用 max(原容差, 1.96·SE),
+ *  n < 50 用精确二项检验(原假设概率 p_sim,双侧 p ≥ 0.05 通过)。 */
+function propGate(orig: number, pSim: number, pAct: number, n: number) {
+  const se = Math.sqrt((pSim * (1 - pSim)) / n);
+  const pct = (x: number) => +(x * 100).toFixed(2);
+  const base = { sim: pct(pSim), act: pct(pAct), diff_pp: pct(pSim - pAct), n };
+  if (n < 50) {
+    const k = Math.round(pAct * n);
+    const pValue = binomTwoSidedP(k, n, pSim);
+    return { value: { ...base, method: "精确二项检验", k, p_value: +pValue.toFixed(4) }, pass: pValue >= 0.05 };
+  }
+  const tol = Math.max(orig, 1.96 * se);
+  return { value: { ...base, method: "max(原容差, 1.96·SE_sim)", se_pp: pct(se), tol_pp: pct(tol) }, pass: Math.abs(pSim - pAct) <= tol };
 }
 
 /** v0.3 第 17 条:计数类(Poisson)SE = sqrt(实际总数) / 场次;relative = true 时换算成相对误差。 */
@@ -577,9 +592,9 @@ function validate(rows: Row[], opts: { cal?: Cal; range?: [number, number]; tag?
   const big = bigMargin(sims);
   const fav = favNotWinSelf(sims);
   const favB365 = favNotWin(sims);
-  const drawT = propTol(0.03, drawAct, sims.length);
-  const bigT = propTol(0.02, big.act, big.n);
-  const favT = propTol(0.03, fav.act, fav.n);
+  const drawG = propGate(0.03, drawSim, drawAct, sims.length);
+  const bigG = propGate(0.02, big.sim, big.act, big.n);
+  const favG = propGate(0.03, fav.sim, fav.act, fav.n);
   const redsSim = mean(sims.map((s) => s.reds));
   const redsAct = mean(sims.map((s) => s.r.out.reds.length));
   const pensSim = mean(sims.map((s) => s.pens));
@@ -626,10 +641,10 @@ function validate(rows: Row[], opts: { cal?: Cal; range?: [number, number]; tag?
   const gates = [
     { name: "Brier 不差于简单 Poisson 基准", value: { sim: brierSimOnBase, baseline: brierBase, n: baseRows.length }, pass: brierSimOnBase <= brierBase },
     { name: "校准斜率 ∈ [0.8, 1.2]", value: { slope: cs.slope, intercept: cs.intercept, table: cs.table }, pass: cs.slope >= 0.8 && cs.slope <= 1.2 },
-    { name: "平局率相差 ≤ max(3pp, 1.96·SE)", value: { sim: pct(drawSim), act: pct(drawAct), diff_pp: pct(drawSim - drawAct), n: sims.length, se_pp: pct(drawT.se), tol_pp: pct(drawT.tol) }, pass: Math.abs(drawSim - drawAct) <= drawT.tol },
+    { name: "平局率(比例类,第 20–21 条)", ...drawG },
     { name: "场均总进球相差 ≤ max(0.15, 1.96·SE)", value: { sim: goalsSim, act: goalsAct, diff: goalsSim - goalsAct, n, total: goalsAct * n, se: goalsT.se, tol: goalsT.tol }, pass: Math.abs(goalsSim - goalsAct) <= goalsT.tol },
-    { name: "净胜 ≥3 球比例相差 ≤ max(2pp, 1.96·SE)", value: { sim: pct(big.sim), act: pct(big.act), diff_pp: pct(big.sim - big.act), n: big.n, se_pp: pct(bigT.se), tol_pp: pct(bigT.tol) }, pass: Math.abs(big.sim - big.act) <= bigT.tol },
-    { name: "热门方(本路径模拟胜率 ≥60%)不胜比例相差 ≤ max(3pp, 1.96·SE)", value: { sim: pct(fav.sim), act: pct(fav.act), diff_pp: pct(fav.sim - fav.act), n: fav.n, se_pp: pct(favT.se), tol_pp: pct(favT.tol) }, pass: Math.abs(fav.sim - fav.act) <= favT.tol },
+    { name: "净胜 ≥3 球比例(比例类,第 20–21 条)", ...bigG },
+    { name: "热门方(本路径模拟胜率 ≥60%)不胜比例(比例类,第 20–21 条)", ...favG },
     { name: "每场红牌数相对差 ≤ max(15%, 1.96·SE)", value: { sim: redsSim, act: redsAct, rel: redsSim / redsAct - 1, n, total: redsAct * n, se_rel: redsT.se, tol_rel: redsT.tol }, pass: Math.abs(redsSim / redsAct - 1) <= redsT.tol },
     { name: "每场点球数相对差 ≤ max(15%, 1.96·SE)", value: { sim: pensSim, act: pensAct, rel: pensSim / pensAct - 1, n, total: pensAct * n, se_rel: pensT.se, tol_rel: pensT.tol }, pass: Math.abs(pensSim / pensAct - 1) <= pensT.tol },
     { name: "进球时间分布逐段相差 ≤ max(2pp, 1.96·SE)", value: { sim: simShare.map(pct), act: actShare.map(pct), diff_pp: simShare.map((v, i) => pct(v - actShare[i])), goals: actGoals, se_pp: timeT.map((t) => pct(t.se)), tol_pp: timeT.map((t) => pct(t.tol)) }, pass: simShare.every((v, i) => Math.abs(v - actShare[i]) <= timeT[i].tol) },

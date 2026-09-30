@@ -92,3 +92,23 @@ export function timingBucket(minute: number): number {
 export function mean(xs: number[]): number {
   return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : Number.NaN;
 }
+
+/** 二项分布概率质量 P(X = k),X ~ Bin(n, p)。 */
+export function binomPmf(k: number, n: number, p: number): number {
+  if (p <= 0) return k === 0 ? 1 : 0;
+  if (p >= 1) return k === n ? 1 : 0;
+  let logC = 0;
+  for (let i = 1; i <= k; i++) logC += Math.log(n - k + i) - Math.log(i);
+  return Math.exp(logC + k * Math.log(p) + (n - k) * Math.log(1 - p));
+}
+
+/** 精确二项检验的双侧 p 值:把概率不大于 P(X = k) 的所有取值的概率相加(与 R binom.test 同口径,相对容差 1e-7)。 */
+export function binomTwoSidedP(k: number, n: number, p: number): number {
+  const pk = binomPmf(k, n, p);
+  let sum = 0;
+  for (let i = 0; i <= n; i++) {
+    const pi = binomPmf(i, n, p);
+    if (pi <= pk * (1 + 1e-7)) sum += pi;
+  }
+  return Math.min(1, sum);
+}
