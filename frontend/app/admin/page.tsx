@@ -175,7 +175,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
       <div className={styles.toolbar}>
         <input
           className={styles.input}
-          placeholder="按昵称 / 用户 ID 搜索"
+          placeholder="按昵称 / 用户编号 / 用户 ID 搜索"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -241,12 +241,12 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>用户</th>
+                <th>用户(昵称 · 编号)</th>
                 <th>角色</th>
                 <th>状态</th>
                 <th>套餐</th>
                 <th>套餐到期</th>
-                <th>注册</th>
+                <th>首次登录</th>
                 <th>最近登录</th>
                 <th>操作</th>
               </tr>
@@ -256,7 +256,9 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
                 <tr key={u.id}>
                   <td>
                     <div>{u.display_name ?? "未设置"}</div>
-                    <div className={`${styles.dim} num`}>{shortId(u.id, 12)}</div>
+                    <div className={`${styles.shortCode} num`} title={u.id}>
+                      {u.short_code ?? shortId(u.id, 12)}
+                    </div>
                   </td>
                   <td>{u.role}</td>
                   <td>{u.status}</td>
@@ -421,7 +423,7 @@ function SlipPicker({
 function UserPicker({
   value,
   onChange,
-  placeholder = "搜索用户(昵称 / 用户 ID)",
+  placeholder = "搜索用户(昵称 / 用户编号)",
 }: {
   value: PickerValue;
   onChange: (v: PickerValue) => void;
@@ -480,12 +482,12 @@ function UserPicker({
                   onClick={() => {
                     onChange({
                       id: u.id,
-                      label: `${u.display_name ?? "未设置"}(${shortId(u.id, 12)})`,
+                      label: `${u.display_name ?? "未设置"}(编号 ${u.short_code ?? shortId(u.id, 12)})`,
                     });
                     setOpen(false);
                   }}
                 >
-                  {u.display_name ?? "未设置"} · {shortId(u.id, 12)}
+                  {u.display_name ?? "未设置"} · 编号 {u.short_code ?? shortId(u.id, 12)}
                 </button>
               </li>
             ))
@@ -1824,6 +1826,249 @@ export function RecoTab() {
 type AccessGrantsResp = GetJson<"/api/v1/admin/reco/access-grants">;
 type AccessGrantCreateResp = PostJson<"/api/v1/admin/reco/access-grants">;
 
+/* ── 精选授权·按时段(2026-10,经站长批准):用户 + 起止日期(北京时间,含首尾)。
+   只覆盖发布时间落在期内的精选;自然到期后期内的精选仍可看;撤销 = 全部收回。 ── */
+
+type AccessPeriodsResp = GetJson<"/api/v1/admin/reco/access-periods">;
+
+/** YYYY-MM-DD 加 n 天(按 UTC 日历算,不受本机时区影响)。 */
+function addDays(day: string, n: number): string {
+  const t = Date.parse(`${day}T00:00:00Z`);
+  return new Date(t + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+function periodState(p: { status: string; starts_on: string; ends_on: string }, today: string) {
+  if (p.status !== "active") return { label: "已撤销", on: false };
+  if (today < p.starts_on) return { label: "未开始", on: true };
+  if (today > p.ends_on) return { label: "已结束(期内的仍可看)", on: false };
+  return { label: "生效中", on: true };
+}
+
+const PERIOD_PRESETS = [
+  { key: "week", label: "一周", days: 7 },
+  { key: "month", label: "一个月", days: 30 },
+  { key: "custom", label: "自定义", days: 0 },
+] as const;
+
+function PeriodAccessSection() {
+  const today = beijingToday();
+  const [user, setUser] = useState<PickerValue>(null);
+  const [startsOn, setStartsOn] = useState(today);
+  const [preset, setPreset] = useState<(typeof PERIOD_PRESETS)[number]["key"]>("week");
+  const [customEnd, setCustomEnd] = useState(addDays(today, 6));
+  const [note, setNote] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  const [list, setList] = useState<AccessPeriodsResp | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [revokeFor, setRevokeFor] = useState<string | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
+
+  const days = PERIOD_PRESETS.find((p) => p.key === preset)?.days ?? 0;
+  const endsOn = preset === "custom" ? customEnd : addDays(startsOn, days - 1);
+  const rangeOk = /^\d{4}-\d{2}-\d{2}$/.test(startsOn) && /^\d{4}-\d{2}-\d{2}$/.test(endsOn) && endsOn >= startsOn;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setList(await clientFetch<AccessPeriodsResp>("/api/v1/admin/reco/access-periods?limit=100"));
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "时段授权记录加载失败") });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // 经微任务回调触发,effect 体内不同步 setState(react-hooks/set-state-in-effect)
+    void Promise.resolve().then(() => load());
+  }, [load]);
+
+  const onGrant = async () => {
+    if (!user || !rangeOk) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await clientFetch("/api/v1/admin/reco/access-periods", {
+        method: "POST",
+        body: { user_id: user.id, starts_on: startsOn, ends_on: endsOn, note: note.trim() || null },
+      });
+      setMsg({ kind: "ok", text: `已开通:${user.label} · ${startsOn} 至 ${endsOn}` });
+      setUser(null);
+      setNote("");
+      setConfirm(false);
+      await load();
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "开通失败") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRevoke = async (id: string) => {
+    setBusy(true);
+    try {
+      await clientFetch(`/api/v1/admin/reco/access-periods/${id}/revoke`, {
+        method: "POST",
+        body: { reason: revokeReason.trim() || null },
+      });
+      setMsg({ kind: "ok", text: "已撤销,期内的精选全部收回" });
+      setRevokeFor(null);
+      setRevokeReason("");
+      await load();
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "撤销失败") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div data-testid="period-access">
+      <MsgBar msg={msg} />
+      <div className={styles.recoPanel}>
+        <h3 className={styles.panelTitle}>按时段开通(期间发布的精选都能看)</h3>
+        <div className={styles.formRow}>
+          <UserPicker value={user} onChange={(v) => { setUser(v); setConfirm(false); }} />
+        </div>
+        <div className={styles.formRow}>
+          <label className={styles.fieldInline}>
+            开始
+            <input
+              className={styles.input}
+              type="date"
+              value={startsOn}
+              onChange={(e) => { setStartsOn(e.target.value); setConfirm(false); }}
+            />
+          </label>
+          {PERIOD_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={preset === p.key ? styles.btnPrimary : styles.btnGhost}
+              aria-pressed={preset === p.key}
+              onClick={() => { setPreset(p.key); setConfirm(false); }}
+            >
+              {p.label}
+            </button>
+          ))}
+          {preset === "custom" ? (
+            <label className={styles.fieldInline}>
+              结束
+              <input
+                className={styles.input}
+                type="date"
+                value={customEnd}
+                min={startsOn}
+                onChange={(e) => { setCustomEnd(e.target.value); setConfirm(false); }}
+              />
+            </label>
+          ) : (
+            <span className={styles.dim}>至 {endsOn}(含)</span>
+          )}
+        </div>
+        <div className={styles.formRow}>
+          <input
+            className={styles.input}
+            placeholder="备注(可空,如:周卡)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            disabled={busy || !user || !rangeOk}
+            onClick={() => setConfirm(true)}
+          >
+            开通
+          </button>
+          {!rangeOk && <span className={styles.dim}>结束日期不能早于开始日期</span>}
+        </div>
+        {confirm && user && rangeOk && (
+          <div className={styles.formRow}>
+            <span className={styles.dim}>
+              确认为「{user.label}」开通 {startsOn} 至 {endsOn}(北京时间)期间发布的全部每日精选?
+            </span>
+            <button type="button" className={styles.btnPrimary} disabled={busy} onClick={onGrant}>
+              {busy ? "提交中…" : "确认开通"}
+            </button>
+            <button type="button" className={styles.btnGhost} onClick={() => setConfirm(false)}>
+              取消
+            </button>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <Loading />
+      ) : !list || list.periods.length === 0 ? (
+        <p className={styles.empty}>暂无时段授权</p>
+      ) : (
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>用户(昵称 · 编号)</th>
+                <th>时段</th>
+                <th>状态</th>
+                <th>开通时间</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.periods.map((p) => {
+                const st = periodState(p, today);
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <div>{p.user_display_name ?? "未设置"}</div>
+                      <div className={`${styles.shortCode} num`}>{p.user_short_code ?? shortId(p.user_id, 12)}</div>
+                    </td>
+                    <td className="num">
+                      {p.starts_on} 至 {p.ends_on}
+                    </td>
+                    <td>
+                      <span className={st.on ? styles.stateOk : styles.stateDim}>{st.label}</span>
+                    </td>
+                    <td className="num">{fmtLocal(p.granted_at)}</td>
+                    <td>{p.note ?? "—"}</td>
+                    <td>
+                      {p.status !== "active" ? (
+                        <span className={styles.dim}>—</span>
+                      ) : revokeFor === p.id ? (
+                        <div className={styles.inlineForm}>
+                          <input
+                            className={styles.input}
+                            placeholder="撤销原因(可空)"
+                            value={revokeReason}
+                            onChange={(e) => setRevokeReason(e.target.value)}
+                          />
+                          <button type="button" className={styles.btnDanger} disabled={busy} onClick={() => onRevoke(p.id)}>
+                            {busy ? "撤销中…" : "确认撤销(期内全部收回)"}
+                          </button>
+                          <button type="button" className={styles.btnGhost} onClick={() => setRevokeFor(null)}>
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" className={styles.btnGhost} onClick={() => setRevokeFor(p.id)}>
+                          撤销
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AccessTab() {
   const [grantUser, setGrantUser] = useState<PickerValue>(null);
   const [grantSlip, setGrantSlip] = useState<PickerValue>(null);
@@ -1843,6 +2088,7 @@ export function AccessTab() {
   // 系统环境下会被忽略/划掉、请求根本不发出且页面没有任何反馈——真实
   // admin 报告点击没反应,与本文件其它 Tab 同一根因,改用站内二次确认面板。
   const [grantConfirm, setGrantConfirm] = useState(false);
+  const [mode, setMode] = useState<"period" | "slip">("period");
 
   const loadGrants = useCallback(async () => {
     setLoadingGrants(true);
@@ -1910,8 +2156,39 @@ export function AccessTab() {
     }
   };
 
+  const modeSwitch = (
+    <div className={styles.formRow} role="group" aria-label="授权方式">
+      <button
+        type="button"
+        className={mode === "period" ? styles.btnPrimary : styles.btnGhost}
+        aria-pressed={mode === "period"}
+        onClick={() => setMode("period")}
+      >
+        按时段(周 / 月)
+      </button>
+      <button
+        type="button"
+        className={mode === "slip" ? styles.btnPrimary : styles.btnGhost}
+        aria-pressed={mode === "slip"}
+        onClick={() => setMode("slip")}
+      >
+        按单场
+      </button>
+    </div>
+  );
+
+  if (mode === "period") {
+    return (
+      <div>
+        {modeSwitch}
+        <PeriodAccessSection />
+      </div>
+    );
+  }
+
   return (
     <div>
+      {modeSwitch}
       <MsgBar msg={msg} />
 
       <div className={styles.recoPanel}>
@@ -1956,7 +2233,7 @@ export function AccessTab() {
       <div className={styles.toolbar}>
         <input
           className={styles.input}
-          placeholder="按用户 ID 筛选"
+          placeholder="按用户编号 / 用户 ID 筛选"
           value={filterUserId}
           onChange={(e) => setFilterUserId(e.target.value)}
           onKeyDown={(e) => {
@@ -1996,7 +2273,7 @@ export function AccessTab() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>用户</th>
+                <th>用户(昵称 · 编号)</th>
                 <th>推荐单</th>
                 <th>状态</th>
                 <th>授权时间</th>
@@ -2008,7 +2285,10 @@ export function AccessTab() {
             <tbody>
               {grants.grants.map((g) => (
                 <tr key={g.id}>
-                  <td className="num">{shortId(g.user_id, 12)}</td>
+                  <td>
+                    <div>{g.user_display_name ?? "未设置"}</div>
+                    <div className={`${styles.shortCode} num`}>{g.user_short_code ?? shortId(g.user_id, 12)}</div>
+                  </td>
                   <td>
                     {g.slip_title}
                     <div className={`${styles.dim} num`}>

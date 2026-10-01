@@ -1,13 +1,13 @@
 import { test, expect } from "@playwright/test";
-import { API, approveViaWebhook, seedMatchId } from "./helpers";
+import { API, seedMatchId, sendCodeViaWebhook } from "./helpers";
 
 /**
- * 扫码登录(webhook 批准)→ 会员解锁 → Admin 拒绝。
+ * 公众号验证码登录(webhook 批准)→ 会员解锁 → Admin 拒绝。
  * 三段可见性:登录即 member 基线,无需订阅(CLAUDE.md §8)。
  */
 
-test("扫码登录 → 会员完整概率投影(API)→ 非管理员被拒", async ({ page }) => {
-  // 登录页自动创建扫码请求;模拟微信服务器 webhook 批准后页面轮询领取并跳转
+test("验证码登录 → 会员完整概率投影(API)→ 非管理员被拒", async ({ page }) => {
+  // 登录页自动获取验证码;模拟用户把验证码发给公众号(webhook 批准)后页面轮询领取并跳转
   const deviceRespPromise = page.waitForResponse(
     (r) =>
       r.url().endsWith("/api/v1/auth/wechat/device") &&
@@ -15,9 +15,9 @@ test("扫码登录 → 会员完整概率投影(API)→ 非管理员被拒", asy
   );
   await page.goto("/login?next=/account");
   const device = (await (await deviceRespPromise).json()) as {
-    request_id: string;
+    login_code: string;
   };
-  const scan = await approveViaWebhook(page.request, device.request_id);
+  const scan = await sendCodeViaWebhook(page.request, device.login_code);
   expect(scan.status()).toBe(200);
   await page.waitForURL("**/account", { timeout: 20_000 });
 

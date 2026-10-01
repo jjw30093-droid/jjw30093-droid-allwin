@@ -26,6 +26,15 @@ ODDS_TABLES = {
 }
 
 
+
+def _platform_migrations_after(version: int) -> int:
+    """真实 platform 迁移目录里版本号大于 version 的迁移个数——升级用例从这里派生期望值,
+    加新迁移不会误伤与本用例主题无关的断言(同 odds 用例 2026-09-07 的修法)。"""
+    return sum(
+        1 for f in sorted((migrate.MIGRATIONS_ROOT / "platform").glob("*.sql"))
+        if int(f.name.split("_", 1)[0]) > version
+    )
+
 def _tables(db_file):
     conn = sqlite3.connect(db_file)
     try:
@@ -524,10 +533,9 @@ def test_reco_odds_contract_backfill_preserves_existing_settled_rows(tmp_path):
 
     # 升级:指向真实迁移目录(含 0014 及之后的全部迁移)
     applied = migrate.apply_all("platform", db_file=db, quiet=True)
-    # 0014(reco 赔率合约)+ 0015(reco 按场授权)+ 0016(兑换码改为按场,
-    # 2026-08-16)+ 0017(兑换码整体下架,2026-08-17)+ 0018(每日公推板块,
-    # 2026-09)= 5 个新迁移。
-    assert applied == 5
+    # 0014(reco 赔率合约)起的全部迁移;从真实目录派生,不再硬编码个数
+    assert applied == _platform_migrations_after(13)
+    assert applied >= 5
 
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
@@ -664,7 +672,8 @@ def test_redeem_codes_table_dropped_upgrade_from_pre_0017_db(tmp_path):
     assert "redeem_codes" in _tables(db)
 
     applied = migrate.apply_all("platform", db_file=db, quiet=True)
-    assert applied == 2  # 0017(兑换码下架)+ 0018(每日公推板块,2026-09)
+    assert applied == _platform_migrations_after(16)  # 0017(兑换码下架)起的全部迁移
+    assert applied >= 2
 
     assert "redeem_codes" not in _tables(db)
     conn = sqlite3.connect(db)
@@ -887,7 +896,8 @@ def test_reco_board_upgrade_from_pre_0018_db_defaults_existing_rows(tmp_path):
     conn.commit()
 
     applied = migrate.apply_all("platform", db_file=db, quiet=True)
-    assert applied == 1  # 只有 0018
+    assert applied == _platform_migrations_after(17)  # 0018 起的全部迁移
+    assert applied >= 1
 
     boards = {r[0] for r in conn.execute("SELECT board FROM reco_slips")}
     assert boards == {"daily_pick"}, "既有精选数据升级后必须全部归为 daily_pick,零变化"

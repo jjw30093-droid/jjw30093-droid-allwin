@@ -30,5 +30,17 @@ class RateLimiter:
                 }
             return True
 
+    def blocked(self, key: str, limit: int, window_seconds: float) -> bool:
+        """只看不记:窗口内已记录次数是否达到上限(配合 record,只对失败计数)。"""
+        now = time.monotonic()
+        with self._lock:
+            hits = [t for t in self._hits.get(key, []) if now - t < window_seconds]
+            self._hits[key] = hits
+            return len(hits) >= limit
+
+    def record(self, key: str) -> None:
+        with self._lock:
+            self._hits.setdefault(key, []).append(time.monotonic())
+
 
 limiter = RateLimiter()

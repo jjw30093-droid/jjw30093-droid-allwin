@@ -3,14 +3,10 @@
 /**
  * /login — 登录页(全部客户端渲染,不含任何会员数据)。
  *
- * 登录路线(2026-08 起):带参数二维码 + webhook 事件。网页授权已废弃(网页授权
- * 域名要求 ICP 备案,本站部署海外不备案),因此三种环境走同一个扫码流,只是
- * 操作提示不同(UA 在浏览器端检测,避免 SSR 水合不一致):
- * - 电脑端:手机微信「扫一扫」;
- * - 微信内:长按二维码 →「识别图中二维码」;
- * - 非微信手机浏览器:截图保存二维码,微信「扫一扫 → 相册」识别。
- * 扫码后微信服务器回调本站 webhook 完成批准,本页轮询领取会话
- * (secret 只留在本页内存,绝不进二维码)。
+ * 登录路线(2026-10 起,经站长批准):公众号发码登录。页面给出 4 位验证码,用户关注
+ * 公众号「足球喵喵第」并把验证码发过去,微信服务器把消息推到本站 webhook 完成批准,
+ * 本页轮询领取会话(secret 只留在本页内存)。此前的带参数二维码路线只对已认证服务号
+ * 开放,站长的公众号是未认证个人号,走不通(CLAUDE.md §7.3)。
  *
  * useSearchParams 必须包在 Suspense 里(Next 16 生产构建约束,
  * 见 node_modules/next/dist/docs/01-app/03-api-reference/04-functions/use-search-params.md)。
@@ -41,8 +37,8 @@ import {
   type MeResponse,
   type PasswordLoginResponse,
 } from "@/lib/api-v1";
-import { ENV_TITLE, ScanLoginCard, useEnv } from "@/components/auth/ScanLoginCard";
-import scanStyles from "@/components/auth/ScanLoginCard.module.css";
+import { CodeLoginCard, ENV_TITLE, useEnv } from "@/components/auth/CodeLoginCard";
+import scanStyles from "@/components/auth/CodeLoginCard.module.css";
 import styles from "./login.module.css";
 
 /** 与后端 service.is_safe_next_path 同规则:仅本站相对路径。 */
@@ -138,12 +134,12 @@ function PasswordLoginSection({
     <details className={styles.pwDetails}>
       <summary className={styles.pwSummary}>账号密码登录</summary>
       {form}
-      <p className={styles.note}>账号由我们开通,没有的话走上面的扫码登录。</p>
+      <p className={styles.note}>账号由我们开通,没有的话用上面的微信验证码登录。</p>
     </details>
   );
 }
 
-/** SSR/水合前骨架:复用 ScanLoginCard 自己的卡片外壳(idle 态视觉),
+/** SSR/水合前骨架:复用 CodeLoginCard 自己的卡片外壳(idle 态视觉),
  * 避免和真正挂载后的卡片切换时跳版。 */
 function ScanCardSkeleton() {
   return (
@@ -151,15 +147,15 @@ function ScanCardSkeleton() {
       <header className={scanStyles.band}>
         <span className={scanStyles.bandLeft}>
           <span className={scanStyles.dot} aria-hidden />
-          <span className={scanStyles.bandLabel}>正在生成扫码请求…</span>
+          <span className={scanStyles.bandLabel}>正在获取验证码…</span>
         </span>
       </header>
       <div className={scanStyles.progressTrack} data-pulse>
         <span className={scanStyles.progressFill} style={{ width: "0%" }} />
       </div>
       <div className={scanStyles.stage}>
-        <div className={scanStyles.stageQr}>
-          <span className={scanStyles.qrSkeleton} aria-hidden />
+        <div className={scanStyles.stageCode}>
+          <span className={scanStyles.codeSkeleton} aria-hidden />
         </div>
       </div>
       <span className={scanStyles.footnoteSkeleton} aria-hidden />
@@ -231,7 +227,7 @@ function LoginBody() {
       {/* 扫码没开放时,密码登录是唯一能用的方式,渲染成常驻主卡片 */}
       {!scanOn && <PasswordLoginSection nextPath={nextPath} standalone />}
 
-      {scanOn && (env === null ? <ScanCardSkeleton /> : <ScanLoginCard nextPath={nextPath} env={env} />)}
+      {scanOn && (env === null ? <ScanCardSkeleton /> : <CodeLoginCard nextPath={nextPath} env={env} />)}
 
       {scanOn && <PasswordLoginSection nextPath={nextPath} standalone={false} />}
     </main>

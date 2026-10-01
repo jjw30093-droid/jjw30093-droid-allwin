@@ -21,6 +21,7 @@ import sys
 
 from argon2 import PasswordHasher
 
+from backend.auth.service import new_short_code
 from backend.db.connections import connect_rw, tx
 from backend.db.util import new_uuid, utc_now_iso
 
@@ -81,10 +82,13 @@ def create_admin(
 
     user_id = new_uuid()
     with tx(conn):
+        # 用户编号(后台认人用,0019 起);密码账号的昵称就是用户名,不弹首次起昵称框
+        short_code = new_short_code(conn)
         conn.execute(
-            "INSERT INTO users (id, display_name, role, password_hash, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, 'active', ?, ?)",
-            (user_id, username, role, password_hash, now, now),
+            "INSERT INTO users (id, display_name, role, password_hash, status, created_at, updated_at,"
+            " short_code, nickname_set)"
+            " VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 1)",
+            (user_id, username, role, password_hash, now, now, short_code),
         )
         conn.execute(
             "INSERT INTO auth_identities (user_id, provider, provider_app_id, provider_subject, created_at)"

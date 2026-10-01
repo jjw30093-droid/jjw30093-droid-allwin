@@ -35,6 +35,8 @@ class MeUser(BaseModel):
     id: str
     display_name: str
     role: str
+    short_code: Optional[str] = None      # 用户编号(6 位),显示在"我的"页,后台按编号开权限
+    nickname_set: bool = False            # False = 首次登录,登录页弹昵称框
 
 
 class MeDTO(BaseModel):
@@ -1669,8 +1671,8 @@ class AccountResponse(BaseModel):
 
 class DeviceLoginCreatedDTO(BaseModel):
     request_id: str
-    secret: str                            # 只留在浏览器内存,不进二维码
-    qr_url: str
+    secret: str                            # 只留在浏览器内存,领取会话时必须带上
+    login_code: str                        # 4 位数字,用户发给公众号(等待中的请求之间互不重复)
     expires_at: str
 
 
@@ -1683,6 +1685,7 @@ class DeviceClaimResultDTO(BaseModel):
 class AdminUserItem(BaseModel):
     id: str
     display_name: str
+    short_code: Optional[str] = None       # 用户编号:后台以编号认人(昵称允许重名)
     role: str
     status: str
     created_at: str
@@ -2441,6 +2444,9 @@ class RecoAccessGrantDTO(BaseModel):
     note: Optional[str] = None
     created_at: str
     updated_at: str
+    # 后台认人用(2026-10):昵称 + 用户编号
+    user_display_name: Optional[str] = None
+    user_short_code: Optional[str] = None
 
 
 class RecoAccessGrantBody(BaseModel):
@@ -2458,8 +2464,41 @@ class AdminRecoAccessGrantsResponse(BaseModel):
     grants: list[RecoAccessGrantDTO]
 
 
+class RecoAccessPeriodDTO(BaseModel):
+    """每日精选时段授权(2026-10):覆盖发布日期(北京时间)落在 [starts_on, ends_on] 内的精选;
+    自然到期后仍可看,提前撤销则全部收回。"""
+
+    id: str
+    user_id: str
+    starts_on: str
+    ends_on: str
+    status: Literal["active", "revoked"]
+    granted_at: str
+    granted_by: str
+    revoked_at: Optional[str] = None
+    revoked_by: Optional[str] = None
+    note: Optional[str] = None
+    created_at: str
+    updated_at: str
+    user_display_name: Optional[str] = None
+    user_short_code: Optional[str] = None
+
+
+class RecoAccessPeriodBody(BaseModel):
+    user_id: str
+    starts_on: str                         # 北京时间 YYYY-MM-DD(含)
+    ends_on: str                           # 北京时间 YYYY-MM-DD(含)
+    note: Optional[str] = None
+
+
+class AdminRecoAccessPeriodsResponse(BaseModel):
+    total: int
+    periods: list[RecoAccessPeriodDTO]
+
+
 class RecoMyAccessResponse(BaseModel):
     """个人"每日精选权限查询"(CLAUDE.md §8.1 允许要求登录的账户类个人
-    功能之一):只含当前用户自己的授权记录。"""
+    功能之一):只含当前用户自己的授权记录(单场 + 时段)。"""
 
     grants: list[RecoAccessGrantDTO]
+    periods: list[RecoAccessPeriodDTO] = []

@@ -66,6 +66,8 @@ class AuthContext:
     session_row: object          # sqlite3.Row | None(CSRF 校验用)
     plan_id: str
     entitlements: frozenset
+    short_code: str | None = None      # 用户编号(后台按编号认人、开权限)
+    nickname_set: bool = False         # 首次登录是否已设过(或跳过)昵称
 
     @property
     def authenticated(self) -> bool:
@@ -95,6 +97,8 @@ def get_auth_context(request: Request, settings: AuthSettings = Depends(get_sett
             session_row=session_row,
             plan_id=plan_id,
             entitlements=ents,
+            short_code=session_row["user_short_code"],
+            nickname_set=bool(session_row["user_nickname_set"]),
         )
     finally:
         conn.close()

@@ -10,7 +10,9 @@
 """
 
 import hashlib
+import re
 import sqlite3
+import unicodedata
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import timedelta
@@ -21,8 +23,7 @@ TIMESTAMP_TOLERANCE_SECONDS = 300
 NONCE_RETENTION_MINUTES = 15
 MAX_BODY_BYTES = 64 * 1024      # 事件 XML 远小于此;超限直接拒绝,防解析放大
 
-# 带参二维码扫码事件里,未关注用户的 EventKey 前缀(微信约定)
-QRSCENE_PREFIX = "qrscene_"
+_CODE_RE = re.compile(r"^\d{4}$")
 
 
 def compute_signature(token: str, timestamp: str, nonce: str) -> str:
@@ -60,11 +61,20 @@ def register_nonce(conn: sqlite3.Connection, nonce: str) -> bool:
 
 @dataclass(frozen=True)
 class WechatEvent:
-    msg_type: str                 # event / text / ...
-    event: str | None             # SCAN / subscribe / unsubscribe / ...(仅 msg_type=event)
-    openid: str                   # FromUserName
+    msg_type: str                 # event / text / image / voice / ...
+    event: str | None             # subscribe / unsubscribe / ...(仅 msg_type=event)
+    openid: str                   # FromUserName:发消息的用户在本公众号下的 openid
     to_user: str                  # ToUserName(公众号原始 ID,透传给被动回复)
-    scene_str: str | None         # 带参二维码场景值(SCAN 直接取;subscribe 去 qrscene_ 前缀)
+    content: str | None           # 文本消息内容(仅 msg_type=text)
+
+
+def extract_login_code(content: str | None) -> str | None:
+    """从用户发给公众号的文本里取 4 位验证码:全角数字转半角、去掉所有空白;
+    恰好 4 位数字才算,否则 None(当作"不是验证码")。"""
+    if not content:
+        return None
+    s = "".join(unicodedata.normalize("NFKC", content).split())
+    return s if _CODE_RE.match(s) else None
 
 
 class WebhookParseError(ValueError):
@@ -92,25 +102,12 @@ def parse_event_xml(body: bytes) -> WechatEvent:
         raise WebhookParseError("缺少 FromUserName/ToUserName/MsgType")
 
     event = text("Event")
-    event_key = text("EventKey")
-
-    scene_str: str | None = None
-    if msg_type == "event" and event:
-        ev = event.lower()
-        if ev == "scan":
-            # 已关注用户扫带参二维码:EventKey 就是 scene_str
-            scene_str = event_key or None
-        elif ev == "subscribe" and event_key:
-            # 未关注用户扫码后关注:EventKey = qrscene_<scene_str>
-            if event_key.startswith(QRSCENE_PREFIX):
-                scene_str = event_key[len(QRSCENE_PREFIX):] or None
-
     return WechatEvent(
         msg_type=msg_type,
         event=event.lower() if event else None,
         openid=openid,
         to_user=to_user,
-        scene_str=scene_str,
+        content=text("Content") if msg_type == "text" else None,
     )
 
 

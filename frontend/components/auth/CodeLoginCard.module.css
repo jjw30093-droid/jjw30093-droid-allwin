@@ -168,31 +168,52 @@
   }
 }
 
-.stageQr {
+.stageCode {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 @media (min-width: 640px) {
-  .stageQr {
-    place-items: center;
+  .stageCode {
     padding: 18px;
     border-right: 1px solid var(--border);
     height: 100%;
   }
 }
 
-.qrSkeleton {
+.stageSteps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+@media (min-width: 640px) {
+  .stageSteps {
+    padding-right: 16px;
+  }
+}
+
+/* 起昵称这一步占满整个操作台(不分左右栏) */
+.stageSingle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 250px;
+  padding: 18px 16px;
+  background: var(--surface-soft);
+}
+
+.codeSkeleton {
   width: 200px;
-  height: 200px;
+  height: 120px;
   border-radius: 12px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   animation: pulse 1.4s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .qrSkeleton {
+  .codeSkeleton {
     animation: none;
     opacity: 0.7;
   }
@@ -207,45 +228,48 @@
   }
 }
 
-/* 真二维码:白底黑码,深浅主题下都保持白底(否则码块对比度不够扫不出来) */
-.qrCanvas {
-  display: block;
-  max-width: 100%;
-  border-radius: 12px;
-  background: #fff;
-  padding: 6px;
+.codeBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
-.qrCanvas[data-faded] {
-  opacity: 0.16;
+.codeLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
 }
-
-.envPill {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1;
-  display: none;
-  padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--brand-teal) 45%, var(--border));
-  border-radius: var(--r-pill);
-  color: var(--brand-teal);
-  font-size: 10.5px;
+.codeDigits {
+  display: flex;
+  gap: 8px;
+}
+.codeDigit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 58px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1.5px solid color-mix(in srgb, var(--brand-teal) 55%, var(--border-strong));
+  color: var(--ink);
+  font-family: var(--font-latin);
+  font-size: 32px;
   font-weight: 800;
-  white-space: nowrap;
-  flex: 0 0 auto;
+  letter-spacing: 0;
 }
-@media (min-width: 640px) {
-  .envPill {
-    display: inline-block;
-  }
+.codeDigits[data-faded] {
+  opacity: 0.3;
 }
 
-.qrUrl {
-  font-family: var(--font-latin), monospace;
-  font-size: 12.5px;
-  color: var(--brand-teal);
-  word-break: break-all;
-  line-height: 1.6;
+/* 公众号二维码(电脑端,有真图时才显示):白底,深色主题下也要能扫 */
+.oaQr {
+  flex: none;
+  width: 112px;
+  height: 112px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
 }
 
 .claimedBox,
@@ -255,7 +279,7 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  width: 200px;
+  min-width: 200px;
 }
 
 .checkIcon {
@@ -279,20 +303,6 @@
   color: var(--ink);
 }
 
-.expiredBox {
-  position: relative;
-}
-.expiredOverlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: rgba(238, 242, 242, 0.72);
-  border-radius: 12px;
-}
 .expiredText {
   margin: 0;
   font-size: 15px;
@@ -365,7 +375,7 @@
   margin: 0;
   padding: 0 14px;
   width: 100%;
-  max-width: 260px;
+  max-width: 340px;
 }
 @media (min-width: 640px) {
   .steps {
@@ -405,32 +415,17 @@
   padding-top: 1px;
 }
 
-.endingNote {
-  margin: 0;
-  padding: 0 14px;
-  font-size: 13px;
-  color: var(--ink);
-  line-height: 1.6;
-  text-align: center;
-}
-@media (min-width: 640px) {
-  .endingNote {
-    padding: 0 18px;
-    text-align: left;
-  }
-}
-
 /* ⑤ 卡内脚注 */
 .footnote {
   margin: 0;
-  padding: 0 14px 14px;
+  padding: 10px 14px 14px;
   font-size: 12px;
   color: var(--ink-3);
   line-height: 1.65;
 }
 @media (min-width: 640px) {
   .footnote {
-    padding: 0 20px 16px;
+    padding: 10px 20px 16px;
   }
 }
 
@@ -448,35 +443,73 @@
   }
 }
 
+/* 首次登录起昵称 */
+.nickForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+}
+.nickTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--ink);
+}
+.nickField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nickLabel {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.nickInput {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-control);
+}
+.nickInput:focus-visible {
+  outline: 2px solid var(--brand-teal);
+  outline-offset: 1px;
+}
+
 /* 开发环境调试面板 */
-.qrFallback {
+.devPanel {
   margin: 0 14px 14px;
 }
 @media (min-width: 640px) {
-  .qrFallback {
+  .devPanel {
     margin: 0 20px 16px;
   }
 }
-
-.qrFallbackSummary {
+.devSummary {
   cursor: pointer;
   font-size: 12.5px;
   color: var(--ink-3);
   padding: 4px 0;
 }
-
-.qrFallback[open] .qrFallbackSummary {
-  margin-bottom: 8px;
-}
-
 .devNote {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin: 8px 0;
+}
+.devCmd {
+  display: block;
+  font-family: var(--font-latin), monospace;
   font-size: 12.5px;
   color: var(--brand-teal);
   background: var(--surface-2);
   border: 1px dashed var(--border-strong);
   border-radius: var(--r-control);
   padding: 8px 12px;
-  margin: 8px 0 0;
+  word-break: break-all;
 }
 
 .row {

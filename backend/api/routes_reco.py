@@ -65,6 +65,9 @@ from .deps import (
 )
 from .schemas import (
     AdminRecoAccessGrantsResponse,
+    AdminRecoAccessPeriodsResponse,
+    RecoAccessPeriodBody,
+    RecoAccessPeriodDTO,
     AdminRecoSlipsResponse,
     OkDTO,
     RecoAccessGrantBody,
@@ -304,7 +307,10 @@ def reco_my_access(
     _no_store(response)
     if not ctx.authenticated:
         raise HTTPException(status_code=401, detail="请先登录")
-    return {"grants": reco_access.list_user_grants(conn, ctx.user_id)}
+    return {
+        "grants": reco_access.list_user_grants(conn, ctx.user_id),
+        "periods": reco_access.list_user_periods(conn, ctx.user_id),
+    }
 
 
 @router.get("/reco/track-record", response_model=RecoTrackRecordResponse)
@@ -653,3 +659,68 @@ def admin_list_reco_access(
         limit=max(1, min(limit, 200)), offset=max(0, offset),
     )
     return {"total": total, "grants": grants}
+
+
+# ── Admin 时段授权(2026-10,经站长批准;admin + CSRF;全部操作写 audit_logs)──────
+
+@router.post("/admin/reco/access-periods", response_model=RecoAccessPeriodDTO, tags=["admin"])
+def admin_grant_reco_period(
+    body: RecoAccessPeriodBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_csrf),
+    conn=Depends(platform_rw),
+):
+    """按 用户 + 起止日期(北京时间,含首尾)开通:覆盖发布日期落在其内的精选。"""
+    _no_store(response)
+    _require_admin(ctx)
+    try:
+        with tx(conn):
+            period_id = reco_access.grant_period(
+                conn, body.user_id, body.starts_on, body.ends_on, actor=ctx.user_id, note=body.note,
+            )
+    except RecoAccessError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return reco_access.get_period(conn, period_id)
+
+
+@router.post(
+    "/admin/reco/access-periods/{period_id}/revoke", response_model=OkDTO, tags=["admin"]
+)
+def admin_revoke_reco_period(
+    period_id: str,
+    body: RecoAccessRevokeBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_csrf),
+    conn=Depends(platform_rw),
+):
+    """提前撤销 = 该时段覆盖的精选全部收回(与撤销单场授权一致)。"""
+    _no_store(response)
+    _require_admin(ctx)
+    try:
+        with tx(conn):
+            reco_access.revoke_period(conn, period_id, actor=ctx.user_id, reason=body.reason)
+    except RecoAccessError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "ok"}
+
+
+@router.get(
+    "/admin/reco/access-periods", response_model=AdminRecoAccessPeriodsResponse, tags=["admin"]
+)
+def admin_list_reco_periods(
+    response: Response,
+    user_id: str = "",
+    status: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    ctx: AuthContext = Depends(get_auth_context),
+    conn=Depends(platform_ro),
+):
+    _no_store(response)
+    if not ctx.authenticated:
+        raise HTTPException(status_code=401, detail="请先登录")
+    _require_admin(ctx)
+    total, periods = reco_access.list_periods(
+        conn, user_id=user_id, status=status, limit=max(1, min(limit, 200)), offset=max(0, offset),
+    )
+    return {"total": total, "periods": periods}

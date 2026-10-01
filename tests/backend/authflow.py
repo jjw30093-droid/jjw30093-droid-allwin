@@ -1,8 +1,8 @@
-"""测试共用:带参数二维码 + webhook 路线的完整扫码登录流(替代旧 mock OAuth 流)。
+"""测试共用:公众号发码登录的完整流程(2026-10 起取代带参数二维码路线)。
 
 流程与生产一致(webhook 入站链路不依赖 Provider,离线可完整验证):
-1. POST /api/v1/auth/wechat/device            → request_id + 浏览器 secret
-2. POST /api/v1/auth/wechat/webhook(签名)    → 模拟微信服务器投递 SCAN 事件
+1. POST /api/v1/auth/wechat/device            → request_id + 浏览器 secret + 4 位 login_code
+2. POST /api/v1/auth/wechat/webhook(签名)    → 模拟微信服务器投递"用户把验证码发给公众号"的文本消息
 3. POST /api/v1/auth/wechat/device/{id}/claim → 领取会话(Set-Cookie)
 
 签名 Token 用 development 默认值 dev-webhook-token(backend/auth/config.py)。
@@ -16,8 +16,21 @@ from backend.auth.wechat_webhook import compute_signature
 DEV_WEBHOOK_TOKEN = "dev-webhook-token"
 
 
-def scan_event_xml(scene_str: str, openid: str, event: str = "SCAN") -> str:
-    event_key = scene_str if event == "SCAN" else f"qrscene_{scene_str}"
+def text_message_xml(content: str, openid: str, msg_type: str = "text") -> str:
+    body = f"<Content><![CDATA[{content}]]></Content>" if msg_type == "text" else "<MediaId><![CDATA[m1]]></MediaId>"
+    return (
+        "<xml>"
+        "<ToUserName><![CDATA[gh_mock_oa]]></ToUserName>"
+        f"<FromUserName><![CDATA[{openid}]]></FromUserName>"
+        f"<CreateTime>{int(time.time())}</CreateTime>"
+        f"<MsgType><![CDATA[{msg_type}]]></MsgType>"
+        f"{body}"
+        f"<MsgId>{uuid.uuid4().int % 10**12}</MsgId>"
+        "</xml>"
+    )
+
+
+def event_xml(event: str, openid: str) -> str:
     return (
         "<xml>"
         "<ToUserName><![CDATA[gh_mock_oa]]></ToUserName>"
@@ -25,7 +38,6 @@ def scan_event_xml(scene_str: str, openid: str, event: str = "SCAN") -> str:
         f"<CreateTime>{int(time.time())}</CreateTime>"
         "<MsgType><![CDATA[event]]></MsgType>"
         f"<Event><![CDATA[{event}]]></Event>"
-        f"<EventKey><![CDATA[{event_key}]]></EventKey>"
         "</xml>"
     )
 
@@ -40,29 +52,35 @@ def signed_webhook_params(token: str = DEV_WEBHOOK_TOKEN, nonce: str | None = No
     }
 
 
-def post_scan(client, scene_str: str, openid: str, event: str = "SCAN", **kwargs):
-    """向 webhook 投递一条签名合法的扫码事件(kwargs 可覆盖 params/token)。"""
+def post_webhook(client, xml: str, **kwargs):
+    """向 webhook 投递一条签名合法的消息/事件(kwargs 可覆盖 params/token)。"""
     token = kwargs.pop("token", DEV_WEBHOOK_TOKEN)
     params = kwargs.pop("params", None) or signed_webhook_params(token)
     return client.post(
         "/api/v1/auth/wechat/webhook",
         params=params,
-        content=scan_event_xml(scene_str, openid, event=event),
+        content=xml,
         headers={"Content-Type": "application/xml"},
         **kwargs,
     )
 
 
-def wechat_scan_login(client, openid: str = "mock-openid-user-1", ip: str = "203.0.113.1"):
-    """完整扫码登录;断言各步成功,返回 claim 响应(Set-Cookie 已生效在 client 上)。"""
+def post_code(client, code: str, openid: str, **kwargs):
+    """模拟用户把验证码发给公众号。"""
+    return post_webhook(client, text_message_xml(code, openid), **kwargs)
+
+
+def wechat_code_login(client, openid: str = "mock-openid-user-1", ip: str = "203.0.113.1"):
+    """完整发码登录;断言各步成功,返回 claim 响应(Set-Cookie 已生效在 client 上)。"""
     r_create = client.post(
         "/api/v1/auth/wechat/device", headers={"x-real-ip": ip}
     )
     assert r_create.status_code == 200, r_create.text
     body = r_create.json()
 
-    r_scan = post_scan(client, body["request_id"], openid)
-    assert r_scan.status_code == 200, r_scan.text
+    r_msg = post_code(client, body["login_code"], openid)
+    assert r_msg.status_code == 200, r_msg.text
+    assert "登录成功" in r_msg.text, r_msg.text
 
     r_claim = client.post(
         f"/api/v1/auth/wechat/device/{body['request_id']}/claim",
@@ -72,3 +90,7 @@ def wechat_scan_login(client, openid: str = "mock-openid-user-1", ip: str = "203
     assert r_claim.status_code == 200, r_claim.text
     assert r_claim.json()["status"] == "claimed"
     return r_claim
+
+
+# 既有测试大量调用这个名字;流程已改为发码登录,语义不变(拿到一个已登录的 client)
+wechat_scan_login = wechat_code_login

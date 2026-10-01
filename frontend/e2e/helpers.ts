@@ -35,32 +35,34 @@ export async function loginWithPassword(
 /** webhook 签名 Token(development 默认值,backend/auth/config.py)。 */
 const DEV_WEBHOOK_TOKEN = "dev-webhook-token";
 
-/** 模拟微信服务器投递带参二维码扫码事件(SCAN):按共享 Token 计算合法签名。
+/** 模拟「用户把验证码发给公众号」:微信服务器按共享 Token 签名,把文本消息推到本站 webhook。
  * webhook 入站链路不依赖 Provider,E2E 走的就是生产同一条代码路径。 */
-export async function approveViaWebhook(
+export async function sendCodeViaWebhook(
   request: APIRequestContext,
-  requestId: string,
+  content: string,
   openid = "mock-openid-user-1",
+  opts: { signature?: string } = {},
 ) {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomUUID().replace(/-/g, "");
-  const signature = createHash("sha1")
-    .update([DEV_WEBHOOK_TOKEN, timestamp, nonce].sort().join(""))
-    .digest("hex");
+  const signature =
+    opts.signature ??
+    createHash("sha1")
+      .update([DEV_WEBHOOK_TOKEN, timestamp, nonce].sort().join(""))
+      .digest("hex");
   const xml =
     "<xml>" +
     "<ToUserName><![CDATA[gh_mock_oa]]></ToUserName>" +
     `<FromUserName><![CDATA[${openid}]]></FromUserName>` +
     `<CreateTime>${timestamp}</CreateTime>` +
-    "<MsgType><![CDATA[event]]></MsgType>" +
-    "<Event><![CDATA[SCAN]]></Event>" +
-    `<EventKey><![CDATA[${requestId}]]></EventKey>` +
+    "<MsgType><![CDATA[text]]></MsgType>" +
+    `<Content><![CDATA[${content}]]></Content>` +
+    `<MsgId>${Date.now()}</MsgId>` +
     "</xml>";
-  const r = await request.post(
+  return request.post(
     `${API}/api/v1/auth/wechat/webhook?signature=${signature}&timestamp=${timestamp}&nonce=${nonce}`,
     { data: xml, headers: { "Content-Type": "application/xml" } },
   );
-  return r;
 }
 
 /** 行首锚定读取 seed_info.txt(edit_match_id 等行含 match_id= 子串,不能裸搜)。 */

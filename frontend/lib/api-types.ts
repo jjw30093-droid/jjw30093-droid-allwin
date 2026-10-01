@@ -32,8 +32,8 @@ export interface paths {
         put?: never;
         /**
          * Create Device Login
-         * @description 浏览器发起扫码登录:创建一次性 request,并向微信申请带参二维码
-         *     (scene_str = 公开 request id;secret 只回给浏览器,绝不进二维码)。
+         * @description 浏览器发起登录:创建一次性 request,返回 4 位验证码(给用户发到公众号)与 secret
+         *     (只留在浏览器内存,领取会话时必须带上;验证码本身不足以领取会话)。
          */
         post: operations["create_device_login_api_v1_auth_wechat_device_post"];
         delete?: never;
@@ -74,7 +74,7 @@ export interface paths {
         put?: never;
         /**
          * Wechat Webhook Events
-         * @description 微信服务器推送的事件入口。登录相关:SCAN / subscribe(带 qrscene_ 场景值)。
+         * @description 微信服务器推送的消息/事件入口。登录:用户发来 4 位验证码(文本消息)。
          *
          *     安全:共享 Token 签名 + 时间戳 ±300s + nonce 一次性(重放静默回 success,
          *     因为微信 5 秒未收到应答会原样重试,不能把重试当攻击)。5 秒内必须应答,
@@ -597,6 +597,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Profile
+         * @description 设置或修改昵称(2–16 个字,允许重名;昵称不是身份凭证,后台以用户编号为准)。
+         */
+        post: operations["update_profile_api_v1_account_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/sessions/revoke": {
         parameters: {
             query?: never;
@@ -1029,6 +1049,47 @@ export interface paths {
         put?: never;
         /** Admin Revoke Reco Access */
         post: operations["admin_revoke_reco_access_api_v1_admin_reco_access_grants__grant_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reco/access-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List Reco Periods */
+        get: operations["admin_list_reco_periods_api_v1_admin_reco_access_periods_get"];
+        put?: never;
+        /**
+         * Admin Grant Reco Period
+         * @description 按 用户 + 起止日期(北京时间,含首尾)开通:覆盖发布日期落在其内的精选。
+         */
+        post: operations["admin_grant_reco_period_api_v1_admin_reco_access_periods_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reco/access-periods/{period_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Revoke Reco Period
+         * @description 提前撤销 = 该时段覆盖的精选全部收回(与撤销单场授权一致)。
+         */
+        post: operations["admin_revoke_reco_period_api_v1_admin_reco_access_periods__period_id__revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1513,6 +1574,13 @@ export interface components {
             /** Grants */
             grants: components["schemas"]["RecoAccessGrantDTO"][];
         };
+        /** AdminRecoAccessPeriodsResponse */
+        AdminRecoAccessPeriodsResponse: {
+            /** Total */
+            total: number;
+            /** Periods */
+            periods: components["schemas"]["RecoAccessPeriodDTO"][];
+        };
         /**
          * AdminRecoLegDTO
          * @description admin 面在会员 RecoLegDTO 基础上补充的运营信息(2026-08-16):
@@ -1611,6 +1679,8 @@ export interface components {
             id: string;
             /** Display Name */
             display_name: string;
+            /** Short Code */
+            short_code?: string | null;
             /** Role */
             role: string;
             /** Status */
@@ -1855,8 +1925,8 @@ export interface components {
             request_id: string;
             /** Secret */
             secret: string;
-            /** Qr Url */
-            qr_url: string;
+            /** Login Code */
+            login_code: string;
             /** Expires At */
             expires_at: string;
         };
@@ -3605,6 +3675,13 @@ export interface components {
             display_name: string;
             /** Role */
             role: string;
+            /** Short Code */
+            short_code?: string | null;
+            /**
+             * Nickname Set
+             * @default false
+             */
+            nickname_set: boolean;
         };
         /** OddsSnapshotItem */
         OddsSnapshotItem: {
@@ -3835,6 +3912,11 @@ export interface components {
             /** Products */
             products: components["schemas"]["ProductDTO"][];
         };
+        /** ProfileBody */
+        ProfileBody: {
+            /** Display Name */
+            display_name?: string | null;
+        };
         /**
          * ProfileWindowN
          * @description 百分位画像窗口长度的白名单(`/matches/{id}/data-profile?n=`)。
@@ -3907,6 +3989,59 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** User Display Name */
+            user_display_name?: string | null;
+            /** User Short Code */
+            user_short_code?: string | null;
+        };
+        /** RecoAccessPeriodBody */
+        RecoAccessPeriodBody: {
+            /** User Id */
+            user_id: string;
+            /** Starts On */
+            starts_on: string;
+            /** Ends On */
+            ends_on: string;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * RecoAccessPeriodDTO
+         * @description 每日精选时段授权(2026-10):覆盖发布日期(北京时间)落在 [starts_on, ends_on] 内的精选;
+         *     自然到期后仍可看,提前撤销则全部收回。
+         */
+        RecoAccessPeriodDTO: {
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id: string;
+            /** Starts On */
+            starts_on: string;
+            /** Ends On */
+            ends_on: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "revoked";
+            /** Granted At */
+            granted_at: string;
+            /** Granted By */
+            granted_by: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Revoked By */
+            revoked_by?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** User Display Name */
+            user_display_name?: string | null;
+            /** User Short Code */
+            user_short_code?: string | null;
         };
         /** RecoAccessRevokeBody */
         RecoAccessRevokeBody: {
@@ -4235,11 +4370,16 @@ export interface components {
         /**
          * RecoMyAccessResponse
          * @description 个人"每日精选权限查询"(CLAUDE.md §8.1 允许要求登录的账户类个人
-         *     功能之一):只含当前用户自己的授权记录。
+         *     功能之一):只含当前用户自己的授权记录(单场 + 时段)。
          */
         RecoMyAccessResponse: {
             /** Grants */
             grants: components["schemas"]["RecoAccessGrantDTO"][];
+            /**
+             * Periods
+             * @default []
+             */
+            periods: components["schemas"]["RecoAccessPeriodDTO"][];
         };
         /**
          * RecoOddsOptionDTO
@@ -7032,6 +7172,75 @@ export interface operations {
             };
         };
     };
+    update_profile_api_v1_account_profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     revoke_other_session_api_v1_account_sessions_revoke_post: {
         parameters: {
             query?: never;
@@ -8396,6 +8605,216 @@ export interface operations {
             header?: never;
             path: {
                 grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoAccessRevokeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_list_reco_periods_api_v1_admin_reco_access_periods_get: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecoAccessPeriodsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_grant_reco_period_api_v1_admin_reco_access_periods_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoAccessPeriodBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoAccessPeriodDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    admin_revoke_reco_period_api_v1_admin_reco_access_periods__period_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period_id: string;
             };
             cookie?: never;
         };

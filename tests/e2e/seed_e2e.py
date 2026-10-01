@@ -308,6 +308,8 @@ def main() -> int:
                 provider_subject=MOCK_MEMBER_OPENID,
                 display_name="E2E会员",
             )
+            # 老用户:已有昵称,登录后不弹首次起昵称框(新用户的起昵称流程另有用例覆盖)
+            service.set_profile(conn, member_id, None)
             # 三段可见性(CLAUDE.md §8):登录即 member 基线,足球数据无需订阅;
             # pro/premium 已下架(0009),不再发放。付费板块 plan 落地后如需
             # E2E 覆盖付费内容,再在这里 grant 对应 plan。

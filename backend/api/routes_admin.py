@@ -60,16 +60,16 @@ def list_users(
     now = utc_now_iso()
     like = f"%{query}%"
     rows = conn.execute(
-        """SELECT u.id, u.display_name, u.role, u.status, u.created_at, u.last_login_at,
+        """SELECT u.id, u.display_name, u.short_code, u.role, u.status, u.created_at, u.last_login_at,
                   (SELECT s.plan_id FROM subscriptions s JOIN plans p ON p.id=s.plan_id
                    WHERE s.user_id=u.id AND s.status='active' AND s.starts_at<=? AND s.ends_at>?
                    ORDER BY p.rank DESC, s.ends_at DESC LIMIT 1) AS plan_id,
                   (SELECT MAX(s.ends_at) FROM subscriptions s
                    WHERE s.user_id=u.id AND s.status='active' AND s.ends_at>?) AS plan_ends_at
            FROM users u
-           WHERE (? = '' OR u.display_name LIKE ? OR u.id LIKE ?)
+           WHERE (? = '' OR u.display_name LIKE ? OR u.id LIKE ? OR u.short_code LIKE ?)
            ORDER BY u.created_at DESC LIMIT ? OFFSET ?""",
-        (now, now, now, query, like, like, limit, offset),
+        (now, now, now, query, like, like, f"%{query.strip()}%", limit, offset),
     ).fetchall()
     total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     return {

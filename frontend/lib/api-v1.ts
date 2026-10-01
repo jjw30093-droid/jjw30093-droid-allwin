@@ -276,6 +276,12 @@ export const createDeviceLogin = () =>
     method: "POST",
     body: {},
   });
+/** 设置/修改昵称;传 null = 首次登录时跳过(保留默认昵称,不再弹框)。 */
+export const updateProfile = (displayName: string | null) =>
+  clientFetch<PostJson<"/api/v1/account/profile">>("/api/v1/account/profile", {
+    method: "POST",
+    body: { display_name: displayName },
+  });
 export const claimDeviceLogin = (requestId: string, secret: string) =>
   clientFetch<PostJson<"/api/v1/auth/wechat/device/{request_id}/claim">>(
     `/api/v1/auth/wechat/device/${requestId}/claim`,

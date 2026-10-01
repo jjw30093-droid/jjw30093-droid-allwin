@@ -1,51 +1,71 @@
 # 微信认证与账户(docs/auth-wechat.md)
 
-> 依据真实代码撰写:`backend/auth/{config,providers,service,wechat_webhook,entitlements}.py`、
-> `backend/api/{routes_auth,deps}.py`、`backend/migrations/platform/{0001_init,0008_qr_webhook_login}.sql`、
-> `backend/cli/{create_admin,simulate_wechat_scan}.py`(2026-08-08 核对)。
+> 依据真实代码撰写:`backend/auth/{config,providers,service,wechat_webhook}.py`、
+> `backend/api/{routes_auth,routes_member,routes_reco,deps}.py`、
+> `backend/commands/reco_access.py`、`backend/migrations/platform/{0001_init,0008_qr_webhook_login,0019_code_login_profiles_periods}.sql`、
+> `backend/cli/{create_admin,simulate_wechat_scan}.py`(2026-10-01 核对)。
 >
-> **路线声明(CLAUDE.md §7.3,修改经用户批准):唯一登录路线是「带参数二维码 +
-> 消息推送 webhook」。网页授权(snsapi_base)已废弃且不得恢复——「网页授权域名」
-> 要求 ICP 备案,备案硬前提是大陆服务器;本项目部署 AWS 东京且不迁回大陆备案。
-> 带参二维码路线全程不在微信内打开本站网页,不受备案约束。**
+> **路线声明(CLAUDE.md §7.3,2026-10 经站长批准修订):唯一微信登录路线是「公众号发码
+> 登录」——网页给出 4 位验证码,用户把它发给公众号「足球喵喵第」,微信服务器把这条消息
+> 推到本站 webhook 完成批准。** 此前的「带参数二维码」路线只对**已认证服务号**开放
+> (微信官方文档:`qrcode/create` 接口权限为「服务号(仅认证)」),站长的公众号是**未认证
+> 的个人公众号**,该路线走不通。发码登录只需要「消息推送」能力,未认证个人公众号也有。
+> 网页授权(snsapi_base)仍然废弃、不得恢复(网页授权域名要求 ICP 备案)。
 >
-> **UNVERIFIED 总声明:真实微信端到端(真实 AppID/AppSecret、公众号后台服务器配置、
-> 微信服务器真实回调、真机扫码)尚未验证。已验证的是:代码逻辑 + Mock Provider +
-> 签名 fixture 下的 pytest 全流程与 Playwright 浏览器端到端(同一条 webhook 代码路径)。**
+> **UNVERIFIED 总声明:真实微信端到端(开发者平台消息推送配置、微信服务器真实推送、
+> 真机发码)尚未验证。已验证的是:代码逻辑 + 签名 fixture 下的 pytest 全流程与 Playwright
+> 浏览器端到端(同一条 webhook 代码路径)。**
 
-## 1. 公众号后台需要配置什么(上线时由站长手动完成)
+## 1. 公众号要配置什么(上线时由站长手动完成)
 
-前提:已微信认证的**服务号**(蓝V,具备「生成带参数的二维码」接口权限)。
+账号:「足球喵喵第」,公众号(订阅号)、未认证、个人主体。AppID `wx2b9ef558a6a1e425`,
+原始 ID `gh_785b28c6a8a0`(两者都是公开标识,不是密钥)。
+
+**2025-12 起,公众号的开发设置已迁到「微信开发者平台」**
+(https://developers.weixin.qq.com/platform/ → 我的业务 → 公众号/服务号 → 选中账号):
 
 | 配置项 | 位置 | 填什么 |
 |---|---|---|
-| 服务器配置 URL | 设置与开发 → 基本配置 → 服务器配置 | `https://<域名>/api/v1/auth/wechat/webhook` |
-| 服务器配置 Token | 同上 | 与 `.env` 的 `WECHAT_WEBHOOK_TOKEN` 一致(强随机,绝不进 Git) |
-| 消息加解密方式 | 同上 | 明文模式或兼容模式(**安全模式(AES)本轮未实现**) |
-| AppID / AppSecret | 基本配置 | 写入 `.env` 的 `WECHAT_OA_APP_ID` / `WECHAT_OA_APP_SECRET` |
-| IP 白名单 | 基本配置 | 服务器出口 IP(`/cgi-bin/token`、`/cgi-bin/qrcode/create` 调用来源) |
+| 消息推送 URL | 域名与消息推送配置 → 消息推送 | `https://miaomiaodi.vip/api/v1/auth/wechat/webhook` |
+| Token | 同上 | 与服务器 `.env` 的 `WECHAT_WEBHOOK_TOKEN` 完全一致(在服务器上用强随机生成,绝不进 Git、不发聊天) |
+| 消息加解密方式 | 同上 | **明文模式**(安全模式 AES 未实现) |
+| 数据格式 | 同上 | XML |
+| AppID | 基础信息 | 写入 `.env` 的 `WECHAT_OA_APP_ID` |
+| AppSecret | 基础信息 → 开发密钥 | **登录不需要**(发码登录不调用任何微信接口),不必生成、不必配置 |
 
-保存「服务器配置」时微信会向 URL 发一次 GET 校验(见 §3 GET 握手),本站必须已部署
-且 `WECHAT_AUTH_ENABLED=1` 才能通过。
+保存「消息推送」配置时微信会向 URL 发一次 GET 校验(见 §3 GET 握手),本站必须已部署
+且 `WECHAT_AUTH_ENABLED=1` 才能通过。所以顺序是:先在服务器 `.env` 写好
+`WECHAT_OA_APP_ID`、`WECHAT_WEBHOOK_TOKEN`、`WECHAT_AUTH_ENABLED=1` 并重启 API,
+再去开发者平台点保存。
 
-**启用服务器配置的副作用(重要):启用后公众号的自动回复、菜单等由开发者接管,
-微信会把所有用户消息推到 webhook。本站对非登录事件统一回 `success`(静默),
-对 `AUTH_DISABLED` 状态回 503(用户在微信里会看到"该公众号暂时无法提供服务")。**
+**启用消息推送的副作用(重要):启用后公众号后台的自动回复、自定义菜单失效**,微信把
+所有用户消息推到 webhook,由本站回复。站长确认目前没有在用自动回复/菜单。本站回复规则:
 
-已知外部单点(如实):「生成带参数的二维码」权限绑定微信认证**年审**;年审过期时
-`qrcode/create` 返回 `errcode=48001`,本站结构化记录并对浏览器返回 502
-"微信扫码服务暂时不可用"。本轮不做降级通道(OTP 第二通道是下一轮独立课题)。
+| 用户在公众号里做了什么 | 本站回复 |
+|---|---|
+| 关注 | 欢迎关注喵弟数据研究室！想登录网站，把网页上的 4 位验证码发给我就行。 |
+| 发来 4 位数字且对上一个等待中的登录请求 | 登录成功，请回到网页继续 |
+| 发来 4 位数字但没对上(过期/已用/不存在) | 验证码无效或已过期，请回到网页重新获取 |
+| 发来别的任何内容(文字、图片、语音…) | 验证码错误，请重新输入(站长定的文案) |
+| 同一微信号 10 分钟内发错验证码满 10 次 | 尝试次数过多，请 10 分钟后再试 |
+| 取消关注等其它事件 | 不回复(回 `success`) |
 
-## 2. access_token(`providers.RealWechatQrProvider`)
+`AUTH_DISABLED` 状态下 webhook 回 503(用户在微信里会看到"该公众号暂时无法提供服务")。
 
-- `GET api.weixin.qq.com/cgi-bin/token`(client_credential)获取,有效期约 7200s。
-- **每个 AppID 全局唯一,重新获取会使上一个立即失效** → 缓存持久化在 platform.db
-  `wechat_access_token_cache`(app_id 主键),临过期(<300s)才刷新;刷新用进程内锁
-  串行化,网络请求不持任何 SQLite 写锁(§5.3 短事务)。
-- token 失效类 errcode(40001/40014/42001)→ 清缓存重取**一次**,不无限重试。
-- access_token 是服务端敏感凭据:只存在缓存表与服务端请求中,不进日志、不进 API 响应。
+## 2. 用户身份、编号与昵称
 
-## 3. 扫码登录全流程
+- 身份键 = `(provider='wechat_oa', provider_app_id=AppID, provider_subject=openid)`;
+  openid 取自消息的 `FromUserName`。`users.id`(UUID)仍是唯一业务主键。
+- **只有验证码对上了才会建账号**——发错码、乱发消息不会凭空产生用户。
+- 未认证公众号拿不到微信昵称/头像(微信 2021-12-27 起也不再对任何账号输出),所以:
+  - 每个用户有一个 **6 位用户编号** `users.short_code`(大写十六进制,唯一),后台按编号
+    认人,开通权限时让用户报编号;账户中心显示自己的编号;后台用户列表/选择器可按编号搜索;
+  - 默认昵称为「球迷 + 编号」;**第一次登录**(`nickname_set=0`)跳转前会请用户起个昵称
+    (2–16 个字,允许重名,可跳过),之后可在账户中心修改(`POST /api/v1/account/profile`,
+    CSRF 保护)。昵称不是身份凭证。
+- 存量密码账号(管理员)迁移时视为已设置昵称,不弹框。
+
+## 3. 发码登录全流程
 
 端点:`POST /auth/wechat/device`、`POST /auth/wechat/device/{id}/claim`、
 `GET|POST /auth/wechat/webhook`(全部挂 `/api/v1` 前缀)。
@@ -53,50 +73,53 @@
 
 ```text
 浏览器 POST /api/v1/auth/wechat/device(限流 10 次/60s/IP)
+  → 先把已过期的 pending 请求标 expired
   → 创建 request:{id(公开), secret(32B 只回浏览器,DB 只存 hash),
-                   status='pending', TTL=DEVICE_REQUEST_TTL_SECONDS(默认 300s)}
-  → 服务端调公众号 qrcode/create(QR_STR_SCENE, scene_str=request id,
-     expire_seconds 与 request TTL 对齐)→ ticket/url 存回 request 行
-  → 返回 {request_id, secret, qr_url(微信带参二维码 URL), expires_at}
-  → 前端 npm `qrcode` 在本地 <canvas> 渲染 qr_url(不经第三方图片服务);
-     创建失败(如 48001)→ 502,request 留给 TTL 自然过期(无 QR 指向,无害)
+                   login_code(4 位数字,secrets 安全随机,与所有等待中的请求互不重复,
+                              部分唯一索引兜底), status='pending',
+                   TTL=DEVICE_REQUEST_TTL_SECONDS(默认 300s)}
+  → 返回 {request_id, secret, login_code, expires_at};不调用任何微信接口
+  → 等待中的码用完(极端情况)→ 429 "当前登录人数过多"
 
-用户扫码(桌面:手机扫屏幕;微信内:长按识别;手机浏览器:截图后相册识别)
+用户关注公众号「足球喵喵第」,把验证码发过去
   → 微信服务器 POST /api/v1/auth/wechat/webhook?signature&timestamp&nonce
-     body=XML:已关注 → Event=SCAN,EventKey=scene_str;
-              未关注 → Event=subscribe,EventKey=qrscene_<scene_str>(关注即登录)
+     body=XML:MsgType=text,Content=验证码,FromUserName=openid
   → 校验链(全部通过才处理):
      ① signature = sha1(sorted(token,timestamp,nonce)) 一致,否则 403;
      ② |now - timestamp| ≤ 300s,否则 403;
      ③ nonce 一次性(INSERT OR IGNORE wechat_webhook_nonces);重复 nonce
         = 微信 5 秒未收到应答的原样重试 → 直接回 success,不二次处理;
      ④ body ≤ 64KB;XML 解析失败 → 回 success 静默丢弃(防重试风暴),只留日志
-  → get_or_create_user_by_identity('wechat_oa', app_id, openid)
-     (users.id UUID 是唯一业务主键;openid 只是可绑定外部身份)
-  → approve_device_request:UPDATE ... WHERE status='pending' AND 未过期(原子);
-     已 approved/claimed → 幂等,不改状态
-  → 被动回复文本(5 秒内,处理只涉本地 DB 无外呼):
-     "登录成功,请回到浏览器继续" / "已确认登录…" / "二维码已过期…" / "二维码无效…"
+  → 内容规范化(全角转半角、去空白)后必须正好 4 位数字,否则回"验证码错误"
+  → 按码找 pending 且未过期的请求;找到才 get_or_create_user_by_identity,
+     approve_device_request:UPDATE ... WHERE status='pending' AND 未过期(原子)
+  → 被动回复文本(5 秒内,只涉本地 DB,无外呼),文案见 §1
 
-浏览器轮询 POST /api/v1/auth/wechat/device/{id}/claim body={secret}(限流 60 次/60s/IP)
+浏览器每 2.5 秒轮询 POST /api/v1/auth/wechat/device/{id}/claim body={secret}(限流 60 次/60s/IP)
   → 五态:pending / forbidden 403(secret 错,不烧毁请求)/ expired·gone 410 /
      claimed(UPDATE ... WHERE status='approved' 的 rowcount=1 原子单次转移,
              第二次领取得 410)
   → claimed 时才创建会话并 Set-Cookie
+  → 前端再查 /api/v1/me:nickname_set=false 时先显示起昵称,再跳回原页面
 ```
 
-GET 握手(公众号后台保存配置时):验签通过原样回显 `echostr`(text/plain),
+安全说明(站长确认的威胁模型:小站,用户量以百计):
+- 验证码只决定"批准哪个请求",**领取会话必须有只在发起浏览器内存里的 secret**;
+  别人看到你的验证码也领不走你的会话。
+- 4 位码在等待中的请求之间唯一;每个微信号 10 分钟最多发错 10 次(只对发错计数,
+  正常登录不消耗次数);码 5 分钟过期、只能用一次。
+- 与 cc 旧站的区别:旧站用 `random.randint` 生成、登录状态存在进程内存、没有 secret
+  领取这一步;本实现码用 `secrets` 生成,状态持久化在 SQLite,会话只能由发起浏览器领取。
+
+GET 握手(开发者平台保存配置时):验签通过原样回显 `echostr`(text/plain),
 失败 403。`AUTH_DISABLED` 状态下 GET/POST webhook 均 503。
 
 webhook 是服务器对服务器通道:签名即凭证,不要求 Cookie/CSRF。安全模型 =
-共享 Token 签名 + 时间戳窗口 + nonce 防重放;明文模式(安全模式 AES 未实现,
-如实标注)。攻击者知道公开 request id 但没有 Token 无法伪造签名,没有浏览器
-secret 无法领取会话。
+共享 Token 签名 + 时间戳窗口 + nonce 防重放;明文模式(安全模式 AES 未实现,如实标注)。
 
-明确淘汰的旧项目模式(CLAUDE.md §7.3):四位随机验证码、进程内登录状态、
-JWT 进查询参数/客户端 session、`users.openid='USER_xxx'` 伪身份——本实现均不存在。
-旧网页授权残留:`oauth_states` 表保留(不做破坏性删除)但无代码路径写入;
-oa/start、oa/callback 端点已删除(回归测试钉死 404)。
+带参数二维码时代的遗留:`device_login_requests.qr_ticket/qr_url` 列、
+`wechat_access_token_cache` 表、`RealWechatQrProvider` 代码保留(不做破坏性删除),
+登录流程不再使用;以后若公众号认证为服务号,可再评估是否恢复扫码。
 
 ## 4. 会话与 CSRF(opaque session)
 
@@ -119,35 +142,34 @@ oa/start、oa/callback 端点已删除(回归测试钉死 404)。
 `/api/v1/me`:匿名返回 `authenticated=false + free plan + free entitlements`;
 登录返回 user/plan/entitlements/session_expires_at。权益解析见 `auth/entitlements.py`。
 
-UnionID:webhook 事件不携带 unionid,当前不保存(`auth_identities.union_id` 字段
+UnionID:webhook 消息不携带 unionid,当前不保存(`auth_identities.union_id` 字段
 保留,将来接入需要 unionid 的接口时才写入,不推测、不伪造)。
 
-## 5. Mock Provider 与本地模拟扫码(development 专用)
+## 5. 本地模拟发码(development 专用)
 
-- 触发条件:`WECHAT_AUTH_PROVIDER=mock`(development 未显式设置时的默认值)。
-- `MockWechatProvider.create_login_qrcode` 不发网络,返回
-  `url=https://example.invalid/mock-wechat-qr/<request_id>`(前端照常渲染 canvas)。
-- **webhook 入站链路不依赖 Provider**——测试/本地模拟扫码就是对 webhook POST 一条
-  按共享 Token 签名的 SCAN 事件,走的是生产同一条代码路径:
+- development 未显式设置 `WECHAT_AUTH_PROVIDER` 时默认 mock(视为已启用,便于本地/E2E)。
+- **webhook 入站链路不依赖 Provider**——本地模拟就是对 webhook POST 一条按共享 Token
+  签名的文本消息,走的是生产同一条代码路径:
   ```bash
-  # 登录页开发环境折叠区可复制 request id
-  python -m backend.cli.simulate_wechat_scan --request-id <request_id>
+  # 登录页开发环境折叠区会显示带当前验证码的完整命令
+  python -m backend.cli.simulate_wechat_scan --code 1234
+  python -m backend.cli.simulate_wechat_scan --code 1234 --openid mock-openid-2   # 模拟另一个新用户
   ```
   该 CLI 在 `APP_ENV=production` 下拒绝运行;签名 Token 取 `WECHAT_WEBHOOK_TOKEN`
   (development 默认 `dev-webhook-token`,与后端一致时签名才通过,不绕过任何校验)。
-- pytest 用 `tests/backend/authflow.py` 的同款 helper;Playwright 用
-  `frontend/e2e/helpers.ts` 的 `approveViaWebhook`(node:crypto 计算 sha1)。
+- pytest 用 `tests/backend/authflow.py`(`post_code`、`wechat_code_login`);Playwright 用
+  `frontend/e2e/helpers.ts` 的 `sendCodeViaWebhook`(node:crypto 计算 sha1)。
 
 ## 6. 认证三态与 Production fail-fast(CLAUDE.md §7.3)
 
-| 状态 | Provider | 行为 |
-|---|---|---|
-| production + `WECHAT_AUTH_ENABLED=0` | `DisabledWechatProvider`(显式占位) | **无微信凭证可启动**;微信端点(device、claim、webhook GET/POST)统一 `503` + `{"code":"AUTH_DISABLED",...}`;密码登录/登出/me 不受影响 |
-| production + `WECHAT_AUTH_ENABLED=1` | 只能 `RealWechatQrProvider` | 缺 AppID / AppSecret / `WECHAT_WEBHOOK_TOKEN` 或 `PUBLIC_BASE_URL` 非 https → 启动抛 `AuthConfigError` fail-fast |
-| development + `WECHAT_AUTH_PROVIDER=mock` | `MockWechatProvider` | 可用(mock 视为已启用,便于本地/E2E);production 检测到 mock → fail-fast |
+| 状态 | 行为 |
+|---|---|
+| production + `WECHAT_AUTH_ENABLED=0` | **无微信凭证可启动**;微信端点(device、claim、webhook GET/POST)统一 `503` + `{"code":"AUTH_DISABLED",...}`;密码登录/登出/me 不受影响 |
+| production + `WECHAT_AUTH_ENABLED=1` | 缺 `WECHAT_OA_APP_ID` / `WECHAT_WEBHOOK_TOKEN` 或 `PUBLIC_BASE_URL` 非 https → 启动抛 `AuthConfigError` fail-fast;**AppSecret 不再是必填** |
+| development + `WECHAT_AUTH_PROVIDER=mock` | 可用;production 检测到 mock → fail-fast |
 
 `GET /api/v1/auth/methods` 返回 `{"wechat_enabled": bool}`(`private, no-store`);
-登录页据此显示"微信登录暂未开放"。冒烟:
+登录页只在 `true` 时显示验证码登录卡片。冒烟:
 `tests/backend/test_auth.py::TestProductionDisabledUvicornSmoke` 以子进程真实启动
 uvicorn(production+ENABLED=0 无凭证)验证 healthz 200、POST device 503。
 
@@ -174,17 +196,29 @@ ALLWIN_ADMIN_PASSWORD=... .venv/bin/python -m backend.cli.create_admin --usernam
 - `GET /api/v1/account` 明确返回
   `recovery: {available: false, note: "当前仅微信登录,尚未支持绑定备用恢复方式"}`,
   前端必须如实展示,不得暗示已有恢复能力。
-- 接入真实通道前,唯一恢复途径是同一微信号重新扫码登录
+- 接入真实通道前,唯一恢复途径是用同一微信号重新发码登录
   (身份键 = provider+app_id+openid)。
 
-## 9. 外部能力验证状态
+## 9. 每日精选授权(后台操作,CLAUDE.md §8.2)
+
+两种方式并存,任一有效即可看;全程在后台「精选授权」页操作,每次开通/撤销写审计日志;
+不再做兑换码(站长 2026-10 决定)。
+
+- **按单场**:`reco_access_grants`(用户 + 单条精选)。
+- **按时段**:`reco_access_periods`(用户 + 起止日期,北京时间自然日,含首尾;后台有
+  「一周 / 一个月 / 自定义」快捷选项,最长 366 天)。口径(站长定):
+  1. 只覆盖**发布时间**(`reco_slips.published_at` 换算北京时间日期)落在期内的精选;
+  2. 时段自然结束后,期内发布的精选**仍然能看**;
+  3. 提前撤销 = 期内全部收回。
+- 用户在账户中心能看到自己的时段与单场授权记录。
+
+## 10. 外部能力验证状态
 
 | 能力 | 状态 |
 |---|---|
-| webhook 校验链(签名/时间窗/nonce 防重放/XML 解析/幂等批准/被动回复) | 已验证(pytest,签名 fixture 离线) |
-| 扫码登录全流程(创建→webhook 批准→原子领取→会话/CSRF/撤销) | 已验证(pytest `tests/backend/test_auth.py` + Playwright `frontend/e2e/device-login.spec.ts`、`auth.spec.ts`) |
-| access_token 缓存(单次获取/临期刷新/失效重取一次/48001 结构化) | 已验证(pytest,httpx.MockTransport 离线) |
-| 认证三态(production+ENABLED=0 无凭证启动 / AUTH_DISABLED / fail-fast 含 webhook Token) | 已验证(pytest + uvicorn 子进程冒烟) |
-| 真实 access_token 获取、qrcode/create、微信服务器真实回调、真机扫码 | **UNVERIFIED**(无真实凭证;上线时按 §1 配置后验证) |
-| 公众号后台服务器配置 URL/Token 握手 | **UNVERIFIED**(同上;GET 握手代码已备) |
-| 年审过期 48001 的真实表现 | **UNVERIFIED**(代码按结构化错误处理,fixture 已覆盖) |
+| webhook 校验链(签名/时间窗/nonce 防重放/XML 解析/验证码匹配/幂等批准/被动回复/发错限次) | 已验证(pytest,签名 fixture 离线) |
+| 发码登录全流程(取码→webhook 批准→原子领取→会话/CSRF/撤销;新用户起昵称) | 已验证(pytest `tests/backend/test_auth.py` + Playwright `frontend/e2e/device-login.spec.ts`、`auth.spec.ts`) |
+| 时段授权(覆盖口径/到期仍可看/撤销收回/与单场并存/审计) | 已验证(pytest `tests/backend/test_reco_access_periods.py`) |
+| 认证三态(production+ENABLED=0 无凭证启动 / AUTH_DISABLED / fail-fast) | 已验证(pytest + uvicorn 子进程冒烟) |
+| 开发者平台消息推送配置的 GET 握手 | **UNVERIFIED**(代码已备;上线时按 §1 配置后验证) |
+| 微信服务器真实推送、真机发码登录 | **UNVERIFIED**(同上) |

@@ -102,7 +102,7 @@
      "auth"
     ],
     "summary": "Create Device Login",
-    "description": "浏览器发起扫码登录:创建一次性 request,并向微信申请带参二维码\n(scene_str = 公开 request id;secret 只回给浏览器,绝不进二维码)。",
+    "description": "浏览器发起登录:创建一次性 request,返回 4 位验证码(给用户发到公众号)与 secret\n(只留在浏览器内存,领取会话时必须带上;验证码本身不足以领取会话)。",
     "operationId": "create_device_login_api_v1_auth_wechat_device_post",
     "responses": {
      "200": {
@@ -468,7 +468,7 @@
      "auth"
     ],
     "summary": "Wechat Webhook Events",
-    "description": "微信服务器推送的事件入口。登录相关:SCAN / subscribe(带 qrscene_ 场景值)。\n\n安全:共享 Token 签名 + 时间戳 ±300s + nonce 一次性(重放静默回 success,\n因为微信 5 秒未收到应答会原样重试,不能把重试当攻击)。5 秒内必须应答,\n处理只涉本地 DB,无外呼。",
+    "description": "微信服务器推送的消息/事件入口。登录:用户发来 4 位验证码(文本消息)。\n\n安全:共享 Token 签名 + 时间戳 ±300s + nonce 一次性(重放静默回 success,\n因为微信 5 秒未收到应答会原样重试,不能把重试当攻击)。5 秒内必须应答,\n处理只涉本地 DB,无外呼。",
     "operationId": "wechat_webhook_events_api_v1_auth_wechat_webhook_post",
     "parameters": [
      {
@@ -2656,6 +2656,88 @@
     }
    }
   },
+  "/api/v1/account/profile": {
+   "post": {
+    "tags": [
+     "member"
+    ],
+    "summary": "Update Profile",
+    "description": "设置或修改昵称(2–16 个字,允许重名;昵称不是身份凭证,后台以用户编号为准)。",
+    "operationId": "update_profile_api_v1_account_profile_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProfileBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad Request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "Forbidden",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/account/sessions/revoke": {
    "post": {
     "tags": [
@@ -4436,6 +4518,295 @@
       "schema": {
        "type": "string",
        "title": "Grant Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RecoAccessRevokeBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/reco/access-periods": {
+   "post": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Grant Reco Period",
+    "description": "按 用户 + 起止日期(北京时间,含首尾)开通:覆盖发布日期落在其内的精选。",
+    "operationId": "admin_grant_reco_period_api_v1_admin_reco_access_periods_post",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RecoAccessPeriodBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoAccessPeriodDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   },
+   "get": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin List Reco Periods",
+    "operationId": "admin_list_reco_periods_api_v1_admin_reco_access_periods_get",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "Status"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminRecoAccessPeriodsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
+  "/api/v1/admin/reco/access-periods/{period_id}/revoke": {
+   "post": {
+    "tags": [
+     "reco",
+     "admin"
+    ],
+    "summary": "Admin Revoke Reco Period",
+    "description": "提前撤销 = 该时段覆盖的精选全部收回(与撤销单场授权一致)。",
+    "operationId": "admin_revoke_reco_period_api_v1_admin_reco_access_periods__period_id__revoke_post",
+    "parameters": [
+     {
+      "name": "period_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Period Id"
       }
      }
     ],
@@ -6686,6 +7057,27 @@
     ],
     "title": "AdminRecoAccessGrantsResponse"
    },
+   "AdminRecoAccessPeriodsResponse": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "periods": {
+      "items": {
+       "$ref": "#/components/schemas/RecoAccessPeriodDTO"
+      },
+      "type": "array",
+      "title": "Periods"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "periods"
+    ],
+    "title": "AdminRecoAccessPeriodsResponse"
+   },
    "AdminRecoLegDTO": {
     "properties": {
      "id": {
@@ -6987,6 +7379,17 @@
      "display_name": {
       "type": "string",
       "title": "Display Name"
+     },
+     "short_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Short Code"
      },
      "role": {
       "type": "string",
@@ -7698,9 +8101,9 @@
       "type": "string",
       "title": "Secret"
      },
-     "qr_url": {
+     "login_code": {
       "type": "string",
-      "title": "Qr Url"
+      "title": "Login Code"
      },
      "expires_at": {
       "type": "string",
@@ -7711,7 +8114,7 @@
     "required": [
      "request_id",
      "secret",
-     "qr_url",
+     "login_code",
      "expires_at"
     ],
     "title": "DeviceLoginCreatedDTO"
@@ -13841,6 +14244,22 @@
      "role": {
       "type": "string",
       "title": "Role"
+     },
+     "short_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Short Code"
+     },
+     "nickname_set": {
+      "type": "boolean",
+      "title": "Nickname Set",
+      "default": false
      }
     },
     "type": "object",
@@ -14609,6 +15028,23 @@
     ],
     "title": "ProductsResponse"
    },
+   "ProfileBody": {
+    "properties": {
+     "display_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Display Name"
+     }
+    },
+    "type": "object",
+    "title": "ProfileBody"
+   },
    "ProfileWindowN": {
     "type": "integer",
     "enum": [
@@ -14758,6 +15194,28 @@
      "updated_at": {
       "type": "string",
       "title": "Updated At"
+     },
+     "user_display_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Display Name"
+     },
+     "user_short_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Short Code"
      }
     },
     "type": "object",
@@ -14774,6 +15232,153 @@
      "updated_at"
     ],
     "title": "RecoAccessGrantDTO"
+   },
+   "RecoAccessPeriodBody": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "starts_on": {
+      "type": "string",
+      "title": "Starts On"
+     },
+     "ends_on": {
+      "type": "string",
+      "title": "Ends On"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "starts_on",
+     "ends_on"
+    ],
+    "title": "RecoAccessPeriodBody"
+   },
+   "RecoAccessPeriodDTO": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "starts_on": {
+      "type": "string",
+      "title": "Starts On"
+     },
+     "ends_on": {
+      "type": "string",
+      "title": "Ends On"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "active",
+       "revoked"
+      ],
+      "title": "Status"
+     },
+     "granted_at": {
+      "type": "string",
+      "title": "Granted At"
+     },
+     "granted_by": {
+      "type": "string",
+      "title": "Granted By"
+     },
+     "revoked_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Revoked At"
+     },
+     "revoked_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Revoked By"
+     },
+     "note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Note"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "title": "Updated At"
+     },
+     "user_display_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Display Name"
+     },
+     "user_short_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Short Code"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "user_id",
+     "starts_on",
+     "ends_on",
+     "status",
+     "granted_at",
+     "granted_by",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "RecoAccessPeriodDTO",
+    "description": "每日精选时段授权(2026-10):覆盖发布日期(北京时间)落在 [starts_on, ends_on] 内的精选;\n自然到期后仍可看,提前撤销则全部收回。"
    },
    "RecoAccessRevokeBody": {
     "properties": {
@@ -15697,6 +16302,14 @@
       },
       "type": "array",
       "title": "Grants"
+     },
+     "periods": {
+      "items": {
+       "$ref": "#/components/schemas/RecoAccessPeriodDTO"
+      },
+      "type": "array",
+      "title": "Periods",
+      "default": []
      }
     },
     "type": "object",
@@ -15704,7 +16317,7 @@
      "grants"
     ],
     "title": "RecoMyAccessResponse",
-    "description": "个人\"每日精选权限查询\"(CLAUDE.md §8.1 允许要求登录的账户类个人\n功能之一):只含当前用户自己的授权记录。"
+    "description": "个人\"每日精选权限查询\"(CLAUDE.md §8.1 允许要求登录的账户类个人\n功能之一):只含当前用户自己的授权记录(单场 + 时段)。"
    },
    "RecoOddsOptionDTO": {
     "properties": {

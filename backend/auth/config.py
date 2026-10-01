@@ -32,6 +32,12 @@ class AuthSettings:
         return self.app_env == "production"
 
     @property
+    def identity_app_id(self) -> str:
+        """openid 只在同一个公众号内唯一,身份键 = (wechat_oa, 公众号 AppID, openid)。
+        development 的 Mock 固定用 "mock-app"(与既有测试/本地数据一致)。"""
+        return "mock-app" if self.wechat_provider_kind == "mock" else self.wechat_app_id
+
+    @property
     def wechat_login_available(self) -> bool:
         """认证三态(CLAUDE.md §7.3):mock(仅 development)视为可用,便于本地 E2E;
         real 必须显式 WECHAT_AUTH_ENABLED=1,否则微信端点返回 AUTH_DISABLED。"""
@@ -63,11 +69,12 @@ def load_auth_settings(env=None) -> AuthSettings:
                 f"{provider_kind!r})——Mock 只允许 development,拒绝启动。"
             )
         if enabled:
+            # 公众号发码登录(2026-10)只需要消息推送:回调 Token 验签 + AppID 作身份命名空间;
+            # 不再调用带参数二维码接口,AppSecret 不是必需项(配了也只用于将来的其它接口)
             missing = [
                 k
                 for k, v in {
                     "WECHAT_OA_APP_ID": app_id,
-                    "WECHAT_OA_APP_SECRET": app_secret,
                     "WECHAT_WEBHOOK_TOKEN": webhook_token,
                 }.items()
                 if not v

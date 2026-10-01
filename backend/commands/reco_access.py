@@ -39,9 +39,13 @@ _GRANT_COLUMNS = (
     " g.granted_at AS granted_at, g.granted_by AS granted_by,"
     " g.revoked_at AS revoked_at, g.revoked_by AS revoked_by, g.note AS note,"
     " g.created_at AS created_at, g.updated_at AS updated_at,"
-    " rs.title AS slip_title, rs.slip_date AS slip_date"
+    " rs.title AS slip_title, rs.slip_date AS slip_date,"
+    " u.display_name AS user_display_name, u.short_code AS user_short_code"
 )
-_GRANT_FROM = "FROM reco_access_grants g LEFT JOIN reco_slips rs ON rs.id = g.slip_id"
+_GRANT_FROM = (
+    "FROM reco_access_grants g LEFT JOIN reco_slips rs ON rs.id = g.slip_id"
+    " LEFT JOIN users u ON u.id = g.user_id"
+)
 
 
 def grant_access(
@@ -119,11 +123,19 @@ def revoke_access(
 
 
 def has_access(conn: sqlite3.Connection, user_id: str, slip_id: str) -> bool:
+    """单场授权(active)或时段授权(未撤销且覆盖该单的发布日期)任一成立即可看。"""
     row = conn.execute(
         "SELECT 1 FROM reco_access_grants WHERE user_id=? AND slip_id=? AND status='active'",
         (user_id, slip_id),
     ).fetchone()
-    return row is not None
+    if row is not None:
+        return True
+    slip = conn.execute(
+        "SELECT published_at, board FROM reco_slips WHERE id=?", (slip_id,)
+    ).fetchone()
+    if slip is None or slip["board"] != "daily_pick":
+        return False
+    return covered_by_periods(active_periods(conn, user_id), slip["published_at"])
 
 
 def get_grant(conn: sqlite3.Connection, grant_id: str) -> dict | None:
@@ -159,8 +171,9 @@ def list_grants(
     where = []
     params: list = []
     if user_id:
-        where.append("g.user_id = ?")
-        params.append(user_id)
+        # 后台按用户编号或内部用户 ID 都能筛(2026-10)
+        where.append("(g.user_id = ? OR u.short_code = upper(?))")
+        params.extend([user_id, user_id])
     if slip_id:
         where.append("g.slip_id = ?")
         params.append(slip_id)
@@ -175,6 +188,156 @@ def list_grants(
     rows = conn.execute(
         f"SELECT {_GRANT_COLUMNS} {_GRANT_FROM}{where_sql}"
         " ORDER BY g.created_at DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset),
+    ).fetchall()
+    return total, [dict(r) for r in rows]
+
+
+# ── 时段授权(2026-10,经站长批准)──────────────────────────────
+# 后台按 用户 + 起止日期(北京时间自然日,含首尾)开通。口径:
+#   覆盖 = 发布时间(reco_slips.published_at 换算北京时间日期)落在 [starts_on, ends_on] 内的精选;
+#   自然到期后这些精选仍可看(判定看"精选何时发布",不看"现在是何时");
+#   提前撤销 = 全部收回(与撤销单场授权一致)。
+# 与单场授权并存,任一有效即可看(has_access)。
+
+import re as _re
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+_BJ = _tz(_td(hours=8))
+_DATE_RE = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MAX_PERIOD_DAYS = 366
+
+
+def published_bj_date(published_at: str | None) -> str | None:
+    """UTC ISO(...Z)→ 北京时间 YYYY-MM-DD;没有发布时间(草稿)返回 None。"""
+    if not published_at:
+        return None
+    t = _dt.strptime(published_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc)
+    return t.astimezone(_BJ).strftime("%Y-%m-%d")
+
+
+def period_covers(starts_on: str, ends_on: str, published_at: str | None) -> bool:
+    d = published_bj_date(published_at)
+    return d is not None and starts_on <= d <= ends_on
+
+
+def _check_date(s: str, label: str) -> str:
+    if not isinstance(s, str) or not _DATE_RE.match(s):
+        raise RecoAccessError(f"{label}格式应为 YYYY-MM-DD: {s!r}")
+    try:
+        _dt.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        raise RecoAccessError(f"{label}不是有效日期: {s!r}")
+    return s
+
+
+def grant_period(
+    conn: sqlite3.Connection,
+    user_id: str,
+    starts_on: str,
+    ends_on: str,
+    *,
+    actor: str,
+    note: str | None = None,
+) -> str:
+    _check_date(starts_on, "开始日期")
+    _check_date(ends_on, "结束日期")
+    if ends_on < starts_on:
+        raise RecoAccessError("结束日期不能早于开始日期")
+    span = (_dt.strptime(ends_on, "%Y-%m-%d") - _dt.strptime(starts_on, "%Y-%m-%d")).days + 1
+    if span > MAX_PERIOD_DAYS:
+        raise RecoAccessError(f"单次开通不超过 {MAX_PERIOD_DAYS} 天")
+    if conn.execute("SELECT 1 FROM users WHERE id=?", (user_id,)).fetchone() is None:
+        raise RecoAccessError(f"用户不存在: {user_id}")
+    now = utc_now_iso()
+    period_id = new_uuid()
+    conn.execute(
+        "INSERT INTO reco_access_periods"
+        " (id, user_id, starts_on, ends_on, status, granted_at, granted_by, note, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+        (period_id, user_id, starts_on, ends_on, now, actor, note, now, now),
+    )
+    write_audit(
+        conn, "reco_access.period_grant", actor,
+        target_type="reco_access_period", target_id=period_id,
+        detail={"user_id": user_id, "starts_on": starts_on, "ends_on": ends_on, "days": span, "note": note},
+    )
+    return period_id
+
+
+def revoke_period(
+    conn: sqlite3.Connection,
+    period_id: str,
+    *,
+    actor: str,
+    reason: str | None = None,
+) -> None:
+    row = conn.execute("SELECT * FROM reco_access_periods WHERE id=?", (period_id,)).fetchone()
+    if row is None:
+        raise RecoAccessError(f"时段授权不存在: {period_id}")
+    if row["status"] != "active":
+        raise RecoAccessError(f"时段授权当前状态为 {row['status']},不是 active,无法撤销")
+    now = utc_now_iso()
+    conn.execute(
+        "UPDATE reco_access_periods SET status='revoked', revoked_at=?, revoked_by=?, updated_at=? WHERE id=?",
+        (now, actor, now, period_id),
+    )
+    write_audit(
+        conn, "reco_access.period_revoke", actor,
+        target_type="reco_access_period", target_id=period_id,
+        detail={"user_id": row["user_id"], "starts_on": row["starts_on"], "ends_on": row["ends_on"], "reason": reason},
+    )
+
+
+def active_periods(conn: sqlite3.Connection, user_id: str) -> list[tuple[str, str]]:
+    """该用户全部未撤销的时段 [(starts_on, ends_on)](含已自然到期的——到期不收回)。"""
+    return [
+        (r[0], r[1])
+        for r in conn.execute(
+            "SELECT starts_on, ends_on FROM reco_access_periods WHERE user_id=? AND status='active'",
+            (user_id,),
+        ).fetchall()
+    ]
+
+
+def covered_by_periods(periods: list[tuple[str, str]], published_at: str | None) -> bool:
+    return any(period_covers(s, e, published_at) for s, e in periods)
+
+
+def get_period(conn: sqlite3.Connection, period_id: str) -> dict | None:
+    row = conn.execute("SELECT * FROM reco_access_periods WHERE id=?", (period_id,)).fetchone()
+    return dict(row) if row is not None else None
+
+
+def list_user_periods(conn: sqlite3.Connection, user_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM reco_access_periods WHERE user_id=? ORDER BY starts_on DESC, created_at DESC",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_periods(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str = "",
+    status: str = "",
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[int, list[dict]]:
+    where, params = [], []
+    if user_id:
+        where.append("p.user_id = ?")
+        params.append(user_id)
+    if status:
+        where.append("p.status = ?")
+        params.append(status)
+    where_sql = f" WHERE {' AND '.join(where)}" if where else ""
+    total = conn.execute(f"SELECT COUNT(*) FROM reco_access_periods p{where_sql}", params).fetchone()[0]
+    rows = conn.execute(
+        "SELECT p.*, u.display_name AS user_display_name, u.short_code AS user_short_code"
+        f" FROM reco_access_periods p LEFT JOIN users u ON u.id = p.user_id{where_sql}"
+        " ORDER BY p.created_at DESC LIMIT ? OFFSET ?",
         (*params, limit, offset),
     ).fetchall()
     return total, [dict(r) for r in rows]

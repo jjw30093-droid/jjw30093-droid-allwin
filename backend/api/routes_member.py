@@ -1,8 +1,11 @@
 """登录用户端点:收藏、账户。全部 private, no-store。"""
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
+from backend.auth import service
 from backend.db.connections import tx
 from backend.db.util import utc_now_iso
 
@@ -99,7 +102,13 @@ def account(
         (ctx.session_id, ctx.user_id, utc_now_iso()),
     ).fetchall()
     return {
-        "user": {"id": ctx.user_id, "display_name": ctx.display_name, "role": ctx.role},
+        "user": {
+            "id": ctx.user_id,
+            "display_name": ctx.display_name,
+            "role": ctx.role,
+            "short_code": ctx.short_code,
+            "nickname_set": ctx.nickname_set,
+        },
         "plan": ctx.plan_id,
         "entitlements": sorted(ctx.entitlements),
         "identities": [dict(r) for r in identities],
@@ -108,6 +117,30 @@ def account(
         # MVP 未接短信/邮件,账号恢复能力如实说明(CLAUDE.md §7.4)
         "recovery": {"available": False, "note": "当前仅微信登录,尚未支持绑定备用恢复方式"},
     }
+
+
+class ProfileBody(BaseModel):
+    # None = 首次登录跳过昵称(保留默认"球迷 + 编号");有值 = 设置/修改昵称
+    display_name: Optional[str] = None
+
+
+@router.post("/account/profile", response_model=OkDTO)
+def update_profile(
+    body: ProfileBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_csrf),
+    conn=Depends(platform_rw),
+):
+    """设置或修改昵称(2–16 个字,允许重名;昵称不是身份凭证,后台以用户编号为准)。"""
+    _no_store(response)
+    name = None
+    if body.display_name is not None:
+        name = service.normalize_nickname(body.display_name)
+        if name is None:
+            raise HTTPException(status_code=422, detail="昵称需为 2–16 个字")
+    with tx(conn):
+        service.set_profile(conn, ctx.user_id, name)
+    return {"status": "ok"}
 
 
 class RevokeSessionBody(BaseModel):

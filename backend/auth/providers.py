@@ -225,6 +225,10 @@ def build_provider(settings: AuthSettings):
             # 三态之一:production/development + real + ENABLED=0
             # → 无凭证可启动,不得尝试实例化真实 Provider(CLAUDE.md §7.3)
             return DisabledWechatProvider()
+        if not settings.wechat_app_secret:
+            # 公众号发码登录不调用任何公众号接口,只需要回调 Token;没配 AppSecret 时
+            # 不实例化真实接口客户端(登录可用性由 settings.wechat_login_available 决定)
+            return DisabledWechatProvider()
         return RealWechatQrProvider(settings.wechat_app_id, settings.wechat_app_secret)
     if settings.is_production:
         raise AuthConfigError("production 禁止实例化 MockWechatProvider(fail-fast)")

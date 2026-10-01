@@ -1,8 +1,9 @@
-"""认证安全测试(带参数二维码 + webhook 路线,2026-08 起):
+"""认证安全测试(公众号发码登录,2026-10 起;此前为带参数二维码路线):
 
-webhook 签名/时间窗/nonce 防重放、扫码批准(SCAN + subscribe)、Device Login
-一次性 secret/原子领取、CSRF、production fail-fast(含 WECHAT_WEBHOOK_TOKEN)、
-cookie 属性、no-store、限流、access_token 缓存(httpx.MockTransport 离线)。
+webhook 签名/时间窗/nonce 防重放、验证码批准(文本消息)、关注欢迎语、非验证码回复、
+发错次数上限、等待中验证码互不重复、Device Login 一次性 secret/原子领取、CSRF、
+production fail-fast(含 WECHAT_WEBHOOK_TOKEN,不再要求 AppSecret)、cookie 属性、
+no-store、限流、access_token 缓存(httpx.MockTransport 离线;登录不再调用,保留供将来接口)。
 """
 
 import time
@@ -14,9 +15,11 @@ from backend.auth.config import AuthConfigError, load_auth_settings
 
 from .authflow import (
     DEV_WEBHOOK_TOKEN,
-    post_scan,
-    scan_event_xml,
+    event_xml,
+    post_code,
+    post_webhook,
     signed_webhook_params,
+    text_message_xml,
     wechat_scan_login,
 )
 from .conftest import BASE_ENV, make_settings
@@ -48,6 +51,23 @@ def _create_device(client, ip):
     return r.json()
 
 
+def _claim(client, req):
+    return client.post(
+        f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
+        json={"secret": req["secret"]},
+    )
+
+
+def _count_users(data_dir) -> int:
+    from backend.db.connections import connect_ro
+
+    conn = connect_ro("platform")
+    try:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+
+
 # ── webhook 校验层 ─────────────────────────────────────────
 
 class TestWebhookVerification:
@@ -72,14 +92,10 @@ class TestWebhookVerification:
     def test_post_bad_signature_403(self, client, fresh_ip):
         req = _create_device(client, fresh_ip)
         params = signed_webhook_params(token="wrong-token")
-        r = post_scan(client, req["request_id"], "mock-openid-a", params=params)
+        r = post_code(client, req["login_code"], "mock-openid-a", params=params)
         assert r.status_code == 403
         # 未被批准:claim 仍 pending
-        r2 = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        assert r2.json()["status"] == "pending"
+        assert _claim(client, req).json()["status"] == "pending"
 
     def test_post_stale_timestamp_403(self, client, fresh_ip):
         from backend.auth.wechat_webhook import compute_signature
@@ -92,18 +108,18 @@ class TestWebhookVerification:
             "timestamp": stale_ts,
             "nonce": nonce,
         }
-        r = post_scan(client, req["request_id"], "mock-openid-a", params=params)
+        r = post_code(client, req["login_code"], "mock-openid-a", params=params)
         assert r.status_code == 403
 
     def test_nonce_replay_returns_success_without_side_effects(self, client, fresh_ip):
         """微信同一请求重试(同 nonce)→ 200 success,不二次处理。"""
         req = _create_device(client, fresh_ip)
         params = signed_webhook_params()
-        r1 = post_scan(client, req["request_id"], "mock-openid-a", params=params)
+        r1 = post_code(client, req["login_code"], "mock-openid-a", params=params)
         assert r1.status_code == 200
         assert "登录成功" in r1.text
         # 同一签名整体重放
-        r2 = post_scan(client, req["request_id"], "mock-openid-a", params=params)
+        r2 = post_code(client, req["login_code"], "mock-openid-a", params=params)
         assert r2.status_code == 200
         assert r2.text == "success"
 
@@ -126,61 +142,67 @@ class TestWebhookVerification:
         )
         assert r.status_code == 400
 
-    def test_non_login_event_acknowledged(self, client):
-        """无场景值的普通事件(如取关)→ success,零副作用。"""
-        xml = (
-            "<xml><ToUserName><![CDATA[gh_x]]></ToUserName>"
-            "<FromUserName><![CDATA[openid-x]]></FromUserName>"
-            "<CreateTime>123</CreateTime><MsgType><![CDATA[event]]></MsgType>"
-            "<Event><![CDATA[unsubscribe]]></Event></xml>"
-        )
-        r = client.post(
-            "/api/v1/auth/wechat/webhook",
-            params=signed_webhook_params(),
-            content=xml,
-            headers={"Content-Type": "application/xml"},
-        )
+    def test_unsubscribe_event_acknowledged(self, client):
+        """取消关注等事件 → success,不回复、零副作用。"""
+        r = post_webhook(client, event_xml("unsubscribe", "openid-x"))
         assert r.status_code == 200
         assert r.text == "success"
 
 
-# ── 扫码登录全流程 ─────────────────────────────────────────
+# ── 发码登录全流程 ─────────────────────────────────────────
 
-class TestScanLogin:
-    def test_full_scan_login_flow(self, client, fresh_ip):
+class TestCodeLogin:
+    def test_full_code_login_flow(self, client, fresh_ip):
         wechat_scan_login(client, ip=fresh_ip)
         body = client.get("/api/v1/me").json()
         assert body["authenticated"] is True
         assert body["plan"] == "member"     # 三段可见性:登录即 member 基线
         assert "prediction:top_probability" in body["entitlements"]
         assert "prediction:full_wdl" in body["entitlements"]
-        # 0010:战绩归档登录即可(reco:track_record 属 member 基线);
-        # 赛前推荐内容(reco:daily)仍是付费专属
         assert "reco:track_record" in body["entitlements"]
         assert "reco:daily" not in body["entitlements"]
 
-    def test_qr_url_contains_no_secret(self, client, fresh_ip):
+    def test_create_returns_4_digit_code_and_no_qr(self, client, fresh_ip):
         req = _create_device(client, fresh_ip)
-        assert req["secret"] not in req["qr_url"]
-        assert req["qr_url"]           # mock provider 也必须给出可渲染内容
-        assert req["request_id"] in req["qr_url"]
+        assert len(req["login_code"]) == 4 and req["login_code"].isdigit()
+        assert req["login_code"] not in req["secret"] or len(req["secret"]) > 20
+        assert "qr_url" not in req
 
-    def test_subscribe_event_with_qrscene_prefix_approves(self, client, fresh_ip):
-        """未关注用户扫码后关注:EventKey=qrscene_<scene_str> 同样批准。"""
+    def test_wrong_code_polite_reply_no_user_created(self, client, fresh_ip, data_dir):
         req = _create_device(client, fresh_ip)
-        r = post_scan(client, req["request_id"], "mock-openid-new", event="subscribe")
+        wrong = f"{(int(req['login_code']) + 1) % 10000:04d}"
+        before = _count_users(data_dir)
+        r = post_code(client, wrong, "mock-openid-wrong")
         assert r.status_code == 200
+        assert "验证码无效或已过期" in r.text
+        assert _count_users(data_dir) == before          # 发错码不会凭空产生账号
+        assert _claim(client, req).json()["status"] == "pending"
+
+    @pytest.mark.parametrize("content", ["你好", "12345", "abcd", "登录"])
+    def test_non_code_text_replies_code_error(self, client, content):
+        r = post_code(client, content, "mock-openid-chat")
+        assert r.status_code == 200
+        assert "验证码错误，请重新输入" in r.text
+
+    def test_image_message_replies_code_error(self, client):
+        r = post_webhook(client, text_message_xml("", "mock-openid-img", msg_type="image"))
+        assert r.status_code == 200
+        assert "验证码错误，请重新输入" in r.text
+
+    def test_subscribe_event_replies_welcome_without_login(self, client, fresh_ip):
+        req = _create_device(client, fresh_ip)
+        r = post_webhook(client, event_xml("subscribe", "mock-openid-new"))
+        assert r.status_code == 200
+        assert "4 位验证码" in r.text
+        assert _claim(client, req).json()["status"] == "pending"
+
+    def test_fullwidth_digits_and_spaces_accepted(self, client, fresh_ip):
+        req = _create_device(client, fresh_ip)
+        code = req["login_code"]
+        fullwidth = " ".join(chr(0xFF10 + int(ch)) for ch in code)   # "１ ２ ３ ４"
+        r = post_code(client, fullwidth, "mock-openid-fw")
         assert "登录成功" in r.text
-        r2 = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        assert r2.json()["status"] == "claimed"
-
-    def test_unknown_scene_str_polite_reply_no_side_effect(self, client):
-        r = post_scan(client, "no-such-request-id", "mock-openid-a")
-        assert r.status_code == 200
-        assert "无效" in r.text
+        assert _claim(client, req).json()["status"] == "claimed"
 
     def test_expired_request_rejected(self, client, fresh_ip, data_dir):
         from backend.db.connections import connect_rw
@@ -192,23 +214,64 @@ class TestScanLogin:
             (req["request_id"],),
         )
         conn.close()
-        r = post_scan(client, req["request_id"], "mock-openid-a")
+        r = post_code(client, req["login_code"], "mock-openid-a")
         assert r.status_code == 200
-        assert "过期" in r.text
+        assert "无效或已过期" in r.text
 
-    def test_rescan_after_approve_is_idempotent(self, client, fresh_ip):
+    def test_code_single_use(self, client, fresh_ip):
         req = _create_device(client, fresh_ip)
-        r1 = post_scan(client, req["request_id"], "mock-openid-a")
+        r1 = post_code(client, req["login_code"], "mock-openid-a")
         assert "登录成功" in r1.text
-        r2 = post_scan(client, req["request_id"], "mock-openid-b")   # 他人再扫
-        assert "已确认" in r2.text
+        r2 = post_code(client, req["login_code"], "mock-openid-b")   # 别人再发同一个码
+        assert "无效或已过期" in r2.text
         # 批准者不变:领取后会话属于第一个 openid 的用户
-        client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        me = client.get("/api/v1/me").json()
-        assert me["authenticated"] is True
+        _claim(client, req)
+        assert client.get("/api/v1/me").json()["authenticated"] is True
+
+    def test_pending_codes_are_unique(self, client, data_dir):
+        codes = []
+        for i in range(40):
+            codes.append(_create_device(client, f"198.18.{i // 9}.{i % 9 + 1}")["login_code"])
+        assert len(set(codes)) == len(codes)
+
+    def test_expired_pending_code_is_released(self, data_dir):
+        """过期但仍是 pending 的请求在下一次创建时被标 expired,不再占着验证码。"""
+        from backend.auth import service
+        from backend.db.connections import connect_rw, tx
+
+        conn = connect_rw("platform")
+        try:
+            with tx(conn):
+                old = service.create_device_request(conn, ttl_seconds=300)
+            conn.execute(
+                "UPDATE device_login_requests SET expires_at='2020-01-01T00:00:00Z' WHERE id=?",
+                (old["request_id"],),
+            )
+            with tx(conn):
+                service.create_device_request(conn, ttl_seconds=300)
+            status = conn.execute(
+                "SELECT status FROM device_login_requests WHERE id=?", (old["request_id"],)
+            ).fetchone()[0]
+            assert status == "expired"
+        finally:
+            conn.close()
+
+    def test_wrong_code_attempts_capped_but_success_not_counted(self, client, fresh_ip):
+        from backend.api.routes_auth import CODE_FAILURES_PER_WINDOW
+
+        openid = f"mock-openid-guess-{fresh_ip}"
+        req = _create_device(client, fresh_ip)
+        wrong = f"{(int(req['login_code']) + 5000) % 10000:04d}"
+        for _ in range(CODE_FAILURES_PER_WINDOW):
+            assert "无效或已过期" in post_code(client, wrong, openid).text
+        # 达到上限:连正确的码也先挡住
+        assert "尝试次数过多" in post_code(client, req["login_code"], openid).text
+        assert _claim(client, req).json()["status"] == "pending"
+        # 另一个微信号不受影响;正常登录多次也不触发上限(每次换 IP,避开创建请求的 IP 限流)
+        other = f"mock-openid-ok-{fresh_ip}"
+        for i in range(CODE_FAILURES_PER_WINDOW + 2):
+            req2 = _create_device(client, f"198.19.{i}.{abs(hash(fresh_ip)) % 250 + 1}")
+            assert "登录成功" in post_code(client, req2["login_code"], other).text
 
     def test_same_openid_reuses_same_user(self, client, fresh_ip, data_dir):
         wechat_scan_login(client, openid="mock-openid-stable", ip=fresh_ip)
@@ -240,12 +303,53 @@ class TestScanLogin:
         assert r1.headers["cache-control"] == "private, no-store"
 
 
-# ── Device Login 一次性 secret / 原子领取(骨架保留) ───────
+# ── 新用户:编号与昵称 ─────────────────────────────────────
+
+class TestNewUserProfile:
+    def _csrf(self, client):
+        return {**ORIGIN, "X-CSRF-Token": client.cookies.get("allwin_csrf")}
+
+    def test_new_user_gets_short_code_default_name_and_needs_nickname(self, client, fresh_ip):
+        wechat_scan_login(client, openid=f"mock-openid-profile-{fresh_ip}", ip=fresh_ip)
+        u = client.get("/api/v1/me").json()["user"]
+        assert len(u["short_code"]) == 6 and u["short_code"] == u["short_code"].upper()
+        assert u["display_name"] == f"球迷 {u['short_code']}"
+        assert u["nickname_set"] is False
+
+    def test_set_nickname(self, client, fresh_ip):
+        wechat_scan_login(client, openid=f"mock-openid-nick-{fresh_ip}", ip=fresh_ip)
+        r = client.post("/api/v1/account/profile", json={"display_name": "  老 球迷  "}, headers=self._csrf(client))
+        assert r.status_code == 200
+        u = client.get("/api/v1/me").json()["user"]
+        assert u["display_name"] == "老 球迷"
+        assert u["nickname_set"] is True
+
+    def test_skip_nickname_keeps_default(self, client, fresh_ip):
+        wechat_scan_login(client, openid=f"mock-openid-skip-{fresh_ip}", ip=fresh_ip)
+        name = client.get("/api/v1/me").json()["user"]["display_name"]
+        r = client.post("/api/v1/account/profile", json={}, headers=self._csrf(client))
+        assert r.status_code == 200
+        u = client.get("/api/v1/me").json()["user"]
+        assert u["display_name"] == name and u["nickname_set"] is True
+
+    @pytest.mark.parametrize("bad", ["a", "x" * 17, "  ", "ab\u0007c"])
+    def test_invalid_nickname_422(self, client, fresh_ip, bad):
+        wechat_scan_login(client, openid=f"mock-openid-bad-{fresh_ip}", ip=fresh_ip)
+        r = client.post("/api/v1/account/profile", json={"display_name": bad}, headers=self._csrf(client))
+        assert r.status_code == 422
+
+    def test_profile_requires_login_and_csrf(self, client, fresh_ip):
+        assert client.post("/api/v1/account/profile", json={}, headers=ORIGIN).status_code == 401
+        wechat_scan_login(client, openid=f"mock-openid-csrf2-{fresh_ip}", ip=fresh_ip)
+        assert client.post("/api/v1/account/profile", json={}, headers=ORIGIN).status_code == 403
+
+
+# ── Device Login 一次性 secret / 原子领取 ────────────────
 
 class TestDeviceLogin:
     def _approve(self, client, req):
-        """模拟微信服务器投递扫码事件(scene_str 只含公开 request_id)。"""
-        r = post_scan(client, req["request_id"], "mock-openid-device")
+        """模拟用户把验证码发给公众号。"""
+        r = post_code(client, req["login_code"], "mock-openid-device")
         assert r.status_code == 200
         assert "登录成功" in r.text
         # 批准动作不给任何一方种网站会话 cookie
@@ -254,16 +358,9 @@ class TestDeviceLogin:
     def test_full_device_flow(self, client, fresh_ip):
         req = _create_device(client, fresh_ip)
         # 未批准前轮询 → pending
-        r = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        assert r.json()["status"] == "pending"
+        assert _claim(client, req).json()["status"] == "pending"
         self._approve(client, req)
-        r = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
+        r = _claim(client, req)
         assert r.status_code == 200
         assert r.json()["status"] == "claimed"
         assert "allwin_session" in r.cookies
@@ -278,42 +375,30 @@ class TestDeviceLogin:
         )
         assert r.status_code == 403
         # 正确 secret 仍可领取(错误尝试不烧毁请求)
-        r2 = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        assert r2.json()["status"] == "claimed"
+        assert _claim(client, req).json()["status"] == "claimed"
 
     def test_claim_only_once(self, client, fresh_ip):
         req = _create_device(client, fresh_ip)
         self._approve(client, req)
-        first = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        assert first.json()["status"] == "claimed"
-        second = client.post(
-            f"/api/v1/auth/wechat/device/{req['request_id']}/claim",
-            json={"secret": req["secret"]},
-        )
-        assert second.status_code == 410
+        assert _claim(client, req).json()["status"] == "claimed"
+        assert _claim(client, req).status_code == 410
 
     def test_unknown_request_gone(self, client):
         r = client.post("/api/v1/auth/wechat/device/nope/claim", json={"secret": "x"})
         assert r.status_code == 410
 
-    def test_qr_ticket_persisted(self, client, fresh_ip, data_dir):
+    def test_login_code_persisted(self, client, fresh_ip, data_dir):
         from backend.db.connections import connect_ro
 
         req = _create_device(client, fresh_ip)
         conn = connect_ro("platform")
         row = conn.execute(
-            "SELECT qr_ticket, qr_url FROM device_login_requests WHERE id=?",
+            "SELECT login_code, status FROM device_login_requests WHERE id=?",
             (req["request_id"],),
         ).fetchone()
         conn.close()
-        assert row["qr_ticket"] == f"mock-ticket-{req['request_id']}"
-        assert row["qr_url"] == req["qr_url"]
+        assert row["login_code"] == req["login_code"]
+        assert row["status"] == "pending"
 
 
 # ── access_token 缓存与真实 Provider(httpx.MockTransport 离线) ──
@@ -454,14 +539,18 @@ class TestRealProviderAccessToken:
         finally:
             conn.close()
 
-    def test_device_create_502_when_provider_fails(self, data_dir, fresh_ip):
-        """QR 创建失败 → 502,request 留给 TTL 过期,不半吊子返回。"""
+    def test_device_create_never_calls_wechat_api(self, data_dir, fresh_ip):
+        """发码登录(2026-10)创建登录请求不调用任何公众号接口:即便接口全部报错
+        (例如年审过期的 48001),网页仍能拿到验证码——这正是改路线的原因之一。"""
         import httpx
 
         from backend.api.app import create_app
         from backend.auth.providers import RealWechatQrProvider
 
+        calls = []
+
         def handler(request):
+            calls.append(str(request.url))
             return httpx.Response(200, json={"errcode": 48001, "errmsg": "api unauthorized"})
 
         settings = make_settings(
@@ -474,7 +563,9 @@ class TestRealProviderAccessToken:
         )
         c = TestClient(app)
         r = c.post("/api/v1/auth/wechat/device", headers={"x-real-ip": fresh_ip})
-        assert r.status_code == 502
+        assert r.status_code == 200
+        assert len(r.json()["login_code"]) == 4
+        assert calls == []
 
 
 # ── CSRF / 登出 ────────────────────────────────────────────
@@ -500,7 +591,7 @@ class TestCsrfAndLogout:
     def test_webhook_needs_no_csrf(self, client, fresh_ip):
         """webhook 是服务器对服务器通道:签名即凭证,不应要求 Cookie/CSRF。"""
         req = _create_device(client, fresh_ip)
-        r = post_scan(client, req["request_id"], "mock-openid-csrf")
+        r = post_code(client, req["login_code"], "mock-openid-csrf")
         assert r.status_code == 200
 
 
@@ -522,6 +613,21 @@ class TestProductionFailFast:
         )
         with pytest.raises(AuthConfigError, match="WECHAT_OA_APP_ID"):
             load_auth_settings(env)
+
+    def test_production_enabled_does_not_require_app_secret(self):
+        """发码登录只用消息推送:AppID + 回调 Token + https 即可启动,AppSecret 不是必需项。"""
+        env = dict(
+            BASE_ENV,
+            APP_ENV="production",
+            WECHAT_AUTH_PROVIDER="real",
+            WECHAT_AUTH_ENABLED="1",
+            WECHAT_OA_APP_ID="wx123",
+            WECHAT_WEBHOOK_TOKEN="tok",
+            PUBLIC_BASE_URL="https://allwin.example.com",
+        )
+        s = load_auth_settings(env)
+        assert s.wechat_login_available is True
+        assert s.identity_app_id == "wx123"
 
     def test_production_enabled_missing_webhook_token_refuses(self):
         env = dict(
@@ -818,37 +924,38 @@ class TestWebhookPureFunctions:
         assert verify_signature("token", "123", "abc", "bad") is False
         assert verify_signature("", "123", "abc", sig) is False
 
-    def test_parse_scan_event(self):
+    def test_parse_text_message(self):
         from backend.auth.wechat_webhook import parse_event_xml
 
-        ev = parse_event_xml(scan_event_xml("req-9", "openid-9").encode())
-        assert ev.event == "scan"
-        assert ev.scene_str == "req-9"
+        ev = parse_event_xml(text_message_xml("1234", "openid-9").encode())
+        assert ev.msg_type == "text"
+        assert ev.content == "1234"
         assert ev.openid == "openid-9"
 
-    def test_parse_subscribe_event_strips_qrscene_prefix(self):
+    def test_parse_subscribe_event(self):
         from backend.auth.wechat_webhook import parse_event_xml
 
-        ev = parse_event_xml(scan_event_xml("req-8", "openid-8", event="subscribe").encode())
+        ev = parse_event_xml(event_xml("subscribe", "openid-8").encode())
+        assert ev.msg_type == "event"
         assert ev.event == "subscribe"
-        assert ev.scene_str == "req-8"
+        assert ev.content is None
 
-    def test_parse_plain_subscribe_without_scene(self):
-        from backend.auth.wechat_webhook import parse_event_xml
+    @pytest.mark.parametrize(
+        "content,expected",
+        [
+            ("1234", "1234"), (" 0042 ", "0042"), ("１２３４", "1234"), ("12 34", "1234"),
+            ("123", None), ("12345", None), ("abcd", None), ("", None), (None, None), ("12a4", None),
+        ],
+    )
+    def test_extract_login_code(self, content, expected):
+        from backend.auth.wechat_webhook import extract_login_code
 
-        xml = (
-            "<xml><ToUserName><![CDATA[gh]]></ToUserName>"
-            "<FromUserName><![CDATA[o]]></FromUserName>"
-            "<CreateTime>1</CreateTime><MsgType><![CDATA[event]]></MsgType>"
-            "<Event><![CDATA[subscribe]]></Event><EventKey><![CDATA[]]></EventKey></xml>"
-        )
-        ev = parse_event_xml(xml.encode())
-        assert ev.scene_str is None
+        assert extract_login_code(content) == expected
 
     def test_reply_xml_swaps_to_from(self):
         from backend.auth.wechat_webhook import build_text_reply, parse_event_xml
 
-        ev = parse_event_xml(scan_event_xml("r", "openid-x").encode())
+        ev = parse_event_xml(text_message_xml("1234", "openid-x").encode())
         xml = build_text_reply(ev, "hello", 1700000000)
         assert "<ToUserName><![CDATA[openid-x]]></ToUserName>" in xml
         assert "<FromUserName><![CDATA[gh_mock_oa]]></FromUserName>" in xml

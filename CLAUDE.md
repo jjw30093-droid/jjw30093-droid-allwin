@@ -363,51 +363,65 @@ last_used_at
 
 唯一约束为 `(provider, provider_app_id, provider_subject)`。UnionID 只能在公众号绑定到同一微信开放平台且真实返回后使用，不能推测或伪造。
 
-### 7.3 微信登录（2026-08 修订，经用户批准）
+### 7.3 微信登录（2026-10 修订，经用户批准；取代 2026-08 的带参数二维码路线）
 
-唯一认证路线是**已认证服务号「带参数二维码」+ 消息推送 webhook**。
-网页授权（`snsapi_base`）路线已废弃且不得恢复：微信「网页授权域名」要求域名通过
-ICP 备案，备案硬前提是网站部署在中国大陆；本项目部署 AWS 东京，且出于内容合规
-考量不迁回大陆备案。用户扫码后在微信 App 内触发事件、微信服务器主动回调本站，
-全程不在微信内打开本站网页，因此不受备案约束。
+唯一微信登录路线是**公众号发码登录 + 消息推送 webhook**：网页给出 4 位验证码，用户把
+它发给公众号，微信服务器把这条消息推到本站 webhook，按发送者 openid 找到或创建内部
+User 并批准登录请求。
 
-登录流程（三种环境同一条链路，仅界面提示不同）：
+为什么换：「生成带参数的二维码」接口只对**已认证服务号**开放，站长的公众号是未认证的
+个人公众号，带参二维码路线走不通；发码登录只需要「消息推送」能力，未认证个人公众号也有。
+网页授权（`snsapi_base`）路线仍然废弃且不得恢复：「网页授权域名」要求 ICP 备案，本项目
+部署 AWS 东京、不迁回大陆备案。发码登录全程不在微信内打开本站网页，不受备案约束。
+公众号的开发设置（AppID、消息推送 URL/Token）自 2025-12 起在「微信开发者平台」配置，
+具体路径见 `docs/auth-wechat.md`。
 
-1. 浏览器创建 `device_login_request`，获得只留在浏览器内存的 secret。
-2. 服务端调用公众号「生成带参数的二维码」接口（`QR_STR_SCENE`，
-   `scene_str` = 公开 request id），二维码内容绝不包含浏览器 secret。
-3. 用户微信扫码（电脑端扫屏幕；微信内长按识别；手机浏览器截图后相册识别），
-   微信服务器把 `SCAN` / `subscribe`（带 `qrscene_` 前缀）事件 POST 到本站 webhook。
-4. webhook 校验共享 Token 签名 + 时间戳新鲜度（±300s）+ nonce 一次性防重放，
-   按 openid 获取或创建内部 User，原子批准该 request（幂等：重复投递不改状态）。
+登录流程：
+
+1. 浏览器创建 `device_login_request`，获得只留在浏览器内存的 secret 和 4 位验证码。
+   验证码用 `secrets` 安全随机生成，与所有等待中（pending）的请求互不重复（应用层先把
+   过期请求标 expired，数据库部分唯一索引兜底）；创建时不调用任何微信接口。
+2. 用户关注公众号，把验证码作为文本消息发过去。
+3. webhook 校验共享 Token 签名 + 时间戳新鲜度（±300s）+ nonce 一次性防重放；
+   内容规范化后必须正好 4 位数字；对上一个 pending 且未过期的请求时，才按 openid
+   获取或创建内部 User，并原子批准该请求（幂等：重复投递不改状态）。**发错码不建账号。**
+4. 同一 openid 10 分钟内最多发错 10 次验证码（只对发错计数，正常登录不消耗次数）。
 5. 浏览器轮询时必须同时提交 secret；成功后原子消费 request 并设置会话 Cookie。
-6. request 短期有效、只能消费一次、状态持久化到 SQLite，不能存在进程内存字典。
+   验证码只决定"批准哪个请求"，没有 secret 领不走会话。
+6. request 短期有效（默认 5 分钟）、只能消费一次、状态持久化到 SQLite，不能存在进程内存字典。
+7. 公众号被动回复文案：非验证码消息一律回"验证码错误，请重新输入"（站长定）；关注时
+   回复欢迎语并说明发码登录。
 
-公众号 `access_token` 每个 AppID 全局唯一、重新获取会使上一个立即失效：必须持久化
-缓存（platform.db）、临过期才串行刷新，不得多处各自获取互相顶掉。AppSecret 与
-webhook Token 只存在 FastAPI 环境变量和服务端请求中。
+启用消息推送会使公众号后台的自动回复和自定义菜单失效（微信规则），所有用户消息由本站
+回复。
 
-已知外部单点（如实声明，不做隐藏降级）：「生成带参数的二维码」接口权限绑定微信
-认证年审，年审过期该接口返回 `errcode=48001`——必须结构化记录并向用户界面如实
-反馈“扫码服务暂不可用”，不得伪装成功。
+未认证公众号拿不到微信昵称和头像：每个用户有一个 6 位用户编号（`users.short_code`），
+后台按编号认人；默认昵称为「球迷 + 编号」，首次登录时请用户自己起昵称（2–16 字，可跳过），
+之后可在账户中心修改。昵称不是身份凭证。
 
-不得沿用旧项目的以下模式：普通 `random` 四位验证码、只存在内存的登录状态、把 JWT 放进查询参数、把 API token 暴露到客户端 session、用 `users.openid='USER_xxx'` 伪造其他身份。
+AppSecret 与 webhook Token 只存在 FastAPI 环境变量和服务端请求中。发码登录不需要
+AppSecret。旧带参二维码路线的 access_token 缓存表与 Provider 代码保留但不参与登录；
+将来若恢复调用任何需要 access_token 的接口，仍须遵守：每个 AppID 全局唯一、持久化缓存、
+临过期才串行刷新，不得多处各自获取互相顶掉。
 
-如果 `WECHAT_AUTH_ENABLED=1`，production 启动时缺少 AppID、AppSecret、
-`WECHAT_WEBHOOK_TOKEN` 或 HTTPS 对外地址必须拒绝启动。Development 可以使用显式
-Mock Provider，但 Mock 在 production 必须 fail-fast。
+不得沿用旧项目的以下模式：用普通 `random` 生成验证码、只存在内存的登录状态、没有浏览器
+secret 就能领取会话、把 JWT 放进查询参数、把 API token 暴露到客户端 session、用
+`users.openid='USER_xxx'` 伪造其他身份。
+
+如果 `WECHAT_AUTH_ENABLED=1`，production 启动时缺少 AppID、`WECHAT_WEBHOOK_TOKEN`
+或 HTTPS 对外地址必须拒绝启动。Development 可以使用显式 Mock Provider，但 Mock 在
+production 必须 fail-fast。
 
 认证开关必须具有三种明确状态：
 
 - production + `WECHAT_AUTH_ENABLED=0`：公开站点必须可以无微信凭证启动；微信登录端点返回结构化 `AUTH_DISABLED`，不得尝试实例化真实 Provider；
-- production + `WECHAT_AUTH_ENABLED=1`：只能使用 Real Provider，缺 AppID、AppSecret、webhook Token 或 HTTPS 对外地址必须 fail-fast；
+- production + `WECHAT_AUTH_ENABLED=1`：只能使用真实配置，缺 AppID、webhook Token 或 HTTPS 对外地址必须 fail-fast；
 - development：只有显式配置时才允许 Mock Provider，production 检测到 Mock 必须 fail-fast。
 
-扫码登录的验收必须覆盖“浏览器创建 → webhook 签名事件批准 → 浏览器轮询 → 原子
+发码登录的验收必须覆盖“浏览器取码 → webhook 签名文本消息批准 → 浏览器轮询 → 原子
 消费 → 设置会话”的完整流程；webhook 入站链路不依赖 Provider，必须可用签名 fixture
-离线验证。登录页必须渲染真实二维码图像，不能只展示待编码 URL。真实微信服务器的
-出站能力（access_token、二维码创建）与入站回调在拿到真实凭证并完成公众号后台
-配置前一律标 `UNVERIFIED`。
+离线验证。真实微信服务器的推送在完成开发者平台消息推送配置并真机发码前一律标
+`UNVERIFIED`。
 
 ### 7.4 网站会话
 
@@ -427,8 +441,8 @@ MVP 使用数据库持久化的 opaque session，不使用浏览器可见长效 
 全站比赛内容对任何人（含匿名）都免费**，不存在"登录才免费"或"付费/免费"
 的内容分层。登录只用于身份类个人功能（收藏、关注、个人记录、账户设置、
 每日精选权限查询），不解锁任何比赛数据。当前不接支付、不设订阅套餐、不设
-Premium 层级——付费板块「每日精选」的授权只能由管理员按"用户 + 单场比赛/
-单条精选"逐条发放（含兑换码，兑换码同样只对应一条精选，不是一整个套餐）。
+Premium 层级——付费板块「每日精选」的授权只能由管理员在后台发放：按"用户 +
+单条精选"，或按"用户 + 时段"（2026-10 起，见 §8.2）；不做兑换码（站长 2026-10 决定）。
 
 Creator Studio（管理后台同理）不属于上面这类"任何登录用户都能用"的身份类
 个人功能——**Studio 是 analyst/admin 专用工具，普通登录用户（role=user）
@@ -466,46 +480,59 @@ studio/page.tsx` 页面注释同样写明"analyst/admin 专用"）。这一次�
 （`/api/v1/track-record`）是同一先例——这是站点自身的公开运营记录，
 不是"个人"内容，不受每日精选按场授权约束。
 
-### 8.2 每日精选按场授权
+### 8.2 每日精选授权（按场 + 按时段）
 
-每日精选是全站唯一需要管理员授权的内容，且**必须按"用户 + 单条精选
-（reco_slip）"授予**——拿到一场比赛的授权不能看到其它场次，全局
-entitlement/plan/subscription 都不能作为授权判据。
+每日精选是全站唯一需要管理员授权的内容，授权只有两种，都绑定到具体用户，
+全局 entitlement/plan/subscription 都不能作为授权判据：
+
+- **按场**：`reco_access_grants`，"用户 + 单条精选（reco_slip）"——拿到一场的授权
+  不能看到其它场次。
+- **按时段**（2026-10，经用户批准）：`reco_access_periods`，"用户 + 起止日期"
+  （北京时间自然日，含首尾，最长 366 天）。口径锁定：只覆盖**发布时间**
+  （`reco_slips.published_at` 换算北京时间日期）落在期内的精选；时段自然结束后，
+  期内发布的精选仍然能看（判定看"精选何时发布"，不看"现在是何时"）；提前撤销 =
+  期内全部收回。
+
+两种授权并存，任一有效即可看（`backend/commands/reco_access.py::has_access`）。
 
 ```text
 reco_access_grants
   id / user_id / slip_id / status(active|revoked)
   granted_at / granted_by / revoked_at / revoked_by / note
+reco_access_periods
+  id / user_id / starts_on / ends_on / status(active|revoked)
+  granted_at / granted_by / revoked_at / revoked_by / note
 ```
 
 - `GET /api/v1/reco/daily`（列表）：未登录 401；已登录 200，每条 slip 按
-  当前用户是否有 active 授权二选一投影——有授权给完整正文，无授权只给
+  当前用户是否有有效授权（按场或时段覆盖）二选一投影——有授权给完整正文，无授权只给
   存在性 + `access_required:true`（标题/腿/赔率/理由等字段物理不下发，
   不是置 null）。
 - `GET /api/v1/reco/daily/{slip_id}`（单条正文）：未登录 401；已登录但
   无 active 授权 403（响应体只有 `{code:"reco_access_required"}`，不含
   任何正文字段）；已登录且有 active 授权 200。撤销后立即再次访问变回 403。
-- `GET /api/v1/reco/my-access`：已登录用户查询自己的授权记录（个人功能，
+- `GET /api/v1/reco/my-access`：已登录用户查询自己的按场与时段授权记录（个人功能，
   允许要求登录）。
-- Admin 授权/撤销（`POST /admin/reco/access-grants`、
-  `POST /admin/reco/access-grants/{id}/revoke`）：admin + CSRF，每次操作
-  写 AuditLog；admin 角色本身不自动获得任何精选内容访问权，管理端预览走
+- Admin 授权/撤销（按场 `POST /admin/reco/access-grants`、
+  `POST /admin/reco/access-grants/{id}/revoke`；按时段
+  `POST /admin/reco/access-periods`、`POST /admin/reco/access-periods/{id}/revoke`）：
+  admin + CSRF，每次操作写 AuditLog；admin 角色本身不自动获得任何精选内容访问权，管理端预览走
   独立的 `GET /admin/reco/slips/{id}/preview`，不能污染普通用户接口。
-- 兑换码（`backend/commands/redeem.py`）：一个兑换码只对应一条具体的
-  `slip_id`，兑换成功即调用 `grant_access(user_id, slip_id)`，不再是
-  "兑换一整个 daily_picks 订阅"。
+- 兑换码不再作为授权渠道（站长 2026-10 决定：全程后台操作）；
+  `backend/commands/redeem.py` 与历史兑换记录保留，不做破坏性删除。
 - 旧的全局 `reco:daily` entitlement 不再驱动任何内容访问判定；历史
   `subscriptions` 行保留（不做破坏性删除），但持有历史订阅不会让用户
-  无条件解锁任何 slip——必须由 `reco_access_grants` 显式授权。
+  无条件解锁任何 slip——必须由 `reco_access_grants` 或 `reco_access_periods`
+  显式授权。
 
 ### 8.3 权限校验
 
 - 前端只负责体验，后端是权限真源；普通比赛内容的后端查询/路由层不得再有
   entitlement 分支。
-- 每日精选的访问判定必须查 `reco_access_grants`，不得回退到 plan/
-  entitlement/subscription。
+- 每日精选的访问判定必须查 `reco_access_grants` 与 `reco_access_periods`，不得
+  回退到 plan/entitlement/subscription。
 - Admin 不能只靠隐藏路由或秘密 URL。
-- 未接真实支付；每日精选授权一律走管理员发放、撤销和按场兑换码；所有
+- 未接真实支付；每日精选授权一律由管理员在后台按场或按时段发放、撤销；所有
   操作写 AuditLog。
 - SEO/GEO 面（sitemap、robots、llms.txt）：普通比赛内容页面现在对匿名
   完全可见，可以按需纳入可索引范围；每日精选正文页面仍需登录+授权，不

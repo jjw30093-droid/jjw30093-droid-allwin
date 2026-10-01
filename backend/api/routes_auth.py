@@ -1,8 +1,10 @@
 """/api/v1/auth/* 与 /api/v1/me。
 
-登录路线(2026-08,CLAUDE.md §7.3 修改已获用户批准):带参数二维码 + webhook 事件。
-网页授权(snsapi_base)端点已移除——网页授权域名要求 ICP 备案,本项目部署 AWS 东京
-且不迁回大陆备案。流程与安全设计见 docs/auth-wechat.md;全部响应 private, no-store。
+登录路线(2026-10,CLAUDE.md §7.3 修改经站长批准):公众号发码登录——网页显示 4 位验证码,
+用户关注公众号后把码发给公众号,消息推送 webhook 按 FromUserName(openid)识别用户并批准
+对应的登录请求,浏览器带 secret 轮询领取会话。此前的「带参数二维码」只支持已认证服务号,
+站长的公众号是未认证个人公众号,不可用。网页授权(snsapi_base)早已移除(需 ICP 备案)。
+流程与安全设计见 docs/auth-wechat.md;全部响应 private, no-store。
 """
 
 import logging
@@ -14,7 +16,6 @@ from pydantic import BaseModel
 
 from backend.auth import service, wechat_webhook
 from backend.auth.config import AuthSettings
-from backend.auth.providers import AuthProviderError
 from backend.db.connections import tx
 
 from .schemas import (
@@ -30,7 +31,6 @@ from .deps import (
     AuthContext,
     client_ip_key,
     get_auth_context,
-    get_provider,
     get_settings,
     platform_rw,
     require_csrf,
@@ -124,7 +124,7 @@ def auth_methods(
     return {"wechat_enabled": settings.wechat_login_available}
 
 
-# ── 扫码登录:创建请求 + 带参二维码 ────────────────────────
+# ── 发码登录:创建请求 + 4 位验证码 ──────────────────────────
 
 @router.post(
     "/auth/wechat/device",
@@ -134,36 +134,24 @@ def auth_methods(
 def create_device_login(
     request: Request,
     settings: AuthSettings = Depends(get_settings),
-    provider=Depends(get_provider),
     conn=Depends(platform_rw),
 ):
-    """浏览器发起扫码登录:创建一次性 request,并向微信申请带参二维码
-    (scene_str = 公开 request id;secret 只回给浏览器,绝不进二维码)。"""
+    """浏览器发起登录:创建一次性 request,返回 4 位验证码(给用户发到公众号)与 secret
+    (只留在浏览器内存,领取会话时必须带上;验证码本身不足以领取会话)。"""
     _ensure_wechat_enabled(settings)
     if not limiter.allow(f"device_create:{client_ip_key(request)}", 10, 60):
         raise HTTPException(status_code=429, detail="请求过于频繁")
-    with tx(conn):
-        req = service.create_device_request(conn, ttl_seconds=settings.device_request_ttl_seconds)
     try:
-        # 网络调用不在事务内(§5.3 短事务);QR 有效期与 request 对齐
-        qr = provider.create_login_qrcode(
-            conn, scene_str=req["request_id"],
-            expire_seconds=settings.device_request_ttl_seconds,
-        )
-    except AuthProviderError as e:
-        # 失败的 request 留给 TTL 自然过期(无 QR 指向它,无法被批准,无害)
-        if e.errcode == 48001:
-            log.error("带参二维码接口无权限(errcode=48001,常见于公众号年审过期)")
-        else:
-            log.warning("创建带参二维码失败: %s", e)
-        raise HTTPException(status_code=502, detail="微信扫码服务暂时不可用,请稍后重试")
-    with tx(conn):
-        service.attach_qr_to_device_request(conn, req["request_id"], qr.ticket, qr.url)
+        with tx(conn):
+            req = service.create_device_request(conn, ttl_seconds=settings.device_request_ttl_seconds)
+    except service.LoginCodeExhausted:
+        log.error("等待中的登录请求把 4 位验证码几乎占满")
+        raise HTTPException(status_code=429, detail="当前登录人数过多,请稍后再试")
     resp = JSONResponse(
         {
             "request_id": req["request_id"],
             "secret": req["secret"],
-            "qr_url": qr.url,
+            "login_code": req["login_code"],
             "expires_at": req["expires_at"],
         }
     )
@@ -269,10 +257,9 @@ async def wechat_webhook_events(
     timestamp: str = "",
     nonce: str = "",
     settings: AuthSettings = Depends(get_settings),
-    provider=Depends(get_provider),
     conn=Depends(platform_rw),
 ):
-    """微信服务器推送的事件入口。登录相关:SCAN / subscribe(带 qrscene_ 场景值)。
+    """微信服务器推送的消息/事件入口。登录:用户发来 4 位验证码(文本消息)。
 
     安全:共享 Token 签名 + 时间戳 ±300s + nonce 一次性(重放静默回 success,
     因为微信 5 秒未收到应答会原样重试,不能把重试当攻击)。5 秒内必须应答,
@@ -305,9 +292,13 @@ async def wechat_webhook_events(
         return resp
 
     reply_text: str | None = None
-    if event.scene_str:
-        reply_text = _handle_login_scan(conn, provider, event)
-    # 其余事件/普通消息:本轮不处理(OTP 第二通道是下一轮独立课题)
+    if event.msg_type == "event":
+        if event.event == "subscribe":
+            reply_text = REPLY_WELCOME
+        # 取消关注等其它事件:不回复
+    else:
+        # 用户发来的任何消息(文本/图片/语音…):是验证码就尝试登录,否则提示
+        reply_text = _handle_user_message(conn, settings, event)
 
     if reply_text is not None:
         resp = Response(
@@ -320,32 +311,42 @@ async def wechat_webhook_events(
     return resp
 
 
-def _handle_login_scan(conn, provider, event: wechat_webhook.WechatEvent) -> str:
-    """按 scene_str(= device request id)批准登录请求,返回给用户的被动回复文案。"""
-    row = service.get_device_request(conn, event.scene_str)
-    if row is None:
-        return "二维码无效,请回到浏览器刷新后重新扫码"
+# 公众号被动回复文案(微信聊天里用全角标点;站长定:非验证码消息一律回"验证码错误，请重新输入")
+REPLY_WELCOME = "欢迎关注喵弟数据研究室！想登录网站，把网页上的 4 位验证码发给我就行。"
+REPLY_NOT_A_CODE = "验证码错误，请重新输入"
+REPLY_CODE_INVALID = "验证码无效或已过期，请回到网页重新获取"
+REPLY_TOO_MANY = "尝试次数过多，请 10 分钟后再试"
+REPLY_SUCCESS = "登录成功，请回到网页继续"
+# 同一个微信号 10 分钟内最多发错 10 次验证码(防止乱猜别人的码);只对发错计数,
+# 正常登录不消耗次数
+CODE_FAILURES_PER_WINDOW = 10
+CODE_FAILURE_WINDOW_SECONDS = 600
 
-    from backend.db.util import utc_now_iso
 
-    if row["status"] in ("approved", "claimed"):
-        # 幂等:重复扫码/微信重投递,不再变更状态
-        return "已确认登录,请回到浏览器继续"
-    if row["status"] != "pending" or row["expires_at"] <= utc_now_iso():
-        return "二维码已过期,请回到浏览器刷新后重新扫码"
-
+def _handle_user_message(conn, settings: AuthSettings, event: wechat_webhook.WechatEvent) -> str:
+    code = wechat_webhook.extract_login_code(event.content)
+    if code is None:
+        return REPLY_NOT_A_CODE
+    fail_key = f"wx_code_fail:{event.openid}"
+    if limiter.blocked(fail_key, CODE_FAILURES_PER_WINDOW, CODE_FAILURE_WINDOW_SECONDS):
+        return REPLY_TOO_MANY
     with tx(conn):
+        row = service.get_pending_request_by_code(conn, code)
+        if row is None:
+            limiter.record(fail_key)
+            return REPLY_CODE_INVALID
+        # 对上了才建/取用户——发错码不会凭空产生账号
         user_id = service.get_or_create_user_by_identity(
             conn,
             provider="wechat_oa",
-            provider_app_id=getattr(provider, "app_id", ""),
+            provider_app_id=settings.identity_app_id,
             provider_subject=event.openid,
         )
-        ok = service.approve_device_request(conn, event.scene_str, user_id)
+        ok = service.approve_device_request(conn, row["id"], user_id)
     if not ok:
-        return "二维码已过期,请回到浏览器刷新后重新扫码"
-    log.info("device request %s 已由 webhook 批准", event.scene_str)
-    return "登录成功,请回到浏览器继续"
+        return REPLY_CODE_INVALID
+    log.info("device request %s 已由公众号验证码批准", row["id"])
+    return REPLY_SUCCESS
 
 
 # ── 密码登录(仅 CLI 创建的 admin 账号使用) ─────────────────
@@ -421,7 +422,13 @@ def me(response: Response, ctx: AuthContext = Depends(get_auth_context)):
         }
     return {
         "authenticated": True,
-        "user": {"id": ctx.user_id, "display_name": ctx.display_name, "role": ctx.role},
+        "user": {
+            "id": ctx.user_id,
+            "display_name": ctx.display_name,
+            "role": ctx.role,
+            "short_code": ctx.short_code,
+            "nickname_set": ctx.nickname_set,
+        },
         "plan": ctx.plan_id,
         "entitlements": sorted(ctx.entitlements),
         "session_expires_at": ctx.session_row["expires_at"],

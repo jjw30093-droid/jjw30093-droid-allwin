@@ -13,6 +13,7 @@ import {
   clientFetch,
   getMe,
   logout,
+  updateProfile,
   type GetJson,
   type MatchDetailResponse,
 } from "@/lib/api-v1";
@@ -42,6 +43,90 @@ function fmtLocal(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("zh-CN", { hour12: false });
+}
+
+/** 北京时间今天(YYYY-MM-DD)。时段授权按北京时间自然日计,与后端口径一致。 */
+function beijingToday(): string {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** 时段授权的状态文字:撤销 / 未开始 / 生效中 / 已结束(已结束仍可看期内发布的精选)。 */
+function periodStatus(p: { status: string; starts_on: string; ends_on: string }, today: string) {
+  if (p.status !== "active") return { label: "已撤销", on: false };
+  if (today < p.starts_on) return { label: "未开始", on: true };
+  if (today > p.ends_on) return { label: "已结束", on: false };
+  return { label: "生效中", on: true };
+}
+
+/** 昵称行:展示 + 就地修改(2–16 个字;昵称不是登录凭证,后台以用户编号认人)。 */
+function NicknameRow({ name, onSaved }: { name: string; onSaved: () => Promise<void> | void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const len = [...draft.trim()].length;
+
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateProfile(draft.trim());
+      setEditing(false);
+      await onSaved();
+    } catch (e) {
+      setErr(apiErrorMessage(e, "保存失败,请稍后再试"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <dd className={styles.nickRow}>
+        <span>{name}</span>
+        <button
+          type="button"
+          className={styles.linkBtn}
+          onClick={() => {
+            setDraft(name);
+            setErr(null);
+            setEditing(true);
+          }}
+          data-testid="nickname-edit"
+        >
+          修改
+        </button>
+      </dd>
+    );
+  }
+  return (
+    <dd>
+      <form
+        className={styles.nickForm}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (len >= 2 && len <= 16) void save();
+        }}
+      >
+        <input
+          className={styles.nickInput}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={16}
+          aria-label="新昵称(2–16 个字)"
+          autoFocus
+        />
+        <button type="submit" className={styles.btnPrimary} disabled={busy || len < 2 || len > 16}>
+          {busy ? "保存中…" : "保存"}
+        </button>
+        <button type="button" className={styles.btnGhost} onClick={() => setEditing(false)} disabled={busy}>
+          取消
+        </button>
+      </form>
+      <p className={styles.dim}>{err ?? "2–16 个字,可以重名"}</p>
+    </dd>
+  );
 }
 
 function SectionSkeleton() {
@@ -198,7 +283,7 @@ export default function AccountPage() {
               是站长收到"看不到战绩"这条反馈的根因之一。 */}
           <p className={styles.note}>
             尚未登录。登录后可使用关注比赛、精选授权状态查询等账户功能;
-            首次微信扫码会自动创建账号。历史战绩不用登录也能看。
+            第一次用微信验证码登录会自动创建账号。历史战绩不用登录也能看。
           </p>
           <Link className={styles.btnPrimary} href="/login?next=/account">
             前往登录
@@ -232,6 +317,11 @@ export default function AccountPage() {
   // "已授权 N 场"必须数当前 active 的按场授权记录,不能再用 entitlements 或
   // plan_id="daily_picks" 的订阅到期时间代替。
   const activeRecoGrants = recoAccess?.grants.filter((g) => g.status === "active") ?? [];
+  // 时段授权(2026-10):只覆盖发布时间落在期内的精选,到期后期内的仍可看
+  const today = beijingToday();
+  const periods = recoAccess?.periods ?? [];
+  const livePeriods = periods.filter((p) => p.status === "active" && p.ends_on >= today);
+  const latestEnd = livePeriods.reduce<string | null>((m, p) => (m === null || p.ends_on > m ? p.ends_on : m), null);
 
   return (
     <main className={styles.page}>
@@ -283,6 +373,16 @@ export default function AccountPage() {
             <span className={styles.accessHint}>{recoAccessError}</span>
           ) : recoAccess === null ? (
             <span className={styles.accessHint}>加载中…</span>
+          ) : latestEnd !== null ? (
+            <>
+              <span className={`${styles.accessState} ${styles.accessOn}`}>
+                已开通至 {latestEnd}
+              </span>
+              <span className={styles.accessHint}>
+                期间发布的精选都能看{activeRecoGrants.length > 0 ? `,另有单场 ${activeRecoGrants.length} 场` : ""} ·{" "}
+                <Link href="/reco?tab=daily">去看 →</Link>
+              </span>
+            </>
           ) : activeRecoGrants.length > 0 ? (
             <>
               <span className={`${styles.accessState} ${styles.accessOn}`}>
@@ -296,7 +396,8 @@ export default function AccountPage() {
             <>
               <span className={`${styles.accessState} ${styles.accessOff}`}>暂无授权场次</span>
               <span className={styles.accessHint}>
-                按场为账号开通,<Link href="/pricing">查看权限说明</Link>
+                由我们在后台为账号开通(按场或按时段),开通时请报上你的用户编号。
+                <Link href="/pricing">查看权限说明</Link>
               </span>
             </>
           )}
@@ -309,7 +410,16 @@ export default function AccountPage() {
         <dl className={styles.dl}>
           <div className={styles.dlRow}>
             <dt>昵称</dt>
-            <dd>{account.user.display_name ?? "未设置"}</dd>
+            <NicknameRow name={account.user.display_name ?? ""} onSaved={load} />
+          </div>
+          <div className={styles.dlRow}>
+            <dt>用户编号</dt>
+            <dd>
+              <span className={`${styles.shortCode} num`} data-testid="user-short-code">
+                {account.user.short_code ?? "—"}
+              </span>
+              <span className={styles.dim}> 开通精选权限时报这个编号</span>
+            </dd>
           </div>
           <div className={styles.dlRow}>
             <dt>当前身份</dt>
@@ -400,18 +510,50 @@ export default function AccountPage() {
           "每日精选权限查询"——CLAUDE.md §8.1 允许要求登录的账户类个人功能) */}
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>每日精选授权记录</h2>
+        {recoAccess !== null && periods.length > 0 && (
+          <div className={styles.tableWrap}>
+            <table className={styles.table} data-testid="my-periods">
+              <thead>
+                <tr>
+                  <th>按时段</th>
+                  <th>状态</th>
+                  <th>开通时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {periods.map((p) => {
+                  const st = periodStatus(p, today);
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <span className="num">
+                          {p.starts_on} 至 {p.ends_on}
+                        </span>
+                        <span className={styles.dim}> 期间发布的精选</span>
+                      </td>
+                      <td>
+                        <span className={st.on ? styles.stateOk : styles.stateDim}>{st.label}</span>
+                      </td>
+                      <td className="num">{fmtLocal(p.granted_at)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         {recoAccessError ? (
           <p className={styles.errText}>{recoAccessError}</p>
         ) : recoAccess === null ? (
           <SectionSkeleton />
         ) : recoAccess.grants.length === 0 ? (
-          <p className={styles.empty}>暂无任何场次的每日精选授权记录</p>
+          periods.length === 0 ? <p className={styles.empty}>暂无每日精选授权记录</p> : null
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>场次</th>
+                  <th>按场次</th>
                   <th>状态</th>
                   <th>授权时间</th>
                   <th>撤销时间</th>

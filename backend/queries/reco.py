@@ -149,6 +149,12 @@ def daily_slips(conn: sqlite3.Connection, user_id: str) -> list[dict]:
             (user_id,),
         ).fetchall()
     }
+    # 时段授权(2026-10):发布日期落在某个未撤销时段内的单同样可看(到期不收回)
+    from backend.commands.reco_access import active_periods, covered_by_periods
+
+    periods = active_periods(conn, user_id)
+    if periods:
+        granted_slip_ids |= {r["id"] for r in rows if covered_by_periods(periods, r["published_at"])}
     legs = _legs_by_slip(conn, [r["id"] for r in rows if r["id"] in granted_slip_ids])
     out = []
     for r in rows:
