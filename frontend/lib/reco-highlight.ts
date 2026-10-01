@@ -18,9 +18,11 @@ import type { GetJson } from "@/lib/api-v1";
 type HighlightResp = GetJson<"/api/v1/reco/highlight">;
 export type BoardHighlight = HighlightResp["boards"][number];
 
-/** 名义窗口的中文说明。 */
+/** 名义窗口的中文说明。按单数计的窗口写「最近 N 单里」(2026-10-01):原来的
+ *  「最近 20 单 · 瑞典超 · 2 单 2 中」容易被读成"20 单只中 2 单",实际意思是
+ *  "最近 20 单里,瑞典超那 2 单全中"。 */
 function windowLabel(w: NonNullable<BoardHighlight["window"]>): string {
-  return w.kind === "days" ? `近 ${w.value} 天` : `最近 ${w.value} 单`;
+  return w.kind === "days" ? `近 ${w.value} 天` : `最近 ${w.value} 单里`;
 }
 
 /** 分段的中文说明;market 用 MARKET_ZH 映射,`?? market` 兜底必须保留
@@ -45,6 +47,11 @@ export type HighlightPart = {
   big?: boolean;
   /** 次级信息,用 --ink-2 覆盖父级的强调红。 */
   muted?: boolean;
+  /** 首页战绩卡(2026-10-01)把一条文案拆成三行:scope=口径(小字)、
+   *  headline=结果(大号)、sub=回报等次级信息。不标即属于 headline。 */
+  line?: "scope" | "headline" | "sub";
+  /** 只在单行横条里起连接作用的分隔符(" · "),拆成三行时不渲染。 */
+  sep?: boolean;
 };
 
 export type HighlightLines = {
@@ -121,11 +128,12 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     // net_units 的旧缓存响应(本地实测就渲染出了「回报 NaN%」)。
     // DTO 上该字段是必填,但"契约必填"挡不住"缓存里的旧响应"。
     const net = s.net_units;
-    const roi =
+    const roi: HighlightPart[] =
       typeof net === "number" && Number.isFinite(net) && s.length > 0
         ? [{
             text: ` · 回报 ${net >= 0 ? "+" : ""}${Math.round(net * 100)}%`,
             muted: true,
+            line: "sub",
           }]
         : [];
     return lines(board, [
@@ -141,7 +149,9 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     const net = h.parlay_net_units ?? 0;
     const sign = net >= 0 ? "+" : "";
     return lines(board, [
-      { text: `${windowLabel(h.window)} · 串关 ${n} 单 回报 ` },
+      { text: `${windowLabel(h.window)} · 串关 ${n} 单`, line: "scope" },
+      { text: " ", line: "scope", sep: true },
+      { text: "回报 " },
       { text: `${sign}${net.toFixed(2)}`, big: true },
       { text: " 单位" },
     ], false);
@@ -155,11 +165,30 @@ export function highlightLines(h: BoardHighlight): HighlightLines | null {
     if (seg) head.push(seg);
     // 头号数字是"中了几单"——放大它,而不是分母。
     return lines(board, [
-      { text: `${head.join(" · ")} · ${r.decided_count} 单 ` },
+      { text: head.join(" · "), line: "scope" },
+      { text: " · ", line: "scope", sep: true },
+      { text: `${r.decided_count} 单 ` },
       { text: String(r.win_count), big: true },
       { text: " 中" },
     ], h.kind === "rate_qualified");
   }
 
   return null;
+}
+
+/** 战绩卡的三行(2026-10-01):由同一组 parts 按 line 分组得到,分隔符不渲染。
+ *  拆分只是换行,不增删任何字——除分隔符外,三行拼起来就是 value。 */
+export type HighlightCard = {
+  scope: string;
+  headline: HighlightPart[];
+  sub: string | null;
+};
+
+export function highlightCard(l: HighlightLines): HighlightCard {
+  const pick = (line: "scope" | "headline" | "sub") =>
+    l.parts.filter((p) => (p.line ?? "headline") === line && !p.sep);
+  const scope = pick("scope").map((p) => p.text).join("");
+  // 单行横条里次级信息以 " · " 起头;换行后这个连接符多余
+  const sub = pick("sub").map((p) => p.text).join("").replace(/^\s*·\s*/, "");
+  return { scope, headline: pick("headline"), sub: sub || null };
 }

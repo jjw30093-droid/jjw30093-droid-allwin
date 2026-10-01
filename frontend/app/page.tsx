@@ -15,7 +15,6 @@ import {
   type FiveLeagueBreak,
   type HomeMatchCard,
 } from "@/lib/homepage";
-import { HomeHero } from "@/components/home/HomeHero";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { ContinueWatching } from "@/components/home/ContinueWatching";
 import { HomeMatchExperienceLive, FreshnessBlock } from "@/components/home/HomeMatchExperienceLive";
@@ -321,7 +320,7 @@ async function DailyPicksSection() {
 export default function Home() {
   return (
     <main className={styles.page}>
-      {/* 推荐战绩 banner:首屏第一块(2026-10-01 站长要求放回顶部、恢复原来的粉红横条样式;
+      {/* 推荐战绩卡:首屏第一块(2026-10-01 站长要求放回顶部,并改为两格战绩卡;
           2026-09-26 曾挪进「今日精选」卡并改灰)。展示的是**择优挑出的口径**(经站长明确
           决定),不是全样本——完整背景见 backend/queries/reco_highlight.py 模块头注;
           全样本记录面在 /reco?tab=record,本 banner 整块链过去。接口挂了/没有已结算样本时
@@ -330,8 +329,8 @@ export default function Home() {
         <RecordHighlightBanner />
       </Suspense>
 
-      {/* 三个入口按钮(2026-10-01 站长要求删掉上方那句"英超、西甲等 N 个联赛的比赛与数据") */}
-      <HomeHero />
+      {/* 原来这里的三个入口按钮(看比赛 / 联赛数据 / 今日精选)2026-10-01 删除:与顶部导航、
+          手机底部导航完全重复(站长确认)。 */}
 
       {/* 每日公推 banner(2026-09):有在架公推时才出现,排在「重点比赛」
           之上。fallback 用 null 而不是骨架屏——banner 是条件出现的,骨架屏

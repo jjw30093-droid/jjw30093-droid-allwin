@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { highlightLines, type BoardHighlight } from "@/lib/reco-highlight";
+import { highlightCard, highlightLines, type BoardHighlight } from "@/lib/reco-highlight";
 
 /** 原始计数的形态:「5 单 5 中」/「18 单 15 中」/「近 5 单全中」。 */
 const COUNT_RE = /\d+\s*单\s*\d+\s*中|近\s*\d+\s*单全中|\(\s*\d+\s*\/\s*\d+\s*\)/;
@@ -288,4 +288,46 @@ describe("禁用词哨兵(品牌文档黑名单仍然有效)", () => {
       }
     }
   });
+});
+
+
+describe("首页战绩卡三行拆分(2026-10-01)", () => {
+  const text = (parts: { text: string }[]) => parts.map((p) => p.text).join("");
+
+  it("命中率:口径一行(最近 N 单里 · 联赛),结果一行(N 单 M 中,M 放大)", () => {
+    const h = base({ kind: "rate_qualified",
+      window: { kind: "count", value: 20, observed_from_date: "2026-09-01", observed_to_date: "2026-09-30" },
+      rate: rate({ decided_count: 2, win_count: 2, lose_count: 0, push_count: 0, hit_rate: 1 }),
+      segment: { kind: "league", market: null, league_id: 67, league_name_zh: "瑞典超" } });
+    const card = highlightCard(highlightLines(h)!);
+    expect(card.scope).toBe("最近 20 单里 · 瑞典超");
+    expect(text(card.headline)).toBe("2 单 2 中");
+    expect(card.headline.find((p) => p.big)?.text).toBe("2");
+    expect(card.sub).toBeNull();
+  });
+
+  it("连中:没有口径行,结果是「近 N 单全中」,回报单独一行且不带连接符", () => {
+    const card = highlightCard(highlightLines(ALL_FORMS[0])!);
+    expect(card.scope).toBe("");
+    expect(text(card.headline)).toBe("近 5 单全中");
+    expect(card.sub).toBe("回报 +597%");
+  });
+
+  it("串关:口径带单数,结果是回报单位", () => {
+    const card = highlightCard(highlightLines(ALL_FORMS[5])!);
+    expect(card.scope).toBe("近 30 天 · 串关 1 单");
+    expect(text(card.headline)).toBe("回报 +2.66 单位");
+  });
+
+  it.each(ALL_FORMS.map((h, i) => [i, h] as const))(
+    "case %i:三行只是换行——结果行仍含原始计数,且每行文字都出自同一条 value",
+    (_i, h) => {
+      const l = highlightLines(h)!;
+      const card = highlightCard(l);
+      for (const piece of [card.scope, text(card.headline), card.sub ?? ""]) {
+        expect(l.value).toContain(piece);
+      }
+      if (h.kind !== "parlay_return") expect(text(card.headline)).toMatch(COUNT_RE);
+    },
+  );
 });

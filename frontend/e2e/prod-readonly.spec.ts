@@ -434,28 +434,24 @@ for (const section of ["team-stats", "players"] as const) {
 
 // ── 手机端体验第三批(2026-09-26):首页首屏 / 比赛详情比分卡 ─────────────
 
-test("首页首屏(手机):没有定位语标题;战绩条在最顶部(在三个入口之上、不在今日精选卡里)", async ({ page }) => {
-  // 2026-10-01 站长:删掉"英超、西甲等 N 个联赛的比赛与数据",把推荐战绩 banner 放回首屏第一位
+test("首页首屏(手机):战绩卡在最顶部、没有重复导航的三个按钮、没有定位语", async ({ page }) => {
+  // 2026-10-01 站长:删掉定位语;删掉与导航重复的三个入口按钮;战绩条改为两格战绩卡放在首屏第一位
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByText(/个联赛的比赛与数据/)).toHaveCount(0);
-  // 2026-10-01 站长:手机端右上角恢复"登录"入口(匿名访问)
+  await expect(page.getByRole("navigation", { name: "首页入口" })).toHaveCount(0);
+  // 手机端右上角"登录"入口(匿名访问)
   await expect(page.locator("header").getByRole("link", { name: "登录", exact: true })).toBeVisible();
-  const nav = page.getByRole("navigation", { name: "首页入口" });
-  await expect(nav.getByRole("link")).toHaveText(["看比赛", "联赛数据", "今日精选"]);
-  await expect(nav.getByRole("link", { name: "看比赛" })).toHaveAttribute("href", "/matches");
-  await expect(nav.getByRole("link", { name: "联赛数据" })).toHaveAttribute("href", "/leagues");
-  await expect(nav.getByRole("link", { name: "今日精选" })).toHaveAttribute("href", "/reco");
-  for (const link of await nav.getByRole("link").all()) {
-    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  }
-  const strip = page.getByRole("link", { name: "推荐战绩,查看完整记录" });
-  if ((await strip.count()) > 0) {
-    expect((await strip.boundingBox())!.y).toBeLessThan((await nav.boundingBox())!.y);
-    const inPicksCard = await strip.evaluate(
+  const card = page.getByRole("link", { name: "推荐战绩,查看完整记录" });
+  if ((await card.count()) > 0) {
+    const inPicksCard = await card.evaluate(
       (el) => !!el.closest("section")?.querySelector("#daily-picks-title"),
     );
     expect(inPicksCard).toBe(false);
+    const cells = card.getByTestId("record-cell");
+    expect(await cells.count()).toBeGreaterThan(0);
+    // 结果行含原始计数(N 单 M 中 / 近 N 单全中 / 串关回报)
+    await expect(cells.first()).toContainText(/\d+\s*单\s*\d+\s*中|近\s*\d+\s*单全中|回报/);
   }
   await noHorizontalOverflow(page, 390);
 });

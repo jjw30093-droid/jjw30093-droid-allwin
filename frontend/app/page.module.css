@@ -10,58 +10,6 @@
  * margin-top 叠加,首屏往下滚到底会看到一大块死白(宪法审计 D1 的让位诉求
  * 由 SiteFooter 一处满足,不需要 <main> 再单独留一次)。 */
 
-/* ── 首页三个入口(2026-09-26 第三批;2026-10-01 删去上方定位语) ─────── */
-
-.hero {
-  margin: 0 0 14px;
-}
-
-.heroActions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.heroBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-pill);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.heroBtnPrimary {
-  border-color: var(--brand-teal);
-  background: var(--brand-teal);
-  color: var(--paper-bright);
-}
-
-@media (hover: hover) {
-  .heroBtn:hover {
-    border-color: var(--brand-teal);
-  }
-  .heroBtnPrimary:hover {
-    filter: brightness(0.94);
-  }
-}
-
-@media (min-width: 761px) {
-  .heroActions {
-    grid-template-columns: repeat(3, max-content);
-  }
-  .heroBtn {
-    padding: 0 28px;
-  }
-}
-
 /* ── 重点比赛卡(2026-08-16 权限口径修正:不再区分免费/锁定,单张卡)
  * design_handoff_home_hero/README.md §3 的双卡对照布局已下架。 */
 
@@ -912,17 +860,19 @@
   }
 }
 
-/* ── 战绩横条(首屏第一位;2026-10-01 恢复 2026-09-26 之前的粉红横条样式) ──
- * 窄屏放不下时 flex-wrap 折成两行;「全部 →」钉在右侧不参与折行。 */
+/* ── 战绩卡(首屏第一位;2026-10-01 由单行细横条改为两格卡片,站长确认) ──
+ * 原来是一行 12–13.5px 的细横条,电脑上横跨整页、内容挤在左边,两组成绩挤在
+ * 一句话里。改成:左上「战绩」chip;每个板块一格(口径小字 / 结果大号 / 回报
+ * 次级灰);「查看全部战绩 →」电脑在右侧、手机在底部。保留原来的粉红配色。 */
 
-.recordStrip {
-  display: flex;
-  align-items: center;
+.recordCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  margin: 0 0 10px;
-  padding: 9px 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--odds-up) 32%, transparent);
-  border-radius: var(--r-card-sm);
+  border-radius: var(--r-card);
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 0%,
@@ -935,34 +885,24 @@
 }
 
 @media (hover: hover) {
-  .recordStrip:hover {
+  .recordCard:hover {
     border-color: color-mix(in srgb, var(--odds-up) 52%, transparent);
     box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--odds-up) 70%, transparent);
   }
 }
 
-.recordStripBody {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  flex-grow: 1;
-  min-width: 0;
-}
-
-/* 战绩 chip 的圆点**不脉冲**:脉冲表示"正在发生",战绩是过去式;而且同屏
- * 两个点一起跳很吵。脉冲只留给下面的公推 chip。 */
+/* 战绩 chip 的圆点**不脉冲**:脉冲表示"正在发生",战绩是过去式;脉冲只留给公推 chip。 */
 .recordChip {
   display: inline-flex;
   align-items: center;
+  justify-self: start;
   gap: 5px;
-  flex: none;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border: 1px solid color-mix(in srgb, var(--odds-up) 38%, transparent);
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--odds-up) 8%, transparent);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--odds-up);
   white-space: nowrap;
 }
@@ -975,58 +915,126 @@
   background: var(--odds-up);
 }
 
-.recordItem {
-  font-size: 12px;
-  color: var(--ink-3);
-  white-space: nowrap;
+.recordCells {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.recordItemValue {
-  font-size: 13.5px;
-  font-weight: 500;
+.recordCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recordCell + .recordCell {
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--odds-up) 22%, transparent);
+}
+
+.recordCellLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--ink-2);
+}
+
+.recordCellBoard {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* 口径只在空格/间隔点处换行,不把「日职联」「瑞典超」拆成两行 */
+.recordCellScope {
+  word-break: keep-all;
+}
+
+.recordCellHeadline {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
 }
 
 /* 被后端择优逻辑判定为"值得强调"的那一条(连中 / 达标命中率)才上红。 */
-.recordItemValue[data-emphasize="1"] {
+.recordCell[data-emphasize="1"] .recordCellHeadline {
   color: var(--odds-up);
 }
 
-/* 文案里的头号数字(连中数 / 命中数 / 净回报),2026-09 站长要求放大。
- *
- * **不能照抄 WinProbabilityBar 的 transform: scale()**——那个先例用在
- * 独占一个 flex 格的数字上,scale 不参与宽度计算正是它要的;而这里的数字
- * 夹在「近」和「单全中」中间,不占位就会压到相邻的字。所以走 font-size,
- * 代价是必须自己把行盒摁住。
- *
- * line-height:1 与 display:inline-block 两条都不能省:.recordStrip 全块
- * 没有任何 line-height 声明,继承 body 的 1.5,20px 字不摁住会把 12px 的
- * 行盒撑到 30px,整条横条变高、chip 与文字的 center 对齐关系也会跳。
- *
- * font-weight 上限是 700:Oswald 只加载了 500/600/700(app/layout.tsx),
- * 写 900 会退化成合成加粗。 */
+/* 头号数字(连中数 / 命中数 / 净回报)。走 font-size 不走 transform(数字夹在
+ * 文字中间,scale 不占位会压字);line-height:1 + inline-block 摁住行盒。
+ * Oswald 只加载了 500/600/700(app/layout.tsx),上限 700。 */
 .recordBigNum {
   font-family: var(--font-latin), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
-  font-size: 20px;
+  font-size: 32px;
   font-weight: 700;
   line-height: 1;
   display: inline-block;
-  vertical-align: -2px;
+  vertical-align: -5px;
+  margin: 0 2px;
 }
 
-/* 回报段是次级信息:红只留给「近 N 单全中」,整行全红会吵、也会抵消掉
- * 大数字本身的重点。 */
-.recordItemMuted {
-  color: var(--ink-2);
-  font-weight: 400;
-}
-
-.recordStripMore {
-  flex: none;
+.recordCellSub {
   font-size: 12px;
+  color: var(--ink-2);
+}
+
+.recordCardMore {
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--brand-gold-deep);
   white-space: nowrap;
+}
+
+@media (min-width: 761px) {
+  .recordCard {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "chip more"
+      "cells more";
+    column-gap: 20px;
+    margin-top: 16px;
+    padding: 14px 20px;
+  }
+  /* 电脑上板块名与口径同一行,用间隔点连起来 */
+  .recordCellLabel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0 6px;
+  }
+  .recordCellScope::before {
+    content: "· ";
+    color: var(--ink-3);
+  }
+  .recordChip {
+    grid-area: chip;
+  }
+  .recordCells {
+    grid-area: cells;
+    gap: 20px;
+  }
+  .recordCell + .recordCell {
+    padding-left: 20px;
+  }
+  .recordCellLabel {
+    font-size: 13px;
+  }
+  .recordCellHeadline {
+    font-size: 17px;
+  }
+  .recordBigNum {
+    font-size: 36px;
+  }
+  .recordCardMore {
+    grid-area: more;
+    align-self: center;
+    font-size: 14px;
+  }
 }
 
 /* ── 公推横条 ─────────────────────────────────────────── */

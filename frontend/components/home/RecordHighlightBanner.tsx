@@ -6,7 +6,8 @@
  * 不要修复成全样本"的说明,见 backend/queries/reco_highlight.py 模块头注。
  *
  * 2026-09-26(第三批)曾挪进「今日精选」卡内部并改中性灰;2026-10-01 站长要求放回
- * 首页最顶部,恢复原来的粉红横条样式(app/page.module.css::.recordStrip)。
+ * 首页最顶部、恢复粉红配色,随后又改为两格战绩卡(每个板块一格:口径 / 大号结果 /
+ * 回报),样式见 app/page.module.css::.recordCard。
  *
  * 2026-09 改版为横条形态(参照 miaomiaodi.cc 的 VipPromoBanner):板块短标签
  * 做灰色前缀、口径与计数用强调色,一行放下两个板块,靠 flex-wrap 在窄屏
@@ -22,7 +23,7 @@
 import { cache } from "react";
 import Link from "next/link";
 import { serverGetOptional, type GetJson } from "@/lib/api-v1";
-import { highlightLines } from "@/lib/reco-highlight";
+import { highlightCard, highlightLines } from "@/lib/reco-highlight";
 import styles from "@/app/page.module.css";
 
 type HighlightResp = GetJson<"/api/v1/reco/highlight">;
@@ -43,52 +44,47 @@ export async function RecordHighlightBanner() {
   // 不需要额外的类型谓词。
   const rows = data.boards.flatMap((b) => {
     const lines = highlightLines(b);
-    return lines ? [{ board: b.board, lines }] : [];
+    return lines ? [{ board: b.board, label: b.board_label_zh, lines, card: highlightCard(lines) }] : [];
   });
   if (rows.length === 0) return null;
 
   return (
-    <Link
-      href="/reco?tab=record"
-      className={styles.recordStrip}
-      aria-label="推荐战绩,查看完整记录"
-    >
-      <span className={styles.recordStripBody}>
-        <span className={styles.recordChip}>
-          <span className={styles.recordChipDot} aria-hidden />
-          战绩
-        </span>
+    <Link href="/reco?tab=record" className={styles.recordCard} aria-label="推荐战绩,查看完整记录">
+      <span className={styles.recordChip}>
+        <span className={styles.recordChipDot} aria-hidden />
+        战绩
+      </span>
+      <span className={styles.recordCells}>
         {rows.map((r) => (
-          <span key={r.board} className={styles.recordItem}>
-            {r.lines.boardShort}{" "}
-            {/* 渲染 parts 而不是 value:连中数要放大成大号 Oswald 数字,
-                回报段要退成次级灰。两者都只能靠结构化分段——三个 kind 的
-                数字位置完全不同,正则切分是错的。parts 拼起来逐字节等于
-                value(有测试守着),所以 value 仍然是那两条文案不变量的
-                合法断言对象。 */}
-            <span
-              className={styles.recordItemValue}
-              data-emphasize={r.lines.emphasize ? "1" : undefined}
-            >
-              {r.lines.parts.map((part, i) => (
-                <span
-                  key={i}
-                  className={
-                    part.big
-                      ? styles.recordBigNum
-                      : part.muted
-                        ? styles.recordItemMuted
-                        : undefined
-                  }
-                >
-                  {part.text}
-                </span>
-              ))}
+          <span
+            key={r.board}
+            className={styles.recordCell}
+            data-emphasize={r.lines.emphasize ? "1" : undefined}
+            data-testid="record-cell"
+          >
+            {/* 第一行:板块 + 口径(小字)。第二行:结果,头号数字放大。第三行:回报等次级信息。
+                三行由同一组 parts 按 line 分组(lib/reco-highlight.ts::highlightCard),
+                除分隔符外不增删任何字。 */}
+            <span className={styles.recordCellLabel}>
+              <span className={styles.recordCellBoard}>{r.label}</span>
+              {r.card.scope && <span className={styles.recordCellScope}>{r.card.scope}</span>}
             </span>
+            <span className={styles.recordCellHeadline}>
+              {r.card.headline.map((part, i) =>
+                part.big ? (
+                  <span key={i} className={styles.recordBigNum}>
+                    {part.text}
+                  </span>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                ),
+              )}
+            </span>
+            {r.card.sub && <span className={styles.recordCellSub}>{r.card.sub}</span>}
           </span>
         ))}
       </span>
-      <span className={styles.recordStripMore}>全部 →</span>
+      <span className={styles.recordCardMore}>查看全部战绩 →</span>
     </Link>
   );
 }

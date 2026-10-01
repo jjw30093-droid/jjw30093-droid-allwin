@@ -4,7 +4,6 @@
  */
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HomeHero } from "@/components/home/HomeHero";
 import { HomeMatchExperienceLive } from "@/components/home/HomeMatchExperienceLive";
 import { LEAGUE_ZH, LEAGUE_COUNT, formatBeijingMD } from "@/components/matches/zh";
 import {
@@ -20,28 +19,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("HomeHero:三个入口(2026-10-01 删去上方定位语)", () => {
+describe("首页联赛数", () => {
   it("联赛数从联赛配置计算,不写死", () => {
     expect(LEAGUE_COUNT).toBe(Object.keys(LEAGUE_ZH).length);
-  });
-
-  it("不再有定位语标题(站长要求删掉'英超、西甲等 N 个联赛的比赛与数据')", () => {
-    const { container } = render(<HomeHero />);
-    expect(screen.queryByRole("heading")).toBeNull();
-    expect(container.textContent).not.toContain("个联赛的比赛与数据");
-  });
-
-  it("三个入口按钮:看比赛 /matches、联赛数据 /leagues、今日精选 /reco", () => {
-    render(<HomeHero />);
-    const nav = screen.getByRole("navigation", { name: "首页入口" });
-    const links = within(nav).getAllByRole("link");
-    expect(links.map((a) => a.textContent)).toEqual(["看比赛", "联赛数据", "今日精选"]);
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/matches", "/leagues", "/reco"]);
-  });
-
-  it("文案不含被禁用的词(模型/自研/Bet365)", () => {
-    const { container } = render(<HomeHero />);
-    expect(container.textContent).not.toMatch(/模型|自研|bet365/i);
   });
 });
 
