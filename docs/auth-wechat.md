@@ -222,5 +222,5 @@ ALLWIN_ADMIN_PASSWORD=... .venv/bin/python -m backend.cli.create_admin --usernam
 | 发码登录全流程(取码→webhook 批准→原子领取→会话/CSRF/撤销;新用户起昵称) | 已验证(pytest `tests/backend/test_auth.py` + Playwright `frontend/e2e/device-login.spec.ts`、`auth.spec.ts`) |
 | 时段授权(覆盖口径/到期仍可看/撤销收回/与单场并存/审计) | 已验证(pytest `tests/backend/test_reco_access_periods.py`) |
 | 认证三态(production+ENABLED=0 无凭证启动 / AUTH_DISABLED / fail-fast) | 已验证(pytest + uvicorn 子进程冒烟) |
-| 开发者平台消息推送配置的 GET 握手 | **UNVERIFIED**(代码已备;上线时按 §1 配置后验证) |
-| 微信服务器真实推送、真机发码登录 | **UNVERIFIED**(同上) |
+| 开发者平台消息推送配置的 GET 握手 | 已验证(2026-10-01 11:37 UTC,生产日志 200) |
+| 微信服务器真实推送、真机发码登录 | 已验证(2026-10-01 站长真机登录成功,新账号带编号与昵称) |
