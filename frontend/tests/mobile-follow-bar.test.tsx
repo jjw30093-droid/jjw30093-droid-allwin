@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileFollowBar, isWeChatBrowser } from "@/components/trust/MobileFollowBar";
 import { FooterDisclaimer } from "@/components/FooterDisclaimer";
-import { WECHAT_MP_NAME } from "@/lib/wechat-mp";
+import { SITE_BRAND_NAME, WECHAT_MP_NAME } from "@/lib/wechat-mp";
 
 const WECHAT_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.44 NetType/WIFI Language/zh_CN";
@@ -35,9 +35,11 @@ describe("isWeChatBrowser", () => {
 });
 
 describe("MobileFollowBar", () => {
-  it("默认只有一行:品牌名 + 关注公众号按钮,没有面板、没有二维码", () => {
+  it("默认只有一行:网站品牌名 + 关注公众号按钮,没有面板、没有二维码", () => {
     render(<MobileFollowBar />);
-    expect(screen.getByText(WECHAT_MP_NAME)).toBeTruthy();
+    expect(screen.getByText(SITE_BRAND_NAME)).toBeTruthy();
+    // 公众号名只在点开的面板里出现(网站品牌与公众号名不是同一个名字)
+    expect(screen.queryByText(WECHAT_MP_NAME)).toBeNull();
     expect(screen.getByRole("button", { name: "关注公众号" })).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("img", { name: /二维码/ })).toBeNull();

@@ -5,14 +5,13 @@
  *
  * | | components/auth/CodeLoginCard | 本组件 |
  * |---|---|---|
- * | 内容 | 微信带参临时码,每次不同 | 固定静态图片 |
+ * | 内容 | 4 位验证码(发给公众号),每次不同 | 公众号固定二维码图片 |
  * | 生命周期 | 5 分钟过期、一次性消费、带轮询状态机 | 永不过期、无状态 |
  * | 目的 | 建立本站会话 | 沉淀私域关系 |
- * | 位置 | 只在 /login 与联赛门禁页 | 页脚常驻 + 详情页底部 |
+ * | 位置 | 只在 /login | 页脚常驻 + 详情页底部 |
  *
- * 两者在微信侧确实是同一个公众号(扫带参码时未关注用户会先被要求关注),
- * 但登录码有时效和状态机 —— 合并会让"我已经关注了,为什么还要扫一次"
- * 变成困惑,而且登录码过期刷新时静态关注入口会跟着消失。
+ * 两者在微信侧是同一个公众号「足球喵喵第」(lib/wechat-mp.ts 单一真源),
+ * 但登录有时效和状态机,关注入口是常驻的,不合并。
  *
  * 二维码图片走 public/ 静态资源而不是 NEXT_PUBLIC_* 环境变量:
  * NEXT_PUBLIC_* 在 next build 时内联,systemd 运行期注入无效(宪法 §10.3),
@@ -21,10 +20,9 @@
  */
 
 import Image from "next/image";
+import { SITE_BRAND_NAME, WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
 import styles from "./WechatFollowCard.module.css";
 
-/** 站长在微信后台「账号详情」下载的固定二维码。缺省时整卡不渲染。 */
-const QR_SRC = "/brand/wechat-mp-qr.png";
 
 export function WechatFollowCard({
   variant = "block",
@@ -49,7 +47,7 @@ export function WechatFollowCard({
             height={34}
             className={styles.brandLogo}
           />
-          <span className={styles.brandName}>喵弟数据研究室</span>
+          <span className={styles.brandName}>{SITE_BRAND_NAME}</span>
         </div>
         <h2 id="wechat-follow-title" className={styles.title}>
           每天一场比赛的完整数据图
@@ -65,14 +63,14 @@ export function WechatFollowCard({
       {hasQr ? (
         <div className={styles.qrBox}>
           <Image
-            src={QR_SRC}
-            alt="喵弟数据研究室 公众号二维码"
+            src={WECHAT_MP_QR_SRC}
+            alt={`${WECHAT_MP_NAME} 公众号二维码`}
             width={200}
             height={200}
             className={styles.qr}
             unoptimized
           />
-          <span className={styles.qrHint}>微信扫码关注</span>
+          <span className={styles.qrHint}>微信扫码关注「{WECHAT_MP_NAME}」</span>
         </div>
       ) : (
         <div className={styles.qrPending}>

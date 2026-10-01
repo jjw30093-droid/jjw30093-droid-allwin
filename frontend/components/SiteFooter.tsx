@@ -13,9 +13,9 @@ import { WechatFollowCard } from "@/components/trust/WechatFollowCard";
 import styles from "./SiteFooter.module.css";
 
 /**
- * 公众号二维码已就位:public/brand/wechat-mp-qr.png(430×430,
- * 由微信后台「账号详情」下载的 gh_8dab312fa23f 二维码转 PNG —— 用 PNG 不用
- * 原始 JPG,是因为 JPEG 压缩伪影会降低二维码的扫描可靠性)。
+ * 公众号二维码已就位:public/brand/wechat-oa-qr.jpg(「足球喵喵第」,430×430,见 lib/wechat-mp.ts。
+ * 2026-10-01 替换掉此前的占位图 gh_8dab312fa23f。保留微信后台原始 JPG 不转 PNG:事后转格式
+ * 去不掉已有的压缩伪影,原图本身用 CoreImage 解码正常)。
  */
 const HAS_WECHAT_QR = true;
 

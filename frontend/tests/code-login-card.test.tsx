@@ -70,9 +70,26 @@ describe("CodeLoginCard", () => {
     const { container } = render(<CodeLoginCard nextPath="/account" env="desktop" />);
     const code = await screen.findByTestId("login-code");
     expect(code.textContent).toBe("0427");
-    expect(screen.getByText(/在微信里搜索并关注公众号「足球喵喵第」/)).not.toBeNull();
+    expect(screen.getByText(/用手机微信扫下面的二维码,关注公众号「足球喵喵第」/)).not.toBeNull();
     expect(screen.getByText(/在公众号对话框里发送验证码 0427/)).not.toBeNull();
+    expect(screen.getByRole("img", { name: "足球喵喵第 公众号二维码" }).getAttribute("src")).toBe(
+      "/brand/wechat-oa-qr.jpg",
+    );
     expect(container.innerHTML).not.toContain("very-secret-value");
+  });
+
+  it("按环境给关注方式:微信内长按二维码;其它手机浏览器搜名字、不放二维码", async () => {
+    mockFetch({ nicknameSet: true, claimAfter: 99 });
+    const { unmount } = render(<CodeLoginCard nextPath="/" env="wechat" />);
+    await screen.findByTestId("login-code");
+    expect(screen.getByText(/长按下面的二维码识别,关注公众号「足球喵喵第」/)).not.toBeNull();
+    expect(screen.getByRole("img", { name: "足球喵喵第 公众号二维码" })).not.toBeNull();
+    unmount();
+
+    render(<CodeLoginCard nextPath="/" env="mobile" />);
+    await screen.findByTestId("login-code");
+    expect(screen.getByText(/在微信里搜索并关注公众号「足球喵喵第」/)).not.toBeNull();
+    expect(screen.queryByRole("img", { name: /公众号二维码/ })).toBeNull();
   });
 
   it("老用户:领取成功直接跳转,不弹起昵称", async () => {

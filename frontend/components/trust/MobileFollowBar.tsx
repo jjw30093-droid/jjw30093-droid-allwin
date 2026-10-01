@@ -16,7 +16,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
+import { SITE_BRAND_NAME, WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
 import styles from "./MobileFollowBar.module.css";
 
 /** 微信内置浏览器判定。只在客户端交互之后才调用(面板是点击后才挂载的),不会有 SSR 水合不一致。 */
@@ -52,7 +52,7 @@ async function copyText(text: string): Promise<boolean> {
 async function saveQr(): Promise<"shared" | "downloaded" | "cancelled"> {
   const res = await fetch(WECHAT_MP_QR_SRC);
   const blob = await res.blob();
-  const file = new File([blob], `${WECHAT_MP_NAME}-公众号二维码.png`, { type: blob.type || "image/png" });
+  const file = new File([blob], `${WECHAT_MP_NAME}-公众号二维码.jpg`, { type: blob.type || "image/jpeg" });
   if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: WECHAT_MP_NAME });
@@ -171,7 +171,7 @@ export function MobileFollowBar() {
       <div className={styles.bar} data-testid="mobile-follow-bar">
         <span className={styles.brand}>
           <Image src="/brand/logo-badge-256.png" alt="" width={24} height={24} className={styles.logo} />
-          <span className={styles.brandName}>{WECHAT_MP_NAME}</span>
+          <span className={styles.brandName}>{SITE_BRAND_NAME}</span>
         </span>
         <button type="button" className={styles.followBtn} onClick={() => setOpen(true)}>
           关注公众号

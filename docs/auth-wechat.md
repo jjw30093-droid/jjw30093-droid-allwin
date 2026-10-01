@@ -19,7 +19,9 @@
 ## 1. 公众号要配置什么(上线时由站长手动完成)
 
 账号:「足球喵喵第」,公众号(订阅号)、未认证、个人主体。AppID `wx2b9ef558a6a1e425`,
-原始 ID `gh_785b28c6a8a0`(两者都是公开标识,不是密钥)。
+原始 ID `gh_785b28c6a8a0`(两者都是公开标识,不是密钥)。网站上展示的关注二维码是
+`frontend/public/brand/wechat-oa-qr.jpg`(公众号后台「账号详情 → 二维码下载」15cm 版),
+名称与图片路径的单一真源是 `frontend/lib/wechat-mp.ts`。
 
 **2025-12 起,公众号的开发设置已迁到「微信开发者平台」**
 (https://developers.weixin.qq.com/platform/ → 我的业务 → 公众号/服务号 → 选中账号):

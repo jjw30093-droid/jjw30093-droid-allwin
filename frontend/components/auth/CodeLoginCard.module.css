@@ -184,8 +184,7 @@
 
 .stageSteps {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  justify-content: center;
   width: 100%;
 }
 @media (min-width: 640px) {
@@ -262,14 +261,20 @@
   opacity: 0.3;
 }
 
-/* 公众号二维码(电脑端,有真图时才显示):白底,深色主题下也要能扫 */
+/* 公众号二维码(电脑端扫码 / 微信内长按识别):白底,深色主题下也要能扫 */
 .oaQr {
-  flex: none;
+  display: block;
+  margin-top: 8px;
   width: 112px;
   height: 112px;
   border-radius: 8px;
   background: #fff;
   padding: 4px;
+}
+/* 微信内长按识别:码大一点更好按 */
+.oaQr[data-env="wechat"] {
+  width: 160px;
+  height: 160px;
 }
 
 .claimedBox,

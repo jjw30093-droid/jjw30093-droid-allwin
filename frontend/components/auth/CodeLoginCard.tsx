@@ -26,6 +26,7 @@ import {
   getMe,
   updateProfile,
 } from "@/lib/api-v1";
+import { WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
 import styles from "./CodeLoginCard.module.css";
 
 export type Env = "wechat" | "mobile" | "desktop";
@@ -43,14 +44,8 @@ export function useEnv(): Env | null {
   return useSyncExternalStore(emptySubscribe, detectEnv, () => null);
 }
 
-/** 公众号名称(用户在微信里搜索用)。 */
-export const OA_NAME = "足球喵喵第";
-/**
- * 公众号二维码图片。站长还没提供「足球喵喵第」的真实二维码之前保持 null:
- * 页脚那张 wechat-mp-qr.png 是占位图、不是这个公众号,绝不能拿来让用户扫。
- * 拿到真图后放进 public/brand/ 并把路径写在这里,电脑端会在步骤旁显示它。
- */
-export const OA_QR_SRC: string | null = null;
+/** 公众号名称与二维码:与页脚关注入口同一个号,单一真源在 lib/wechat-mp.ts。 */
+const OA_NAME = WECHAT_MP_NAME;
 
 type CardState =
   | { phase: "idle" }
@@ -74,11 +69,17 @@ export const ENV_TITLE: Record<Env, string> = {
   mobile: "微信验证码登录",
 };
 
+/**
+ * 第一步怎么关注,按环境给:电脑端扫第 1 步下面的码;微信内长按同一张码识别;
+ * 其它手机浏览器没法扫自己屏幕,让用户去微信里搜名字。
+ */
 function stepsFor(env: Env, code: string): [string, string, string] {
   const follow =
-    OA_QR_SRC && env === "desktop"
-      ? `用手机微信扫右侧二维码,关注公众号「${OA_NAME}」`
-      : `在微信里搜索并关注公众号「${OA_NAME}」`;
+    env === "desktop"
+      ? `用手机微信扫下面的二维码,关注公众号「${OA_NAME}」`
+      : env === "wechat"
+        ? `长按下面的二维码识别,关注公众号「${OA_NAME}」`
+        : `在微信里搜索并关注公众号「${OA_NAME}」`;
   return [follow, `在公众号对话框里发送验证码 ${code}`, "回到本页,发送后自动登录"];
 }
 
@@ -332,7 +333,7 @@ export function CodeLoginCard({
   const progressWidth =
     bandState === "claimed" || bandState === "error" ? 100 : bandState === "expired" ? 0 : pct;
 
-  const showQr = OA_QR_SRC !== null && env === "desktop" && card.phase === "waiting";
+  const showQr = (env === "desktop" || env === "wechat") && card.phase === "waiting";
 
   return (
     <section className={styles.card} data-state={bandState} data-testid="code-login-card">
@@ -406,14 +407,24 @@ export function CodeLoginCard({
                 {stepsFor(env, card.code).map((step, i) => (
                   <li key={i}>
                     <span className={styles.stepNum}>{i + 1}</span>
-                    <span className={styles.stepText}>{step}</span>
+                    <span className={styles.stepText}>
+                      {step}
+                      {/* 二维码放在第 1 步里、文字下方:放在步骤旁边会把步骤挤成窄条 */}
+                      {i === 0 && showQr && (
+                        // eslint-disable-next-line @next/next/no-img-element -- 自托管小图,无需 next/image 优化
+                        <img
+                          className={styles.oaQr}
+                          data-env={env}
+                          src={WECHAT_MP_QR_SRC}
+                          alt={`${OA_NAME} 公众号二维码`}
+                          width={112}
+                          height={112}
+                        />
+                      )}
+                    </span>
                   </li>
                 ))}
               </ol>
-              {showQr && (
-                // eslint-disable-next-line @next/next/no-img-element -- 自托管小图,无需 next/image 优化
-                <img className={styles.oaQr} src={OA_QR_SRC!} alt={`公众号「${OA_NAME}」二维码`} width={112} height={112} />
-              )}
             </div>
           )}
         </div>

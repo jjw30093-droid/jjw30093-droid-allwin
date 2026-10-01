@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { WECHAT_MP_NAME } from "@/lib/wechat-mp";
+import { WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
 import styles from "./about.module.css";
 
 export const metadata: Metadata = {
@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 };
 
 /** 与页脚 WechatFollowCard 同一张固定二维码,不走从未配置过的 NEXT_PUBLIC_* 变量。 */
-const WECHAT_QR_SRC = "/brand/wechat-mp-qr.png";
 
 
 export default function AboutPage() {
@@ -94,7 +93,7 @@ export default function AboutPage() {
         <div className={styles.contact}>
           <strong>微信公众号：{WECHAT_MP_NAME}</strong>
           <Image
-            src={WECHAT_QR_SRC}
+            src={WECHAT_MP_QR_SRC}
             alt={`微信公众号 ${WECHAT_MP_NAME} 二维码`}
             width={148}
             height={148}

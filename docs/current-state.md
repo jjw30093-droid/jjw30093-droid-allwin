@@ -7746,7 +7746,9 @@ source)清一色 **2026-08-06**——全部来自同一批一次性历史导入,
 - **Playwright 全量套件跑不起来,与本次改动无关**:`tests/e2e/seed_e2e.py` 仍 import 已在
   commit f9cf2a3 删除的 `backend.commands.predictions`,种子脚本在建会员之前就崩溃。本次的
   登录用例是在已迁移的 `data/e2e` 上手工补 admin/会员后、用临时 Playwright 配置单独跑的。
-- 公众号「足球喵喵第」的真实二维码图片还没有;登录卡片目前只写"在微信里搜索并关注",
-  拿到图片后在 `frontend/components/auth/CodeLoginCard.tsx` 的 `OA_QR_SRC` 填路径即可在电脑端显示。
-  页脚那张 `wechat-mp-qr.png` 是占位图,不是这个公众号。
+- 公众号二维码(同日补):站长从公众号后台下载 15cm 版(430×430),CoreImage 解码为
+  `weixin.qq.com/r/mp/…` 关注链接,放在 `frontend/public/brand/wechat-oa-qr.jpg`。登录卡片电脑端
+  在步骤旁显示、微信内显示在步骤下方供长按识别,其它手机浏览器提示搜索名称;页脚、关于页、
+  手机关注面板同步换成这张,公众号名统一为「足球喵喵第」(`frontend/lib/wechat-mp.ts`),
+  网站品牌名仍是「喵弟数据研究室」。原占位图 `wechat-mp-qr.png`(另一个号 gh_8dab312fa23f)已删除。
 - 开发者平台消息推送配置、真实微信推送、真机发码:**UNVERIFIED**(需站长配置后实测)。
