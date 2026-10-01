@@ -17,60 +17,12 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { SITE_BRAND_NAME, WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
+import { copyText, saveQr } from "@/lib/wechat-mp-actions";
 import styles from "./MobileFollowBar.module.css";
 
 /** 微信内置浏览器判定。只在客户端交互之后才调用(面板是点击后才挂载的),不会有 SSR 水合不一致。 */
 export function isWeChatBrowser(ua: string): boolean {
   return /MicroMessenger/i.test(ua);
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // 落到下面的兜底
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
-async function saveQr(): Promise<"shared" | "downloaded" | "cancelled"> {
-  const res = await fetch(WECHAT_MP_QR_SRC);
-  const blob = await res.blob();
-  const file = new File([blob], `${WECHAT_MP_NAME}-公众号二维码.jpg`, { type: blob.type || "image/jpeg" });
-  if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: WECHAT_MP_NAME });
-      return "shared";
-    } catch (e) {
-      if ((e as { name?: string })?.name === "AbortError") return "cancelled";
-      // 其它错误退回下载
-    }
-  }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = file.name;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return "downloaded";
 }
 
 export function FollowSheet({ onClose }: { onClose: () => void }) {

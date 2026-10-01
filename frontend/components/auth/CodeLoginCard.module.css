@@ -271,8 +271,9 @@
   background: #fff;
   padding: 4px;
 }
-/* 微信内长按识别:码大一点更好按 */
-.oaQr[data-env="wechat"] {
+/* 手机(微信内长按识别 / 普通浏览器截图保存):码大一点 */
+.oaQr[data-env="wechat"],
+.oaQr[data-env="mobile"] {
   width: 160px;
   height: 160px;
 }
@@ -523,4 +524,19 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 8px;
+}
+
+/* 手机浏览器:保存二维码 / 复制公众号名称 */
+.qrActions {
+  display: block;
+}
+.qrActions .row {
+  margin-top: 10px;
+  gap: 8px;
+}
+.qrActionMsg {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--brand-teal);
 }

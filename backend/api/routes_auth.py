@@ -139,7 +139,9 @@ def create_device_login(
     """浏览器发起登录:创建一次性 request,返回 4 位验证码(给用户发到公众号)与 secret
     (只留在浏览器内存,领取会话时必须带上;验证码本身不足以领取会话)。"""
     _ensure_wechat_enabled(settings)
-    if not limiter.allow(f"device_create:{client_ip_key(request)}", 10, 60):
+    # 每个 IP 每分钟 30 次(2026-10-01 由 10 放宽:同一 WiFi/同一出口 IP 的多人同时登录,
+    # 10 次会让第 11 人起被挡;30 人同网实测需要 30)
+    if not limiter.allow(f"device_create:{client_ip_key(request)}", DEVICE_CREATE_PER_IP_PER_MIN, 60):
         raise HTTPException(status_code=429, detail="请求过于频繁")
     try:
         with tx(conn):
@@ -312,14 +314,18 @@ async def wechat_webhook_events(
 
 
 # 公众号被动回复文案(微信聊天里用全角标点;站长定:非验证码消息一律回"验证码错误，请重新输入")
-REPLY_WELCOME = "欢迎关注喵弟数据研究室！想登录网站，把网页上的 4 位验证码发给我就行。"
+REPLY_WELCOME = (
+    "欢迎关注喵弟数据研究室！想登录网站，把网页上的 4 位验证码发给我就行。"
+    "只发你自己在网页上看到的验证码，别人发给你的验证码不要发，否则对方会登录你的账号。"
+)
 REPLY_NOT_A_CODE = "验证码错误，请重新输入"
 REPLY_CODE_INVALID = "验证码无效或已过期，请回到网页重新获取"
 REPLY_TOO_MANY = "尝试次数过多，请 10 分钟后再试"
-REPLY_SUCCESS = "登录成功，请回到网页继续"
+REPLY_SUCCESS = "登录成功，请回到网页继续。如果这个验证码是别人发给你的，请马上联系我们。"
 # 同一个微信号 10 分钟内最多发错 10 次验证码(防止乱猜别人的码);只对发错计数,
 # 正常登录不消耗次数
 CODE_FAILURES_PER_WINDOW = 10
+DEVICE_CREATE_PER_IP_PER_MIN = 30
 CODE_FAILURE_WINDOW_SECONDS = 600
 
 

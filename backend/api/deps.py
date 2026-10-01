@@ -164,9 +164,13 @@ def auth_context_for(request: Request) -> AuthContext:
 
 
 def client_ip_key(request: Request) -> str:
-    # 单机部署经 Cloudflare/Nginx 回源;真实 IP 由反代头传递,仅作限流键,不落库
-    return (
-        request.headers.get("cf-connecting-ip")
-        or request.headers.get("x-real-ip")
-        or (request.client.host if request.client else "unknown")
-    )
+    """限流键用的客户端 IP(只作限流键,不落库)。
+
+    只认 nginx 设置的 X-Real-IP,**不认请求里自带的 CF-Connecting-IP**(2026-10-01 安全修复):
+    源站 443 曾可绕过 Cloudflare 直连,攻击者自带 CF-Connecting-IP 就能每次换一个"IP",
+    让所有按 IP 的限流(含管理员密码登录 5 次/分钟)失效。现在由 nginx 的 realip 模块
+    只在连接确实来自 Cloudflare 网段时才采信 CF-Connecting-IP,把结果写进
+    $remote_addr → X-Real-IP(deploy/nginx/miaomiaodi.vip);直连来的请求拿到的就是
+    它自己的真实地址。FastAPI 只监听 127.0.0.1,外部无法绕过 nginx 直接设置 X-Real-IP。
+    """
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")

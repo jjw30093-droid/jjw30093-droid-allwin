@@ -74,7 +74,7 @@
 状态持久化在 platform.db `device_login_requests`(不是进程内存字典)。
 
 ```text
-浏览器 POST /api/v1/auth/wechat/device(限流 10 次/60s/IP)
+浏览器 POST /api/v1/auth/wechat/device(限流 30 次/60s/IP,同一 WiFi 多人同时登录也够用)
   → 先把已过期的 pending 请求标 expired
   → 创建 request:{id(公开), secret(32B 只回浏览器,DB 只存 hash),
                    login_code(4 位数字,secrets 安全随机,与所有等待中的请求互不重复,
@@ -112,6 +112,14 @@
   正常登录不消耗次数);码 5 分钟过期、只能用一次。
 - 与 cc 旧站的区别:旧站用 `random.randint` 生成、登录状态存在进程内存、没有 secret
   领取这一步;本实现码用 `secrets` 生成,状态持久化在 SQLite,会话只能由发起浏览器领取。
+- **限流用的 IP(2026-10-01 安全修复)**:API 只认 nginx 设置的 X-Real-IP。nginx 用 realip 模块
+  只在连接来自 Cloudflare 网段时采信 CF-Connecting-IP,并在转给上游前清空它;443 只接受
+  Cloudflare 网段(及本机)的连接。此前源站能绕过 Cloudflare 直连,自带 CF-Connecting-IP
+  即可每次"换 IP",让全部按 IP 的限流(含管理员密码登录)失效——已实测复现后修复。
+  配置见 `deploy/nginx/miaomiaodi.vip`;Cloudflare 公布新网段时须同步更新其中两处列表。
+- **防"骗验证码"**:发码登录的固有风险是有人把自己网页上的码发给你、哄你转发给公众号,
+  对方的浏览器就会登录你的账号。无法从技术上杜绝;登录卡片脚注、关注欢迎语、登录成功回复
+  都提醒"只发自己网页上看到的验证码,别人给的不要发"。
 
 GET 握手(开发者平台保存配置时):验签通过原样回显 `echostr`(text/plain),
 失败 403。`AUTH_DISABLED` 状态下 GET/POST webhook 均 503。

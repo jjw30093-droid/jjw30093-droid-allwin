@@ -960,3 +960,30 @@ class TestWebhookPureFunctions:
         assert "<ToUserName><![CDATA[openid-x]]></ToUserName>" in xml
         assert "<FromUserName><![CDATA[gh_mock_oa]]></FromUserName>" in xml
         assert "hello" in xml
+
+
+class TestRateLimitIpKey:
+    """2026-10-01 安全修复:限流只认 nginx 设置的 X-Real-IP,请求自带的 CF-Connecting-IP 不能"换 IP"。"""
+
+    def test_forged_cf_connecting_ip_does_not_reset_limit(self, client, fresh_ip):
+        codes = []
+        for i in range(31):
+            r = client.post(
+                "/api/v1/auth/wechat/device",
+                headers={"x-real-ip": fresh_ip, "cf-connecting-ip": f"198.51.100.{i + 1}"},
+            )
+            codes.append(r.status_code)
+        assert codes[:30] == [200] * 30   # 同一 IP 每分钟 30 次(同一 WiFi 多人同时登录)
+        assert codes[30] == 429           # 第 31 次被挡,伪造的 CF-Connecting-IP 不起作用
+
+    def test_other_real_ip_is_separate_bucket(self, client, fresh_ip):
+        for _ in range(30):
+            client.post("/api/v1/auth/wechat/device", headers={"x-real-ip": fresh_ip})
+        assert client.post("/api/v1/auth/wechat/device", headers={"x-real-ip": fresh_ip}).status_code == 429
+        assert client.post("/api/v1/auth/wechat/device", headers={"x-real-ip": f"{fresh_ip}-b"}).status_code == 200
+
+
+def test_replies_warn_against_forwarded_codes(client):
+    """防"骗验证码":关注欢迎语和登录成功回复都提醒别发别人给的码。"""
+    r = post_webhook(client, event_xml("subscribe", "openid-phish-check"))
+    assert "别人发给你的验证码不要发" in r.text

@@ -1,6 +1,46 @@
 # allwin — 部署到 miaomiaodi.vip 做测试(2026-08-14)。
 # 基于 deploy/nginx/allwin.conf.example 改写,SSL 证书沿用服务器上已有的
 # Let's Encrypt(Certbot)证书,不是 Cloudflare Origin Certificate。
+#
+# 2026-10-01 安全修复(限流可被绕过):
+# 源站 443 此前能绕过 Cloudflare 直连,而 nginx 把请求自带的 CF-Connecting-IP 原样转给 API,
+# API 又拿它当用户 IP 做限流 → 直连并每次换一个 CF-Connecting-IP 就能让所有按 IP 的限流失效
+# (含管理员密码登录 5 次/分钟)。修法三层:
+#   ① realip:只有连接确实来自 Cloudflare 网段时才采信 CF-Connecting-IP,结果写进 $remote_addr,
+#      再以 X-Real-IP 转给 API(API 只认 X-Real-IP,见 backend/api/deps.py::client_ip_key);
+#   ② 转给上游前清空 CF-Connecting-IP,上游永远看不到客户端自带的这个头;
+#   ③ 443 只接受来自 Cloudflare 网段(及本机)的连接,其余一律 403。
+# Cloudflare 网段取自 https://www.cloudflare.com/ips-v4 与 ips-v6(2026-10-01)。网段很少变,
+# 但若 Cloudflare 公布新网段,需同步更新下面两处列表,否则来自新网段的访客会被 403。
+
+# 连接方(TCP 对端,未经 realip 改写)是否 Cloudflare / 本机
+geo $realip_remote_addr $allwin_from_cloudflare {
+    default 0;
+    127.0.0.1 1;
+    ::1 1;
+    173.245.48.0/20 1;
+    103.21.244.0/22 1;
+    103.22.200.0/22 1;
+    103.31.4.0/22 1;
+    141.101.64.0/18 1;
+    108.162.192.0/18 1;
+    190.93.240.0/20 1;
+    188.114.96.0/20 1;
+    197.234.240.0/22 1;
+    198.41.128.0/17 1;
+    162.158.0.0/15 1;
+    104.16.0.0/13 1;
+    104.24.0.0/14 1;
+    172.64.0.0/13 1;
+    131.0.72.0/22 1;
+    2400:cb00::/32 1;
+    2606:4700::/32 1;
+    2803:f800::/32 1;
+    2405:b500::/32 1;
+    2405:8100::/32 1;
+    2a06:98c0::/29 1;
+    2c0f:f248::/32 1;
+}
 
 upstream allwin_api {
     server 127.0.0.1:8000;
@@ -36,8 +76,40 @@ server {
     server_tokens off;
     client_max_body_size 4m;
 
+    # ③ 只接受经 Cloudflare 回源的连接(本机自检除外)
+    if ($allwin_from_cloudflare = 0) {
+        return 403;
+    }
+
+    # ① 真实访客 IP:只信任 Cloudflare 网段给的 CF-Connecting-IP
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    set_real_ip_from 2400:cb00::/32;
+    set_real_ip_from 2606:4700::/32;
+    set_real_ip_from 2803:f800::/32;
+    set_real_ip_from 2405:b500::/32;
+    set_real_ip_from 2405:8100::/32;
+    set_real_ip_from 2a06:98c0::/29;
+    set_real_ip_from 2c0f:f248::/32;
+    real_ip_header CF-Connecting-IP;
+
     proxy_http_version 1.1;
     proxy_set_header Host $host;
+    # ② 上游只看 X-Real-IP(= realip 处理后的 $remote_addr);客户端自带的 CF-Connecting-IP 清空
+    proxy_set_header CF-Connecting-IP "";
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;

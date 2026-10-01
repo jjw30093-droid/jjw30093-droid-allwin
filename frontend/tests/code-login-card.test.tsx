@@ -78,18 +78,31 @@ describe("CodeLoginCard", () => {
     expect(container.innerHTML).not.toContain("very-secret-value");
   });
 
-  it("按环境给关注方式:微信内长按二维码;其它手机浏览器搜名字、不放二维码", async () => {
+  it("按环境给关注方式:微信内长按二维码;其它手机浏览器也显示二维码,并给保存/复制按钮", async () => {
     mockFetch({ nicknameSet: true, claimAfter: 99 });
     const { unmount } = render(<CodeLoginCard nextPath="/" env="wechat" />);
     await screen.findByTestId("login-code");
     expect(screen.getByText(/长按下面的二维码识别,关注公众号「足球喵喵第」/)).not.toBeNull();
     expect(screen.getByRole("img", { name: "足球喵喵第 公众号二维码" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "保存二维码" })).toBeNull();
     unmount();
 
+    // 2026-10-01 站长:手机打开登录页必须看得到公众号二维码
     render(<CodeLoginCard nextPath="/" env="mobile" />);
     await screen.findByTestId("login-code");
-    expect(screen.getByText(/在微信里搜索并关注公众号「足球喵喵第」/)).not.toBeNull();
-    expect(screen.queryByRole("img", { name: /公众号二维码/ })).toBeNull();
+    expect(screen.getByText(/保存下面的二维码,在微信「扫一扫」右上角的相册里选它/)).not.toBeNull();
+    expect(screen.getByRole("img", { name: "足球喵喵第 公众号二维码" }).getAttribute("src")).toBe(
+      "/brand/wechat-oa-qr.jpg",
+    );
+    expect(screen.getByRole("button", { name: "保存二维码" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "复制公众号名称" })).not.toBeNull();
+  });
+
+  it("脚注提醒不要发送别人给的验证码", async () => {
+    mockFetch({ nicknameSet: true, claimAfter: 99 });
+    render(<CodeLoginCard nextPath="/" env="desktop" />);
+    await screen.findByTestId("login-code");
+    expect(screen.getByText(/别人发给你的验证码不要发/)).not.toBeNull();
   });
 
   it("老用户:领取成功直接跳转,不弹起昵称", async () => {

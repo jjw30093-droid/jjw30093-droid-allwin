@@ -27,6 +27,7 @@ import {
   updateProfile,
 } from "@/lib/api-v1";
 import { WECHAT_MP_NAME, WECHAT_MP_QR_SRC } from "@/lib/wechat-mp";
+import { copyText, saveQr } from "@/lib/wechat-mp-actions";
 import styles from "./CodeLoginCard.module.css";
 
 export type Env = "wechat" | "mobile" | "desktop";
@@ -70,8 +71,10 @@ export const ENV_TITLE: Record<Env, string> = {
 };
 
 /**
- * 第一步怎么关注,按环境给:电脑端扫第 1 步下面的码;微信内长按同一张码识别;
- * 其它手机浏览器没法扫自己屏幕,让用户去微信里搜名字。
+ * 第一步怎么关注,按环境给(三种环境都显示同一张公众号二维码,2026-10-01 站长要求手机也要有码):
+ * - 电脑端:手机微信扫第 1 步下面的码;
+ * - 微信内:长按同一张码识别;
+ * - 其它手机浏览器:没法扫自己屏幕,给"保存二维码 → 微信扫一扫从相册选"与"复制名称去搜索"两条路。
  */
 function stepsFor(env: Env, code: string): [string, string, string] {
   const follow =
@@ -79,8 +82,50 @@ function stepsFor(env: Env, code: string): [string, string, string] {
       ? `用手机微信扫下面的二维码,关注公众号「${OA_NAME}」`
       : env === "wechat"
         ? `长按下面的二维码识别,关注公众号「${OA_NAME}」`
-        : `在微信里搜索并关注公众号「${OA_NAME}」`;
+        : `关注公众号「${OA_NAME}」:保存下面的二维码,在微信「扫一扫」右上角的相册里选它;或复制名称到微信搜索`;
   return [follow, `在公众号对话框里发送验证码 ${code}`, "回到本页,发送后自动登录"];
+}
+
+/** 手机浏览器(非微信):保存二维码 + 复制公众号名称。与页脚关注面板共用同一套动作。 */
+function MobileQrActions() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const say = (m: string) => {
+    setMsg(m);
+    setTimeout(() => setMsg(null), 2500);
+  };
+  return (
+    <span className={styles.qrActions}>
+      <span className={styles.row}>
+        <button
+          type="button"
+          className={styles.btnGhost}
+          onClick={async () => {
+            try {
+              const r = await saveQr();
+              if (r === "shared") say("请在分享面板选择「存储图像」");
+              else if (r === "downloaded") say("已开始下载,也可以直接截图保存");
+            } catch {
+              say("保存失败,请直接截图保存二维码");
+            }
+          }}
+        >
+          保存二维码
+        </button>
+        <button
+          type="button"
+          className={styles.btnGhost}
+          onClick={async () => say((await copyText(OA_NAME)) ? "已复制,去微信搜索关注" : "复制失败,请手动输入名称")}
+        >
+          复制公众号名称
+        </button>
+      </span>
+      {msg && (
+        <span className={styles.qrActionMsg} role="status">
+          {msg}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -319,7 +364,7 @@ export function CodeLoginCard({
     card.phase === "waiting"
       ? isEnding
         ? "验证码 5 分钟内有效,过期点一下重新获取,不用刷新页面。"
-        : "已经关注过公众号的,直接发送验证码即可。只用于确认是你本人,不读取微信昵称和头像。"
+        : "只发送你自己在本页看到的验证码;别人发给你的验证码不要发,否则对方会登录你的账号。已关注的直接发送即可。"
       : card.phase === "claimed"
         ? "登录成功,正在回到刚才那页。"
         : card.phase === "nickname"
@@ -333,7 +378,7 @@ export function CodeLoginCard({
   const progressWidth =
     bandState === "claimed" || bandState === "error" ? 100 : bandState === "expired" ? 0 : pct;
 
-  const showQr = (env === "desktop" || env === "wechat") && card.phase === "waiting";
+  const showQr = card.phase === "waiting";
 
   return (
     <section className={styles.card} data-state={bandState} data-testid="code-login-card">
@@ -421,6 +466,7 @@ export function CodeLoginCard({
                           height={112}
                         />
                       )}
+                      {i === 0 && showQr && env === "mobile" && <MobileQrActions />}
                     </span>
                   </li>
                 ))}
