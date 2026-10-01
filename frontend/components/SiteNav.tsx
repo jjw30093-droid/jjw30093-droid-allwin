@@ -315,8 +315,9 @@ export function SiteNav() {
             <ThemeToggle />
             <div className={styles.account}>
               {me?.authenticated ? (
-                <Link href="/account" className={styles.accountLink}>
-                  {me.user?.display_name ?? "已登录"}
+                <Link href="/account" className={styles.accountLink} title={me.user?.display_name ?? undefined}>
+                  {/* 昵称最长 16 字:单独包一层做尾部省略,窄屏下不会两头被裁 */}
+                  <span className={styles.accountName}>{me.user?.display_name ?? "已登录"}</span>
                 </Link>
               ) : (
                 // 2026-09-16 真实用户反馈"不知道从哪里登录":这里此前写

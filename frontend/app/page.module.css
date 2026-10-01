@@ -10,18 +10,10 @@
  * margin-top 叠加,首屏往下滚到底会看到一大块死白(宪法审计 D1 的让位诉求
  * 由 SiteFooter 一处满足,不需要 <main> 再单独留一次)。 */
 
-/* ── 首屏定位语 + 三个入口(2026-09-26 第三批) ─────────────────── */
+/* ── 首页三个入口(2026-09-26 第三批;2026-10-01 删去上方定位语) ─────── */
 
 .hero {
   margin: 0 0 14px;
-}
-
-.heroTitle {
-  margin: 0 0 12px;
-  font-size: 18px;
-  line-height: 1.4;
-  font-weight: 800;
-  color: var(--ink);
 }
 
 .heroActions {
@@ -62,9 +54,6 @@
 }
 
 @media (min-width: 761px) {
-  .heroTitle {
-    font-size: 22px;
-  }
   .heroActions {
     grid-template-columns: repeat(3, max-content);
   }
@@ -923,27 +912,32 @@
   }
 }
 
-/* ── 战绩条(2026-09-26 第三批:挪进「今日精选」卡内部,改中性配色) ──
- * 原来是顶部整宽的粉红色横条(红边框 + 粉底 + 红色阴影),占据首屏第一位。
- * 现在是卡内一行浅灰底的普通条:无红色边框/粉色背景/阴影,强调值不再上红。
+/* ── 战绩横条(首屏第一位;2026-10-01 恢复 2026-09-26 之前的粉红横条样式) ──
  * 窄屏放不下时 flex-wrap 折成两行;「全部 →」钉在右侧不参与折行。 */
 
 .recordStrip {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   padding: 9px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--odds-up) 32%, transparent);
   border-radius: var(--r-card-sm);
-  background: var(--surface-soft);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 0%,
+    var(--surface) 46%,
+    color-mix(in srgb, var(--odds-up) 7%, var(--surface)) 100%
+  );
+  box-shadow: 0 4px 18px -8px color-mix(in srgb, var(--odds-up) 55%, transparent);
   text-decoration: none;
   color: var(--ink);
 }
 
 @media (hover: hover) {
   .recordStrip:hover {
-    border-color: var(--border-strong);
+    border-color: color-mix(in srgb, var(--odds-up) 52%, transparent);
+    box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--odds-up) 70%, transparent);
   }
 }
 
@@ -964,12 +958,12 @@
   gap: 5px;
   flex: none;
   padding: 2px 8px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid color-mix(in srgb, var(--odds-up) 38%, transparent);
   border-radius: var(--r-pill);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--odds-up) 8%, transparent);
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--odds-up);
   white-space: nowrap;
 }
 
@@ -978,7 +972,7 @@
   height: 6px;
   flex: none;
   border-radius: var(--r-pill);
-  background: var(--ink-3);
+  background: var(--odds-up);
 }
 
 .recordItem {
@@ -993,11 +987,9 @@
   color: var(--ink-2);
 }
 
-/* 被后端择优逻辑判定为"值得强调"的那一条(连中 / 达标命中率):中性配色下
- * 只加粗、用主文字色,不再上红。 */
+/* 被后端择优逻辑判定为"值得强调"的那一条(连中 / 达标命中率)才上红。 */
 .recordItemValue[data-emphasize="1"] {
-  color: var(--ink);
-  font-weight: 700;
+  color: var(--odds-up);
 }
 
 /* 文案里的头号数字(连中数 / 命中数 / 净回报),2026-09 站长要求放大。
@@ -1023,7 +1015,8 @@
   vertical-align: -2px;
 }
 
-/* 回报段是次级信息,退成次级灰,不抢大数字的重点。 */
+/* 回报段是次级信息:红只留给「近 N 单全中」,整行全红会吵、也会抵消掉
+ * 大数字本身的重点。 */
 .recordItemMuted {
   color: var(--ink-2);
   font-weight: 400;
@@ -1032,7 +1025,7 @@
 .recordStripMore {
   flex: none;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--brand-gold-deep);
   white-space: nowrap;
 }
 

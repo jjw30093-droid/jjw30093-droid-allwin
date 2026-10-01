@@ -143,6 +143,13 @@
   text-decoration: none;
 }
 
+.accountName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .accountLink {
   display: inline-flex;
   align-items: center;
@@ -189,9 +196,24 @@
     display: none;
   }
 
-  /* 顶部栏不再放"登录 / 账户"入口(2026-09-26):登录和账户入口在底部导航的「我的」 */
-  .account {
-    display: none;
+  /* 顶部栏右上角的"登录 / 昵称"入口:2026-09-26 曾在手机上隐藏(只留底部「我的」),
+   * 2026-10-01 站长要求恢复——新用户一眼能找到登录。底部「我的」照样保留。 */
+  /* 恢复后右侧多了一个按钮:品牌区允许收缩(文字省略),不能把右侧按钮挤出屏幕。
+   * 实测 375 宽详情页(有返回箭头)+ 16 字昵称、320 宽各页面都不再横向溢出。 */
+  .brand {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .brandNames {
+    min-width: 0;
+  }
+
+  .brandMark,
+  .brandDescriptor {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .backBtn {
@@ -243,6 +265,11 @@
     padding: 0 10px;
     font-size: 12px;
   }
+
+  .actions {
+    gap: 4px;
+  }
+
 
   .bottomNav {
     position: fixed;
@@ -301,5 +328,16 @@
 
   :global(html[data-theme="dark"]) .bottomActive {
     color: var(--brand-gold);
+  }
+}
+
+/* 320 级窄屏:副标题让位,已登录昵称再收窄一点 */
+@media (max-width: 360px) {
+  .brandDescriptor {
+    display: none;
+  }
+
+  .accountLink {
+    max-width: 64px;
   }
 }

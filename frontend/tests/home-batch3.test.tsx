@@ -4,7 +4,7 @@
  */
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HomeHero, HERO_TAGLINE } from "@/components/home/HomeHero";
+import { HomeHero } from "@/components/home/HomeHero";
 import { HomeMatchExperienceLive } from "@/components/home/HomeMatchExperienceLive";
 import { LEAGUE_ZH, LEAGUE_COUNT, formatBeijingMD } from "@/components/matches/zh";
 import {
@@ -20,12 +20,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("HomeHero:一句话定位 + 三个入口", () => {
-  it("定位语里的联赛数从联赛配置计算,不写死", () => {
+describe("HomeHero:三个入口(2026-10-01 删去上方定位语)", () => {
+  it("联赛数从联赛配置计算,不写死", () => {
     expect(LEAGUE_COUNT).toBe(Object.keys(LEAGUE_ZH).length);
-    expect(HERO_TAGLINE).toBe(`英超、西甲等 ${Object.keys(LEAGUE_ZH).length} 个联赛的比赛与数据`);
-    render(<HomeHero />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(HERO_TAGLINE);
+  });
+
+  it("不再有定位语标题(站长要求删掉'英超、西甲等 N 个联赛的比赛与数据')", () => {
+    const { container } = render(<HomeHero />);
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(container.textContent).not.toContain("个联赛的比赛与数据");
   });
 
   it("三个入口按钮:看比赛 /matches、联赛数据 /leagues、今日精选 /reco", () => {

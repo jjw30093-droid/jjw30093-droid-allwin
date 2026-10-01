@@ -1,22 +1,16 @@
 /**
- * 首页首屏第一块(2026-09-26 第三批):一句话定位 + 三个入口按钮。
+ * 首页三个入口按钮(看比赛 / 联赛数据 / 今日精选)。服务端组件(无 "use client")。
  *
- * 服务端组件(无 "use client")。联赛数从联赛配置计算(LEAGUE_COUNT),新增联赛
- * 自动跟着变,不写死数字。战绩条不再占首屏第一位,挪进「今日精选」卡内部。
+ * 2026-09-26 第三批加入时上方还有一句定位文案"英超、西甲等 N 个联赛的比赛与数据"(h1);
+ * 2026-10-01 站长要求删掉这句,并把推荐战绩 banner 放回首屏第一位(见 app/page.tsx)。
  */
 
 import Link from "next/link";
-import { LEAGUE_COUNT } from "@/components/matches/zh";
 import styles from "@/app/page.module.css";
-
-export const HERO_TAGLINE = `英超、西甲等 ${LEAGUE_COUNT} 个联赛的比赛与数据`;
 
 export function HomeHero() {
   return (
-    <section className={styles.hero} aria-labelledby="home-hero-title">
-      <h1 id="home-hero-title" className={styles.heroTitle}>
-        {HERO_TAGLINE}
-      </h1>
+    <section className={styles.hero} aria-label="首页入口">
       <nav className={styles.heroActions} aria-label="首页入口">
         <Link href="/matches" className={`${styles.heroBtn} ${styles.heroBtnPrimary}`}>
           看比赛

@@ -249,12 +249,6 @@ async function DailyPicksSection() {
         )}
       </header>
 
-      {/* 战绩条(2026-09-26 第三批):从页面最顶部挪进今日精选卡,中性配色。
-          接口挂了/没有已结算样本时自己返回 null。 */}
-      <Suspense fallback={null}>
-        <RecordHighlightBanner />
-      </Suspense>
-
       {!overview ? (
         <p className={styles.picksNote}>精选状态暂时加载不出来，可以直接进精选页看看。</p>
       ) : published ? (
@@ -327,9 +321,16 @@ async function DailyPicksSection() {
 export default function Home() {
   return (
     <main className={styles.page}>
-      {/* 首屏第一块(2026-09-26):一句话定位 + 三个入口。原来排在这里的战绩条
-          已挪进下面「今日精选」卡内部(RecordHighlightBanner,中性配色),
-          背景仍见 backend/queries/reco_highlight.py 模块头注(择优口径,经站长决定)。 */}
+      {/* 推荐战绩 banner:首屏第一块(2026-10-01 站长要求放回顶部、恢复原来的粉红横条样式;
+          2026-09-26 曾挪进「今日精选」卡并改灰)。展示的是**择优挑出的口径**(经站长明确
+          决定),不是全样本——完整背景见 backend/queries/reco_highlight.py 模块头注;
+          全样本记录面在 /reco?tab=record,本 banner 整块链过去。接口挂了/没有已结算样本时
+          自己返回 null。 */}
+      <Suspense fallback={null}>
+        <RecordHighlightBanner />
+      </Suspense>
+
+      {/* 三个入口按钮(2026-10-01 站长要求删掉上方那句"英超、西甲等 N 个联赛的比赛与数据") */}
       <HomeHero />
 
       {/* 每日公推 banner(2026-09):有在架公推时才出现,排在「重点比赛」

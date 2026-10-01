@@ -53,7 +53,11 @@ describe("SiteNav:登录状态不再展示套餐徽标", () => {
     expect(within(accountLink).queryByText("会员")).toBeNull();
     expect(within(accountLink).queryByText("免费")).toBeNull();
     expect(within(accountLink).queryByText("精选")).toBeNull();
-    expect(accountLink.querySelector("span")).toBeNull();
+    // 唯一的子元素是昵称本身(2026-10-01 为窄屏尾部省略包了一层 span),没有任何徽标元素
+    const spans = accountLink.querySelectorAll("span");
+    expect(spans).toHaveLength(1);
+    expect(spans[0].textContent).toBe("张三");
+    expect(accountLink.textContent).toBe("张三");
   });
 });
 

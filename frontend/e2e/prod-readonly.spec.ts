@@ -434,11 +434,13 @@ for (const section of ["team-stats", "players"] as const) {
 
 // ── 手机端体验第三批(2026-09-26):首页首屏 / 比赛详情比分卡 ─────────────
 
-test("首页首屏(手机):第一块是一句话定位 + 三个入口;战绩条不在页面最顶部", async ({ page }) => {
+test("首页首屏(手机):没有定位语标题;战绩条在最顶部(在三个入口之上、不在今日精选卡里)", async ({ page }) => {
+  // 2026-10-01 站长:删掉"英超、西甲等 N 个联赛的比赛与数据",把推荐战绩 banner 放回首屏第一位
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  const h1 = page.getByRole("heading", { level: 1 });
-  await expect(h1).toHaveText(/^英超、西甲等 \d+ 个联赛的比赛与数据$/);
+  await expect(page.getByText(/个联赛的比赛与数据/)).toHaveCount(0);
+  // 2026-10-01 站长:手机端右上角恢复"登录"入口(匿名访问)
+  await expect(page.locator("header").getByRole("link", { name: "登录", exact: true })).toBeVisible();
   const nav = page.getByRole("navigation", { name: "首页入口" });
   await expect(nav.getByRole("link")).toHaveText(["看比赛", "联赛数据", "今日精选"]);
   await expect(nav.getByRole("link", { name: "看比赛" })).toHaveAttribute("href", "/matches");
@@ -447,28 +449,13 @@ test("首页首屏(手机):第一块是一句话定位 + 三个入口;战绩条�
   for (const link of await nav.getByRole("link").all()) {
     expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
-  // 定位语在整页最上面;战绩条(若接口有数据)在「今日精选」卡内部,不在它上面
-  const heroBox = (await h1.boundingBox())!;
   const strip = page.getByRole("link", { name: "推荐战绩,查看完整记录" });
   if ((await strip.count()) > 0) {
-    const stripBox = (await strip.boundingBox())!;
-    expect(stripBox.y).toBeGreaterThan(heroBox.y);
+    expect((await strip.boundingBox())!.y).toBeLessThan((await nav.boundingBox())!.y);
     const inPicksCard = await strip.evaluate(
       (el) => !!el.closest("section")?.querySelector("#daily-picks-title"),
     );
-    expect(inPicksCard).toBe(true);
-    // 中性配色:没有红色边框/粉色背景
-    const style = await strip.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { border: s.borderTopColor, bg: s.backgroundColor, shadow: s.boxShadow };
-    });
-    const isRedish = (c: string) => {
-      const m = c.match(/\d+(\.\d+)?/g)?.map(Number) ?? [];
-      return m.length >= 3 && m[0] > 150 && m[0] - m[1] > 60 && m[0] - m[2] > 60;
-    };
-    expect(isRedish(style.border), style.border).toBe(false);
-    expect(isRedish(style.bg), style.bg).toBe(false);
-    expect(style.shadow).toBe("none");
+    expect(inPicksCard).toBe(false);
   }
   await noHorizontalOverflow(page, 390);
 });
