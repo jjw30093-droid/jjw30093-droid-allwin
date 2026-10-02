@@ -381,7 +381,7 @@ export function PlayerQuadrantChart({ rows }: { rows: PlayerQuadrantRow[] }) {
         <p className={styles.note}>
           {view.note} 图上每名球员用头像表示,位置挤在一起的会自动错开一点避免遮挡;
           精确数值以点击后的详情面板为准。点击头像或上方名单查看该球员数值与位置内排名,
-          再点一人可对比,按 Esc 或点空白处取消。头像来自 FotMob 图床,加载失败不影响坐标位置。
+          再点一人可对比,按 Esc 或点空白处取消。
           {truncationText && <> {truncationText}</>}
           {hiddenText && <> {hiddenText}</>}
           {disabledViews.hasMissing && (

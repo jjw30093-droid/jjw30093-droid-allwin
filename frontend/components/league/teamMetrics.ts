@@ -198,7 +198,7 @@ export const METRICS = {
     unit: "%",
     digits: 1,
     semantic: "style",
-    caliber: "成功传球里有多大比例发生在对方半场(分母是成功传球,不是传球尝试总数)——本站用现有数据算的代理指标,不是 Opta/StatsBomb 的官方 Field Tilt。",
+    caliber: "成功传球里有多大比例发生在对方半场(分母是成功传球,不是传球尝试总数)——本站用现有数据算的代理指标。",
     sample: {
       minMatches: 3,
       minVolume: {
@@ -392,7 +392,7 @@ export const METRICS = {
     unit: "%",
     digits: 1,
     semantic: "style",
-    caliber: "赛季累计本队对方禁区触球 ÷ 赛季累计(本队+对手对方禁区触球之和)。仅 2024 年起的赛季有数据(2024 年之前 touches_opp_box 随机缺失,球队间不可比)。这是本站目前最接近 Field Tilt 的字段,但不是 Opta/StatsBomb 的官方 Field Tilt。",
+    caliber: "赛季累计本队对方禁区触球 ÷ 赛季累计(本队+对手对方禁区触球之和)。仅 2024 年起的赛季有数据(2024 年之前 touches_opp_box 随机缺失,球队间不可比)。这是本站目前最接近 Field Tilt 的字段,但不是官方 Field Tilt。",
     sample: {
       minMatches: 3,
       minVolume: {

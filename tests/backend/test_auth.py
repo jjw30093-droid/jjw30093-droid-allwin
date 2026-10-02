@@ -987,3 +987,11 @@ def test_replies_warn_against_forwarded_codes(client):
     """防"骗验证码":关注欢迎语和登录成功回复都提醒别发别人给的码。"""
     r = post_webhook(client, event_xml("subscribe", "openid-phish-check"))
     assert "别人发给你的验证码不要发" in r.text
+
+
+def test_production_does_not_serve_openapi_or_docs(disabled_client, client):
+    """生产不对外提供接口说明文件与文档页(docstring 里有数据来源名,2026-10-02 站长);
+    开发环境照常可用。前端类型由 export_openapi 直接调 app.openapi() 生成,不受影响。"""
+    assert disabled_client.get("/api/v1/openapi.json").status_code == 404
+    assert disabled_client.get("/api/v1/docs").status_code == 404
+    assert client.get("/api/v1/openapi.json").status_code == 200

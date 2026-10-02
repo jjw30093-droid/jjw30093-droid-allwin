@@ -122,7 +122,7 @@ export function XgLuckChart({ rows }: { rows: Row[] }) {
   };
 
   const summary =
-    `xG 运气榜(FotMob 官方 xG 口径,非本站模型):正值表示实际积分高于按 xG 应得的积分。` +
+    `xG 运气榜(非本站模型):正值表示实际积分高于按 xG 应得的积分。` +
     `${top.name} 多拿 ${top.diff.toFixed(1)} 分` +
     (top.actualPosition != null && top.xPosition != null
       ? `(实际第 ${top.actualPosition},按 xG 应在第 ${top.xPosition})`
@@ -146,7 +146,7 @@ export function XgLuckChart({ rows }: { rows: Row[] }) {
       </p>
       <EChart option={option} height={Math.max(280, data.length * 26)} ariaSummary={summary} />
       <p className={styles.note}>
-        口径:实际积分 − 按 xG 应得积分。xG 与预期积分均来自数据源(FotMob)的官方
+        口径:实际积分 − 按 xG 应得积分。xG 与预期积分均来自数据源的官方
         xG 榜，不是本站模型输出。xG 只衡量射门机会质量，不包含扑救、门框与
         临门一脚的差别，数值大不代表「接下来一定回归」。
       </p>

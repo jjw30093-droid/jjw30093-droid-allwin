@@ -72,7 +72,6 @@ export default function AboutPage() {
         </div>
         <div className={styles.prose}>
           <p>
-            比赛与球队数据主要来自 FotMob，赔率快照来自 NowGoal。
             每个区块保留数据更新时间和来源；来源没有提供的字段就显示不可用，
             不用零值补齐。
           </p>

@@ -30,7 +30,9 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
         title="allwin API",
         version="1.0.0",
         docs_url="/api/v1/docs" if not settings.is_production else None,
-        openapi_url="/api/v1/openapi.json",
+        # 生产不对外提供接口说明文件(2026-10-02 站长:docstring 里有数据来源名);
+        # 前端类型由 backend.cli.export_openapi 在本地直接调 app.openapi() 生成,不经这个 URL。
+        openapi_url="/api/v1/openapi.json" if not settings.is_production else None,
     )
     app.state.auth_settings = settings
     app.state.wechat_provider = provider

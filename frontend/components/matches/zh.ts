@@ -28,9 +28,9 @@ export const MARKET_ZH: Record<string, string> = {
 export const LEGACY_SOURCE_ZH: Record<string, string> = {
   asset_a_json: "存档 A",
   asset_b_footballdata: "存档 B·football-data",
-  asset_b_nowgoal: "存档 B·NowGoal",
+  asset_b_nowgoal: "存档 C",
   football_uk_jka: "旧库 J/K/澳",
-  nowgoal_archive_refetch: "NowGoal 重抓",
+  nowgoal_archive_refetch: "存档重抓",
 };
 
 /** 各市场 payload 字段 → 中文列名(与 backend/providers/nowgoal.py _FIELD_MAP 对齐) */

@@ -143,7 +143,7 @@ export const VIEWS: View[] = [
     x: METRICS.oppHalfPassShare,
     y: METRICS.totalShots,
     quadrants: ["前场压制", "少传多射", "推进乏力", "倒脚少射"],
-    note: "横轴是成功传球里有多大比例发生在对方半场，纵轴是场均射门数——这是本站用现有数据算的代理指标，不是 Opta/StatsBomb 的官方 Field Tilt。",
+    note: "横轴是成功传球里有多大比例发生在对方半场，纵轴是场均射门数——这是本站用现有数据算的代理指标。",
     related: [METRICS.shotsOnTarget, METRICS.xg],
   },
   {

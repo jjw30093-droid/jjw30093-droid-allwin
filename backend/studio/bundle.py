@@ -376,7 +376,6 @@ def build_analysis_bundle(
         "script_sections": script_sections,
         "subtitle_cues": subtitle_cues,
         "source_notes": [
-            {"kind": "data_source", "text": "比赛与统计数据来源:FotMob(自建 Bronze 层)"},
             {
                 "kind": "probability_source",
                 # 三态各自独立成句,不能用二元 else 兜底——UNAVAILABLE 落进
