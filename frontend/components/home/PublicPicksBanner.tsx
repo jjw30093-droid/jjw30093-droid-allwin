@@ -11,6 +11,7 @@
  */
 
 import { cache } from "react";
+import { keepLastGoodPage } from "@/lib/isr";
 import { serverGetOptional, type GetJson } from "@/lib/api-v1";
 import { visiblePublicPicks } from "@/lib/reco-banner";
 import { PublicPicksBannerLive } from "./PublicPicksBannerLive";
@@ -36,7 +37,7 @@ const getBannerData = cache(async (): Promise<BannerData | null> => {
   const data = await serverGetOptional<CurrentResp>(
     "/api/v1/reco/public/current",
     { revalidate: 60 },
-  ).catch(() => null);
+  ).catch(keepLastGoodPage(null));
   if (!data) return null;
   return {
     visible: visiblePublicPicks(

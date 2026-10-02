@@ -47,6 +47,8 @@ import {
 } from "@/components/reco/TrackRecordPanel";
 import { Tabs } from "@/components/ui/Tabs";
 import { ProfitCurve } from "@/components/reco/ProfitCurve";
+import { fmtUnitsAsYuan, STAKE_YUAN } from "@/lib/profit-curve";
+import { resultTallyText } from "@/lib/reco-labels";
 import styles from "./reco.module.css";
 
 export { SlipCard, slipTone };
@@ -194,9 +196,10 @@ function RecoBody() {
           不能藏在第三个标签页里。口径与「历史战绩」页同一份 summary。 */}
       {summary && summary.settled_count > 0 && (
         <Link href="/reco?tab=record" className={styles.recordSummary} data-testid="reco-summary">
+          {/* 2026-10-02 站长:与首页"31 单 20 中"对得上——这里写全部单数,下面把走水单列 */}
           <span className={styles.recordSummaryItem}>
-            <b className="num">{summary.settled_count}</b>
-            <span>已结算</span>
+            <b className="num">{summary.settled_count} 单</b>
+            <span>{resultTallyText(summary)}</span>
           </span>
           <span className={styles.recordSummaryItem}>
             <b className="num">
@@ -206,10 +209,9 @@ function RecoBody() {
           </span>
           <span className={styles.recordSummaryItem}>
             <b className={`num ${summary.net_units > 0 ? styles.recordSummaryUp : ""}`}>
-              {summary.net_units >= 0 ? "+" : ""}
-              {summary.net_units.toFixed(2)}
+              {fmtUnitsAsYuan(summary.net_units)}
             </b>
-            <span>盈利(单位)</span>
+            <span>盈利(每单 {STAKE_YUAN} 元)</span>
           </span>
         </Link>
       )}

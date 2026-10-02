@@ -66,6 +66,11 @@ export function thousands(v: number): string {
   return v < 0 ? `-${str}` : str;
 }
 
+/** 单位盈亏 → 按每单 STAKE_YUAN 元换算的钱(战绩页、精选页不再出现"单位"这个词,2026-10-02)。 */
+export function fmtUnitsAsYuan(units: number): string {
+  return fmtYuan(units * STAKE_YUAN);
+}
+
 /** "+3,835 元" / "-1,000 元" */
 export function fmtYuan(v: number, signed = true): string {
   const s = thousands(Math.abs(v));

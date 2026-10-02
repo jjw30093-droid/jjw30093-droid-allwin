@@ -22,6 +22,7 @@
 
 import { cache } from "react";
 import Link from "next/link";
+import { keepLastGoodPage } from "@/lib/isr";
 import { serverGetOptional, type GetJson } from "@/lib/api-v1";
 import { highlightCard, highlightLines } from "@/lib/reco-highlight";
 import styles from "@/app/page.module.css";
@@ -33,7 +34,7 @@ const getHighlight = cache(async (): Promise<HighlightResp | null> =>
   // (同 app/page.tsx::getRecoOverview 与 PublicPicksBanner 的既有写法)。
   serverGetOptional<HighlightResp>("/api/v1/reco/highlight", {
     revalidate: 300,
-  }).catch(() => null),
+  }).catch(keepLastGoodPage(null)),
 );
 
 export async function RecordHighlightBanner() {

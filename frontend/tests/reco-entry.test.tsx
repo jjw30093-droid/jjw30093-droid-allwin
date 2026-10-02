@@ -76,7 +76,7 @@ describe("/reco 顶部", () => {
     expect(container.textContent).not.toContain("结算完的单子都在这儿");
   });
 
-  it("战绩摘要放在最上面:已结算 33、命中率 64.5%、盈利 +7.67", async () => {
+  it("战绩摘要放在最上面:33 单 20中 11黑 2走、命中率 64.5%、盈利按每单 500 元换成钱", async () => {
     mockFetch({
       "/api/v1/me": { body: ME_ANON },
       "/api/v1/reco/track-record": { body: TRACK_WITH_DATA },
@@ -84,9 +84,12 @@ describe("/reco 顶部", () => {
     });
     render(<RecoPage />);
     const box = await screen.findByTestId("reco-summary");
-    expect(box.textContent).toContain("33");
+    expect(box.textContent).toContain("33 单");
+    // 走水单列出来,和首页"31 单 20 中"对得上(31 + 2 = 33)
+    expect(box.textContent).toContain("20中 11黑 2走");
     expect(box.textContent).toContain("64.5%");
-    expect(box.textContent).toContain("+7.67");
+    expect(box.textContent).toContain("+3,835 元");
+    expect(box.textContent).not.toContain("单位");
     expect(box.getAttribute("href")).toBe("/reco?tab=record");
   });
 

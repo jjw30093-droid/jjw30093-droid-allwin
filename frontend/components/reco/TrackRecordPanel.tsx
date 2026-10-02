@@ -16,7 +16,8 @@
  */
 
 import { useState } from "react";
-import { legPick, slipLeagueLabel } from "@/lib/reco-labels";
+import { legPick, resultTallyText, slipLeagueLabel } from "@/lib/reco-labels";
+import { fmtUnitsAsYuan, STAKE_YUAN } from "@/lib/profit-curve";
 import Link from "next/link";
 import type { GetJson } from "@/lib/api-v1";
 import { LoadMoreList } from "@/components/reco/LoadMoreList";
@@ -107,7 +108,7 @@ function blockMetrics(slip: Slip, tone: SlipTone): { kicker: string; value: stri
   if (tone === "void") return { kicker: "", value: "不计分母" };
   if (slip.return_units == null) return { kicker: "盈亏", value: "—" };
   const net = slip.return_units - 1;
-  return { kicker: "盈亏", value: `${net >= 0 ? "+" : ""}${net.toFixed(2)}` };
+  return { kicker: "盈亏", value: fmtUnitsAsYuan(net) };
 }
 
 function LegRow({ leg }: { leg: Slip["legs"][number] }) {
@@ -200,32 +201,18 @@ export function SlipCard({ slip }: { slip: Slip }) {
   );
 }
 
-/** 未授权 slip 的中性卡片:只展示后端下发的存在性 + 状态(slip_date/status),
- * 标题/腿/赔率/理由这些字段在网络响应里physically 不存在,这里自然也就
-
-
-/** "1胜 2半赢 3负 1半输 2走"——四分之一盘口半赢/半输只在实际出现时才显示,
- * 避免绝大多数场次(没有 half_win/half_loss)时汇总条挤满恒为 0 的分类。 */
-function resultBreakdownText(summary: TrackSummary): string {
-  const parts = [`${summary.win_count}胜`];
-  if (summary.half_win_count > 0) parts.push(`${summary.half_win_count}半赢`);
-  parts.push(`${summary.lose_count}负`);
-  if (summary.half_loss_count > 0) parts.push(`${summary.half_loss_count}半输`);
-  parts.push(`${summary.push_count}走`);
-  return parts.join(" ");
-}
-
+/** 战绩汇总条:单数、中/黑/走、命中率、按每单 500 元换算的盈利(2026-10-02 起不再出现"单位")。 */
 export function SummaryRow({ summary }: { summary: TrackSummary }) {
   return (
     <>
       <section className={styles.summaryRow} aria-label="战绩汇总">
         <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>{summary.settled_count}</span>
+          <span className={`${styles.summaryNum} num`}>{summary.settled_count} 单</span>
           <span className={styles.summaryLabel}>已结算</span>
         </div>
         <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>{resultBreakdownText(summary)}</span>
-          <span className={styles.summaryLabel}>命中/未中/走水{(summary.half_win_count > 0 || summary.half_loss_count > 0) ? "（含四分之一盘半赢半输）" : ""}</span>
+          <span className={`${styles.summaryNum} num`}>{resultTallyText(summary)}</span>
+          <span className={styles.summaryLabel}>中/黑/走</span>
         </div>
         <div className={styles.summaryItem}>
           <span className={`${styles.summaryNum} num`}>
@@ -234,11 +221,8 @@ export function SummaryRow({ summary }: { summary: TrackSummary }) {
           <span className={styles.summaryLabel}>命中率</span>
         </div>
         <div className={styles.summaryItem}>
-          <span className={`${styles.summaryNum} num`}>
-            {summary.net_units >= 0 ? "+" : ""}
-            {summary.net_units.toFixed(2)}
-          </span>
-          <span className={styles.summaryLabel}>净单位</span>
+          <span className={`${styles.summaryNum} num`}>{fmtUnitsAsYuan(summary.net_units)}</span>
+          <span className={styles.summaryLabel}>盈利(每单 {STAKE_YUAN} 元)</span>
         </div>
         {summary.voided_count > 0 && (
           <div className={styles.summaryItem}>
@@ -248,7 +232,7 @@ export function SummaryRow({ summary }: { summary: TrackSummary }) {
         )}
       </section>
       <p className={styles.summaryNote}>
-        走水不算进去，半赢半输各算半场；每单按 1 单位算，作废的不计入命中率。
+        命中率不算走水和作废的单，半赢半输各算半场。
       </p>
     </>
   );

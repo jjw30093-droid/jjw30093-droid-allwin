@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { keepLastGoodPage } from "@/lib/isr";
 import {
   serverGet,
   serverGetOptional,
@@ -107,23 +108,23 @@ export const getHomePageData = cache(async (): Promise<HomePageData> => {
     serverGetOptional<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=today&limit=1",
       { revalidate: 60 },
-    ).catch(() => null),
+    ).catch(keepLastGoodPage(null)),
     serverGetOptional<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=tomorrow&limit=1",
       { revalidate: 60 },
-    ).catch(() => null),
+    ).catch(keepLastGoodPage(null)),
     // 重点位选场需要知道"哪几场点进去真有东西看"。一次列表请求换回整段窗口
     // 的射门史命中集合,比逐场拉 analysis 便宜得多(替代了此前逐场拉 prediction
     // 的 N 次请求 —— 概率面板已下架,那些请求本就没有消费方了)。
     serverGetOptional<MatchListResponse>(
       "/api/v1/matches?status=upcoming&window=7d&content=shots&limit=200",
       { revalidate: 60 },
-    ).catch(() => null),
+    ).catch(keepLastGoodPage(null)),
     getFreshness(),
     // 五大联赛各取最近几场,用于"停赛期"提示的判定与恢复日期(不依赖上面的
     // 候选池:池有 limit,被截断时"池里没有"不等于"未来 7 天没有")。
     ...fiveLeagueRequestPaths().map((path) =>
-      serverGetOptional<MatchListResponse>(path, { revalidate: 300 }).catch(() => null),
+      serverGetOptional<MatchListResponse>(path, { revalidate: 300 }).catch(keepLastGoodPage(null)),
     ),
   ]);
 
@@ -152,13 +153,13 @@ export const getHomePageData = cache(async (): Promise<HomePageData> => {
 const getRecoOverview = cache(async (): Promise<RecoOverview | null> => {
   return serverGetOptional<RecoOverview>("/api/v1/reco/overview", {
     revalidate: 120,
-  }).catch(() => null);
+  }).catch(keepLastGoodPage(null));
 });
 
 const getFreshness = cache(async (): Promise<Freshness | null> => {
   return serverGetOptional<Freshness>("/api/v1/status/freshness", {
     revalidate: 60,
-  }).catch(() => null);
+  }).catch(keepLastGoodPage(null));
 });
 
 /* ── 今晚/明天/未来7天计数条 + 重点比赛 + 近期比赛 ──
@@ -175,7 +176,9 @@ async function HomeMatchExperienceSection() {
   let data: HomePageData;
   try {
     data = await getHomePageData();
-  } catch {
+  } catch (err) {
+    // 生产运行时抛出去 → ISR 保留上一版正常页面(见 lib/isr.ts)
+    keepLastGoodPage(null)(err);
     return (
       <HomeMatchExperienceLive
         initialFeatured={null}
@@ -226,7 +229,7 @@ function recoResultBreakdownText(overview: RecoOverview): string {
 const getLatestSettledSlip = cache(async (): Promise<RecapSlip | null> => {
   const data = await serverGetOptional<TrackRecord>("/api/v1/reco/track-record?limit=20", {
     revalidate: 300,
-  }).catch(() => null);
+  }).catch(keepLastGoodPage(null));
   return pickLatestSettledSlip(data?.slips ?? []);
 });
 

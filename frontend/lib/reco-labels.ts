@@ -67,3 +67,19 @@ export function legPick(leg: { market: string; selection: string; match_desc: st
   }
   return { market, selection: out ?? sel };
 }
+
+
+/** "20中 11黑 2走"(四分之一盘半赢/半输只在出现时显示)。精选页与战绩页共用:
+ * 首页战绩卡写"31 单 20 中"(只算分出输赢的单),这里把走水单独列出来,
+ * 两处能对上(31 + 2 = 33)。 */
+export function resultTallyText(s: {
+  win_count: number; lose_count: number; push_count: number;
+  half_win_count: number; half_loss_count: number;
+}): string {
+  const parts = [`${s.win_count}中`];
+  if (s.half_win_count > 0) parts.push(`${s.half_win_count}半赢`);
+  parts.push(`${s.lose_count}黑`);
+  if (s.half_loss_count > 0) parts.push(`${s.half_loss_count}半输`);
+  parts.push(`${s.push_count}走`);
+  return parts.join(" ");
+}
