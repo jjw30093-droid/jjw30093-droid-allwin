@@ -22,6 +22,7 @@ export type BoardHighlight = HighlightResp["boards"][number];
  *  「最近 20 单 · 瑞典超 · 2 单 2 中」容易被读成"20 单只中 2 单",实际意思是
  *  "最近 20 单里,瑞典超那 2 单全中"。 */
 function windowLabel(w: NonNullable<BoardHighlight["window"]>): string {
+  if (w.kind === "all") return "全部"; // 2026-10-02:全部已结算(与战绩页同一个数)
   return w.kind === "days" ? `近 ${w.value} 天` : `最近 ${w.value} 单里`;
 }
 

@@ -2072,8 +2072,8 @@ class RecoHighlightRateDTO(BaseModel):
 
 
 class RecoHighlightWindowDTO(BaseModel):
-    kind: Literal["days", "count"]
-    value: int                               # 30 天 / 最近 20 单
+    kind: Literal["days", "count", "all"]    # all = 全部已结算(2026-10-02)
+    value: int                               # 30 天 / 最近 20 单 / all 时为 0
     # 实际覆盖区间——名义窗口会高估跨度(生产 20 单集中在 08-14~09-02,
     # "近30天"名义上比实际宽),细行要如实写出真实区间。
     observed_from_date: str

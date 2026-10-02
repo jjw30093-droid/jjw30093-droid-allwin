@@ -1,4 +1,10 @@
-"""首页战绩 banner 的**择优**口径选择器(2026-09,经站长明确决定)。
+"""首页战绩 banner 的**择优**口径选择器(2026-09,经站长明确决定;2026-10-02 改规则)。
+
+2026-10-02 站长改规则:原来在"窗口 × 联赛 × 市场"几十个切片里按命中率挑,样本太少时会挑出
+「瑞典超 2 单 2 中」「日职联 1 单 1 中」这种小切片。现在**只看整体**(不分联赛、不分市场;串关按
+一单算,与战绩页同口径),在若干时间/单数窗口里挑命中率最高的那个,样本至少 MIN_DECIDED 单;
+最好的口径命中率仍低于 SHOW_MIN_HIT_RATE 时这个板块不展示(kind='empty')。连中 ≥ MIN_STREAK
+仍优先。
 
 ⚠️ 本模块**故意**从数十个统计口径候选里挑一个最好看的展示。**这不是 bug,
 不要"修复"成全样本。** 站长在被明确告知这与 CLAUDE.md §2.2/§8.1 冲突之后
@@ -30,9 +36,11 @@ from .reco import hit_rate_from_counts
 
 # ── 可调常量(站长可改;改动会直接改变首页展示的口径)──────────────
 MIN_STREAK = 3                    # 低于此长度不作为连中候选(2 连是巧合)
-HIT_RATE_THRESHOLD = 0.70         # 站长指定的"好看"线
-DAY_WINDOWS = (30, 10, 5, 3)      # 天窗口,由宽到窄
-COUNT_WINDOWS = (20, 10, 5)       # 场次窗口,由宽到窄
+HIT_RATE_THRESHOLD = 0.70         # 站长指定的"好看"线(只决定 kind=rate_qualified,用于强调色)
+DAY_WINDOWS = (90, 60, 30, 14, 7) # 天窗口,由宽到窄(2026-10-02)
+COUNT_WINDOWS = (30, 20, 10)      # 场次窗口,由宽到窄(2026-10-02)
+MIN_DECIDED = 10                  # 有胜负的单数至少这么多才作为候选(2026-10-02:不再挑 2 单 2 中)
+SHOW_MIN_HIT_RATE = 0.50          # 最好的口径也不到一半:这个板块不上首页(2026-10-02)
 BOARDS = ("daily_pick", "daily_public")
 BOARD_LABEL_ZH = {"daily_pick": "每日精选", "daily_public": "每日公推"}
 
@@ -62,7 +70,7 @@ class SlipFact:
 class Candidate:
     kind: Literal["rate", "parlay_return"]
     board: str
-    window_kind: Literal["days", "count"]
+    window_kind: Literal["days", "count", "all"]
     window_value: int
     segment_kind: Literal["overall", "market", "league", "league_market"]
     market: str | None
@@ -197,6 +205,8 @@ def _window_slips(
         s for s in ordered_slips(slips, board)
         if s.status == "settled" and s.result is not None
     ]
+    if kind == "all":
+        return settled
     if kind == "days":
         cutoff = (now - timedelta(days=value)).strftime("%Y-%m-%d")
         return [s for s in settled if s.slip_date >= cutoff]
@@ -243,72 +253,34 @@ def build_candidates(
     slips: Sequence[SlipFact], board: str, now: datetime,
     *, known_league_ids: Mapping[int, str] | None = None,
 ) -> list[Candidate]:
-    """枚举该板块的全部候选。命中率类候选**只用单关**(站长决策:串子是串子,
-    串子和单关分开算);串关另出一条"回报"候选,不算命中率。
+    """枚举该板块的全部候选(2026-10-02 起只有"整体"一个切片)。
 
-    单关的腿==单,所以 market/league 归属唯一,不存在串关混 ah+ou 的歧义。
+    串关按一单算(整单命中/未中),与战绩页 track_record_summary 同口径——首页数字与战绩页
+    能对上。样本(有胜负的单数)不足 MIN_DECIDED 的窗口不作为候选。
+    known_league_ids 不再使用,保留形参只为调用方兼容。
     """
+    del known_league_ids
     out: list[Candidate] = []
-    windows = [("days", v) for v in DAY_WINDOWS] + [("count", v) for v in COUNT_WINDOWS]
+    windows = (
+        [("all", 0)]
+        + [("days", v) for v in DAY_WINDOWS]
+        + [("count", v) for v in COUNT_WINDOWS]
+    )
     for wkind, wval in windows:
         rows = _window_slips(slips, board, wkind, wval, now)
-        singles = [r for r in rows if r.combo_type == "single"]
-        parlays = [r for r in rows if r.combo_type == "parlay"]
-
         c = _make_rate_candidate(
-            singles, board=board, window_kind=wkind, window_value=wval,
+            rows, board=board, window_kind=wkind, window_value=wval,
             segment_kind="overall", market=None, league_id=None)
-        if c:
+        if c and c.decided >= MIN_DECIDED:
             out.append(c)
-
-        markets = {r.market for r in singles if r.market}
-        for m in sorted(markets):
-            c = _make_rate_candidate(
-                [r for r in singles if r.market == m], board=board,
-                window_kind=wkind, window_value=wval,
-                segment_kind="market", market=m, league_id=None)
-            if c:
-                out.append(c)
-
-        # 联赛维度:没有中文名的联赛整体丢弃——不能把内部 league_id 露给用户,
-        # 也不做"其它联赛"聚合桶(那等于把多个不可比联赛混成一个好看数字)。
-        leagues = {
-            r.league_id for r in singles
-            if r.league_id is not None
-            and (known_league_ids is None or r.league_id in known_league_ids)
-        }
-        for lg in sorted(leagues):
-            in_league = [r for r in singles if r.league_id == lg]
-            c = _make_rate_candidate(
-                in_league, board=board, window_kind=wkind, window_value=wval,
-                segment_kind="league", market=None, league_id=lg)
-            if c:
-                out.append(c)
-            for m in sorted({r.market for r in in_league if r.market}):
-                c = _make_rate_candidate(
-                    [r for r in in_league if r.market == m], board=board,
-                    window_kind=wkind, window_value=wval,
-                    segment_kind="league_market", market=m, league_id=lg)
-                if c:
-                    out.append(c)
-
-        if parlays:
-            net = sum((r.return_units or 0.0) for r in parlays) - len(parlays)
-            pdates = [r.slip_date for r in parlays]
-            out.append(Candidate(
-                kind="parlay_return", board=board,
-                window_kind=wkind, window_value=wval,
-                segment_kind="overall", market=None, league_id=None,
-                win=0, lose=0, half_win=0, half_loss=0, push=0, decided=0,
-                hit_rate=None, slip_count=len(parlays), net_units=round(net, 4),
-                observed_from=min(pdates), observed_to=max(pdates),
-            ))
     return out
 
 
 def _window_rank(c: Candidate) -> tuple[int, int]:
-    # 天窗口优先于场次窗口:日历区间读者能自己去战绩页核对,"最近 N 单"核对不了。
-    return (1 if c.window_kind == "days" else 0, c.window_value)
+    # 平局时:全部 > 天窗口 > 场次窗口——全部与战绩页同一个数,最经得起核对;
+    # 日历区间读者也能自己去战绩页核对,"最近 N 单"核对不了。
+    order = {"all": 2, "days": 1, "count": 0}
+    return (order.get(c.window_kind, 0), c.window_value)
 
 
 _SEGMENT_RANK = {"overall": 3, "market": 2, "league": 1, "league_market": 0}
@@ -352,14 +324,12 @@ def select_for_board(
     cands = build_candidates(slips, board, now, known_league_ids=known_league_ids)
     rate_cands = [c for c in cands if c.kind == "rate"]
     if not rate_cands:
-        # 没有命中率候选时,串关回报仍可作为兜底展示
-        parlay = [c for c in cands if c.kind == "parlay_return"]
-        if parlay:
-            best_p = max(parlay, key=lambda c: (c.net_units or 0.0, c.slip_count, c.key))
-            return Highlight(board, "parlay_return", None, best_p, len(cands))
         return Highlight(board, "empty", None, None, 0)
 
     best = max(rate_cands, key=_rank_key)
+    if best.hit_rate is None or best.hit_rate < SHOW_MIN_HIT_RATE - 1e-9:
+        # 最好看的整体口径也不到一半:不上首页(2026-10-02 站长:挑漂亮的数字显示)
+        return Highlight(board, "empty", None, None, len(cands))
     kind = (
         "rate_qualified"
         if best.hit_rate is not None and best.hit_rate >= threshold - 1e-9

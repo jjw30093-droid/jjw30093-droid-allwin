@@ -44,15 +44,25 @@ export async function RecordHighlightBanner() {
   // 不需要额外的类型谓词。
   const rows = data.boards.flatMap((b) => {
     const lines = highlightLines(b);
-    return lines ? [{ board: b.board, label: b.board_label_zh, lines, card: highlightCard(lines) }] : [];
+    // 命中率与计数同屏(计数在大字里,百分比在旁边;lib/reco-highlight.ts 的"百分比永远与计数同现")
+    const rate = b.rate?.hit_rate ?? null;
+    return lines ? [{ board: b.board, label: b.board_label_zh, lines, card: highlightCard(lines), rate }] : [];
   });
   if (rows.length === 0) return null;
 
   return (
-    <Link href="/reco?tab=record" className={styles.recordCard} aria-label="推荐战绩,查看完整记录">
-      <span className={styles.recordChip}>
-        <span className={styles.recordChipDot} aria-hidden />
-        战绩
+    <Link
+      href="/reco?tab=record"
+      className={styles.recordCard}
+      data-cells={rows.length}
+      aria-label="推荐战绩,查看完整记录"
+    >
+      <span className={styles.recordTop}>
+        <span className={styles.recordChip}>
+          <span className={styles.recordChipDot} aria-hidden />
+          战绩
+        </span>
+        <span className={styles.recordCardMore}>查看全部战绩 →</span>
       </span>
       <span className={styles.recordCells}>
         {rows.map((r) => (
@@ -62,29 +72,33 @@ export async function RecordHighlightBanner() {
             data-emphasize={r.lines.emphasize ? "1" : undefined}
             data-testid="record-cell"
           >
-            {/* 第一行:板块 + 口径(小字)。第二行:结果,头号数字放大。第三行:回报等次级信息。
-                三行由同一组 parts 按 line 分组(lib/reco-highlight.ts::highlightCard),
-                除分隔符外不增删任何字。 */}
             <span className={styles.recordCellLabel}>
               <span className={styles.recordCellBoard}>{r.label}</span>
               {r.card.scope && <span className={styles.recordCellScope}>{r.card.scope}</span>}
             </span>
-            <span className={styles.recordCellHeadline}>
-              {r.card.headline.map((part, i) =>
-                part.big ? (
-                  <span key={i} className={styles.recordBigNum}>
-                    {part.text}
-                  </span>
-                ) : (
-                  <span key={i}>{part.text}</span>
-                ),
+            <span className={styles.recordStats}>
+              <span className={styles.recordCellHeadline}>
+                {r.card.headline.map((part, i) =>
+                  part.big ? (
+                    <span key={i} className={styles.recordBigNum}>
+                      {part.text}
+                    </span>
+                  ) : (
+                    <span key={i}>{part.text}</span>
+                  ),
+                )}
+              </span>
+              {r.rate != null && (
+                <span className={styles.recordRate}>
+                  <b className="num">{(r.rate * 100).toFixed(1)}%</b>
+                  <span>命中率</span>
+                </span>
               )}
             </span>
             {r.card.sub && <span className={styles.recordCellSub}>{r.card.sub}</span>}
           </span>
         ))}
       </span>
-      <span className={styles.recordCardMore}>查看全部战绩 →</span>
     </Link>
   );
 }

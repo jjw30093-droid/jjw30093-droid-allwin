@@ -12,6 +12,8 @@ from datetime import datetime
 
 from backend.queries.reco_highlight import (
     HIT_RATE_THRESHOLD,
+    MIN_DECIDED,
+    SHOW_MIN_HIT_RATE,
     Candidate,
     SlipFact,
     build_candidates,
@@ -233,78 +235,69 @@ class TestStreak:
 # ── 命中率候选 ──────────────────────────────────────────────────
 
 class TestRateCandidates:
-    def test_only_singles_count_toward_hit_rate(self):
-        """站长决策:串子是串子。串关不得混进命中率候选。"""
-        rows = [
-            slip("s01", result="win"),
-            slip("s02", result="lose", combo="parlay"),
-        ]
-        cands = [c for c in build_candidates(rows, "daily_pick", NOW)
-                 if c.kind == "rate" and c.segment_kind == "overall"]
-        assert cands and all(c.decided == 1 and c.win == 1 for c in cands)
+    """2026-10-02 站长改规则:只看整体(不分联赛/市场),串关按一单算,样本 ≥ MIN_DECIDED。"""
 
-    def test_parlay_gets_return_candidate_not_hit_rate(self):
-        rows = [slip("s01", combo="parlay", result="win", ret=3.66)]
+    def _n(self, n, *, prefix="s", result="win", **kw):
+        return [slip(f"{prefix}{i:02d}", result=result,
+                     published=f"2026-09-01T{i:02d}:00:00Z", **kw) for i in range(1, n + 1)]
+
+    def test_only_overall_segment(self):
+        """不再按联赛/市场切片(此前会挑出「瑞典超 2 单 2 中」)。"""
+        rows = self._n(6, prefix="a", league=67, market="ou") + self._n(6, prefix="b", result="lose", league=47)
         cands = build_candidates(rows, "daily_pick", NOW)
-        parlay = [c for c in cands if c.kind == "parlay_return"]
-        assert parlay and parlay[0].hit_rate is None
-        assert parlay[0].net_units == 2.66
+        assert cands and {c.segment_kind for c in cands} == {"overall"}
+
+    def test_parlay_counts_as_one_slip(self):
+        """串关按整单算,与战绩页同口径——首页数字能和战绩页对上。"""
+        rows = self._n(9, prefix="s") + [slip("p01", combo="parlay", result="lose",
+                                              published="2026-09-01T23:00:00Z")]
+        c = next(c for c in build_candidates(rows, "daily_pick", NOW) if c.window_kind == "all")
+        assert c.decided == 10 and c.win == 9 and c.lose == 1
+
+    def test_below_min_decided_produces_no_candidate(self):
+        assert MIN_DECIDED == 10
+        assert build_candidates(self._n(MIN_DECIDED - 1), "daily_pick", NOW) == []
+        assert build_candidates(self._n(MIN_DECIDED), "daily_pick", NOW)
 
     def test_push_not_in_denominator(self):
-        rows = [slip("s01", result="win"), slip("s02", result="push")]
-        c = next(c for c in build_candidates(rows, "daily_pick", NOW)
-                 if c.segment_kind == "overall" and c.window_value == 30)
-        assert c.decided == 1 and c.push == 1 and c.hit_rate == 1.0
+        rows = self._n(10) + [slip("x01", result="push", published="2026-09-01T23:00:00Z")]
+        c = next(c for c in build_candidates(rows, "daily_pick", NOW) if c.window_kind == "all")
+        assert c.decided == 10 and c.push == 1 and c.hit_rate == 1.0
 
     def test_all_push_produces_no_candidate(self):
         """全走水:分母为 0,既不是 0% 也不是 100%,不生成候选。"""
-        rows = [slip("s01", result="push"), slip("s02", result="push")]
-        assert not [c for c in build_candidates(rows, "daily_pick", NOW) if c.kind == "rate"]
+        assert build_candidates(self._n(12, result="push"), "daily_pick", NOW) == []
 
     def test_count_window_not_generated_when_sample_short(self):
-        """用 6 单冒充"最近 10 单"是虚假标签。"""
-        rows = [slip(f"s{i:02d}") for i in range(1, 7)]
-        cands = build_candidates(rows, "daily_pick", NOW)
-        assert not [c for c in cands if c.window_kind == "count" and c.window_value == 10]
-        assert [c for c in cands if c.window_kind == "count" and c.window_value == 5]
-
-    def test_league_without_zh_name_is_dropped(self):
-        rows = [slip("s01", league=99999)]
-        cands = build_candidates(rows, "daily_pick", NOW, known_league_ids={47: "英超"})
-        assert not [c for c in cands if c.segment_kind in ("league", "league_market")]
-
-    def test_league_none_still_counts_in_overall_and_market(self):
-        rows = [slip("s01", league=None)]
-        cands = build_candidates(rows, "daily_pick", NOW, known_league_ids={47: "英超"})
-        kinds = {c.segment_kind for c in cands if c.kind == "rate"}
-        assert "overall" in kinds and "market" in kinds
-        assert "league" not in kinds
+        """用 12 单冒充"最近 20 单"是虚假标签。"""
+        cands = build_candidates(self._n(12), "daily_pick", NOW)
+        assert not [c for c in cands if c.window_kind == "count" and c.window_value == 20]
+        assert [c for c in cands if c.window_kind == "count" and c.window_value == 10]
 
     def test_observed_dates_are_actual_not_nominal(self):
-        rows = [slip("s01", date="2026-08-20"), slip("s02", date="2026-09-01")]
+        rows = [slip(f"s{i:02d}", date="2026-08-20" if i == 1 else "2026-09-01",
+                     published=f"2026-09-01T{i:02d}:00:00Z") for i in range(1, 11)]
         c = next(c for c in build_candidates(rows, "daily_pick", NOW)
-                 if c.segment_kind == "overall" and c.window_value == 30)
+                 if c.window_kind == "days" and c.window_value == 30)
         assert c.observed_from == "2026-08-20" and c.observed_to == "2026-09-01"
 
     def test_now_is_injected_not_read_from_clock(self):
-        # 5 单:刚好够生成最小的场次窗口(COUNT_WINDOWS 最小值 5)。
-        rows = [slip(f"s{i:02d}", date="2026-09-01",
-                     published=f"2026-09-01T{i:02d}:00:00Z") for i in range(1, 6)]
-        far = datetime(2030, 1, 1)
-        cands = build_candidates(rows, "daily_pick", far)
-        # 天窗口依赖 now → 远期 now 下全部出窗
+        cands = build_candidates(self._n(10), "daily_pick", datetime(2030, 1, 1))
+        # 天窗口依赖 now → 远期 now 下全部出窗;全部/场次窗口不依赖 now → 仍在
         assert not [c for c in cands if c.window_kind == "days"]
-        # 场次窗口不依赖 now → 仍在。两者对比证明 now 确实是注入的而非读时钟。
-        assert [c for c in cands if c.window_kind == "count"]
+        assert [c for c in cands if c.window_kind in ("all", "count")]
 
 
 # ── 阈值与择优 ──────────────────────────────────────────────────
 
 class TestSelection:
-    def _rows(self, wins, loses):
-        out = [slip(f"w{i:02d}", result="win", published=f"2026-09-01T{i:02d}:00:00Z")
+    def _rows(self, wins, loses, *, day="2026-09-01"):
+        # 发布时刻:全部胜在前、负在后(字符串可比较且合法:分钟/秒按序号展开)
+        out = [slip(f"w{i:03d}", result="win", date=day,
+                    published=f"{day}T01:{i // 60:02d}:{i % 60:02d}Z")
                for i in range(1, wins + 1)]
-        out += [slip(f"l{i:02d}", result="lose", published=f"2026-09-02T{i:02d}:00:00Z")
+        out += [slip(f"l{i:03d}", result="lose", date=day,
+                     published=f"{day}T02:{i // 60:02d}:{i % 60:02d}Z")
                 for i in range(1, loses + 1)]
         return out
 
@@ -317,57 +310,62 @@ class TestSelection:
         h = select_for_board(self._rows(69, 31), "daily_pick", NOW)
         assert h.kind == "rate_best_effort"
 
-    def test_all_losses_still_returns_something(self):
-        """站长要求不留空:全输也要挑最不难看的挂,不得返回空。"""
-        h = select_for_board(self._rows(0, 5), "daily_pick", NOW)
-        assert h.kind == "rate_best_effort"
-        assert h.candidate is not None and h.candidate.hit_rate == 0.0
+    def test_below_half_is_not_shown(self):
+        """最好看的整体口径也不到一半:这个板块不上首页(2026-10-02)。"""
+        assert SHOW_MIN_HIT_RATE == 0.5
+        h = select_for_board(self._rows(4, 6), "daily_pick", NOW)
+        assert h.kind == "empty" and h.candidate is None
+        assert select_for_board(self._rows(5, 5), "daily_pick", NOW).kind == "rate_best_effort"
 
     def test_streak_wins_over_rate(self):
         h = select_for_board(self._rows(5, 0), "daily_pick", NOW)
         assert h.kind == "streak" and h.streak.length == 5
 
     def test_rate_ladder_activates_once_streak_broken(self):
-        """连中被打断后,阶梯才生效——证明它不是死代码。"""
-        rows = self._rows(5, 0) + [
-            slip("z99", result="lose", published="2026-09-03T00:00:00Z")]
-        h = select_for_board(rows, "daily_pick", NOW)
-        assert h.kind in ("rate_qualified", "rate_best_effort")
+        h = select_for_board(self._rows(9, 1), "daily_pick", NOW)
+        assert h.kind == "rate_qualified" and h.candidate.decided == 10
+
+    def test_picks_the_prettiest_window(self):
+        """早期 19 中 3、最近 10 天 2 中 8:挑全部(或较宽窗口)而不是最近的难看窗口;反过来亦然。"""
+        old = [slip(f"o{i:02d}", result="win" if i <= 19 else "lose", date="2026-07-15",
+                    published=f"2026-07-15T{i:02d}:00:00Z") for i in range(1, 23)]
+        recent = [slip(f"r{i:02d}", result="win" if i <= 2 else "lose", date="2026-09-01",
+                       published=f"2026-09-01T{i:02d}:00:00Z") for i in range(1, 11)]
+        h = select_for_board(old + recent, "daily_pick", NOW)
+        assert h.candidate.window_kind == "all" and h.candidate.decided == 32
+        good_recent = [slip(f"g{i:02d}", result="win" if i <= 9 else "lose", date="2026-09-01",
+                            published=f"2026-09-01T{i:02d}:00:00Z") for i in range(1, 11)]
+        bad_old = [slip(f"b{i:02d}", result="lose", date="2026-07-15",
+                        published=f"2026-07-15T{i:02d}:00:00Z") for i in range(1, 21)]
+        h2 = select_for_board(bad_old + good_recent, "daily_pick", NOW)
+        assert h2.candidate.window_kind in ("days", "count") and h2.candidate.hit_rate == 0.9
+
+    def test_tie_prefers_all_window(self):
+        """所有单都在近期时,全部 / 近 N 天 数字一样:选「全部」(与战绩页同一个数)。"""
+        h = select_for_board(self._rows(8, 3), "daily_pick", NOW)
+        assert h.candidate.window_kind == "all"
 
     def test_deterministic_regardless_of_input_order(self):
-        rows = self._rows(4, 2)
+        rows = self._rows(8, 3)
         a = select_for_board(rows, "daily_pick", NOW)
         b = select_for_board(list(reversed(rows)), "daily_pick", NOW)
         assert a.kind == b.kind
         assert a.candidate.key == b.candidate.key
-
-    def test_tie_break_prefers_larger_sample(self):
-        """两个 100% 候选:样本大的赢。"""
-        rows = [slip(f"a{i:02d}", market="ou", published=f"2026-09-01T{i:02d}:00:00Z")
-                for i in range(1, 6)]
-        rows += [slip(f"b{i:02d}", market="ah", published=f"2026-09-02T{i:02d}:00:00Z")
-                 for i in range(1, 4)]
-        cands = [c for c in build_candidates(rows, "daily_pick", NOW)
-                 if c.kind == "rate" and c.segment_kind == "market"
-                 and c.window_kind == "days" and c.window_value == 30]
-        best = max(cands, key=lambda c: (c.hit_rate, c.decided))
-        assert best.market == "ou" and best.decided == 5
 
 
 # ── 板块分离 ────────────────────────────────────────────────────
 
 class TestBoards:
     def test_boards_computed_separately(self):
-        rows = [
-            slip("s01", board="daily_pick", result="win"),
-            slip("s02", board="daily_public", result="lose"),
-        ]
-        out = {h.board: h for h in select_highlights(rows, NOW)}
-        assert out["daily_pick"].candidate.hit_rate == 1.0
-        assert out["daily_public"].candidate.hit_rate == 0.0
+        pick = [slip(f"p{i:02d}", board="daily_pick", result="win" if i <= 8 else "lose",
+                     published=f"2026-09-01T{i:02d}:00:00Z") for i in range(1, 11)]
+        pub = [slip(f"q{i:02d}", board="daily_public", result="win" if i <= 2 else "lose",
+                    published=f"2026-09-01T{i:02d}:00:00Z") for i in range(1, 11)]
+        out = {h.board: h for h in select_highlights(pick + pub, NOW)}
+        assert out["daily_pick"].candidate.hit_rate == 0.8
+        assert out["daily_public"].kind == "empty"       # 2 中 8:不上首页
 
     def test_empty_board_returns_empty_kind_not_zero_percent(self):
-        """公推生产现状:零已结算。不能产出"0 单 0%"这种行。"""
         rows = [slip("s01", board="daily_pick")]
         out = {h.board: h for h in select_highlights(rows, NOW)}
         assert out["daily_public"].kind == "empty"
@@ -408,20 +406,33 @@ class TestHighlightEndpoint:
 
     def test_anonymous_200_with_counts_not_just_rate(self, app, data_dir, fresh_ip):
         """响应必须带原始计数——只给 hit_rate 的话前端就没法做到
-        "百分比与计数同现"。"""
+        "百分比与计数同现"。2026-10-02 起样本至少 MIN_DECIDED 单、只看整体。"""
         self._seed_core(940001)
         admin = _admin_client(app, data_dir, fresh_ip)
-        sid = _create_slip(admin, title="战绩样本", board="daily_public",
-                            legs=[_prov_leg("A vs B", "ah", "主胜", 1.9, 940001)])
-        _publish(admin, sid)
-        _settle_win(admin, sid)
+        # 先 9 中、最后 2 单不中(最后不中 → 没有连中,走命中率口径)
+        for i, res in enumerate(["win"] * 9 + ["lose"] * 2):
+            sid = _create_slip(admin, title=f"战绩样本{i}", board="daily_public",
+                               legs=[_prov_leg("A vs B", "ah", "主胜", 1.9, 940001)])
+            _publish(admin, sid)
+            legs = admin.get("/api/v1/admin/reco/slips").json()["slips"]
+            leg_id = next(x for x in legs if x["id"] == sid)["legs"][0]["id"]
+            r = admin.post(f"/api/v1/admin/reco/slips/{sid}/settle",
+                           headers=_csrf(admin), json={"leg_results": {leg_id: res}})
+            assert r.status_code == 200, r.text
+            # 同一秒内发布的单会按随机 id 排序;显式给出先后,保证"最后两单不中"确定成立
+            conn = connect_rw("platform")
+            conn.execute("UPDATE reco_slips SET published_at=? WHERE id=?",
+                         (f"2026-09-20T00:{i:02d}:00Z", sid))
+            conn.commit()
+            conn.close()
 
         r = TestClient(app).get("/api/v1/reco/highlight")
         assert r.status_code == 200
         body = r.json()
         pub = next(b for b in body["boards"] if b["board"] == "daily_public")
-        assert pub["rate"] is not None
-        assert pub["rate"]["win_count"] == 1 and pub["rate"]["decided_count"] == 1
+        assert pub["rate"] is not None, pub
+        assert pub["rate"]["win_count"] == 9 and pub["rate"]["decided_count"] == 11
+        assert pub["segment"]["kind"] == "overall"
         assert pub["candidate_key"]          # 可复现
 
     def test_streak_dto_carries_net_units(self, app, data_dir, fresh_ip):

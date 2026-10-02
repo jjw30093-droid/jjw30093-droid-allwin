@@ -331,3 +331,18 @@ describe("首页战绩卡三行拆分(2026-10-01)", () => {
     },
   );
 });
+
+describe("2026-10-02:整体「全部」口径", () => {
+  it("window.kind=all 显示「全部」,结果行仍是原始计数", () => {
+    const h = base({
+      kind: "rate_best_effort",
+      window: { kind: "all", value: 0, observed_from_date: "2026-08-14", observed_to_date: "2026-09-14" },
+      rate: rate({ decided_count: 31, win_count: 20, lose_count: 11, push_count: 2, hit_rate: 0.6452 }),
+      segment: { kind: "overall", market: null, league_id: null, league_name_zh: null },
+    });
+    const card = highlightCard(highlightLines(h)!);
+    expect(card.scope).toBe("全部");
+    expect(card.headline.map((p) => p.text).join("")).toBe("31 单 20 中");
+    expect(card.headline.find((p) => p.big)?.text).toBe("20");
+  });
+});

@@ -4276,7 +4276,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "days" | "count";
+            kind: "days" | "count" | "all";
             /** Value */
             value: number;
             /** Observed From Date */
