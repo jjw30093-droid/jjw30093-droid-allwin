@@ -494,3 +494,22 @@ def _seed_non_1x2_odds(conn_odds, match_id: int, observed_at: str) -> None:
                    '{"line":2.5,"over":1.9,"under":1.9}', 'x', ?, ?, 'run1')""",
         (f"boost-titan-{match_id}", observed_at, observed_at),
     )
+
+
+def test_upcoming_match_ids_same_predicate_as_upcoming_list(data_dir):
+    """boost=free_predicted 的概率收窄集合(2026-10-03 性能修复)必须覆盖
+    status=upcoming 列表可能返回的每一场:与 list_matches 同一个 status 谓词。"""
+    from backend.db.connections import connect_rw
+    from backend.queries.matches import upcoming_match_ids
+    from tests.backend.coreseed import insert_match, seed_core_schema
+
+    conn = connect_rw("core")
+    seed_core_schema(conn)
+    insert_match(conn, 8801, date="2027-04-01", status="NotStarted")
+    insert_match(conn, 8802, date="2027-04-02", status="InPlay")
+    insert_match(conn, 8803, date="2026-04-02", status="Finish", home_score=1, away_score=0)
+    conn.commit()
+    ids = upcoming_match_ids(conn)
+    conn.close()
+    assert {8801, 8802} <= ids
+    assert 8803 not in ids

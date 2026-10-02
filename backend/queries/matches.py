@@ -837,3 +837,16 @@ def recent_shot_map_spec(
         "shots": shots,
         "official_stats": official_stats,
     }
+
+
+def upcoming_match_ids(conn: sqlite3.Connection) -> set[int]:
+    """全部未完赛比赛的 id(与 list_matches 的 status="upcoming" 同一谓词)。
+
+    给 /matches?boost=free_predicted 收窄概率计算用(2026-10-03 性能修复):
+    不收窄时 latest_1x2_by_match 要扫全库全部历史 1x2 快照(生产 129 万行快照,
+    单次 1.2s,首页并发时排队到 8s 超时,首页因此显示"今日比赛暂时无法加载");
+    收窄到未完赛比赛后结果对 upcoming 列表逐场相同,耗时约 10ms。"""
+    return {
+        int(r[0])
+        for r in conn.execute("SELECT Match_ID FROM dim_match WHERE status IN ('NotStarted', 'InPlay')")
+    }

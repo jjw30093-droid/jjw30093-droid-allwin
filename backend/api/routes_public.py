@@ -404,7 +404,10 @@ def list_matches(
     # 请求(占绝大多数)只需要给"这一页"的比赛标概率,等 list_matches() 分页
     # 返回后再按这一页的 match_id 收窄查询即可——延后到下面 D8。
     if boost == "free_predicted":
-        win_prob_by_match = q_odds.latest_1x2_by_match(conn_odds)
+        # status=upcoming(首页唯一用法)只需要未完赛比赛的概率——收窄后从扫全库
+        # 历史快照(生产 1.2s)降到 ~10ms,见 q_matches.upcoming_match_ids
+        scope_ids = q_matches.upcoming_match_ids(conn) if status == "upcoming" else None
+        win_prob_by_match = q_odds.latest_1x2_by_match(conn_odds, match_ids=scope_ids)
         free_predicted_match_ids: set[int] = set(win_prob_by_match.keys())
     else:
         win_prob_by_match = None  # 分页后按本页 match_id 收窄计算,见下方 D8
