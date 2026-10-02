@@ -129,14 +129,6 @@ function HighlightsGroup({
         matchId={idNum}
         className={styles.section}
         heading={<SectionTitle>数据倾向</SectionTitle>}
-        emptyFallback={
-          finished ? undefined : (
-            <p className={styles.quickEmpty}>
-              这场暂时没有把握够大的数据倾向（历史上对不到一半的判断，我们不拿出来）。
-              上面的胜平负概率可以先看，往右点「数据」「赔率」还有两队数据和盘口变化。
-            </p>
-          )
-        }
       />
     </>
   );

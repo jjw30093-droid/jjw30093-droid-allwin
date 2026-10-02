@@ -179,7 +179,7 @@ test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用
   );
 });
 
-test("赛前市场卡:只展示有方向且历史命中率 ≥ 50% 的卡;都不够时给说明,不留空白", async ({
+test("赛前市场卡:只展示有方向且历史命中率 ≥ 50% 的卡;一张都不够时整段不出现", async ({
   page,
 }) => {
   // 2026-10-01 站长 P0:「未标定」「样本不足」「样本外不稳定」以及命中率不到一半的卡
@@ -188,8 +188,7 @@ test("赛前市场卡:只展示有方向且历史命中率 ≥ 50% 的卡;都不
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/matches/${seedMatchId()}`);
   const shown = page.getByTestId("market-cards-section");
-  const empty = page.getByTestId("market-cards-empty");
-  await expect(shown.or(empty)).toBeVisible();
+  await page.waitForLoadState("networkidle");
   // 大小球仍不展示(2026-08-20 站长要求)
   await expect(page.getByRole("heading", { name: "大小球" })).toHaveCount(0);
   for (const banned of ["未标定", "样本不足", "不够稳定"]) {
@@ -200,7 +199,8 @@ test("赛前市场卡:只展示有方向且历史命中率 ≥ 50% 的卡;都不
     const rates = await shown.getByText(/^\d+%$/).allTextContents();
     for (const r of rates) expect(Number(r.replace("%", ""))).toBeGreaterThanOrEqual(50);
   } else {
-    await expect(empty).toContainText("暂时没有把握够大的数据倾向");
+    // 一张都不够:标题也不出现,不放任何替代说明(站长 2026-10-02)
+    await expect(page.getByRole("heading", { name: "数据倾向" })).toHaveCount(0);
   }
   await expect(page.getByText("必胜")).toHaveCount(0);
   await expect(page.getByText("稳赚")).toHaveCount(0);

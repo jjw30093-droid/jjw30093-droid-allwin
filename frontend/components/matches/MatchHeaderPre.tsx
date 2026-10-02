@@ -72,9 +72,7 @@ export function MatchHeaderPre({ match }: { match: MatchSummary }) {
           列表有、点进来反而没有)。没有赔率时整块不出现。 */}
       {match.win_probability && (
         <div className={styles.probRow} data-testid="header-win-prob">
-          <p className={styles.probTitle}>
-            胜平负概率<span className={styles.probNote}>按赔率折算</span>
-          </p>
+          <p className={styles.probTitle}>胜平负概率</p>
           <WinProbabilityBar probability={match.win_probability} size="lg" />
         </div>
       )}

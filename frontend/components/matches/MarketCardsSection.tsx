@@ -20,15 +20,12 @@ export function MarketCardsSection({
   matchId,
   heading,
   className,
-  emptyFallback,
 }: {
   matchId: number;
   /** 段标题(没有可展示的卡时不渲染) */
   heading?: React.ReactNode;
   /** 外层 section 的样式(间距由调用方的页面样式决定) */
   className?: string;
-  /** 加载完成但没有可展示的卡时显示的内容(赛前「看点」用,避免整个标签页空白);不传则整段不出现 */
-  emptyFallback?: React.ReactNode;
 }) {
   const [resp, setResp] = useState<MatchMarketCardsResponse | null>(null);
   const [error, setError] = useState(false);
@@ -73,13 +70,7 @@ export function MarketCardsSection({
     );
   } else {
     const shown = resp.cards.filter(isShowableMarketCard);
-    if (shown.length === 0) {
-      return emptyFallback ? (
-        <section className={className} data-testid="market-cards-empty">
-          {emptyFallback}
-        </section>
-      ) : null;
-    }
+    if (shown.length === 0) return null;
     body = (
       <div className={styles.grid}>
         {shown.map((card) => (
