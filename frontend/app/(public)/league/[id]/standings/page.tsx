@@ -111,7 +111,7 @@ export default async function StandingsPage({
           <StandingsTable rows={data.rows} seasonFinished={data.season_finished} leagueId={id} />
         )
       ) : (
-        <MemberLeagueSection kind="standings" leagueId={id} season={seasonParam} />
+        <MemberLeagueSection kind="standings" leagueId={id} season={seasonParam} tableType={tableType} />
       )}
     </main>
   );

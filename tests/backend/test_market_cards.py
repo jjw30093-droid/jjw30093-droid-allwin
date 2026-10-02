@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.db.connections import connect_rw
+from tests.backend.authflow import wechat_scan_login
 from tests.backend.coreseed import insert_match, seed_core_schema
 
 
@@ -251,11 +252,13 @@ class TestMatchMarketsRoute:
             assert card["signal_grade"] is None
 
     def test_no_history_league_degrades_honestly(self, app, market_fixture):
-        """英冠(48,原 league:lottery)2026-08-16 起匿名即可访问(除"每日精选"
-        外全站比赛内容全部免费)——直接验证匿名 no_history 降级路径(不是
-        500,也不是 401)。这条断言正是要推翻的旧规则(此前匿名恒 401)。"""
+        """英冠(48)无历史 → no_history 降级(不是 500)。2026-10-02 起非英超
+        匿名 401,登录后才走到降级路径。"""
         anon = TestClient(app)
-        r = anon.get("/api/v1/matches/9502/markets")
+        assert anon.get("/api/v1/matches/9502/markets").status_code == 401
+        user = TestClient(app)
+        wechat_scan_login(user, ip="203.0.113.211")
+        r = user.get("/api/v1/matches/9502/markets")
         assert r.status_code == 200
         for card in r.json()["cards"]:
             assert card["data_quality"] == "no_history"

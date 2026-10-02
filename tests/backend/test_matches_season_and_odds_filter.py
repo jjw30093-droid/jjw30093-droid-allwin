@@ -436,6 +436,8 @@ class TestHomepageHeroBoostFreePredicted:
         详情端点必须下发与列表同一口径(同一函数)的 win_probability;没有 1x2 赔率时诚实为 None。"""
         self._seed_matches(data_dir)
         c = TestClient(app)
+        # 布景联赛是瑞典超(67),2026-10-02 起比赛详情需要登录
+        wechat_scan_login(c, ip="203.0.113.212")
         listed = {m["match_id"]: m for m in c.get(
             "/api/v1/matches?status=upcoming&window=7d&limit=12&sort=time").json()["matches"]}
         detail = c.get("/api/v1/matches/9111").json()["match"]

@@ -169,17 +169,15 @@ class TestI18nFallback:
 
 
 class TestGateAndCache:
-    def test_previously_lottery_league_open_to_anonymous(self, seeded_report, client, fresh_ip):
-        """瑞典超 9301(原 league:lottery):2026-08-16 起除"每日精选"外全站
-        比赛内容全部免费,匿名与登录后同样 200——这条断言正是要推翻的旧规则
-        (此前匿名 401)。"""
+    def test_non_epl_league_requires_login(self, seeded_report, client, fresh_ip):
+        """瑞典超 9301:2026-10-02 登录门禁,匿名 401,登录后 200。"""
         conn = connect_rw("core")
         insert_match(conn, 9301, league_id=67, date="2026-05-10",
                      home_id=2001, away_id=2002, home="Vasteras SK", away="Orgryte IS")
         seed_match_report(conn, match_id=9301, home_id=2001, away_id=2002)
         conn.commit()
         conn.close()
-        assert client.get("/api/v1/matches/9301/report").status_code == 200
+        assert client.get("/api/v1/matches/9301/report").status_code == 401
         wechat_scan_login(client, ip=fresh_ip)
         assert client.get("/api/v1/matches/9301/report").status_code == 200
 

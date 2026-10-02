@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { TeamBadge } from "@/components/teams/TeamBadge";
+import { clientFetch, type GetJson } from "@/lib/api-v1";
 import { Chip } from "@/components/ui/Chip";
 import { FOCUS_LABEL, matchingFixture, prepareMatch, type ManyResult, type MatchSetup, type SingleResult, type TeamSetup } from "@/features/simulator/engine";
 import { IMPACT_RUNS, impactJobs, summarizeImpact, type ImpactJob, type SideImpact } from "@/features/simulator/focusImpact";
@@ -51,7 +52,7 @@ function pickDefaultPair(params: SimParams, leagueId: string): [number, number] 
 export function SimulatorClient({
   params,
   leagueId: leagueNum,
-  fixtureIndex,
+  fixtureIndex: initialFixtureIndex,
   paramsStale,
   initialStep,
 }: {
@@ -117,6 +118,20 @@ export function SimulatorClient({
     setAway(lastLineupSetup(params, a));
     setFixtureChoice(fixtureId);
   };
+
+  // 服务端只能给匿名口径的真实比赛(英超);登录用户在浏览器补拉五大联赛全部(2026-10-02 登录门禁)
+  const [fixtureIndex, setFixtureIndex] = useState(initialFixtureIndex);
+  useEffect(() => {
+    let cancelled = false;
+    clientFetch<GetJson<"/api/v1/simulator/fixtures">>("/api/v1/simulator/fixtures")
+      .then((r) => {
+        if (!cancelled) setFixtureIndex(r.fixture_index as FixtureIndexEntry[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fixtures = useMemo(
     () =>

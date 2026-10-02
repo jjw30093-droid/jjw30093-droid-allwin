@@ -223,9 +223,10 @@ class TestUnifiedErrorContractRuntime:
         from backend import api_server
 
         # 2026-08-25 起 dim_match 触发器要求联赛已在制度表登记且赛季与日期
-        # 一致——sentinel 改用 42(欧冠,已登记、本布景无其它种子数据,
-        # 隔离性等价),2099-08-01 → 跨年推导正是 2099/2100。
-        sentinel_league_id = 42
+        # 一致,2099-08-01 → 跨年推导正是 2099/2100。2026-10-02 起非英超的
+        # legacy 端点未登录 401(会话 Cookie Path=/api/v1 本来也到不了
+        # /api/league/*),sentinel 改用英超 47(本布景无其它种子数据)。
+        sentinel_league_id = 47
         sentinel_season = "2099/2100"
         temp_core = data_dir / "allwin.db"
         assert Path(api_server.DB_PATH).resolve() == temp_core.resolve()

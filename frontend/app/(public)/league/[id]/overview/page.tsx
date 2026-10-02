@@ -77,7 +77,7 @@ export default async function LeagueOverviewPage({
       {data ? (
         <SeasonProfileCharts profile={data} />
       ) : (
-        <MemberLeagueSection kind="standings" leagueId={id} season={seasonParam} />
+        <MemberLeagueSection kind="season-profile" leagueId={id} season={seasonParam} />
       )}
     </main>
   );

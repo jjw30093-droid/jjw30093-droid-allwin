@@ -85,3 +85,12 @@
   background: transparent;
   cursor: pointer;
 }
+
+/* 与 team-stats.module.css .empty 同款(登录后客户端加载路径的空状态) */
+.empty {
+  margin: 0;
+  padding: 28px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+}

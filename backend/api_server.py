@@ -26,7 +26,7 @@ import os
 import sqlite3
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
@@ -35,6 +35,9 @@ except ImportError:
     from db import DB_PATH                  # 兼容旧脚本式运行(cwd=backend)
 
 from backend.api.cache_policy import install_cache_policy
+from backend.api.data_access import data_access_ctx, require_league_access
+from backend.api.deps import AuthContext
+from backend.queries.leagues import LEAGUE_META
 from backend.api.error_handlers import register_error_handlers
 from backend.api.schemas import (
     LeagueBettingResponse,
@@ -53,6 +56,18 @@ app = FastAPI(title="allwin serving API")
 # 下 schema 与运行时不一致(生产入口 backend.api.app:app 借用本文件路由对象时,
 # 走的是主 app 自己注册的处理器,不受这里影响)。
 register_error_handlers(app)
+
+# 2026-10-02 登录门禁:legacy 端点经 data_access_ctx 识别身份,依赖
+# app.state.auth_settings。生产入口(backend.api.app)用的是主 app 自己的
+# settings(请求的 request.app 是主 app);这里只为本文件作为独立 app 运行
+# (测试/旧脚本)时补上。配置缺失时不在 import 期抛错——主 app 的
+# create_app 才是 production fail-fast 的地方。
+try:
+    from backend.auth.config import load_auth_settings
+
+    app.state.auth_settings = load_auth_settings()
+except Exception:  # noqa: BLE001
+    pass
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,6 +102,13 @@ def _valid_seasons(conn: sqlite3.Connection, league_id: int, only_finished: bool
     query += " ORDER BY Season"
     rows = conn.execute(query, params).fetchall()
     return [r["Season"] for r in rows]
+
+
+def _legacy_league_gate(ctx: AuthContext, league_id: int) -> None:
+    """2026-10-02 登录门禁同样覆盖旧兼容层(未登录只能看英超)。未登记联赛
+    保持旧行为(由 _resolve_season 报错),不改既有错误契约。"""
+    if league_id in LEAGUE_META:
+        require_league_access(ctx, league_id)
 
 
 def _resolve_season(conn: sqlite3.Connection, league_id: int, season: Optional[str]) -> str:
@@ -144,9 +166,14 @@ FREE_PLAYER_STATS = {
 @app.get(
     "/api/league/{league_id}/overview",
     response_model=LeagueOverviewResponse,
-    responses=error_responses(400, 422),
+    responses=error_responses(400, 401, 422, 429),
 )
-def league_overview(league_id: int, season: Optional[str] = None):
+def league_overview(
+    league_id: int,
+    season: Optional[str] = None,
+    ctx: AuthContext = Depends(data_access_ctx),
+):
+    _legacy_league_gate(ctx, league_id)
     conn = get_readonly_connection()
     try:
         season = _resolve_season(conn, league_id, season)
@@ -240,9 +267,14 @@ def league_overview(league_id: int, season: Optional[str] = None):
 @app.get(
     "/api/league/{league_id}/betting",
     response_model=LeagueBettingResponse,
-    responses=error_responses(400, 422),
+    responses=error_responses(400, 401, 422, 429),
 )
-def league_betting(league_id: int, season: Optional[str] = None):
+def league_betting(
+    league_id: int,
+    season: Optional[str] = None,
+    ctx: AuthContext = Depends(data_access_ctx),
+):
+    _legacy_league_gate(ctx, league_id)
     conn = get_readonly_connection()
     try:
         season = _resolve_season(conn, league_id, season)
@@ -310,9 +342,14 @@ def league_betting(league_id: int, season: Optional[str] = None):
 @app.get(
     "/api/league/{league_id}/matches",
     response_model=LeagueMatchesResponse,
-    responses=error_responses(400, 422),
+    responses=error_responses(400, 401, 422, 429),
 )
-def league_matches(league_id: int, season: Optional[str] = None):
+def league_matches(
+    league_id: int,
+    season: Optional[str] = None,
+    ctx: AuthContext = Depends(data_access_ctx),
+):
+    _legacy_league_gate(ctx, league_id)
     conn = get_readonly_connection()
     try:
         season = _resolve_season(conn, league_id, season)

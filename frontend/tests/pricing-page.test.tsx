@@ -38,10 +38,12 @@ describe("/pricing:不得再把普通比赛内容描述成登录/会员独占权
     mockProductsFetch();
     render(await AccessTiers());
 
-    // 2026-09-26:当前没有自助注册,"注册用户"改称"免费账号",开通方式写成"通过公众号申请"
+    // 2026-10-02 登录门禁:游客只有英超的完整资料,其他联赛登录(免费)后看
     expect(screen.getByText("免费账号")).not.toBeNull();
     expect(screen.queryByText("注册用户")).toBeNull();
-    expect(screen.getByText("通过公众号申请开通，无需付费")).not.toBeNull();
+    expect(screen.getByText("微信验证码登录，免费")).not.toBeNull();
+    expect(screen.getByText("英超的完整比赛资料与赔率时间线")).not.toBeNull();
+    expect(screen.getByText("全部联赛的完整比赛资料与赔率时间线")).not.toBeNull();
     expect(screen.getByText("按场为你的账号开通")).not.toBeNull();
     expect(screen.queryByText(/浏览部分公开联赛/)).toBeNull();
     expect(screen.queryByText(/每场比赛的最高一项模型概率/)).toBeNull();
@@ -76,7 +78,7 @@ describe("/pricing 页面文案与入口(2026-09-26)", () => {
     const { default: PricingPage } = await import("@/app/pricing/page");
     const { container } = render(<PricingPage />);
     expect(container.textContent).not.toContain("站长");
-    expect(container.textContent).toContain("看历史战绩");
+    expect(container.textContent).toContain("历史战绩不用登录");
     expect(container.textContent).not.toContain("历史 战绩");
   });
 });

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { API, seedMatchId } from "./helpers";
+import { API, seedMatchId, sendCodeViaWebhook } from "./helpers";
 
 /**
  * 匿名浏览(**本地种子版**):首页/详情/象限图等依赖 e2e 种子数据的用例。
@@ -168,8 +168,16 @@ test("球队象限图:视角可切换、可分组,缺数据的视角诚实禁用
   await page.getByRole("button", { name: "攻防总览" }).click();
   await expect(page.getByRole("tab", { name: "攻守 xG" })).toBeVisible();
 
-  // 数据源没给 xg 档的赛季:攻守 xG 视角禁用并说明原因,默认落到战术,不静默补 0
+  // 数据源没给 xg 档的赛季:攻守 xG 视角禁用并说明原因,默认落到战术,不静默补 0。
+  // 2026-10-02 起非英超联赛需要登录,这一段先登录再看法甲。
+  const deviceRespPromise = page.waitForResponse(
+    (r) => r.url().endsWith("/api/v1/auth/wechat/device") && r.request().method() === "POST",
+  );
   await page.goto("/league/53/team-stats?season=2020%2F2021");
+  await page.waitForURL(/\/login\?next=/);
+  const device = (await (await deviceRespPromise).json()) as { login_code: string };
+  await sendCodeViaWebhook(page.request, device.login_code, "mock-openid-quadrant");
+  await page.waitForURL("**/league/53/team-stats**", { timeout: 20_000 });
   const gated = page.getByRole("tab", { name: "攻守 xG" });
   await expect(gated).toBeDisabled();
   await expect(gated).toHaveAttribute("title", /缺少此视角所需的数据/);

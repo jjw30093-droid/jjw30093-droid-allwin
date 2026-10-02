@@ -1,12 +1,13 @@
 """/api/v1 公开数据端点。
 
-2026-08-16 产品权限口径修正(经用户批准):除"每日精选"外,网站所有比赛
-内容全部免费,包括匿名用户——登录与内容分层彻底解耦,本文件的联赛/比赛级
-端点不再有任何 entitlement 门禁或按登录状态投影的字段裁剪。
+2026-10-02 登录门禁(经站长批准,取代 2026-08-16"全站匿名免费"口径):
+未登录只能看英超的比赛详情与联赛数据,其他联赛 401(login_required);
+比赛列表 /matches 的对阵/时间/胜平负概率对任何人一致。门禁与防爬限流见
+data_access.py。每日精选的按场授权不在本文件(routes_reco.py)。
 
-缓存边界(CLAUDE.md §10.2):匿名数据响应给 s-maxage;prediction/analysis/
-odds 端点内容会随时间更新(预测发布/赔率刷新),一律
-private, no-store,不进共享缓存(与登录状态无关)。
+缓存边界(CLAUDE.md §10.2):只有匿名可见联赛(英超)的响应给 s-maxage;
+其余联赛的响应随身份变化(匿名 401 / 登录 200)→ private, no-store。
+prediction/analysis/odds 端点内容随时间更新,一律 no-store。
 """
 
 import json
@@ -33,7 +34,8 @@ from backend.queries.leagues import (
 )
 
 from .cache_policy import PUBLIC_CACHE, PUBLIC_CACHE_SHORT
-from .deps import NO_STORE, AuthContext, core_ro, get_auth_context, odds_ro, platform_ro
+from .data_access import data_access_ctx, require_league_access
+from .deps import NO_STORE, AuthContext, core_ro, odds_ro, platform_ro
 from .schemas import (
     AnalysisBundleDTO,
     FreshnessResponse,
@@ -60,12 +62,10 @@ from .schemas import (
 router = APIRouter(
     prefix="/api/v1",
     tags=["public"],
-    responses=error_responses(400, 404, 422),
+    responses=error_responses(400, 401, 404, 422, 429),
 )
 
-# 全部已收录联赛现在对匿名与登录用户返回一致内容(单一真源见 queries/leagues.py)。
-# 取代散落的 `league_id == 47` 硬编码——所有联赛都应进公共缓存,不再有需要
-# 登录才能访问、因而必须 no-store 的联赛。
+# 匿名可见、因而可进公共缓存的联赛(单一真源见 queries/leagues.py::ANON_LEAGUE_IDS)。
 ANON_CACHEABLE = anonymous_cacheable_league_ids()
 
 
@@ -80,16 +80,6 @@ def _with_content_status(match: dict) -> dict:
     projected.update(status)
     projected["sync_state"] = projected.pop("state")
     return projected
-
-
-def _require_known_league(league_id: int) -> None:
-    """联赛必须在 LEAGUE_META 登记才允许访问对应端点;未知联赛 404。
-
-    2026-08-16 产品权限口径修正后,门禁只剩这一步——不再有任何基于
-    entitlement/登录状态的 401/403(原 `_require_league_access` 的
-    entitlement 分支已删除)。"""
-    if league_id not in LEAGUE_META:
-        raise HTTPException(status_code=404, detail="未知联赛")
 
 
 # ── 联赛 ───────────────────────────────────────────────────
@@ -142,8 +132,9 @@ def league_standings(
     # 后四档共 2,892 行此前 100% 不可见(standings 硬编码 'all')。
     table_type: str = Query("all", pattern="^(all|home|away|form|xg)$"),
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
-    _require_known_league(league_id)
+    require_league_access(ctx, league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     data = q_matches.standings(conn, league_id, season, table_type=table_type)
     if not data["rows"]:
@@ -160,8 +151,9 @@ def league_fixtures(
     limit: int = Query(100, ge=1, le=400),
     offset: int = Query(0, ge=0),
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
-    _require_known_league(league_id)
+    require_league_access(ctx, league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     seasons = q_matches.seasons_of_league(conn, league_id)
     # 未显式传 season,或传的赛季库里没有 → 取"最早一场未开赛比赛"所在赛季
@@ -203,6 +195,7 @@ def league_team_stats(
     recency: RecencyWindow | None = None,
     venue: Literal["home", "away", "all"] = "all",
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """球队赛季统计(2026-08-16 起全字段免费投影,含角球/红黄牌/零封/BTTS)。
 
@@ -212,7 +205,7 @@ def league_team_stats(
     `ratios.*.matches_played` 天然表示"筛选窗口内的场次数"。筛选激活时
     `boards` 恒为空列表(来源方赛季级榜单结构上无法按筛选窗口切片)。
     """
-    _require_known_league(league_id)
+    require_league_access(ctx, league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     data = q_league_stats.team_season_stats(
         conn, league_id, season, recency=recency, venue=venue
@@ -236,6 +229,7 @@ def league_season_profile(
     response: Response,
     season: str | None = None,
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """联赛速览:进球时段 / 比分分布 / 大小球阈值 / 主客胜率。
 
@@ -243,7 +237,7 @@ def league_season_profile(
     /api/league/{id}/betting 曾查过同一批数据,但 §10.1 禁止继续扩展 legacy,
     这里在 v1 新建。
     """
-    _require_known_league(league_id)
+    require_league_access(ctx, league_id)
     response.headers["Cache-Control"] = (
         PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     )
@@ -263,9 +257,10 @@ def league_players(
     response: Response,
     season: str | None = None,
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """球员榜(5 维度:进球/助攻/xG/xGOT/评分,各 top 10)。"""
-    _require_known_league(league_id)
+    require_league_access(ctx, league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     data = q_league_stats.player_leaderboards(conn, league_id, season)
     if not any(board["entries"] for board in data["boards"]):
@@ -283,6 +278,7 @@ def league_player_quadrant(
     response: Response,
     season: str | None = None,
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """联赛球员象限图(2026-09-15):一次返回全部位置的球员 + 10 个复合指标。
 
@@ -291,7 +287,7 @@ def league_player_quadrant(
     这里只按宽松下限裁掉真正的长尾替补,`excluded_below_floor` 如实回传
     裁掉几个人,不静默丢弃。
     """
-    _require_known_league(league_id)
+    require_league_access(ctx, league_id)
     response.headers["Cache-Control"] = PUBLIC_CACHE if league_id in ANON_CACHEABLE else NO_STORE
     data = q_player_quadrant.player_quadrant_stats(conn, league_id, season)
     if not data["rows"]:
@@ -334,14 +330,14 @@ def list_matches(
     q: str | None = Query(None, min_length=1, max_length=80),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    ctx: AuthContext = Depends(get_auth_context),
+    ctx: AuthContext = Depends(data_access_ctx),
     conn=Depends(core_ro),
     conn_platform=Depends(platform_ro),
     conn_odds=Depends(odds_ro),
 ):
-    """比赛列表:所有已收录联赛的比赛都出现在列表里,内容对任何人(含匿名)
-    完全一致(2026-08-16 起除"每日精选"外全站比赛内容全部免费,登录与内容
-    分层彻底解耦)。"""
+    """比赛列表:所有已收录联赛的比赛都出现在列表里,对阵/时间/比分/胜平负
+    概率对任何人(含匿名)完全一致——站长 2026-10-02 口径是"列表给你看,
+    点进去才要登录",所以列表本身不按身份裁剪,前端按联赛决定点击去向。"""
     # 内容不随身份变化,但请求带 Cookie(已登录)时仍不进共享缓存
     # (CLAUDE.md §10.2 的一般 Cookie 规则,与本场比赛内容是否分层无关)。
     response.headers["Cache-Control"] = NO_STORE if ctx.authenticated else PUBLIC_CACHE_SHORT
@@ -479,11 +475,12 @@ def match_detail(
     conn=Depends(core_ro),
     conn_platform=Depends(platform_ro),
     conn_odds=Depends(odds_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     m = q_matches.match_by_id(conn, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
     response.headers["Cache-Control"] = PUBLIC_CACHE_SHORT if m["league_id"] in ANON_CACHEABLE else NO_STORE
     m = _with_content_status(m)
     # 单场端点用单场版查询(2026-08-19 性能修复):odds_coverage_sets()/
@@ -528,6 +525,7 @@ def match_analysis(
     conn_core=Depends(core_ro),
     conn_platform=Depends(platform_ro),
     conn_odds=Depends(odds_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """公开版 analysis_bundle:恒完整返回(2026-08-16 起除"每日精选"外全站
     比赛内容全部免费,不再按 entitlement 投影;与 Studio 共用生成逻辑)。
@@ -540,7 +538,7 @@ def match_analysis(
     m = q_matches.match_by_id(conn_core, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
     bundle = build_analysis_bundle(conn_core, conn_platform, conn_odds, match_id)
     bundle.pop("subtitle_cues", None)   # 页面用不到,字幕留给 Studio(与权限无关)
     return bundle
@@ -554,6 +552,7 @@ def match_odds(
     response: Response,
     conn_core=Depends(core_ro),
     conn_odds=Depends(odds_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """恒返回完整快照时间线(2026-08-16 起除"每日精选"外全站比赛内容全部
     免费,不再对匿名/无订阅用户施加 1 小时延迟摘要)。"""
@@ -561,7 +560,7 @@ def match_odds(
     m = q_matches.match_by_id(conn_core, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
 
     # provider='nowgoal':本端点下游只查 bronze_ng_odds_snap(nowgoal 形状的表,
     # 无 provider 列)。dim_match_xref 的 UNIQUE 是 (provider, fotmob_match_id),
@@ -645,18 +644,18 @@ def match_report(
     match_id: int,
     response: Response,
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。
 
-    门禁:只有"联赛是否已登记"这一条(未知联赛 404),不分付费档位、不区分
-    登录状态——本端点全部是已完赛的历史事实,不含模型输出、不含赔率方法论。
-    缓存:任何联赛都可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);
+    门禁:require_league_access(未知联赛 404,未登录看非英超 401)。
+    缓存:英超匿名响应可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);
     请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。
     """
     m = q_matches.match_by_id(conn, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
     response.headers["Cache-Control"] = (
         PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
     )
@@ -673,18 +672,19 @@ def match_preview(
     response: Response,
     conn_core=Depends(core_ro),
     conn_odds=Depends(odds_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """赛前预览:预计阵容+伤停快照、球队风格象限、进攻来源拆解、关键球员占比、
     门将对位——数据 tab 阵容/风格/球员三个子 tab 的唯一数据源。
 
-    门禁与 /report、/markets 同级:只有"联赛是否已登记"这一条,不分付费
-    档位、不区分登录状态。全部由两队各自历史聚合与已采集快照构成,赛前与
+    门禁与 /report、/markets 同级(require_league_access)。
+    全部由两队各自历史聚合与已采集快照构成,赛前与
     赛后都能给,不含模型输出或赔率方法论。
     """
     m = q_matches.match_by_id(conn_core, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
     response.headers["Cache-Control"] = (
         PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
     )
@@ -698,6 +698,7 @@ def match_data_profile(
     venue: Literal["same_venue", "all"] = "same_venue",
     n: ProfileWindowN = ProfileWindowN.N10,
     conn=Depends(core_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """「数据 → 风格」子 tab 百分位画像的**可切换口径**版本(2026-09-13)。
 
@@ -716,12 +717,12 @@ def match_data_profile(
     共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端
     被重抄一遍。非法值由 FastAPI 统一 422。
 
-    门禁与 `/preview` 同级:只有"联赛是否已登记"这一条。
+    门禁与 `/preview` 同级(require_league_access)。
     """
     m = q_matches.match_by_id(conn, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
     response.headers["Cache-Control"] = (
         PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
     )
@@ -738,6 +739,7 @@ def match_markets(
     conn_core=Depends(core_ro),
     conn_platform=Depends(platform_ro),
     conn_odds=Depends(odds_ro),
+    ctx: AuthContext = Depends(data_access_ctx),
 ):
     """赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论
     (data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的"这场比赛
@@ -747,13 +749,12 @@ def match_markets(
     (line_source="market"),没有时退回统计参考线(line_source="statistical");
     yellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。
 
-    门禁与 /report 同级:只有"联赛是否已登记"这一条,不区分付费档位、不区分
-    登录状态——数据倾向是本站对访客建立信任的内容。
+    门禁与 /report 同级(require_league_access)。
     """
     m = q_matches.match_by_id(conn_core, match_id)
     if m is None:
         raise HTTPException(status_code=404, detail="比赛不存在")
-    _require_known_league(m["league_id"])
+    require_league_access(ctx, m["league_id"], m)
     response.headers["Cache-Control"] = (
         PUBLIC_CACHE if m["league_id"] in ANON_CACHEABLE else NO_STORE
     )

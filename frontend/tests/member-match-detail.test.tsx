@@ -1,17 +1,21 @@
 /**
- * MemberMatchDetail 渲染测试(2026-08-16 权限口径修正)。
+ * MemberMatchDetail 渲染测试。
  *
- * /api/v1/matches/{id} 现在对任何人恒 200,不会再返回 401/403——组件原本
- * "401/403 → LeagueGateCard 登录门禁卡片"这条分支已是死代码,必须移除:
  * - 拿到数据 → 渲染 MatchDetailBody;
+ * - 401(2026-10-02 登录门禁:未登录看非英超)→ 直接跳登录页,不渲染门禁卡片;
  * - 404(比赛不存在)→ 诚实说明;
- * - 其他错误(含理论上不应再出现的 401/403)→ 统一归入可重试的错误态,
- *   绝不出现登录引导文案。
+ * - 其他错误(403 等)→ 可重试的错误态。
  */
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemberMatchDetail } from "@/components/matches/MemberMatchDetail";
+import { redirectToLogin } from "@/lib/login-gate";
+
+vi.mock("@/lib/login-gate", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/login-gate")>()),
+  redirectToLogin: vi.fn(),
+}));
 
 vi.mock("@/components/matches/MatchDetailBody", () => ({
   MatchDetailBody: () => <div data-testid="match-detail-body-stub" />,
@@ -20,6 +24,7 @@ vi.mock("@/components/matches/MatchDetailBody", () => ({
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.mocked(redirectToLogin).mockClear();
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -39,15 +44,16 @@ function mockDetailStatus(status: number) {
   );
 }
 
-describe("MemberMatchDetail:401/403 不再是可达状态,不得渲染登录门禁卡片", () => {
-  it("意外收到 401 时不出现登录门禁卡片,归入通用错误态(可重试)", async () => {
+describe("MemberMatchDetail:401 跳登录页,403 归入错误态", () => {
+  it("收到 401 时直接跳登录页,页面保持骨架、不渲染任何门禁卡片", async () => {
     mockDetailStatus(401);
     render(
       <MemberMatchDetail matchId={1} />,
     );
-    await waitFor(() => expect(screen.queryByText("数据暂时无法加载")).not.toBeNull());
+    await waitFor(() => expect(redirectToLogin).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText("比赛详情加载中")).not.toBeNull();
+    expect(screen.queryByText("数据暂时无法加载")).toBeNull();
     expect(screen.queryByText(/登录/)).toBeNull();
-    expect(screen.queryByText("扫码登录后查看本场数据")).toBeNull();
   });
 
   it("意外收到 403 时同样不出现登录门禁卡片", async () => {

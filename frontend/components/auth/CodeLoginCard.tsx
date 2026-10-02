@@ -317,6 +317,8 @@ export function CodeLoginCard({
         if (stopped) return;
         if (e instanceof ApiError) {
           if (e.status === 410) setCard({ phase: "expired" });
+          else if (e.status === 403 && e.code === "account_disabled")
+            setCard({ phase: "error", message: "该账号已被停用" });
           else if (e.status === 403)
             setCard({ phase: "error", message: "登录请求校验失败,请重新获取验证码" });
           // 429 / 网络抖动:跳过本轮,下一轮继续

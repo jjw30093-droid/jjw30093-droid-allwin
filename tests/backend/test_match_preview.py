@@ -179,16 +179,14 @@ class TestStyleAndAttackSources:
 
 
 class TestGateAndCache:
-    def test_previously_lottery_league_open_to_anonymous(self, seeded_preview, client, fresh_ip):
-        """2026-08-16 起:除"每日精选"外全站比赛内容全部免费,原
-        league:lottery 联赛(67)不再需要登录——匿名与登录后返回同一状态码。
-        这条断言正是要推翻的旧规则(此前匿名 401)。"""
+    def test_non_epl_league_requires_login(self, seeded_preview, client, fresh_ip):
+        """2026-10-02 登录门禁:非英超匿名 401,登录后 200。"""
         conn = connect_rw("core")
         insert_match(conn, 9301, league_id=67, season="2026", date="2026-05-10",
                      home_id=2001, away_id=2002, home="Vasteras SK", away="Orgryte IS")
         conn.commit()
         conn.close()
-        assert client.get("/api/v1/matches/9301/preview").status_code == 200
+        assert client.get("/api/v1/matches/9301/preview").status_code == 401
         wechat_scan_login(client, ip=fresh_ip)
         assert client.get("/api/v1/matches/9301/preview").status_code == 200
 

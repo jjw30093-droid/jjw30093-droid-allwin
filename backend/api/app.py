@@ -77,6 +77,7 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
         "routes_admin_odds",
         "routes_studio",
         "routes_analytics",
+        "routes_simulator",
     ):
         try:
             module = __import__(f"backend.api.{module_name}", fromlist=["router"])

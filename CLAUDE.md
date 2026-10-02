@@ -434,13 +434,15 @@ MVP 使用数据库持久化的 opaque session，不使用浏览器可见长效 
 - 登录、回调、会话、账户接口全部 `Cache-Control: private, no-store`。
 - 付费用户后续应能绑定恢复身份；MVP 未接真实短信/邮件时必须在界面如实说明。
 
-## 8. Role、每日精选授权（2026-08-17 权限口径修正，经用户批准，废止此前的
-「三段可见性」模型）
+## 8. 登录门禁、Role、每日精选授权（2026-10-02 登录门禁，经用户批准，取代
+2026-08-17"全站匿名免费"口径）
 
 商业定位：站点是短视频/自媒体的流量载体与用户沉淀池。**除"每日精选"外，
-全站比赛内容对任何人（含匿名）都免费**，不存在"登录才免费"或"付费/免费"
-的内容分层。登录只用于身份类个人功能（收藏、关注、个人记录、账户设置、
-每日精选权限查询），不解锁任何比赛数据。当前不接支付、不设订阅套餐、不设
+全站比赛内容都免费，但只有英超对未登录用户开放**（站长 2026-10-02：防止
+被人不登录就爬数据，尤其是赔率；英超作为展示窗口）。其他联赛的比赛详情、
+赔率、联赛数据要用微信验证码登录（免费）后才能看。比赛列表里的对阵、时间、
+比分与胜平负概率对任何人可见——"列表给你看，点进去才要登录"。登录不分
+付费层级：任何登录用户看到的比赛内容完全相同。当前不接支付、不设订阅套餐、不设
 Premium 层级——付费板块「每日精选」的授权只能由管理员在后台发放：按"用户 +
 单条精选"，或按"用户 + 时段"（2026-10 起，见 §8.2）；不做兑换码（站长 2026-10 决定）。
 
@@ -454,8 +456,10 @@ studio/page.tsx` 页面注释同样写明"analyst/admin 专用"）。这一次�
 
 ### 8.1 维度
 
-- 认证状态：anonymous / authenticated——**只影响能否使用身份类个人功能，
-  不影响任何普通比赛内容的可见性**。
+- 认证状态：anonymous / authenticated——决定身份类个人功能，以及**非英超**
+  联赛的比赛详情与联赛数据能否访问（§8.3 登录门禁）。匿名可见联赛的单一
+  真源是 `backend/queries/leagues.py::ANON_LEAGUE_IDS`（当前只有 47），前端
+  `frontend/lib/login-gate.ts` 镜像它并有测试比对，不得在别处写 `league_id == 47`。
 - Role：user / analyst / admin，只表达身份，不承载**付费**能力（不因为
   Role 不同而看到不同的比赛数据分层）；但 Role 仍然是 Creator Studio 这类
   内部工具的合法功能性门禁——`role=user` 的普通登录用户和管理员一样都不能
@@ -469,12 +473,11 @@ studio/page.tsx` 页面注释同样写明"analyst/admin 专用"）。这一次�
 - 每日精选真正的访问控制单位是 `reco_access_grants` 表（见 §8.2），不是
   entitlement。
 
-普通比赛内容（首页比赛卡片、比赛详情、胜平负概率、MODEL/MARKET_BASELINE
-概率、积分榜、近期及赛季数据、数据可视化、射门图、xG/xGA、阵容和伤停、
-赔率当前值和时间线、比赛分析要点、联赛和球队资料）**对匿名和
-登录用户返回完全相同的响应字段**——没有 `requires_login`、`tier`、
-`free_outcome`、`locked_outcomes`、`is_premium` 这类裁剪字段，也没有
-"登录才能看完整概率/完整赔率时间线/完整联赛列表"这类分支。
+普通比赛内容的门禁是**整体的 401，不是字段裁剪**：一个端点要么完整返回，
+要么（匿名 + 非英超）401 `login_required`——没有 `requires_login`、`tier`、
+`free_outcome`、`locked_outcomes`、`is_premium` 这类裁剪字段，也不得把详情
+数据下发后在前端遮挡。`GET /api/v1/matches`（比赛列表）对匿名与登录返回
+完全相同的内容，不按身份裁剪，前端据联赛决定点击去向。
 
 `reco:track_record`（每日精选战绩归档）同样对匿名开放，与模型公开战绩
 （`/api/v1/track-record`）是同一先例——这是站点自身的公开运营记录，
@@ -529,14 +532,36 @@ reco_access_periods
 
 - 前端只负责体验，后端是权限真源；普通比赛内容的后端查询/路由层不得再有
   entitlement 分支。
+- 登录门禁（`backend/api/data_access.py`）：比赛详情族（详情/analysis/odds/
+  report/preview/data-profile/markets）、联赛数据族（standings/fixtures/
+  team-stats/season-profile/players/player-quadrant）、legacy `/api/league/*`、
+  模拟器非英超参数（`/api/v1/simulator/params`）一律经 `require_league_access`：
+  未知联赛 404，匿名 + 非英超 401 `login_required`（details 只带列表本来就
+  公开的联赛名/对阵/开球时间）。401 与登录后的非英超响应一律 `private, no-store`。
+  前端遇 401 直接跳 `/login?next=<当前路径>`（`location.replace`）。
+- 服务端渲染拿不到登录态（会话 Cookie Path=/api/v1），所以非英超页面的 HTML/RSC
+  只能是不含数据的外壳，数据由浏览器带 Cookie 请求 API；模拟器页服务端只下发
+  英超参数与英超真实比赛索引（盘口线是赔率数据）。验收必须包含"匿名拿到的
+  HTML/RSC 不含非英超详情数据"的泄漏检查。
+- 防爬限流（同一文件）：数据端点按登录用户计数，额度 = "正常人浏览频率 × 3"（站长
+  2026-10-02 定口径）：正常人取生产访问日志真人访客 p95（每分钟 4 / 每小时 5 / 每天 15 页），
+  ×3 后按一页 6 次请求（非英超详情页实测）换算为每分钟 72、每小时 90、每天 270 次；
+  公开的比赛列表 `/api/v1/matches` 不计。
+  匿名按 X-Real-IP（每分钟 300；没有 X-Real-IP 的 Next 服务端直连不计）。超限
+  429 `rate_limited`，登录用户触发时写 `audit_logs`（`ratelimit.trip`，同一账号
+  10 分钟一条），后台用户列表显示近 7 天次数。限流只是提高成本与留证据，挡不住
+  模拟正常手速的爬虫。
+- 停用账号：后台 `POST /api/v1/admin/users/{id}/status`（admin + CSRF + AuditLog），
+  停用即撤销全部会话；被停用账号再登录时领取会话返回 403 `account_disabled`，
+  不发 Cookie。不能停用管理员。
 - 每日精选的访问判定必须查 `reco_access_grants` 与 `reco_access_periods`，不得
   回退到 plan/entitlement/subscription。
 - Admin 不能只靠隐藏路由或秘密 URL。
 - 未接真实支付；每日精选授权一律由管理员在后台按场或按时段发放、撤销；所有
   操作写 AuditLog。
-- SEO/GEO 面（sitemap、robots、llms.txt）：普通比赛内容页面现在对匿名
-  完全可见，可以按需纳入可索引范围；每日精选正文页面仍需登录+授权，不
-  纳入 sitemap。
+- SEO/GEO 面（sitemap、robots、llms.txt）：只列匿名可见联赛（英超）的页面；
+  其他联赛页面对爬虫只是登录跳转外壳，不纳入；每日精选正文页面仍需登录+授权，
+  不纳入 sitemap。
 
 ## 10. API 与缓存
 
@@ -570,7 +595,9 @@ GET  /api/v1/admin/...
 ### 10.2 缓存边界
 
 - `/_next/static/*` 和带 hash 的静态资源：长期 immutable。
-- 匿名首页、比赛列表和公开比赛页：按数据新鲜度使用 `s-maxage`。
+- 匿名首页、比赛列表和英超的公开比赛/联赛数据：按数据新鲜度使用 `s-maxage`。
+  非英超的比赛/联赛数据响应随身份变化（匿名 401 / 登录 200），一律 `private, no-store`
+  （§8.3）。
 - 会员数据、登录、账户、Studio、Admin、导出：`private, no-store`。
 - 带 Session Cookie、Authorization 或 Set-Cookie 的响应不得进入 Cloudflare 共享缓存。
 - 公共 HTML 不因用户身份变化；登录后会员数据由私有 API 加载，避免缓存变体泄漏。
@@ -1163,8 +1190,9 @@ systemd 默认软上限 1024）不可用，根因至今未最终定位（已排�
 - migration 可在临时副本执行且可重复运行；
 - SQLite `integrity_check`；
 - pytest；
-- 权限矩阵测试（普通比赛内容对匿名与登录一致；每日精选按场授权 401/403/200）；
+- 权限矩阵测试（英超匿名 200 + 公共缓存；非英超匿名 401 `login_required` + no-store、登录 200；比赛列表对匿名与登录一致；每日精选按场/时段授权 401/403/200）；
 - 普通比赛内容 DTO 不含 requires_login/tier/free_outcome 等已废止的裁剪字段；
+- 防爬限流（登录用户超限 429 + `ratelimit.trip` 留痕；Next 服务端直连不计）与停用账号（会话立即失效、再登录 403 `account_disabled`）；
 - 内容编辑必须经 `edit_snapshot` 留痕（`prediction_snapshot_edits` 正确写入，`edit_count`/`last_edited_at` 更新）；
 - webhook 签名/时间戳/nonce 防重放、设备扫码一次性消费、会话撤销与 CSRF 测试；
 - 数据源不可用时的降级测试。
@@ -1173,7 +1201,7 @@ systemd 默认软上限 1024）不可用，根因至今未最终定位（已排�
 
 - ESLint、TypeScript、Vitest；
 - `npm run build`；
-- Playwright 覆盖：匿名浏览完整比赛内容、微信 Mock 登录、每日精选按场授权与撤销、
+- Playwright 覆盖：匿名浏览英超完整内容、匿名打开非英超跳登录页且 HTML/RSC 不含详情数据、登录后回到原页面、微信 Mock 登录、每日精选按场授权与撤销、
   Admin 拒绝、Studio 导出。
 - 新增或修改图表：至少一条渲染冒烟测试（真实调用 `buildOption` + ECharts
   headless 渲染，异常必须真实抛出，见 §11.3）；标记/背景配色变化附一条

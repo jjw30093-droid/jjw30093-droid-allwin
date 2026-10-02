@@ -204,7 +204,7 @@ function LoginBody() {
       <div className={styles.titleGroup}>
         <div className={styles.titleCopy}>
           <h1 className={styles.title}>{pageTitle}</h1>
-          <p className={styles.note}>登录后可以收藏比赛、查看每日精选。比赛数据不用登录也能看。</p>
+          <p className={styles.note}>登录后可以查看全部联赛的比赛数据、收藏比赛、查看每日精选。</p>
         </div>
       </div>
 

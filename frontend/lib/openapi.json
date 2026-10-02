@@ -912,6 +912,16 @@
        }
       }
      },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
      "404": {
       "description": "Not Found",
       "content": {
@@ -924,6 +934,16 @@
      },
      "422": {
       "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
       "content": {
        "application/json": {
         "schema": {
@@ -1001,6 +1021,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1020,6 +1050,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1119,6 +1159,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1138,6 +1188,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1229,6 +1289,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1248,6 +1318,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1308,6 +1388,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1327,6 +1417,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1387,6 +1487,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1406,6 +1516,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1466,6 +1586,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1485,6 +1615,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1495,7 +1635,7 @@
      "public"
     ],
     "summary": "List Matches",
-    "description": "比赛列表:所有已收录联赛的比赛都出现在列表里,内容对任何人(含匿名)\n完全一致(2026-08-16 起除\"每日精选\"外全站比赛内容全部免费,登录与内容\n分层彻底解耦)。",
+    "description": "比赛列表:所有已收录联赛的比赛都出现在列表里,对阵/时间/比分/胜平负\n概率对任何人(含匿名)完全一致——站长 2026-10-02 口径是\"列表给你看,\n点进去才要登录\",所以列表本身不按身份裁剪,前端按联赛决定点击去向。",
     "operationId": "list_matches_api_v1_matches_get",
     "parameters": [
      {
@@ -1696,6 +1836,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1715,6 +1865,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1758,6 +1918,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1777,6 +1947,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1821,6 +2001,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1840,6 +2030,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1892,6 +2092,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1911,6 +2121,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1921,7 +2141,7 @@
      "public"
     ],
     "summary": "Match Report",
-    "description": "完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。\n\n门禁:只有\"联赛是否已登记\"这一条(未知联赛 404),不分付费档位、不区分\n登录状态——本端点全部是已完赛的历史事实,不含模型输出、不含赔率方法论。\n缓存:任何联赛都可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);\n请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。",
+    "description": "完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。\n\n门禁:require_league_access(未知联赛 404,未登录看非英超 401)。\n缓存:英超匿名响应可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);\n请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。",
     "operationId": "match_report_api_v1_matches__match_id__report_get",
     "parameters": [
      {
@@ -1963,6 +2183,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -1982,6 +2212,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -1992,7 +2232,7 @@
      "public"
     ],
     "summary": "Match Preview",
-    "description": "赛前预览:预计阵容+伤停快照、球队风格象限、进攻来源拆解、关键球员占比、\n门将对位——数据 tab 阵容/风格/球员三个子 tab 的唯一数据源。\n\n门禁与 /report、/markets 同级:只有\"联赛是否已登记\"这一条,不分付费\n档位、不区分登录状态。全部由两队各自历史聚合与已采集快照构成,赛前与\n赛后都能给,不含模型输出或赔率方法论。",
+    "description": "赛前预览:预计阵容+伤停快照、球队风格象限、进攻来源拆解、关键球员占比、\n门将对位——数据 tab 阵容/风格/球员三个子 tab 的唯一数据源。\n\n门禁与 /report、/markets 同级(require_league_access)。\n全部由两队各自历史聚合与已采集快照构成,赛前与\n赛后都能给,不含模型输出或赔率方法论。",
     "operationId": "match_preview_api_v1_matches__match_id__preview_get",
     "parameters": [
      {
@@ -2026,6 +2266,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -2045,6 +2295,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -2055,7 +2315,7 @@
      "public"
     ],
     "summary": "Match Data Profile",
-    "description": "「数据 → 风格」子 tab 百分位画像的**可切换口径**版本(2026-09-13)。\n\n`/preview` 里内嵌的 `data_profile` 恒为默认口径(same_venue / n=10),\n用户不动切换器时本端点一次都不会被请求。拆成独立子资源是性能决策:\n`/preview` 整条是 493 次 core SELECT(生产实测 0.55s / 26KB),而本端点\n只跑 `match_data_profile()` 一个函数(热态 ~133ms / 10 次 SELECT)。把\n这两个参数加到 `/preview` 上,等于为了 10 条 SELECT 的数据重算全部模块,\n还要把 CDN 缓存键打散 6 倍。\n\n`venue=\"all\"` = 不分主客场、**仍限本联赛**。与 `comparison_mode` 的\n`cross_league_raw`(欧战,不限赛事)是正交的两个维度,不要混淆。\n\n参数用 `Literal` 而不是正则白名单:`Literal` 在 OpenAPI 里生成 enum,\n`npm run gen:api` 直接产出 TS 联合类型,前端的按钮列表与后端的白名单\n共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端\n被重抄一遍。非法值由 FastAPI 统一 422。\n\n门禁与 `/preview` 同级:只有\"联赛是否已登记\"这一条。",
+    "description": "「数据 → 风格」子 tab 百分位画像的**可切换口径**版本(2026-09-13)。\n\n`/preview` 里内嵌的 `data_profile` 恒为默认口径(same_venue / n=10),\n用户不动切换器时本端点一次都不会被请求。拆成独立子资源是性能决策:\n`/preview` 整条是 493 次 core SELECT(生产实测 0.55s / 26KB),而本端点\n只跑 `match_data_profile()` 一个函数(热态 ~133ms / 10 次 SELECT)。把\n这两个参数加到 `/preview` 上,等于为了 10 条 SELECT 的数据重算全部模块,\n还要把 CDN 缓存键打散 6 倍。\n\n`venue=\"all\"` = 不分主客场、**仍限本联赛**。与 `comparison_mode` 的\n`cross_league_raw`(欧战,不限赛事)是正交的两个维度,不要混淆。\n\n参数用 `Literal` 而不是正则白名单:`Literal` 在 OpenAPI 里生成 enum,\n`npm run gen:api` 直接产出 TS 联合类型,前端的按钮列表与后端的白名单\n共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端\n被重抄一遍。非法值由 FastAPI 统一 422。\n\n门禁与 `/preview` 同级(require_league_access)。",
     "operationId": "match_data_profile_api_v1_matches__match_id__data_profile_get",
     "parameters": [
      {
@@ -2112,6 +2372,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -2131,6 +2401,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -2141,7 +2421,7 @@
      "public"
     ],
     "summary": "Match Markets",
-    "description": "赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论\n(data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的\"这场比赛\n特有\"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。\n\n盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线\n(line_source=\"market\"),没有时退回统计参考线(line_source=\"statistical\");\nyellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。\n\n门禁与 /report 同级:只有\"联赛是否已登记\"这一条,不区分付费档位、不区分\n登录状态——数据倾向是本站对访客建立信任的内容。",
+    "description": "赛前市场卡:两队各自历史均值 → 离线标定表查历史命中率 → 结论\n(data 倾向 + 星级)+ 折叠归因明细。这是赛前之墙唯一能给的\"这场比赛\n特有\"内容之一(未开赛比赛没有任何赛后事实表数据,只有两队历史聚合)。\n\n盘口线:goals/corners 在真的抓到 NowGoal 实时盘口时用真实线\n(line_source=\"market\"),没有时退回统计参考线(line_source=\"statistical\");\nyellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。\n\n门禁与 /report 同级(require_league_access)。",
     "operationId": "match_markets_api_v1_matches__match_id__markets_get",
     "parameters": [
      {
@@ -2175,6 +2455,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "404": {
       "content": {
        "application/json": {
@@ -2194,6 +2484,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -2227,6 +2527,16 @@
        }
       }
      },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
      "404": {
       "description": "Not Found",
       "content": {
@@ -2239,6 +2549,16 @@
      },
      "422": {
       "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
       "content": {
        "application/json": {
         "schema": {
@@ -2279,6 +2599,16 @@
        }
       }
      },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
      "404": {
       "description": "Not Found",
       "content": {
@@ -2291,6 +2621,16 @@
      },
      "422": {
       "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
       "content": {
        "application/json": {
         "schema": {
@@ -5014,6 +5354,109 @@
     }
    }
   },
+  "/api/v1/admin/users/{user_id}/status": {
+   "post": {
+    "tags": [
+     "admin"
+    ],
+    "summary": "Set User Status",
+    "description": "停用/恢复账号(2026-10-02 防爬:站长对异常刷数据的账号手动封禁)。\n\n停用即撤销该用户全部会话(立即掉线);停用状态下登录拿到的会话也会被\nget_session_by_token 拒绝。不允许停用自己或其他管理员,防止误操作锁死后台。",
+    "operationId": "set_user_status_api_v1_admin_users__user_id__status_post",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserStatusBody"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OkDTO"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     }
+    }
+   }
+  },
   "/api/v1/admin/users/{user_id}/grant": {
    "post": {
     "tags": [
@@ -6582,6 +7025,160 @@
     }
    }
   },
+  "/api/v1/simulator/params": {
+   "get": {
+    "tags": [
+     "simulator"
+    ],
+    "summary": "Simulator Params",
+    "operationId": "simulator_params_api_v1_simulator_params_get",
+    "parameters": [
+     {
+      "name": "league_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "League Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SimulatorParamsResponse"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Service Unavailable"
+     }
+    }
+   }
+  },
+  "/api/v1/simulator/fixtures": {
+   "get": {
+    "tags": [
+     "simulator"
+    ],
+    "summary": "Simulator Fixtures",
+    "description": "真实比赛索引:登录给五大联赛全部,未登录只给英超。",
+    "operationId": "simulator_fixtures_api_v1_simulator_fixtures_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SimulatorFixturesResponse"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Unauthorized",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Unprocessable Content",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Too Many Requests",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "Service Unavailable",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/league/{league_id}/overview": {
    "get": {
     "tags": [
@@ -6638,6 +7235,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "422": {
       "content": {
        "application/json": {
@@ -6647,6 +7254,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -6707,6 +7324,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "422": {
       "content": {
        "application/json": {
@@ -6716,6 +7343,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -6776,6 +7413,16 @@
       },
       "description": "Bad Request"
      },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
      "422": {
       "content": {
        "application/json": {
@@ -6785,6 +7432,16 @@
        }
       },
       "description": "Unprocessable Content"
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Too Many Requests"
      }
     }
    }
@@ -7445,6 +8102,22 @@
        }
       ],
       "title": "Plan Ends At"
+     },
+     "rate_limit_trips_7d": {
+      "type": "integer",
+      "title": "Rate Limit Trips 7D",
+      "default": 0
+     },
+     "last_rate_limited_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Rate Limited At"
      }
     },
     "type": "object",
@@ -17373,6 +18046,133 @@
     "type": "object",
     "title": "ScoreDistributionRow"
    },
+   "SimulatorFixtureDTO": {
+    "properties": {
+     "match_id": {
+      "type": "integer",
+      "title": "Match Id"
+     },
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "home_team_id": {
+      "type": "integer",
+      "title": "Home Team Id"
+     },
+     "away_team_id": {
+      "type": "integer",
+      "title": "Away Team Id"
+     },
+     "home_name": {
+      "type": "string",
+      "title": "Home Name"
+     },
+     "away_name": {
+      "type": "string",
+      "title": "Away Name"
+     },
+     "kickoff_at_utc": {
+      "type": "string",
+      "title": "Kickoff At Utc"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "ah_line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ah Line"
+     },
+     "ou_line": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ou Line"
+     },
+     "final_score": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "integer"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Final Score"
+     }
+    },
+    "type": "object",
+    "required": [
+     "match_id",
+     "league_id",
+     "home_team_id",
+     "away_team_id",
+     "home_name",
+     "away_name",
+     "kickoff_at_utc",
+     "status"
+    ],
+    "title": "SimulatorFixtureDTO"
+   },
+   "SimulatorFixturesResponse": {
+    "properties": {
+     "fixture_index": {
+      "items": {
+       "$ref": "#/components/schemas/SimulatorFixtureDTO"
+      },
+      "type": "array",
+      "title": "Fixture Index"
+     }
+    },
+    "type": "object",
+    "required": [
+     "fixture_index"
+    ],
+    "title": "SimulatorFixturesResponse"
+   },
+   "SimulatorParamsResponse": {
+    "properties": {
+     "league_id": {
+      "type": "integer",
+      "title": "League Id"
+     },
+     "params": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Params"
+     },
+     "fixture_index": {
+      "items": {
+       "$ref": "#/components/schemas/SimulatorFixtureDTO"
+      },
+      "type": "array",
+      "title": "Fixture Index"
+     }
+    },
+    "type": "object",
+    "required": [
+     "league_id",
+     "params",
+     "fixture_index"
+    ],
+    "title": "SimulatorParamsResponse"
+   },
    "SourceHealthItem": {
     "properties": {
      "id": {
@@ -18928,6 +19728,29 @@
     },
     "type": "object",
     "title": "UpdateDraftBody"
+   },
+   "UserStatusBody": {
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "active",
+       "disabled"
+      ],
+      "title": "Status"
+     },
+     "note": {
+      "type": "string",
+      "maxLength": 200,
+      "title": "Note",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "required": [
+     "status"
+    ],
+    "title": "UserStatusBody"
    },
    "WinProbabilityDTO": {
     "properties": {

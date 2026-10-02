@@ -251,7 +251,7 @@ test("登录页:一句话副标题、账号密码表单、忘记密码提示,没
   // 顶栏与内容的留白 16px:/login 的这项检查放在这里,不放进下面多页用例——Cloudflare 对
   // /login 单独有更严的限流(线上实测返回 429 / Error 1015),整份 e2e 里只访问 /login 一次
   expect(await page.evaluate(() => getComputedStyle(document.querySelector("body > main")!).paddingTop)).toBe("16px");
-  await expect(page.getByText("登录后可以收藏比赛、查看每日精选。比赛数据不用登录也能看。")).toBeVisible();
+  await expect(page.getByText("登录后可以查看全部联赛的比赛数据、收藏比赛、查看每日精选。")).toBeVisible();
   // 账号密码表单:扫码未开放时是常驻主卡片,开放时收在折叠项里——两种形态都要能用
   const username = page.getByLabel("用户名");
   if (!(await username.isVisible().catch(() => false))) {

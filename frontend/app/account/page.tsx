@@ -282,7 +282,7 @@ export default function AccountPage() {
               (app/reco/page.tsx:8)——等于在告诉用户"战绩要登录才能看",
               是站长收到"看不到战绩"这条反馈的根因之一。 */}
           <p className={styles.note}>
-            尚未登录。登录后可使用关注比赛、精选授权状态查询等账户功能;
+            尚未登录。登录后可查看全部联赛的比赛数据,使用关注比赛、精选授权状态查询等账户功能;
             第一次用微信验证码登录会自动创建账号。历史战绩不用登录也能看。
           </p>
           <Link className={styles.btnPrimary} href="/login?next=/account">

@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { stepForQuery } from "@/features/simulator/wizard";
+import { ANON_LEAGUE_IDS, isAnonLeague } from "@/lib/login-gate";
 import { fixtureIndex, isStale, leagueOf, loadParams, sliceForLeague } from "./loadParams";
+import { MemberSimulator } from "./MemberSimulator";
 import { SimulatorClient } from "./SimulatorClient";
 import styles from "./simulator.module.css";
 
@@ -84,6 +86,9 @@ export default async function SimulatorPage({ searchParams }: { searchParams: Se
   }
   const sp = await searchParams;
   const leagueId = leagueOf(sp.lg, loaded.params);
+  // 登录门禁(2026-10-02):服务端拿不到登录态(会话 Cookie 只发往 /api/v1),
+  // 只能按匿名口径渲染英超;其他联赛交给浏览器带 Cookie 去 API 取。
+  if (!isAnonLeague(leagueId)) return <MemberSimulator leagueId={leagueId} />;
   // 链接里带了本联赛两支球队(分享设定 / 只带两队)→ 服务端就决定进第 2 步,页面不会先闪第 1 步
   const search = new URLSearchParams(
     Object.entries(sp).flatMap(([k, v]) => (v == null ? [] : Array.isArray(v) ? v.map((x) => [k, x] as [string, string]) : [[k, v] as [string, string]])),
@@ -94,7 +99,7 @@ export default async function SimulatorPage({ searchParams }: { searchParams: Se
       key={leagueId}
       params={sliced}
       leagueId={leagueId}
-      fixtureIndex={fixtureIndex(loaded.params)}
+      fixtureIndex={fixtureIndex(loaded.params, ANON_LEAGUE_IDS)}
       paramsStale={isStale(loaded.params)}
       initialStep={stepForQuery(`?${search}`, sliced, leagueId)}
     />

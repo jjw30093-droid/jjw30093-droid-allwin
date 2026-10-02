@@ -359,7 +359,7 @@ export default function Home() {
         </Link>
         <Link href="/pricing">
           <strong>权限说明</strong>
-          <span>比赛数据不用登录，精选要开通</span>
+          <span>英超不用登录，其他联赛登录后看</span>
         </Link>
         <Link href="/about">
           <strong>关于我们</strong>

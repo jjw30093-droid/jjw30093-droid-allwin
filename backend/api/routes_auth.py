@@ -190,7 +190,13 @@ def claim_device_login(
         raise HTTPException(status_code=403, detail="secret 校验失败")
     if status in ("expired", "gone"):
         raise HTTPException(status_code=410, detail="扫码请求已失效")
-    # claimed:原子领取成功,创建会话
+    # claimed:原子领取成功,创建会话。被管理员停用的账号不发会话(否则拿到一个
+    # 立即失效的 Cookie,页面表现为"登录成功却还是未登录",说不清原因)。
+    user_row = conn.execute("SELECT status FROM users WHERE id=?", (user_id,)).fetchone()
+    if user_row is None or user_row["status"] != "active":
+        raise HTTPException(
+            status_code=403, detail={"code": "account_disabled", "message": "该账号已被停用"}
+        )
     with tx(conn):
         sess = service.create_session(
             conn, user_id,

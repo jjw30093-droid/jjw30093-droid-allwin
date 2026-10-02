@@ -113,7 +113,13 @@ export default async function TeamStatsPage({
           </>
         )
       ) : (
-        <MemberLeagueSection kind="team-stats" leagueId={id} season={seasonParam} />
+        <MemberLeagueSection
+          kind="team-stats"
+          leagueId={id}
+          season={seasonParam}
+          recency={recency}
+          venue={venue}
+        />
       )}
     </main>
   );

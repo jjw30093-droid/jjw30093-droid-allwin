@@ -4,16 +4,13 @@
  * 比赛详情客户端加载器。
  *
  * 会话 cookie Path=/api/v1,Next 服务端读不到——app/matches/[matchId]/page.tsx
- * 的服务端匿名取数(serverGetOptional)在 401/403/404 时统一返回 null。
- * 2026-08-16 权限口径修正后,/api/v1/matches/{id} 对任何人恒 200,不会再
- * 返回 401/403,`detail===null` 现在只可能是比赛真的不存在(404)或服务端
- * 取数失败——此前"401/403 → LeagueGateCard 登录门禁卡片"这条分支已是死
- * 代码(此前的扫码登录门禁卡片、真实赛事信息透传等逻辑随之一并移除),
- * 简化为浏览器重新请求一次以三分:
+ * 的服务端匿名取数(serverGetOptional)在 401/403/404 时统一返回 null,由本
+ * 组件在浏览器带 Cookie 重新请求一次:
  * - 拿到数据 → 并行补拉 analysis/report/preview/related,渲染与 SSR 完全
  *   相同的 MatchDetailBody(公共 HTML 外壳不因登录态变化,宪法 §10.2);
+ * - 401(2026-10-02 登录门禁:未登录看非英超)→ 直接跳登录页,登录后回到本页;
  * - 404 → 比赛不存在的诚实说明;
- * - 其他错误(含理论上不应再出现的 401/403)→ 统一归入可重试错误态。
+ * - 其他错误 → 可重试错误态。
  */
 
 import Link from "next/link";
@@ -34,6 +31,7 @@ import {
   type AnalysisBundle,
 } from "@/components/matches/MatchDetailBody";
 import { relatedMatchesQuery } from "@/lib/match-links";
+import { isLoginRequired, redirectToLogin } from "@/lib/login-gate";
 import styles from "@/components/league/MemberLeagueSection.module.css";
 
 type LoadedData = {
@@ -114,7 +112,10 @@ export function MemberMatchDetail({
       })
       .catch((e) => {
         if (cancelled) return;
-        if (e instanceof ApiError && e.status === 404) {
+        if (isLoginRequired(e)) {
+          // 保持骨架屏,直接去登录页
+          redirectToLogin();
+        } else if (e instanceof ApiError && e.status === 404) {
           setState({ phase: "notfound" });
         } else {
           setState({ phase: "error" });

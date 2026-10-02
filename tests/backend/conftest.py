@@ -57,3 +57,19 @@ def client(app):
 def fresh_ip():
     """每个测试独立限流键(限流器是进程级单例)。"""
     return f"10.0.0.{next(_ip_counter)}"
+
+
+@pytest.fixture(autouse=True)
+def _reset_data_rate_limits():
+    """数据端点防爬限流(backend/api/data_access.py)按用户 id 计数,而多数测试
+    用同一个默认 openid 登录——不清零的话,同一进程里跑满 120 次数据请求后
+    后面的测试会莫名 429。只清数据端点的桶,不动 auth 端点的限流状态。"""
+    from backend.api import data_access
+    from backend.api.ratelimit import limiter
+
+    with limiter._lock:
+        for key in [k for k in limiter._hits if k.startswith(("data_user:", "data_ip:"))]:
+            del limiter._hits[key]
+    with data_access._trip_lock:
+        data_access._last_trip_audit.clear()
+    yield

@@ -1692,6 +1692,9 @@ class AdminUserItem(BaseModel):
     last_login_at: Optional[str] = None
     plan_id: str
     plan_ends_at: Optional[str] = None
+    # 防爬限流留痕(2026-10-02):近 7 天触发次数与最近一次时间,供管理员判断是否停用
+    rate_limit_trips_7d: int = 0
+    last_rate_limited_at: Optional[str] = None
 
 
 class AdminUsersResponse(BaseModel):
@@ -2519,3 +2522,31 @@ class RecoMyAccessResponse(BaseModel):
 
     grants: list[RecoAccessGrantDTO]
     periods: list[RecoAccessPeriodDTO] = []
+
+
+# ── 模拟器参数(2026-10-02 登录门禁,routes_simulator.py) ──────────────
+
+class SimulatorFixtureDTO(BaseModel):
+    match_id: int
+    league_id: int
+    home_team_id: int
+    away_team_id: int
+    home_name: str
+    away_name: str
+    kickoff_at_utc: str
+    status: str
+    ah_line: Optional[float] = None
+    ou_line: Optional[float] = None
+    final_score: Optional[list[int]] = None
+
+
+class SimulatorFixturesResponse(BaseModel):
+    fixture_index: list[SimulatorFixtureDTO]
+
+
+class SimulatorParamsResponse(BaseModel):
+    league_id: int
+    # 参数文件按联赛切片后的原样结构(由 backend/cli/simulator_params_export.py
+    # 生成,前端类型 features/simulator/types.ts::SimParams 是它的消费方类型)
+    params: dict[str, Any]
+    fixture_index: list[SimulatorFixtureDTO]

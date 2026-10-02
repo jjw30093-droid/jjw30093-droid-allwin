@@ -12,7 +12,6 @@ import type { FixtureParams, SimParams } from "@/features/simulator/types";
 
 export const CALIBRATED_LEAGUES = [47, 87, 55, 54, 53] as const;
 export const DEFAULT_LEAGUE = 47;
-const STALE_HOURS = 48;
 
 const cache = new Map<string, { mtimeMs: number; params: SimParams }>();
 
@@ -113,11 +112,15 @@ export interface FixtureIndexEntry {
   final_score: [number, number] | null;
 }
 
-/** 五个联赛合并的"有 Crown 盘口的真实比赛"小索引(只含列表需要的字段)。 */
-export function fixtureIndex(params: SimParams): FixtureIndexEntry[] {
+/** 五个联赛合并的"有 Crown 盘口的真实比赛"小索引(只含列表需要的字段)。
+ *  `leagues` 给定时只含这些联赛——页面服务端只能给匿名口径(英超),盘口线本身就是
+ *  赔率数据;登录用户的全联赛索引经 /api/v1/simulator/fixtures 下发
+ *  (Python 对应实现:backend/queries/simulator_params.py,两边同步改)。 */
+export function fixtureIndex(params: SimParams, leagues?: ReadonlySet<number>): FixtureIndexEntry[] {
   const name = (id: number) => params.teams[String(id)]?.name_zh ?? String(id);
   return Object.values(params.fixtures)
     .filter((f: FixtureParams) => f.market_lambda && CALIBRATED_LEAGUES.includes(f.league_id as (typeof CALIBRATED_LEAGUES)[number]))
+    .filter((f: FixtureParams) => !leagues || leagues.has(f.league_id))
     .map((f) => ({
       match_id: f.match_id,
       league_id: f.league_id,
@@ -133,7 +136,4 @@ export function fixtureIndex(params: SimParams): FixtureIndexEntry[] {
     }));
 }
 
-export function isStale(params: SimParams, now = Date.now()): boolean {
-  const t = Date.parse(params.meta.generated_at);
-  return Number.isFinite(t) && now - t > STALE_HOURS * 3600 * 1000;
-}
+export { isStale } from "@/features/simulator/staleness";

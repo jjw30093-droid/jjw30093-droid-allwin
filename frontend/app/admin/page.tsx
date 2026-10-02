@@ -88,6 +88,8 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
   const [revokeSubId, setRevokeSubId] = useState("");
   const [revokeSubConfirm, setRevokeSubConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 停用/恢复账号的二次确认(内联,不用 window.confirm,理由同 onGrant)
+  const [statusFor, setStatusFor] = useState<string | null>(null);
 
   const load = useCallback(async (q: string) => {
     setLoading(true);
@@ -144,6 +146,23 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
       await load(query);
     } catch (e) {
       setMsg({ kind: "err", text: apiErrorMessage(e, "开通失败") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSetStatus = async (userId: string, status: "active" | "disabled") => {
+    setBusy(true);
+    try {
+      await clientFetch(`/api/v1/admin/users/${userId}/status`, {
+        method: "POST",
+        body: { status },
+      });
+      setMsg({ kind: "ok", text: status === "disabled" ? "账号已停用,已强制下线" : "账号已恢复" });
+      setStatusFor(null);
+      await load(query);
+    } catch (e) {
+      setMsg({ kind: "err", text: apiErrorMessage(e, "操作失败") });
     } finally {
       setBusy(false);
     }
@@ -244,6 +263,7 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
                 <th>用户(昵称 · 编号)</th>
                 <th>角色</th>
                 <th>状态</th>
+                <th>限流记录</th>
                 <th>套餐</th>
                 <th>套餐到期</th>
                 <th>首次登录</th>
@@ -261,7 +281,20 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
                     </div>
                   </td>
                   <td>{u.role}</td>
-                  <td>{u.status}</td>
+                  <td className={u.status === "disabled" ? styles.statusDisabled : undefined}>
+                    {u.status === "disabled" ? "已停用" : "正常"}
+                  </td>
+                  <td className="num">
+                    {u.rate_limit_trips_7d > 0 ? (
+                      <span className={styles.tripWarn} title={`最近一次 ${fmtLocal(u.last_rate_limited_at)}`}>
+                        7 天 {u.rate_limit_trips_7d} 次
+                      </span>
+                    ) : u.last_rate_limited_at ? (
+                      <span className={styles.dim}>{fmtLocal(u.last_rate_limited_at)}</span>
+                    ) : (
+                      <span className={styles.dim}>—</span>
+                    )}
+                  </td>
                   <td>{u.plan_id}</td>
                   <td className="num">{fmtLocal(u.plan_ends_at)}</td>
                   <td className="num">{fmtLocal(u.created_at)}</td>
@@ -323,6 +356,33 @@ function UsersTab({ plans }: { plans: PlanInfo[] }) {
                         开通订阅
                       </button>
                     )}
+                    {u.role !== "admin" &&
+                      (statusFor === u.id ? (
+                        <div className={styles.inlineForm}>
+                          <span className={styles.dim}>
+                            {u.status === "disabled" ? "确认恢复该账号?" : "确认停用?该用户立即下线且无法再登录。"}
+                          </span>
+                          <button
+                            type="button"
+                            className={u.status === "disabled" ? styles.btnPrimary : styles.btnDanger}
+                            disabled={busy}
+                            onClick={() => onSetStatus(u.id, u.status === "disabled" ? "active" : "disabled")}
+                          >
+                            {u.status === "disabled" ? "确认恢复" : "确认停用"}
+                          </button>
+                          <button type="button" className={styles.btnGhost} onClick={() => setStatusFor(null)}>
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={u.status === "disabled" ? styles.btnGhost : styles.btnDanger}
+                          onClick={() => setStatusFor(u.id)}
+                        >
+                          {u.status === "disabled" ? "恢复账号" : "停用账号"}
+                        </button>
+                      ))}
                   </td>
                 </tr>
               ))}

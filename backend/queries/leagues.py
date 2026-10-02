@@ -1,12 +1,15 @@
-"""联赛元数据(与访问门禁历史 —— 2026-08-16 起已彻底解耦)。
+"""联赛元数据与"匿名可见联赛"单一真源。
 
-2026-08-16 产品权限口径修正(经用户批准):除"每日精选"外,网站所有比赛
-内容全部免费,包括匿名用户;登录与内容分层彻底解耦,不再有任何联赛级
-访问门禁。每个联赛条目上的 `entitlement` 字段(league:epl/top5/lottery/
-european_cup)现在只是**描述性分类元数据**(竞彩语境归类、报表/CLI 统计用,
-如 backend/cli/odds_coverage_report.py),不再驱动任何 403/401 门禁或
-"是否需要登录"的判断——`accessible_league_ids()`/`anonymous_cacheable_league_ids()`
-恒返回全部联赛 id。
+2026-10-02 登录门禁(经站长批准,取代 2026-08-16"全站匿名免费"口径):
+未登录用户只能看英超(47)的比赛详情与联赛数据,其他联赛必须登录——目的
+是防爬,尤其是赔率数据。比赛列表里的对阵/时间/胜平负概率对任何人可见
+(站长:"对阵信息概率什么给你看,点击进去就是登陆界面")。
+`ANON_LEAGUE_IDS` 是唯一判据,路由层与前端(frontend/lib/site.ts)从这里
+派生,不得在别处再写 `league_id == 47`。
+
+每个联赛条目上的 `entitlement` 字段(league:epl/top5/lottery/european_cup)
+只是**描述性分类元数据**(竞彩语境归类、报表/CLI 统计用),不驱动门禁——
+门禁只看"是否登录 + 是否英超"。
 
 单一真源:新增联赛只改这一处字典,不得把 league id 散落写进其它业务分支
 (路由/前端/采集脚本一律从这里或真实数据库读取)。"""
@@ -126,14 +129,21 @@ def accessible_league_ids(entitlements: frozenset | None = None) -> set[int]:
     return set(LEAGUE_META.keys())
 
 
-def anonymous_cacheable_league_ids() -> frozenset[int]:
-    """匿名即可完整浏览的联赛 id 集合。
+# 未登录即可浏览比赛详情与联赛数据的联赛(2026-10-02 起只有英超)。
+ANON_LEAGUE_IDS: frozenset[int] = frozenset({47})
 
-    2026-08-16 起恒为全部联赛:所有联赛的公开数据端点对匿名与登录请求返回
-    一致内容、不随身份变化 → 全部可进公共缓存(CLAUDE.md §10.2:公共缓存
-    不与用户身份混用)。取代散落各处的 `league_id == 47` 硬编码判断。
+
+def is_anonymous_league(league_id: int) -> bool:
+    return league_id in ANON_LEAGUE_IDS
+
+
+def anonymous_cacheable_league_ids() -> frozenset[int]:
+    """匿名即可完整浏览、因而响应可进公共缓存的联赛 id 集合。
+
+    其余联赛的数据端点对匿名返回 401,对登录用户返回数据(响应随身份变化)
+    → 一律 private, no-store(CLAUDE.md §10.2:公共缓存不与用户身份混用)。
     """
-    return frozenset(LEAGUE_META.keys())
+    return ANON_LEAGUE_IDS
 
 
 def league_data_profiles(conn: sqlite3.Connection) -> dict[int, dict]:

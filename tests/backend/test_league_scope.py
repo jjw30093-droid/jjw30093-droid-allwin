@@ -59,17 +59,12 @@ def test_new_leagues_declare_season_kind():
         SeasonKind(meta["season_kind"])  # 词汇不兼容会抛 ValueError
 
 
-def test_anonymous_cacheable_is_universal():
-    """2026-08-16 产品权限口径修正:除"每日精选"外全站比赛内容全部免费,
-    包括匿名——联赛级 entitlement 分类(epl/top5/lottery/european_cup)现在
-    只是描述性元数据,不再影响匿名可缓存集合。这条断言正是要推翻
-    "league:lottery 联赛不进匿名可缓存集"的旧规则。"""
+def test_anonymous_cacheable_is_epl_only():
+    """2026-10-02 登录门禁:未登录只能看英超 → 只有英超的响应与身份无关、
+    可进共享缓存;其余联赛匿名 401 / 登录 200,必须 no-store。"""
     anon = anonymous_cacheable_league_ids()
-    assert set(LEAGUE_META) == set(anon)
-    # league:lottery 联赛现在同样在匿名可缓存集合内
-    for lid, meta in LEAGUE_META.items():
-        if meta["entitlement"] == "league:lottery":
-            assert lid in anon, f"{lid} 应在匿名可缓存集合内(登录与内容分层已解耦)"
+    assert set(anon) == {47}
+    assert set(anon) <= set(LEAGUE_META)
 
 
 def test_accessible_league_ids_is_universal_regardless_of_entitlements():

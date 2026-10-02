@@ -124,11 +124,11 @@ class TestEntitlementMatrixLeagueAccess:
     """A.1 / A.2:2026-08-16 产品权限口径修正——除"每日精选"外全站比赛内容
     全部免费,包括匿名;admin 角色本身不授予付费板块权益。"""
 
-    def test_anonymous_gets_full_access_including_former_lottery_leagues(
+    def test_anonymous_only_epl_logged_in_all_leagues(
         self, app, data_dir, fresh_ip
     ):
-        """除"每日精选"外全站比赛内容全部免费:原 league:lottery 联赛不再
-        需要登录。这条断言正是要推翻的旧规则(此前匿名 401)。"""
+        """2026-10-02 登录门禁:未登录只能看英超,其他联赛 401 login_required
+        且不进共享缓存;登录后全部联赛 200。"""
         seed_basic_core(data_dir)
         conn = connect_rw("core")
         insert_match(conn, 9301, league_id=67, date="2026-05-10",
@@ -138,9 +138,11 @@ class TestEntitlementMatrixLeagueAccess:
 
         client = TestClient(app)
         assert client.get("/api/v1/leagues/47/standings").status_code == 200
-        assert client.get("/api/v1/matches/9101").status_code == 200   # 西甲
-        r = client.get("/api/v1/matches/9301")   # 瑞典超,原 league:lottery
-        assert r.status_code == 200
+        for path in ("/api/v1/matches/9101", "/api/v1/matches/9301", "/api/v1/leagues/87/standings"):
+            r = client.get(path)
+            assert r.status_code == 401, path
+            assert r.json()["code"] == "login_required"
+            assert r.headers["cache-control"] == STRICT_NO_STORE
 
         logged_in = TestClient(app)
         _login(logged_in, fresh_ip)

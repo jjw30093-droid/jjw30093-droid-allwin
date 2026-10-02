@@ -40,13 +40,12 @@ MOCK_MEMBER_OPENID = "mock-openid-user-1"   # MockWechatProvider 固定 code=moc
 
 
 def _anon_league_ids(platform_conn) -> set[int]:
-    """匿名(free)可见联赛集合——与 API 路由完全同源地推导。"""
-    from backend.auth.entitlements import resolve_entitlements
-    from backend.queries.leagues import accessible_league_ids
+    """匿名可看详情的联赛集合——与 API 路由同一真源(2026-10-02 登录门禁:
+    只有英超,见 backend/queries/leagues.py::ANON_LEAGUE_IDS)。种子比赛必须
+    从这里挑,匿名用例才能打开它的详情页。"""
+    from backend.queries.leagues import ANON_LEAGUE_IDS
 
-    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    _, anon_entitlements = resolve_entitlements(platform_conn, None, now_iso)
-    return accessible_league_ids(anon_entitlements)
+    return set(ANON_LEAGUE_IDS)
 
 
 def _kickoff_key(match: dict) -> tuple[str, int]:

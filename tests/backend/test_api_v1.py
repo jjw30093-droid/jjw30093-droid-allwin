@@ -85,21 +85,26 @@ class TestMatchWindowParam:
 
 
 class TestLeagueGate:
-    """2026-08-16 产品权限口径修正:除"每日精选"外全部比赛内容对匿名完全
-    开放,不再有任何联赛级登录门禁;LeagueInfo.accessible/entitlement/
-    requires_login 三个只为登录门禁服务的字段已从响应模型整体删除。"""
+    """2026-10-02 登录门禁(经站长批准):未登录只能看英超的比赛详情与联赛
+    数据,其他联赛 401 login_required;比赛列表的对阵/时间/概率对任何人一致
+    (列表里看得到,点进去才要登录)。"""
 
-    def test_anonymous_sees_all_leagues_with_full_content(self, app, seeded):
+    def test_anonymous_list_all_leagues_but_details_epl_only(self, app, seeded):
         client = TestClient(app)
         r = client.get("/api/v1/matches")
         ids = {m["league_id"] for m in r.json()["matches"]}
         assert ids <= {47, 87}   # 本 fixture 只布景了这两个联赛的比赛
         for m in r.json()["matches"]:
             assert "requires_login" not in m
-        assert client.get("/api/v1/matches/9101").status_code == 200
-        assert client.get("/api/v1/leagues/87/standings").status_code == 200
-        # 原 league:lottery(需登录)联赛现同样匿名 200,不再 401
-        assert client.get("/api/v1/leagues/67/standings").status_code == 200
+        assert client.get("/api/v1/matches/9001").status_code == 200   # 英超
+        r = client.get("/api/v1/matches/9101")                         # 西甲
+        assert r.status_code == 401
+        body = r.json()
+        assert body["code"] == "login_required"
+        # 401 只带列表本来就公开的赛事标识,不带任何详情数据
+        assert set(body["details"]) <= {"league_id", "league_name", "home_team", "away_team", "kickoff_at_utc"}
+        assert client.get("/api/v1/leagues/87/standings").status_code == 401
+        assert client.get("/api/v1/leagues/67/standings").status_code == 401
         leagues = client.get("/api/v1/leagues").json()
         by_id = {l["league_id"]: l for l in leagues}
         assert 47 in by_id and 67 in by_id
@@ -130,14 +135,28 @@ class TestLeagueGate:
 PREVIOUSLY_LOTTERY_LEAGUE_IDS = (67, 59, 223, 9080, 113, 48, 57, 61, 268)
 
 
-class TestPreviouslyLotteryLeaguesFullyOpenAnonymously:
-    """任务验收标准:匿名访问这 9 个联赛的 standings/fixtures/team-stats/
-    players/season-profile 全部 200,不再 401/403(不要求每个联赛都有布景
-    数据——空态本身也必须是 200 诚实空响应,而不是门禁 401/403)。"""
+class TestNonEplLeaguesRequireLogin:
+    """2026-10-02 登录门禁:非英超联赛的 standings/fixtures/team-stats/
+    players/player-quadrant/season-profile 匿名 401、登录 200(不要求每个
+    联赛都有布景数据——空态本身也必须是 200 诚实空响应)。"""
+
+    LEAGUE_PATHS = (
+        "standings", "fixtures", "team-stats", "players", "player-quadrant", "season-profile",
+    )
+
+    @pytest.mark.parametrize("league_id", (87, *PREVIOUSLY_LOTTERY_LEAGUE_IDS))
+    def test_anonymous_401_and_not_cached(self, app, seeded, league_id):
+        client = TestClient(app)
+        for section in self.LEAGUE_PATHS:
+            r = client.get(f"/api/v1/leagues/{league_id}/{section}")
+            assert r.status_code == 401, f"{section} 应对匿名 401,实际 {r.status_code}"
+            assert r.json()["code"] == "login_required"
+            assert r.headers["cache-control"] == "private, no-store"
 
     @pytest.mark.parametrize("league_id", PREVIOUSLY_LOTTERY_LEAGUE_IDS)
-    def test_standings_fixtures_stats_players_profile_all_200(self, app, seeded, league_id):
+    def test_standings_fixtures_stats_players_profile_all_200(self, app, seeded, league_id, fresh_ip):
         client = TestClient(app)
+        _login_user(client, ip=fresh_ip)
         for path in (
             f"/api/v1/leagues/{league_id}/standings",
             f"/api/v1/leagues/{league_id}/fixtures",
@@ -146,7 +165,7 @@ class TestPreviouslyLotteryLeaguesFullyOpenAnonymously:
             f"/api/v1/leagues/{league_id}/season-profile",
         ):
             r = client.get(path)
-            assert r.status_code == 200, f"{path} 应对匿名 200,实际 {r.status_code}: {r.text}"
+            assert r.status_code == 200, f"{path} 应对登录用户 200,实际 {r.status_code}: {r.text}"
 
 
 # silver_team_season_stats 现在全字段免费投影(2026-08-16 起,除"每日精选"
@@ -191,6 +210,7 @@ class TestLeagueSeasonStats:
         assert row["avg_expected_goals_non_penalty"] == 1.96
         assert row["avg_expected_goals_conceded"] == pytest.approx(2.0)
 
+        _login_user(client)
         missing = client.get("/api/v1/leagues/87/team-stats").json()["rows"][0]
         assert missing["avg_expected_goals_conceded"] is None
 
@@ -215,24 +235,22 @@ class TestLeagueSeasonStats:
         assert top["value"] == 27.0
         assert r.headers["cache-control"].startswith("public")
 
-    def test_anonymous_top5_team_stats_ok(self, app, seeded):
-        """top5(87)对匿名开放,与 EPL 同一投影规则(2026-08-16 起全字段免费)。"""
+    def test_logged_in_top5_team_stats_full_projection_no_store(self, app, seeded, fresh_ip):
+        """登录用户看 87:与英超同一投影规则;响应随身份变化 → 不进共享缓存。"""
         client = TestClient(app)
+        _login_user(client, ip=fresh_ip)
         r = client.get("/api/v1/leagues/87/team-stats")
         assert r.status_code == 200
         row = r.json()["rows"][0]
         assert row["avg_possession"] == 58.3
         for key, value in REQUIRED_TEAM_STAT_SENTINELS.items():
             assert row[key] == value
-        assert r.headers["cache-control"].startswith("public")
+        assert r.headers["cache-control"] == "private, no-store"
 
-    def test_anonymous_lottery_league_now_open(self, app, seeded):
-        """2026-08-16 起:除每日精选外全部比赛内容对匿名开放,原 league:lottery
-        联赛(67)不再需要登录——本用例随之从"匿名验证 67 被挡"改为验证 67
-        直接可访问且拿到完整投影。"""
+    def test_anonymous_lottery_league_requires_login(self, app, seeded):
         client = TestClient(app)
-        assert client.get("/api/v1/leagues/67/team-stats").status_code == 200
-        assert client.get("/api/v1/leagues/67/players").status_code == 200
+        assert client.get("/api/v1/leagues/67/team-stats").status_code == 401
+        assert client.get("/api/v1/leagues/67/players").status_code == 401
 
     def test_logged_in_top5_stats_ok(self, app, seeded, fresh_ip):
         client = TestClient(app)
@@ -410,10 +428,10 @@ class TestLeagueSeasonStats:
             f"实际={relative}(旧实现会把 A 整体排到 B/C 之后)"
         )
 
-    def test_no_data_league_honest_empty(self, app, seeded):
-        # 42(欧冠,league:european_cup,权限矩阵互换后匿名可访问)未布景统计数据
-        # → 诚实空态
+    def test_no_data_league_honest_empty(self, app, seeded, fresh_ip):
+        # 42(欧冠)未布景统计数据 → 诚实空态(2026-10-02 起非英超需登录)
         client = TestClient(app)
+        _login_user(client, ip=fresh_ip)
         ts = client.get("/api/v1/leagues/42/team-stats")
         assert ts.status_code == 200
         assert ts.json()["rows"] == [] and ts.json()["empty_reason"]
@@ -476,8 +494,11 @@ class TestAllsvenskanLeagueOnboarding:
         assert client.get("/api/v1/leagues/9999/standings").status_code == 404
         assert client.get("/api/v1/leagues/9999/fixtures").status_code == 404
 
-    def test_fixtures_and_standings_open_to_anonymous(self, app, seeded_allsvenskan):
+    def test_fixtures_and_standings_require_login(self, app, seeded_allsvenskan, fresh_ip):
         client = TestClient(app)
+        assert client.get("/api/v1/leagues/67/fixtures").status_code == 401
+        assert client.get("/api/v1/leagues/67/standings").status_code == 401
+        _login_user(client, ip=fresh_ip)
         assert client.get("/api/v1/leagues/67/fixtures").status_code == 200
         assert client.get("/api/v1/leagues/67/standings").status_code == 200
 
@@ -565,19 +586,22 @@ class TestLeagueSeasonProfile:
         # 公开面必须可进共享缓存(§10.2)
         assert r.headers["cache-control"].startswith("public")
 
-    def test_previously_gated_league_now_open_to_anonymous(self, app, seeded):
-        """原 league:lottery 联赛(2026-08-16 起不再需要登录)匿名直接拿到统计。"""
+    def test_non_epl_league_requires_login(self, app, seeded, fresh_ip):
+        """2026-10-02 登录门禁:非英超匿名 401;登录后拿到统计且不进共享缓存。"""
         self._seed_profile(league_id=67, season="2026")
         client = TestClient(app)
+        assert client.get("/api/v1/leagues/67/season-profile").status_code == 401
+        _login_user(client, ip=fresh_ip)
         r = client.get("/api/v1/leagues/67/season-profile")
         assert r.status_code == 200
         body = r.json()
         assert body["summary"]["total_matches"] == 380
-        assert r.headers["cache-control"].startswith("public")
+        assert r.headers["cache-control"] == "private, no-store"
 
-    def test_no_data_league_honest_empty(self, app, seeded):
+    def test_no_data_league_honest_empty(self, app, seeded, fresh_ip):
         """没有银层数据的联赛返回诚实空态,不是 500、也不补零。"""
         client = TestClient(app)
+        _login_user(client, ip=fresh_ip)
         r = client.get("/api/v1/leagues/42/season-profile")
         assert r.status_code == 200
         body = r.json()

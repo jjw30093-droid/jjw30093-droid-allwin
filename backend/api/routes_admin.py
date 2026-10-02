@@ -3,7 +3,12 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+from backend.auth.service import revoke_all_sessions
+from backend.commands.audit import write_audit
 
 from backend.cli.ops_check import _sanitize_summary
 from backend.commands.subscriptions import grant_subscription, revoke_subscription
@@ -58,9 +63,15 @@ def list_users(
     _no_store(response)
     limit = max(1, min(limit, 200))
     now = utc_now_iso()
+    week_ago = _days_ago_iso(7)
     like = f"%{query}%"
     rows = conn.execute(
         """SELECT u.id, u.display_name, u.short_code, u.role, u.status, u.created_at, u.last_login_at,
+                  (SELECT COUNT(*) FROM audit_logs a
+                   WHERE a.actor_user_id=u.id AND a.action='ratelimit.trip'
+                     AND a.created_at>=?) AS rate_limit_trips_7d,
+                  (SELECT MAX(a.created_at) FROM audit_logs a
+                   WHERE a.actor_user_id=u.id AND a.action='ratelimit.trip') AS last_rate_limited_at,
                   (SELECT s.plan_id FROM subscriptions s JOIN plans p ON p.id=s.plan_id
                    WHERE s.user_id=u.id AND s.status='active' AND s.starts_at<=? AND s.ends_at>?
                    ORDER BY p.rank DESC, s.ends_at DESC LIMIT 1) AS plan_id,
@@ -69,13 +80,60 @@ def list_users(
            FROM users u
            WHERE (? = '' OR u.display_name LIKE ? OR u.id LIKE ? OR u.short_code LIKE ?)
            ORDER BY u.created_at DESC LIMIT ? OFFSET ?""",
-        (now, now, now, query, like, like, f"%{query.strip()}%", limit, offset),
+        (week_ago, now, now, now, query, like, like, f"%{query.strip()}%", limit, offset),
     ).fetchall()
     total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     return {
         "total": total,
         "users": [dict(r) | {"plan_id": r["plan_id"] or "free"} for r in rows],
     }
+
+
+def _days_ago_iso(days: int) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class UserStatusBody(BaseModel):
+    status: Literal["active", "disabled"]
+    note: str = Field("", max_length=200)
+
+
+@router.post("/users/{user_id}/status", response_model=OkDTO)
+def set_user_status(
+    user_id: str,
+    body: UserStatusBody,
+    response: Response,
+    ctx: AuthContext = Depends(require_admin_csrf),
+    conn=Depends(platform_rw),
+):
+    """停用/恢复账号(2026-10-02 防爬:站长对异常刷数据的账号手动封禁)。
+
+    停用即撤销该用户全部会话(立即掉线);停用状态下登录拿到的会话也会被
+    get_session_by_token 拒绝。不允许停用自己或其他管理员,防止误操作锁死后台。
+    """
+    _no_store(response)
+    with tx(conn):
+        row = conn.execute("SELECT id, role, status FROM users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        if body.status == "disabled" and (user_id == ctx.user_id or row["role"] == "admin"):
+            raise HTTPException(status_code=400, detail="不能停用管理员账号")
+        conn.execute(
+            "UPDATE users SET status=?, updated_at=? WHERE id=?",
+            (body.status, utc_now_iso(), user_id),
+        )
+        revoked = revoke_all_sessions(conn, user_id) if body.status == "disabled" else 0
+        write_audit(
+            conn,
+            action="user.disable" if body.status == "disabled" else "user.enable",
+            actor_user_id=ctx.user_id,
+            target_type="user",
+            target_id=user_id,
+            detail={"previous": row["status"], "note": body.note, "sessions_revoked": revoked},
+        )
+    return {"status": "ok"}
 
 
 class GrantBody(BaseModel):

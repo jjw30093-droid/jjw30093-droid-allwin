@@ -293,9 +293,9 @@ export interface paths {
         };
         /**
          * List Matches
-         * @description 比赛列表:所有已收录联赛的比赛都出现在列表里,内容对任何人(含匿名)
-         *     完全一致(2026-08-16 起除"每日精选"外全站比赛内容全部免费,登录与内容
-         *     分层彻底解耦)。
+         * @description 比赛列表:所有已收录联赛的比赛都出现在列表里,对阵/时间/比分/胜平负
+         *     概率对任何人(含匿名)完全一致——站长 2026-10-02 口径是"列表给你看,
+         *     点进去才要登录",所以列表本身不按身份裁剪,前端按联赛决定点击去向。
          */
         get: operations["list_matches_api_v1_matches_get"];
         put?: never;
@@ -378,9 +378,8 @@ export interface paths {
          * Match Report
          * @description 完赛事实报告:阵容/事件/射门/球队与球员统计(详情页四 tab 数据源)。
          *
-         *     门禁:只有"联赛是否已登记"这一条(未知联赛 404),不分付费档位、不区分
-         *     登录状态——本端点全部是已完赛的历史事实,不含模型输出、不含赔率方法论。
-         *     缓存:任何联赛都可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);
+         *     门禁:require_league_access(未知联赛 404,未登录看非英超 401)。
+         *     缓存:英超匿名响应可进公共缓存(cache_policy PUBLIC_ALLOWLIST 已收录本路径);
          *     请求带 Cookie 时中间件强制 no-store,登录响应不会污染共享缓存。
          */
         get: operations["match_report_api_v1_matches__match_id__report_get"];
@@ -404,8 +403,8 @@ export interface paths {
          * @description 赛前预览:预计阵容+伤停快照、球队风格象限、进攻来源拆解、关键球员占比、
          *     门将对位——数据 tab 阵容/风格/球员三个子 tab 的唯一数据源。
          *
-         *     门禁与 /report、/markets 同级:只有"联赛是否已登记"这一条,不分付费
-         *     档位、不区分登录状态。全部由两队各自历史聚合与已采集快照构成,赛前与
+         *     门禁与 /report、/markets 同级(require_league_access)。
+         *     全部由两队各自历史聚合与已采集快照构成,赛前与
          *     赛后都能给,不含模型输出或赔率方法论。
          */
         get: operations["match_preview_api_v1_matches__match_id__preview_get"];
@@ -443,7 +442,7 @@ export interface paths {
          *     共用同一真源(§10.3);正则只会生成 `type: string`,白名单就得在前端
          *     被重抄一遍。非法值由 FastAPI 统一 422。
          *
-         *     门禁与 `/preview` 同级:只有"联赛是否已登记"这一条。
+         *     门禁与 `/preview` 同级(require_league_access)。
          */
         get: operations["match_data_profile_api_v1_matches__match_id__data_profile_get"];
         put?: never;
@@ -471,8 +470,7 @@ export interface paths {
          *     (line_source="market"),没有时退回统计参考线(line_source="statistical");
          *     yellow_cards 恒为统计参考线(NowGoal 没有罚牌市场)。
          *
-         *     门禁与 /report 同级:只有"联赛是否已登记"这一条,不区分付费档位、不区分
-         *     登录状态——数据倾向是本站对访客建立信任的内容。
+         *     门禁与 /report 同级(require_league_access)。
          */
         get: operations["match_markets_api_v1_matches__match_id__markets_get"];
         put?: never;
@@ -1113,6 +1111,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{user_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set User Status
+         * @description 停用/恢复账号(2026-10-02 防爬:站长对异常刷数据的账号手动封禁)。
+         *
+         *     停用即撤销该用户全部会话(立即掉线);停用状态下登录拿到的会话也会被
+         *     get_session_by_token 拒绝。不允许停用自己或其他管理员,防止误操作锁死后台。
+         */
+        post: operations["set_user_status_api_v1_admin_users__user_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/grant": {
         parameters: {
             query?: never;
@@ -1386,6 +1407,43 @@ export interface paths {
         put?: never;
         /** Record Event */
         post: operations["record_event_api_v1_analytics_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulator/params": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulator Params */
+        get: operations["simulator_params_api_v1_simulator_params_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulator/fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Simulator Fixtures
+         * @description 真实比赛索引:登录给五大联赛全部,未登录只给英超。
+         */
+        get: operations["simulator_fixtures_api_v1_simulator_fixtures_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1693,6 +1751,13 @@ export interface components {
             plan_id: string;
             /** Plan Ends At */
             plan_ends_at?: string | null;
+            /**
+             * Rate Limit Trips 7D
+             * @default 0
+             */
+            rate_limit_trips_7d: number;
+            /** Last Rate Limited At */
+            last_rate_limited_at?: string | null;
         };
         /** AdminUsersResponse */
         AdminUsersResponse: {
@@ -4772,6 +4837,47 @@ export interface components {
             /** Pct */
             pct?: number | null;
         };
+        /** SimulatorFixtureDTO */
+        SimulatorFixtureDTO: {
+            /** Match Id */
+            match_id: number;
+            /** League Id */
+            league_id: number;
+            /** Home Team Id */
+            home_team_id: number;
+            /** Away Team Id */
+            away_team_id: number;
+            /** Home Name */
+            home_name: string;
+            /** Away Name */
+            away_name: string;
+            /** Kickoff At Utc */
+            kickoff_at_utc: string;
+            /** Status */
+            status: string;
+            /** Ah Line */
+            ah_line?: number | null;
+            /** Ou Line */
+            ou_line?: number | null;
+            /** Final Score */
+            final_score?: number[] | null;
+        };
+        /** SimulatorFixturesResponse */
+        SimulatorFixturesResponse: {
+            /** Fixture Index */
+            fixture_index: components["schemas"]["SimulatorFixtureDTO"][];
+        };
+        /** SimulatorParamsResponse */
+        SimulatorParamsResponse: {
+            /** League Id */
+            league_id: number;
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /** Fixture Index */
+            fixture_index: components["schemas"]["SimulatorFixtureDTO"][];
+        };
         /** SourceHealthItem */
         SourceHealthItem: {
             /** Id */
@@ -5233,6 +5339,19 @@ export interface components {
             overrides?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** UserStatusBody */
+        UserStatusBody: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "disabled";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /**
          * WinProbabilityDTO
@@ -6055,6 +6174,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6066,6 +6194,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6107,6 +6244,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6118,6 +6264,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6161,6 +6316,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6172,6 +6336,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6214,6 +6387,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6225,6 +6407,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6265,6 +6456,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6276,6 +6476,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6316,6 +6525,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6327,6 +6545,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6367,6 +6594,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6378,6 +6614,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6426,6 +6671,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6437,6 +6691,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6475,6 +6738,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6486,6 +6758,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6524,6 +6805,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6535,6 +6825,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6573,6 +6872,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6584,6 +6892,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6622,6 +6939,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6633,6 +6959,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6671,6 +7006,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6682,6 +7026,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6723,6 +7076,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6734,6 +7096,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6772,6 +7143,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6783,6 +7163,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6819,6 +7208,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6830,6 +7228,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6866,6 +7273,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -6877,6 +7293,15 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8981,6 +9406,86 @@ export interface operations {
             };
         };
     };
+    set_user_status_api_v1_admin_users__user_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserStatusBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     grant_user_subscription_api_v1_admin_users__user_id__grant_post: {
         parameters: {
             query?: never;
@@ -10206,6 +10711,138 @@ export interface operations {
             };
         };
     };
+    simulator_params_api_v1_simulator_params_get: {
+        parameters: {
+            query: {
+                league_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulatorParamsResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    simulator_fixtures_api_v1_simulator_fixtures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulatorFixturesResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     league_overview_api_league__league_id__overview_get: {
         parameters: {
             query?: {
@@ -10237,8 +10874,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10279,8 +10934,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10321,8 +10994,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
