@@ -198,7 +198,7 @@ export default async function MatchesPage({
       {breakResumeMD && (
         <div className={styles.breakNotice} data-testid="five-league-break">
           <p className={styles.breakText}>
-            国际比赛日，五大联赛 <b>{breakResumeMD}</b> 恢复。想提前看赛程：
+            国际比赛日，五大联赛 <b>{breakResumeMD}</b> 恢复。
           </p>
           <div className={styles.breakLinks}>
             {FIVE_LEAGUE_IDS.map((id) => (

@@ -273,7 +273,7 @@ export function SimulatorClient({
         </span>
         {paramsStale ? (
           <span className={styles.hint} data-testid="params-stale">
-            参数不是最新的(上次更新 {params.meta.generated_at}),每日更新可能延迟。
+            参数不是最新的(上次更新 {params.meta.generated_at})。
           </span>
         ) : null}
       </header>
