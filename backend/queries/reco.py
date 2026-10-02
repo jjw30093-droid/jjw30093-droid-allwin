@@ -223,6 +223,27 @@ def track_record_summary(conn: sqlite3.Connection) -> dict:
     )
 
 
+def track_record_curve(conn: sqlite3.Connection) -> list[dict]:
+    """盈利走势(2026-10-01 站长要求):全部已结算精选按时间正序的累计盈亏。
+
+    与 track_record_summary() 同一口径——只算 board='daily_pick' 且 status='settled',
+    每单 return_units - 1(走水为 0、半赢半输按结算值),作废不计;所以最后一点的
+    cum_units 与 summary.net_units 相等(有测试守着)。不分页:走势必须是全样本。
+    """
+    rows = conn.execute(
+        "SELECT slip_date, return_units FROM reco_slips"
+        " WHERE status='settled' AND board='daily_pick'"
+        " ORDER BY slip_date ASC, settled_at ASC, id ASC"
+    ).fetchall()
+    out: list[dict] = []
+    cum = 0.0
+    for r in rows:
+        net = (r["return_units"] or 0.0) - 1.0
+        cum += net
+        out.append({"slip_date": r["slip_date"], "net_units": round(net, 4), "cum_units": round(cum, 4)})
+    return out
+
+
 def published_match_ids(conn: sqlite3.Connection) -> set[int]:
     """当前处于 published(赛前有效)状态的推荐单覆盖的比赛 id 集合。
 

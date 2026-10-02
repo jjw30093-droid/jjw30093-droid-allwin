@@ -44,9 +44,7 @@ function mockFetch(routes: Record<string, { status?: number; body: unknown }>) {
 }
 
 const ME_ANON = { authenticated: false, plan: "free", entitlements: [] };
-const ME_USER = { authenticated: true, user: { id: "u1", display_name: "测试", role: "user" }, plan: "free", entitlements: [] };
 const PUBLIC = { window_days: 7, slips: [] };
-const DAILY = { window_days: 30, slips: [] };
 
 const TRACK_WITH_DATA = {
   summary: {
@@ -57,16 +55,25 @@ const TRACK_WITH_DATA = {
   slips: [],
 };
 
+const CURVE = [
+  { slip_date: "2026-09-01", net_units: 0.9, cum_units: 0.9 },
+  { slip_date: "2026-09-02", net_units: -1, cum_units: -0.1 },
+  { slip_date: "2026-09-03", net_units: 0.85, cum_units: 0.75 },
+];
+
 describe("/reco 顶部", () => {
-  it("新一句说明;旧说明不在了", async () => {
+  it("说明句、三步说明都已删除(站长 2026-10-01:没人会看)", async () => {
     mockFetch({
       "/api/v1/me": { body: ME_ANON },
-      "/api/v1/reco/track-record": { body: TRACK },
+      "/api/v1/reco/track-record": { body: TRACK_WITH_DATA },
       "/api/v1/reco/public": { body: PUBLIC },
     });
     const { container } = render(<RecoPage />);
-    await screen.findByText("每天人工挑的比赛，结算后的每一单都公开，中没中都留着。");
+    await screen.findByTestId("reco-summary");
+    expect(container.textContent).not.toContain("结算后的每一单都公开");
     expect(container.textContent).not.toContain("每天人工精选，开通后在这里查看。");
+    expect(screen.queryByTestId("reco-unlock-steps")).toBeNull();
+    expect(container.textContent).not.toContain("结算完的单子都在这儿");
   });
 
   it("战绩摘要放在最上面:已结算 33、命中率 64.5%、盈利 +7.67", async () => {
@@ -83,73 +90,34 @@ describe("/reco 顶部", () => {
     expect(box.getAttribute("href")).toBe("/reco?tab=record");
   });
 
-  it("没有已结算样本时不放战绩摘要(不显示一排 0)", async () => {
+  it("没有已结算样本时不放战绩摘要、不放盈利走势(不显示一排 0)", async () => {
     mockFetch({
       "/api/v1/me": { body: ME_ANON },
-      "/api/v1/reco/track-record": { body: TRACK },
+      "/api/v1/reco/track-record": { body: { ...TRACK, curve: [] } },
       "/api/v1/reco/public": { body: PUBLIC },
     });
     render(<RecoPage />);
-    await screen.findByText("每天人工挑的比赛，结算后的每一单都公开，中没中都留着。");
+    await waitFor(() =>
+      expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]).includes("track-record"))).toBe(true),
+    );
+    await new Promise((r) => setTimeout(r, 30));
     expect(screen.queryByTestId("reco-summary")).toBeNull();
+    expect(screen.queryByTestId("profit-curve")).toBeNull();
   });
 
-  it("未登录:三步说明 + '去登录' 指向 /login?next=/reco", async () => {
+  it("盈利走势:按每单 500 元、本金 10000 元换算,文字与最后一点一致", async () => {
     mockFetch({
       "/api/v1/me": { body: ME_ANON },
-      "/api/v1/reco/track-record": { body: TRACK },
+      "/api/v1/reco/track-record": { body: { ...TRACK_WITH_DATA, curve: CURVE } },
       "/api/v1/reco/public": { body: PUBLIC },
     });
     render(<RecoPage />);
-    const steps = await screen.findByTestId("reco-unlock-steps");
-    expect(steps.textContent).toContain("用微信验证码登录");
-    expect(steps.textContent).toContain("6 位用户编号");
-    expect(screen.getByRole("link", { name: "去登录" }).getAttribute("href")).toBe("/login?next=/reco");
-    expect(screen.getByRole("link", { name: "怎么联系我们" }).getAttribute("href")).toBe("/pricing#how-to-unlock");
-    expect(screen.queryByRole("link", { name: "查看我的编号" })).toBeNull();
-  });
-
-  it("已登录但没有任何 active 授权:三步说明里第一步已完成,按钮换成'查看我的编号'", async () => {
-    mockFetch({
-      "/api/v1/me": { body: ME_USER },
-      "/api/v1/reco/track-record": { body: TRACK },
-      "/api/v1/reco/public": { body: PUBLIC },
-      "/api/v1/reco/my-access": { body: { grants: [{ id: "g1", status: "revoked" }] } },
-      "/api/v1/reco/daily": { body: DAILY },
-    });
-    render(<RecoPage />);
-    const btn = await screen.findByRole("link", { name: "查看我的编号" });
-    expect(btn.getAttribute("href")).toBe("/account");
-    expect(screen.getByTestId("reco-unlock-steps").textContent).toContain("✓");
-    expect(screen.queryByRole("link", { name: "去登录" })).toBeNull();
-  });
-
-  it("已登录且有 active 授权:不显示三步说明", async () => {
-    mockFetch({
-      "/api/v1/me": { body: ME_USER },
-      "/api/v1/reco/track-record": { body: TRACK },
-      "/api/v1/reco/public": { body: PUBLIC },
-      "/api/v1/reco/my-access": { body: { grants: [{ id: "g1", status: "active" }] } },
-      "/api/v1/reco/daily": { body: DAILY },
-    });
-    render(<RecoPage />);
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]).includes("my-access"))).toBe(true));
-    await new Promise((r) => setTimeout(r, 30));
-    expect(screen.queryByTestId("reco-unlock-steps")).toBeNull();
-  });
-
-  it("授权状态接口失败:不显示三步说明(不能因为接口出错就说用户没开通)", async () => {
-    mockFetch({
-      "/api/v1/me": { body: ME_USER },
-      "/api/v1/reco/track-record": { body: TRACK },
-      "/api/v1/reco/public": { body: PUBLIC },
-      "/api/v1/reco/my-access": { status: 500, body: { code: "boom" } },
-      "/api/v1/reco/daily": { body: DAILY },
-    });
-    render(<RecoPage />);
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]).includes("my-access"))).toBe(true));
-    await new Promise((r) => setTimeout(r, 30));
-    expect(screen.queryByTestId("reco-unlock-steps")).toBeNull();
+    const card = await screen.findByTestId("profit-curve");
+    expect(card.textContent).toContain("每单 500 元、本金 10,000 元");
+    expect(card.textContent).toContain("+375 元");       // 0.75 单位 × 500
+    expect(card.textContent).toContain("10,375");
+    expect(card.textContent).toContain("+3.8%");
+    expect(card.textContent).toContain("回落 500 元");    // 高点 +450 → 低点 -50
   });
 });
 

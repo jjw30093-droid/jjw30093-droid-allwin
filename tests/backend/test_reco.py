@@ -1076,3 +1076,33 @@ class TestLegLeagueNames:
         _publish(admin, pub_sid)
         pub = next(s for s in anon.get("/api/v1/reco/public").json()["slips"] if s["id"] == pub_sid)
         assert pub["legs"][0]["league_name_zh"] == "荷甲"
+
+
+class TestTrackRecordCurve:
+    """2026-10-01:盈利走势。全部已结算精选按时间正序累计;作废不计;
+    最后一点的累计值与 summary.net_units 相等(同一口径)。"""
+
+    def test_curve_matches_summary_and_excludes_void(self, app, data_dir, fresh_ip):
+        admin = _admin_client(app, data_dir, fresh_ip)
+        first = _create_slip(admin, slip_date=_days_ago(5), title="走势一",
+                             legs=[_prov_leg("A vs B", "1x2", "主胜", 1.9, 950101)])
+        _publish(admin, first)
+        _settle(admin, first, ["win"])            # +0.9
+        second = _create_slip(admin, slip_date=_days_ago(3), title="走势二",
+                              legs=[_prov_leg("C vs D", "1x2", "主胜", 2.0, 950102)])
+        _publish(admin, second)
+        _settle(admin, second, ["lose"])          # -1.0
+        voided = _create_slip(admin, slip_date=_days_ago(4), title="作废",
+                              legs=[_prov_leg("E vs F", "1x2", "主胜", 1.8, 950103)])
+        _publish(admin, voided)
+        assert admin.post(f"/api/v1/admin/reco/slips/{voided}/void", headers=_csrf(admin),
+                          json={"reason": "测试"}).status_code == 200
+
+        body = TestClient(app).get("/api/v1/reco/track-record").json()
+        curve = body["curve"]
+        dates = [p["slip_date"] for p in curve]
+        assert dates == sorted(dates)                       # 时间正序
+        assert _days_ago(4) not in dates                    # 作废不计
+        assert curve[-1]["cum_units"] == pytest.approx(body["summary"]["net_units"], abs=1e-6)
+        mine = [p for p in curve if p["slip_date"] in (_days_ago(5), _days_ago(3))]
+        assert [round(p["net_units"], 2) for p in mine] == [0.9, -1.0]

@@ -2214,6 +2214,15 @@ class RecoTrackRecordSummaryDTO(BaseModel):
     net_units: float
 
 
+class RecoCurvePointDTO(BaseModel):
+    """盈利走势的一个点(2026-10-01):一张已结算精选。net_units = 这单盈亏
+    (return_units - 1,走水为 0),cum_units = 截至这单的累计盈亏(单位)。"""
+
+    slip_date: str
+    net_units: float
+    cum_units: float
+
+
 class RecoTrackRecordResponse(BaseModel):
     """匿名可见(2026-08-16 起不再要求登录):结算/作废归档全历史,命中未中
     全展示——站点自身的历史运营记录,不属于"每日精选"按场授权的约束范围。"""
@@ -2221,6 +2230,9 @@ class RecoTrackRecordResponse(BaseModel):
     summary: RecoTrackRecordSummaryDTO
     total: int
     slips: list[RecoSlipDTO]
+    # 全部已结算精选按时间正序的累计盈亏(不分页——画走势要全样本;作废不计,
+    # 与 summary.net_units 同一口径,最后一点的 cum_units 恒等于 summary.net_units)
+    curve: list[RecoCurvePointDTO] = []
 
 
 class RecoOverviewResponse(BaseModel):

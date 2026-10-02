@@ -281,9 +281,6 @@ export function TrackRecordPanel({
       {error && <p className={styles.errText}>{error}</p>}
       {showSummary && summary && <SummaryRow summary={summary} />}
       <h2 className={styles.sectionTitle}>战绩归档（{total}）</h2>
-      <p className={styles.archiveNote}>
-        结算完的单子都在这儿，中没中都留着。改过的地方会在那张单子上标出来。
-      </p>
       {loading ? (
         <div className={styles.card} aria-busy="true">
           <div className={styles.skeleton} />

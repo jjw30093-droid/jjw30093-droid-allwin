@@ -15569,6 +15569,30 @@
     ],
     "title": "RecoBoardHighlightDTO"
    },
+   "RecoCurvePointDTO": {
+    "properties": {
+     "slip_date": {
+      "type": "string",
+      "title": "Slip Date"
+     },
+     "net_units": {
+      "type": "number",
+      "title": "Net Units"
+     },
+     "cum_units": {
+      "type": "number",
+      "title": "Cum Units"
+     }
+    },
+    "type": "object",
+    "required": [
+     "slip_date",
+     "net_units",
+     "cum_units"
+    ],
+    "title": "RecoCurvePointDTO",
+    "description": "盈利走势的一个点(2026-10-01):一张已结算精选。net_units = 这单盈亏\n(return_units - 1,走水为 0),cum_units = 截至这单的累计盈亏(单位)。"
+   },
    "RecoDailyLockedSlipDTO": {
     "properties": {
      "id": {
@@ -17115,6 +17139,14 @@
       },
       "type": "array",
       "title": "Slips"
+     },
+     "curve": {
+      "items": {
+       "$ref": "#/components/schemas/RecoCurvePointDTO"
+      },
+      "type": "array",
+      "title": "Curve",
+      "default": []
      }
     },
     "type": "object",

@@ -46,6 +46,7 @@ import {
   type Slip,
 } from "@/components/reco/TrackRecordPanel";
 import { Tabs } from "@/components/ui/Tabs";
+import { ProfitCurve } from "@/components/reco/ProfitCurve";
 import styles from "./reco.module.css";
 
 export { SlipCard, slipTone };
@@ -57,7 +58,6 @@ type TrackResp = GetJson<"/api/v1/reco/track-record">;
 // 每日公推(2026-09 新增,board='daily_public'):完全公开、匿名可见,
 // 响应形状同 RecoSlipDTO——直接复用既有 SlipCard,不新造投影/组件。
 type PublicResp = GetJson<"/api/v1/reco/public">;
-type MyAccessResponse = GetJson<"/api/v1/reco/my-access">;
 
 // 每日精选未授权状态固定文案:未登录时是列表级别的说明,不针对某一场,
 // 不用"本场";已登录时改成针对具体这一场的措辞。
@@ -99,8 +99,6 @@ function RecoBody() {
   const [trackErr, setTrackErr] = useState<string | null>(null);
   const [pub, setPub] = useState<PublicResp | null>(null);
   const [pubErr, setPubErr] = useState<string | null>(null);
-  // 当前账号是否有任何 active 授权;null = 还没查到(此时不放"怎么开通"按钮,避免闪一下)
-  const [hasGrant, setHasGrant] = useState<boolean | null>(null);
 
   // 历史战绩(2026-08-16 起匿名可见):不依赖登录态,挂载后直接拉取。
   useEffect(() => {
@@ -148,22 +146,6 @@ function RecoBody() {
     };
   }, []);
 
-  // 授权状态(个人功能,要求登录):决定顶部放"怎么开通"还是什么都不放
-  useEffect(() => {
-    if (me === "loading" || !me?.authenticated) return;
-    let cancelled = false;
-    clientFetch<MyAccessResponse>("/api/v1/reco/my-access")
-      .then((r) => {
-        if (!cancelled) setHasGrant(r.grants.some((g) => g.status === "active"));
-      })
-      .catch(() => {
-        // 查不到就当作"未知",不放按钮(不能因为接口失败就告诉用户"你没开通")
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [me]);
-
   // 今日精选列表:仅登录后才请求(未登录该端点 401)。每一条按 slip 分别
   // 授权投影,不存在任何"全局已解锁"判断。
   useEffect(() => {
@@ -185,7 +167,6 @@ function RecoBody() {
 
   const authed = me !== "loading" && Boolean(me?.authenticated);
   const summary = track?.summary;
-  const noAccess = hasGrant === false;
 
   // 显式 ?tab= 优先;否则默认落在完全公开的「每日公推」(2026-09 起,站长
   // 明确要求:导航栏"每日精选"入口点进来直接看到公推,不需要登录门槛——
@@ -208,7 +189,6 @@ function RecoBody() {
   return (
     <main className={styles.page}>
       <h1 className={styles.title}>每日精选</h1>
-      <p className={styles.subtitle}>每天人工挑的比赛，结算后的每一单都公开，中没中都留着。</p>
 
       {/* 战绩摘要(2026-10-01 站长 P0):来这页的人第一件事就是看准不准,
           不能藏在第三个标签页里。口径与「历史战绩」页同一份 summary。 */}
@@ -244,35 +224,10 @@ function RecoBody() {
       )}
       {/* 入口(2026-09-26):未登录 → 登录;已登录但还没有任何授权 → 怎么开通;
           已开通或还没查到授权状态时不放按钮 */}
-      {/* 怎么看今日精选(2026-10-01 站长 P0):未登录、或已登录但还没开通时,写清三步。 */}
-      {((me !== "loading" && !authed) || (authed && noAccess)) && (
-        <section className={styles.unlockSteps} data-testid="reco-unlock-steps">
-          <h2 className={styles.unlockTitle}>怎么看今日精选</h2>
-          <ol className={styles.unlockList}>
-            <li className={authed ? styles.unlockDone : undefined}>
-              用微信验证码登录（免费）{authed ? " ✓" : ""}
-            </li>
-            <li>
-              在「<Link href="/account">我的</Link>」页找到你的 6 位用户编号
-            </li>
-            <li>把编号告诉我们，按场或按周给你开通</li>
-          </ol>
-          <div className={styles.btnRow}>
-            {!authed ? (
-              <Link className={styles.btnPrimary} href="/login?next=/reco">
-                去登录
-              </Link>
-            ) : (
-              <Link className={styles.btnPrimary} href="/account">
-                查看我的编号
-              </Link>
-            )}
-            <Link className={styles.btnGhost} href="/pricing#how-to-unlock">
-              怎么联系我们
-            </Link>
-          </div>
-        </section>
-      )}
+      {/* 盈利走势(2026-10-01 站长要求):按每单 500 元、本金 10000 元换算,文字 + 走势图。
+          curve 用 ?? [] 兜底:track-record 有 5 分钟公共缓存,发版后的几分钟里浏览器会真实
+          收到不带 curve 字段的旧响应(同 lib/reco-highlight.ts 里 net_units 的教训)。 */}
+      {(track?.curve ?? []).length > 0 && <ProfitCurve points={track!.curve} />}
 
       <Tabs
         ariaLabel="精选内容切换"

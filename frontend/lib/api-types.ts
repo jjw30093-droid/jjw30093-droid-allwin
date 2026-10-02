@@ -4098,6 +4098,19 @@ export interface components {
             candidates_considered: number;
         };
         /**
+         * RecoCurvePointDTO
+         * @description 盈利走势的一个点(2026-10-01):一张已结算精选。net_units = 这单盈亏
+         *     (return_units - 1,走水为 0),cum_units = 截至这单的累计盈亏(单位)。
+         */
+        RecoCurvePointDTO: {
+            /** Slip Date */
+            slip_date: string;
+            /** Net Units */
+            net_units: number;
+            /** Cum Units */
+            cum_units: number;
+        };
+        /**
          * RecoDailyLockedSlipDTO
          * @description 当前用户对该 slip 没有 active 按场授权时的中性投影(2026-08-16,
          *     取代旧的全局 reco:daily 布尔权益门禁):只暴露"存在性 + 状态",标题/
@@ -4683,6 +4696,11 @@ export interface components {
             total: number;
             /** Slips */
             slips: components["schemas"]["RecoSlipDTO"][];
+            /**
+             * Curve
+             * @default []
+             */
+            curve: components["schemas"]["RecoCurvePointDTO"][];
         };
         /** RecoTrackRecordSummaryDTO */
         RecoTrackRecordSummaryDTO: {

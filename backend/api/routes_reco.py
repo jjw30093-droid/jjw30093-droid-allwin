@@ -348,6 +348,7 @@ def reco_track_record(
         "summary": q_reco.track_record_summary(conn),
         "total": total,
         "slips": q_reco.attach_leg_leagues(conn_core, slips),
+        "curve": q_reco.track_record_curve(conn),
     }
 
 

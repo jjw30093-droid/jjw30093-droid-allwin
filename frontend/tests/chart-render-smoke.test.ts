@@ -852,3 +852,17 @@ describe("ShotMapChart.buildOption:深色球场底提亮后的空心圈浅色描
     expect(withOutline.svg.toLowerCase()).toContain(COLORS.ink.toLowerCase());
   });
 });
+
+describe("每日精选盈利走势(2026-10-01)", () => {
+  it("buildProfitCurveOption 真实渲染,不抛异常,画出折线", async () => {
+    const { buildProfitCurveOption } = await import("@/lib/profit-curve");
+    const pts = [
+      { slip_date: "2026-09-01", net_units: 0.9, cum_units: 0.9 },
+      { slip_date: "2026-09-02", net_units: -1, cum_units: -0.1 },
+      { slip_date: "2026-09-03", net_units: 0.85, cum_units: 0.75 },
+    ];
+    const r = renderSvg(buildProfitCurveOption(pts, COLORS), { width: 360, height: 200 });
+    expect(r.paths).toBeGreaterThan(0);
+    expect(r.svg).toContain("元");
+  });
+});
