@@ -538,11 +538,6 @@
   color: var(--odds-up) !important;
 }
 
-.recordSummaryHint {
-  grid-column: 1 / -1;
-  font-size: 12px;
-  color: var(--ink-3);
-}
 
 /* ── 盈利走势(2026-10-01) ── */
 .profitCard {
@@ -581,8 +576,3 @@
   color: var(--odds-down);
 }
 
-.profitSub {
-  margin: 0 0 6px;
-  font-size: 12px;
-  color: var(--ink-3);
-}

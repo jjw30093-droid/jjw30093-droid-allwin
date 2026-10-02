@@ -117,7 +117,9 @@ describe("/reco 顶部", () => {
     expect(card.textContent).toContain("+375 元");       // 0.75 单位 × 500
     expect(card.textContent).toContain("10,375");
     expect(card.textContent).toContain("+3.8%");
-    expect(card.textContent).toContain("回落 500 元");    // 高点 +450 → 低点 -50
+    // 2026-10-02 站长:不放回撤/时间范围/风险提示这类说明句
+    expect(card.textContent).not.toContain("回落");
+    expect(card.textContent).not.toContain("过去的结果");
   });
 });
 

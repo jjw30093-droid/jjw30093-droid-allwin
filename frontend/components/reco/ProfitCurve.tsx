@@ -38,13 +38,6 @@ export function ProfitCurve({ points }: { points: ReadonlyArray<CurvePoint> }) {
         </span>
         ）
       </p>
-      <p className={styles.profitSub}>
-        中途最多从高点回落 <span className="num">{thousands(sc.maxDrawdownYuan)}</span> 元 ·{" "}
-        <span className="num">
-          {sc.from} 至 {sc.to}
-        </span>{" "}
-        · 过去的结果不代表以后
-      </p>
       <EChart
         option={buildProfitCurveOption(points, colors)}
         height={200}

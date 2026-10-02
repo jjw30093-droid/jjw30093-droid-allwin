@@ -211,15 +211,6 @@ function RecoBody() {
             </b>
             <span>盈利(单位)</span>
           </span>
-          <span className={styles.recordSummaryHint}>
-            {summary.win_count} 中 {summary.lose_count} 不中
-            {summary.half_win_count > 0 ? ` ${summary.half_win_count} 半赢` : ""}
-            {summary.half_loss_count > 0 ? ` ${summary.half_loss_count} 半输` : ""}
-            {summary.push_count > 0 ? ` ${summary.push_count} 走水` : ""}
-            {summary.voided_count > 0 ? ` · 作废 ${summary.voided_count} 单不计` : ""}
-            {" · 每单按 1 单位算 · "}
-            {tab === "record" ? "每一单都在下面" : "看每一单 →"}
-          </span>
         </Link>
       )}
       {/* 入口(2026-09-26):未登录 → 登录;已登录但还没有任何授权 → 怎么开通;
