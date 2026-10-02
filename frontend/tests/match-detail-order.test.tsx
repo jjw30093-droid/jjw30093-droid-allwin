@@ -16,7 +16,10 @@ vi.mock("@/components/matches/OddsTimeline", () => ({
   OddsTimeline: () => <div data-testid="mock-odds-timeline" />,
 }));
 vi.mock("@/components/matches/MarketCardsSection", () => ({
-  MarketCardsSection: () => <div data-testid="mock-market-cards" />,
+  // 2026-10-01 起标题由 MarketCardsSection 自己渲染(没有可展示的卡时连标题一起不出现)
+  MarketCardsSection: ({ heading }: { heading?: React.ReactNode }) => (
+    <div data-testid="mock-market-cards">{heading}</div>
+  ),
 }));
 vi.mock("@/components/matches/MomentumChart", () => ({
   MomentumChart: () => <div data-testid="mock-momentum-chart" />,

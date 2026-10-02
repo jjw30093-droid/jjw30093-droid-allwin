@@ -311,3 +311,15 @@
   margin: 0 0 10px;
 }
 
+
+/* 赛前「看点」没有可展示的数据倾向时的说明(2026-10-01) */
+.quickEmpty {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}

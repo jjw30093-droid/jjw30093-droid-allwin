@@ -1037,3 +1037,42 @@ class TestAuditLogsFilterByTarget:
         assert logs, "至少应该有 reco.create 一条"
         assert all(l["target_type"] == "reco_slip" and l["target_id"] == sid for l in logs)
         assert not any(l["target_id"] == other_sid for l in logs)
+
+
+class TestLegLeagueNames:
+    """2026-10-01 站长 P0:推荐单标题是人工自由文本(「荷兰甲」「荷甲早场」「韩k精选」…),
+    列表直接显示会让用户以为是不同联赛。公开战绩与公推的每条腿按 match_id 派生
+    标准联赛名(LEAGUE_META.name_zh);取不到(站外赛事/核心库没有这场)时如实为 None。"""
+
+    def test_track_record_and_public_legs_carry_standard_league_name(self, app, data_dir, fresh_ip):
+        from .coreseed import insert_match, seed_core_schema
+
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        insert_match(conn, 940101, league_id=57, date="2026-09-06", status="Finish",
+                     home_score=1, away_score=0, kickoff_at_utc="2026-09-06T12:30:00Z")
+        conn.commit()
+        conn.close()
+
+        admin = _admin_client(app, data_dir, fresh_ip)
+        sid = _create_slip(admin, title="荷兰甲", legs=[
+            _prov_leg("海牙 vs 福图纳锡塔德", "ou", "小3.25", 1.78, 940101),
+            _prov_leg("站外赛事", "ou", "大2.5", 1.8, 940199),
+        ])
+        _publish(admin, sid)
+        _settle(admin, sid, ["lose", "win"])
+
+        anon = TestClient(app)
+        slip = next(s for s in anon.get("/api/v1/reco/track-record").json()["slips"] if s["id"] == sid)
+        assert slip["title"] == "荷兰甲"   # 原标题照常下发,不改写数据
+        assert slip["legs"][0]["league_id"] == 57
+        assert slip["legs"][0]["league_name_zh"] == "荷甲"
+        assert slip["legs"][1]["league_id"] is None
+        assert slip["legs"][1]["league_name_zh"] is None
+
+        pub_sid = _create_slip(admin, slip_date=_days_ago(1), title="荷甲早场",
+                               legs=[_prov_leg("海牙 vs 福图纳锡塔德", "ou", "小3.25", 1.78, 940101)],
+                               board="daily_public")
+        _publish(admin, pub_sid)
+        pub = next(s for s in anon.get("/api/v1/reco/public").json()["slips"] if s["id"] == pub_sid)
+        assert pub["legs"][0]["league_name_zh"] == "荷甲"

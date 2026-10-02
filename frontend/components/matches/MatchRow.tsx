@@ -9,7 +9,8 @@ import type { MatchSummary } from "@/lib/api-v1";
 import { buildMatchHref } from "@/lib/match-links";
 import { WinProbabilityBar } from "./WinProbabilityBar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import { STATUS_ZH, formatBeijingHM } from "./zh";
+import { LeagueBadge } from "./LeagueBadge";
+import { LEAGUE_ZH, STATUS_ZH, formatBeijingHM } from "./zh";
 import styles from "./MatchRow.module.css";
 
 /**
@@ -27,9 +28,13 @@ export interface FreeTip {
 export function MatchRow({
   match,
   returnTo,
+  showLeague = false,
 }: {
   match: MatchSummary;
   returnTo?: string;
+  /** 在行内显示联赛名(多联赛混排的赛程页用;联赛自己的页面里是冗余信息,默认不显示)。
+   *  2026-10-01 站长 P0:停赛期赛程页全是巴甲,卡片上不写联赛,用户不知道看的是哪个联赛。 */
+  showLeague?: boolean;
 }) {
   const finished = match.status === "Finish";
   // 卡片内只显示开球时间(北京时间,如 18:00):日期已在分组标题里,不再重复。
@@ -60,10 +65,22 @@ export function MatchRow({
             )}
           </span>
         )}
-        <span className={styles.status}>
-          {STATUS_ZH[match.status] ?? match.status}
-          {match.round ? ` · 第${match.round}轮` : ""}
-        </span>
+        {showLeague ? (
+          <span className={styles.status} data-testid="row-league">
+            <LeagueBadge leagueId={match.league_id} size={14} />
+            {LEAGUE_ZH[match.league_id] ?? `联赛 ${match.league_id}`}
+            {match.round ? ` · 第${match.round}轮` : ""}
+            {/* 未开赛看开球时间、完赛看比分就够了;进行中/延期等状态仍要写出来 */}
+            {match.status !== "NotStarted" && match.status !== "Finish"
+              ? ` · ${STATUS_ZH[match.status] ?? match.status}`
+              : ""}
+          </span>
+        ) : (
+          <span className={styles.status}>
+            {STATUS_ZH[match.status] ?? match.status}
+            {match.round ? ` · 第${match.round}轮` : ""}
+          </span>
+        )}
       </span>
       <span className={styles.away}>
         <TeamBadge

@@ -92,6 +92,8 @@ export function buildMatchesApiQuery(
   qs.set("window", window);
   if (content) qs.set("content", content);
   if (q) qs.set("q", q);
+  // 赛程页按开球时间排,不要后端"有赔率优先"的排序(否则同一天的比赛会被拆开)
+  qs.set("sort", "time");
   qs.set("limit", String(opts.limit));
   qs.set("offset", String((page - 1) * opts.limit));
   return qs.toString();

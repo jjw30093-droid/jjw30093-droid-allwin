@@ -4294,6 +4294,10 @@ export interface components {
             odds: number;
             /** Result */
             result?: ("win" | "lose" | "push" | "half_win" | "half_loss") | null;
+            /** League Id */
+            league_id?: number | null;
+            /** League Name Zh */
+            league_name_zh?: string | null;
         };
         /** RecoLegInput */
         RecoLegInput: {
@@ -6375,6 +6379,7 @@ export interface operations {
                 window?: string | null;
                 content?: string | null;
                 boost?: string | null;
+                sort?: string | null;
                 q?: string | null;
                 limit?: number;
                 offset?: number;

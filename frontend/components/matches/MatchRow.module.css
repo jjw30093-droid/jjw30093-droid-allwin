@@ -74,6 +74,9 @@
 }
 
 .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: var(--ink-3);
   letter-spacing: 0.04em;

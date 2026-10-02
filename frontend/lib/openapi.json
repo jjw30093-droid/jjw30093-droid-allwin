@@ -1617,6 +1617,23 @@
       }
      },
      {
+      "name": "sort",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(time)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Sort"
+      }
+     },
+     {
       "name": "q",
       "in": "query",
       "required": false,
@@ -16024,6 +16041,28 @@
        }
       ],
       "title": "Result"
+     },
+     "league_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "League Id"
+     },
+     "league_name_zh": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "League Name Zh"
      }
     },
     "type": "object",

@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   serverGet,
+  serverGetOptional,
   type LeagueInfo,
   type MatchListResponse,
 } from "@/lib/api-v1";
+import { FIVE_LEAGUE_IDS, fiveLeagueBreak, fiveLeagueRequestPaths } from "@/lib/homepage";
+import { LEAGUE_ZH, formatBeijingMD } from "@/components/matches/zh";
 import { MatchListLive } from "@/components/matches/MatchListLive";
 import {
   buildMatchesApiQuery,
@@ -157,6 +161,20 @@ export default async function MatchesPage({
     );
   }
 
+  // 五大联赛停赛提示(2026-10-01 站长 P0):国际比赛日期间默认赛程全是巴甲等小联赛,
+  // 冲着英超来的用户不知道去哪找。只在"赛程 + 没选联赛"时判断;判据与首页同一个纯函数
+  // (lib/homepage.ts::fiveLeagueBreak),取不到数据就当没停赛,不显示。
+  let breakResumeMD: string | null = null;
+  if (status === "upcoming" && league == null) {
+    const lists = await Promise.all(
+      fiveLeagueRequestPaths().map((path) =>
+        serverGetOptional<MatchListResponse>(path, { revalidate: 300 }).catch(() => null),
+      ),
+    );
+    const brk = fiveLeagueBreak(lists, new Date());
+    if (brk.onBreak) breakResumeMD = formatBeijingMD(brk.resumeAt);
+  }
+
   // 选中联赛 → 只列该联赛赛季;否则列并集(降序,最新赛季在前)。
   // available_seasons 与身份无关(不随登录态变化),留在 SSR 计算即可——
   // 只有 accessible/data_status 这类随身份变化的字段才需要客户端刷新。
@@ -176,6 +194,25 @@ export default async function MatchesPage({
         <MatchModeSwitch filters={filters} />
       </div>
       {/* 「浏览联赛排名与球队数据 →」已删除(2026-09-26):底部导航已有「联赛」入口 */}
+
+      {breakResumeMD && (
+        <div className={styles.breakNotice} data-testid="five-league-break">
+          <p className={styles.breakText}>
+            国际比赛日，五大联赛 <b>{breakResumeMD}</b> 恢复。想提前看赛程：
+          </p>
+          <div className={styles.breakLinks}>
+            {FIVE_LEAGUE_IDS.map((id) => (
+              <Link
+                key={id}
+                href={buildMatchesHref(filters, { league: id, window: "all", page: 1 })}
+                className={styles.breakLink}
+              >
+                {LEAGUE_ZH[id]}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 筛选栏、比赛行、翻页都在 MatchListLive 里:服务端渲染的是匿名口径
           (SSR 读不到会话 cookie),挂载后浏览器带 cookie 刷新一次,已登录且

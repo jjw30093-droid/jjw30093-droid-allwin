@@ -503,3 +503,71 @@
 .entryRow {
   margin: 0 0 16px;
 }
+
+/* ── 战绩摘要(2026-10-01 站长 P0:放在精选页最上面) ── */
+.recordSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--odds-up) 30%, var(--border));
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--odds-up) 5%, var(--surface));
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.recordSummaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.recordSummaryItem b {
+  font-family: var(--font-latin), system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.recordSummaryUp {
+  color: var(--odds-up) !important;
+}
+
+.recordSummaryHint {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* ── 怎么看今日精选 ── */
+.unlockSteps {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.unlockTitle {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.unlockList {
+  margin: 0 0 4px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+.unlockDone {
+  color: var(--ink-3);
+}

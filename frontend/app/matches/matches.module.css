@@ -337,3 +337,38 @@
   font-size: 13px;
   color: var(--ink-3);
 }
+
+/* 五大联赛停赛提示(2026-10-01):橙色 = 等待更新(DESIGN.md 颜色语义,不用红) */
+.breakNotice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--pending) 35%, var(--border));
+  border-radius: var(--r-card-sm, 10px);
+  background: color-mix(in srgb, var(--pending) 7%, var(--surface));
+}
+
+.breakText {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.breakLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.breakLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+}

@@ -4,6 +4,9 @@
  * 关注按钮位置、日期行内容),拆成独立组件比在一个组件里塞双分支更清楚;
  * 深浅色仍是单份 JSX 只换 CSS 变量,不违反 DESIGN.md §2.9 的铁律
  * (铁律禁止的是"同一份内容因主题分两套 JSX",不是"两种不同内容分两个组件")。
+ *
+ * 2026-10-01:头部底部加胜平负概率条(赔率折算的市场概率,不是自研模型——
+ * 模型概率仍然不展示)。
  */
 
 import { FollowButton } from "@/components/matches/FollowButton";
@@ -11,6 +14,7 @@ import { KickoffCountdown } from "@/components/matches/KickoffCountdown";
 import { LeagueBadge } from "@/components/matches/LeagueBadge";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { TeamBadge } from "@/components/teams/TeamBadge";
+import { WinProbabilityBar } from "@/components/matches/WinProbabilityBar";
 import { LEAGUE_ZH, STATUS_ZH } from "@/components/matches/zh";
 import type { MatchSummary } from "@/lib/api-v1";
 import styles from "./MatchHeaderPre.module.css";
@@ -63,6 +67,17 @@ export function MatchHeaderPre({ match }: { match: MatchSummary }) {
           <span className={styles.kickoffTime}>{match.date_utc}</span>
         )}
       </div>
+
+      {/* 胜平负概率(赔率折算,与比赛列表、首页重点卡同一数据,2026-10-01 站长 P0:
+          列表有、点进来反而没有)。没有赔率时整块不出现。 */}
+      {match.win_probability && (
+        <div className={styles.probRow} data-testid="header-win-prob">
+          <p className={styles.probTitle}>
+            胜平负概率<span className={styles.probNote}>按赔率折算</span>
+          </p>
+          <WinProbabilityBar probability={match.win_probability} size="lg" />
+        </div>
+      )}
     </header>
   );
 }

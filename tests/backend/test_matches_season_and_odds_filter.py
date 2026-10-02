@@ -416,6 +416,36 @@ class TestHomepageHeroBoostFreePredicted:
         assert body["matches"][0]["win_probability"] is None
 
 
+    def test_sort_time_is_pure_chronological(self, app, data_dir):
+        """2026-10-01 站长 P0:赛程页要时间轴。默认排序把"有赔率/有分析"的比赛提前,
+        没赔率的同日比赛被挤到后面(线上 10/8 雷莫 vs 格雷米奥排在 10/9 之后);
+        sort=time 必须纯按开球时间排,默认排序保持不变(首页重点位依赖它)。"""
+        self._seed_matches(data_dir)
+        c = TestClient(app)
+        default_ids = [m["match_id"] for m in c.get(
+            "/api/v1/matches?status=upcoming&window=7d&limit=12").json()["matches"]]
+        assert default_ids[:8] == list(range(9101, 9109))
+        assert default_ids.index(9111) < default_ids.index(9109)  # 优先档仍在前
+        time_ids = [m["match_id"] for m in c.get(
+            "/api/v1/matches?status=upcoming&window=7d&limit=12&sort=time").json()["matches"]]
+        assert time_ids == list(range(9101, 9113))
+        assert c.get("/api/v1/matches?sort=bogus").status_code == 422
+
+    def test_match_detail_carries_same_win_probability_as_list(self, app, data_dir):
+        """2026-10-01 站长 P0:列表/首页显示了胜平负概率,点进详情页却没有。
+        详情端点必须下发与列表同一口径(同一函数)的 win_probability;没有 1x2 赔率时诚实为 None。"""
+        self._seed_matches(data_dir)
+        c = TestClient(app)
+        listed = {m["match_id"]: m for m in c.get(
+            "/api/v1/matches?status=upcoming&window=7d&limit=12&sort=time").json()["matches"]}
+        detail = c.get("/api/v1/matches/9111").json()["match"]
+        assert detail["win_probability"] is not None
+        assert detail["win_probability"] == listed[9111]["win_probability"]
+        assert c.get("/api/v1/matches/9109").json()["match"]["win_probability"] is None
+        # 只有非 1x2 市场赔率的比赛同样算不出概率
+        assert c.get("/api/v1/matches/9101").json()["match"]["win_probability"] is None
+
+
 def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 

@@ -16,6 +16,7 @@
  */
 
 import { useState } from "react";
+import { slipLeagueLabel } from "@/lib/reco-labels";
 import Link from "next/link";
 import type { GetJson } from "@/lib/api-v1";
 import { MARKET_ZH } from "@/components/matches/zh";
@@ -165,7 +166,8 @@ export function SlipCard({ slip }: { slip: Slip }) {
 
         <div className={styles.metaLine}>
           <span className="num">{slip.slip_date}</span>
-          <span>{slip.title}</span>
+          {/* 联赛用标准名(按比赛派生),不直接显示人工标题——标题写法不统一 */}
+          <span data-testid="slip-league">{slipLeagueLabel(slip)}</span>
         </div>
 
         {slip.note && <p className={styles.note}>{slip.note}</p>}
@@ -264,17 +266,20 @@ export function TrackRecordPanel({
   total,
   loading = false,
   error = null,
+  showSummary = true,
 }: {
   summary: TrackSummary | null;
   slips: Slip[];
   total: number;
   loading?: boolean;
   error?: string | null;
+  /** /reco 页顶部已有战绩摘要(2026-10-01),那里传 false,避免同一组数字连着出现两遍 */
+  showSummary?: boolean;
 }) {
   return (
     <section>
       {error && <p className={styles.errText}>{error}</p>}
-      {summary && <SummaryRow summary={summary} />}
+      {showSummary && summary && <SummaryRow summary={summary} />}
       <h2 className={styles.sectionTitle}>战绩归档（{total}）</h2>
       <p className={styles.archiveNote}>
         结算完的单子都在这儿，中没中都留着。改过的地方会在那张单子上标出来。

@@ -385,6 +385,23 @@ def _banner_match_facts_for_ids(
     return out
 
 
+def attach_leg_leagues(conn_core: sqlite3.Connection, slips: list[dict]) -> list[dict]:
+    """给每条腿补上 league_id / league_name_zh(按 match_id 从 dim_match 派生,整批一次查询)。
+
+    推荐单标题是人工自由文本,同一个联赛出现过「荷兰甲 / 荷甲 / 荷甲早场」等多种写法;
+    展示联赛用这里的标准名(LEAGUE_META.name_zh)。取不到的腿两字段为 None,原样下发。
+    原地修改并返回同一列表,便于路由里直接 return。
+    """
+    ids = {leg["match_id"] for s in slips for leg in s.get("legs", []) if leg.get("match_id") is not None}
+    facts = _banner_match_facts_for_ids(conn_core, ids)
+    for s in slips:
+        for leg in s.get("legs", []):
+            f = facts.get(leg.get("match_id")) if leg.get("match_id") is not None else None
+            leg["league_id"] = f["league_id"] if f else None
+            leg["league_name_zh"] = f["league_name_zh"] if f else None
+    return slips
+
+
 def _public_current_legs_by_slip(
     conn: sqlite3.Connection, conn_core: sqlite3.Connection, slip_ids: list[str]
 ) -> dict[str, list[dict]]:

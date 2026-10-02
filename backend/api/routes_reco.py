@@ -126,6 +126,7 @@ def reco_overview(
 def reco_public(
     response: Response,
     conn=Depends(platform_ro),
+    conn_core=Depends(core_ro),
 ):
     """每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
     不需要登录——与「每日精选」并列的板块,签名里刻意不注入 AuthContext,
@@ -136,7 +137,7 @@ def reco_public(
     response.headers["Cache-Control"] = PUBLIC_CACHE_SHORT
     return {
         "window_days": q_reco.RECO_PUBLIC_WINDOW_DAYS,
-        "slips": q_reco.public_slips(conn),
+        "slips": q_reco.attach_leg_leagues(conn_core, q_reco.public_slips(conn)),
     }
 
 
@@ -319,6 +320,7 @@ def reco_track_record(
     limit: int = 50,
     offset: int = 0,
     conn=Depends(platform_ro),
+    conn_core=Depends(core_ro),
 ):
     """匿名可见(2026-08-16 起,不再要求登录):结算/作废归档全历史。
 
@@ -345,7 +347,7 @@ def reco_track_record(
     return {
         "summary": q_reco.track_record_summary(conn),
         "total": total,
-        "slips": slips,
+        "slips": q_reco.attach_leg_leagues(conn_core, slips),
     }
 
 

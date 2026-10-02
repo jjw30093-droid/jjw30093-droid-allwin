@@ -80,6 +80,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
  * 训练前不渲染任何概率。
  */
 function QuickView({ detail }: { detail: MatchDetailResponse }) {
+  // 没有已发布精选时整块不显示(2026-10-01 站长 P0:赛前页最上面一块灰底"推荐待发布"
+  // 对新用户是空信息,占掉首屏最好的位置)。
+  if (!detail.reco_published) return null;
   return (
     <section className={styles.quickView} aria-label="本场看点" data-testid="quick-view">
       <div className={styles.quickRecoRow}>
@@ -121,10 +124,20 @@ function HighlightsGroup({
         </>
       )}
       {!finished && <QuickView detail={detail} />}
-      <section className={styles.section}>
-        <SectionTitle>数据倾向</SectionTitle>
-        <MarketCardsSection matchId={idNum} />
-      </section>
+      {/* 标题交给 MarketCardsSection 渲染:没有可展示的卡时整段(含标题)不出现 */}
+      <MarketCardsSection
+        matchId={idNum}
+        className={styles.section}
+        heading={<SectionTitle>数据倾向</SectionTitle>}
+        emptyFallback={
+          finished ? undefined : (
+            <p className={styles.quickEmpty}>
+              这场暂时没有把握够大的数据倾向（历史上对不到一半的判断，我们不拿出来）。
+              上面的胜平负概率可以先看，往右点「数据」「赔率」还有两队数据和盘口变化。
+            </p>
+          )
+        }
+      />
     </>
   );
 }

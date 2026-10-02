@@ -1,17 +1,35 @@
 "use client";
 
 /**
- * 市场卡列表(比赛详情页新首要区块,赛前/完赛均可用)。
+ * 市场卡列表(比赛详情页「数据倾向」区块,赛前/完赛均可用)。
  * 结构:结论区常驻 + 驱动因子折叠,见 MarketCard.tsx。
+ *
+ * 2026-10-01(站长 P0):只展示"有方向且历史命中率 ≥ 50%"的卡(门槛见
+ * lib/market-cards.ts)。整段的外层 section 与标题由本组件渲染——没有可展示的
+ * 卡时连标题一起不出现,不留一个空标题。
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { clientFetch } from "@/lib/api-v1";
 import type { MatchMarketCardsResponse } from "@/lib/api-v1";
+import { isShowableMarketCard } from "@/lib/market-cards";
 import { MarketCard } from "./MarketCard";
 import styles from "./MarketCardsSection.module.css";
 
-export function MarketCardsSection({ matchId }: { matchId: number }) {
+export function MarketCardsSection({
+  matchId,
+  heading,
+  className,
+  emptyFallback,
+}: {
+  matchId: number;
+  /** 段标题(没有可展示的卡时不渲染) */
+  heading?: React.ReactNode;
+  /** 外层 section 的样式(间距由调用方的页面样式决定) */
+  className?: string;
+  /** 加载完成但没有可展示的卡时显示的内容(赛前「看点」用,避免整个标签页空白);不传则整段不出现 */
+  emptyFallback?: React.ReactNode;
+}) {
   const [resp, setResp] = useState<MatchMarketCardsResponse | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -35,8 +53,9 @@ export function MarketCardsSection({ matchId }: { matchId: number }) {
     setAttempt((n) => n + 1);
   }, []);
 
+  let body: React.ReactNode;
   if (error) {
-    return (
+    body = (
       <div className={styles.stateBox}>
         数据倾向加载失败。
         <button type="button" onClick={retry} className={styles.retryBtn}>
@@ -44,23 +63,36 @@ export function MarketCardsSection({ matchId }: { matchId: number }) {
         </button>
       </div>
     );
-  }
-  if (resp == null) {
-    return (
+  } else if (resp == null) {
+    body = (
       <div className={styles.skeleton} aria-label="数据倾向加载中">
         <span className={styles.skelCard} />
         <span className={styles.skelCard} />
         <span className={styles.skelCard} />
       </div>
     );
+  } else {
+    const shown = resp.cards.filter(isShowableMarketCard);
+    if (shown.length === 0) {
+      return emptyFallback ? (
+        <section className={className} data-testid="market-cards-empty">
+          {emptyFallback}
+        </section>
+      ) : null;
+    }
+    body = (
+      <div className={styles.grid}>
+        {shown.map((card) => (
+          <MarketCard key={card.market} card={card} />
+        ))}
+      </div>
+    );
   }
-  if (resp.cards.length === 0) return null;
 
   return (
-    <div className={styles.grid}>
-      {resp.cards.map((card) => (
-        <MarketCard key={card.market} card={card} />
-      ))}
-    </div>
+    <section className={className} data-testid="market-cards-section">
+      {heading}
+      {body}
+    </section>
   );
 }

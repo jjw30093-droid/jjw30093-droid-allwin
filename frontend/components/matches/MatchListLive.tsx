@@ -386,7 +386,7 @@ export function MatchListLive({
                     {formatDateHeadingZh(dateKey)}
                   </div>
                 )}
-                <MatchRow match={m} returnTo={buildMatchesHref(filters, {})} />
+                <MatchRow match={m} returnTo={buildMatchesHref(filters, {})} showLeague />
               </Fragment>
             );
           })}

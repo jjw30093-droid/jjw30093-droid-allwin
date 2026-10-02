@@ -326,6 +326,11 @@ def list_matches(
     # 调用方已经依赖的默认排序/分页语义,只在显式请求时把"当前调用方能看到
     # 概率的免费比赛"顶进 limit 截断线以内,不下发额外的整窗口数据。
     boost: str | None = Query(None, pattern="^(free_predicted)$"),
+    # sort=time(2026-10-01):纯按开球时间排,不做"有分析/有赔率的比赛优先"。
+    # 赛程页(/matches)要的是时间轴——优先档会把没有赔率的比赛挤到后面,
+    # 同一天的比赛被拆到两处(真实发现:10/8 雷莫 vs 格雷米奥排在 10/9 之后)。
+    # 首页重点位仍走默认优先排序(那里要的是"值得看的比赛别被 limit 截掉")。
+    sort: str | None = Query(None, pattern="^(time)$"),
     q: str | None = Query(None, min_length=1, max_length=80),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -419,8 +424,8 @@ def list_matches(
         query=q,
         query_team_ids=query_team_ids,
         match_ids=match_ids,
-        priority_match_ids=analysis_match_ids | odds_match_ids,
-        top_priority_match_ids=free_predicted_match_ids,
+        priority_match_ids=None if sort == "time" else analysis_match_ids | odds_match_ids,
+        top_priority_match_ids=None if sort == "time" else free_predicted_match_ids,
         limit=limit,
         offset=offset,
     )
@@ -498,6 +503,9 @@ def match_detail(
     last_observed = q_odds.odds_last_observed_for_match(conn_odds, match_id)
     m["odds_last_observed_at"] = last_observed
     m["odds_freshness_state"] = q_odds.classify_odds_freshness(last_observed)
+    # 胜平负概率(赔率折算):与列表路由同一函数、同一口径(2026-10-01 站长 P0:
+    # 列表/首页显示了概率,点进详情页却没有,前后不一致)。单场只查这一场。
+    m["win_probability"] = q_odds.latest_1x2_by_match(conn_odds, match_ids={match_id}).get(match_id)
     home_form = q_matches.recent_form(conn, m["home"]["team_id"], m["date_utc"])
     away_form = q_matches.recent_form(conn, m["away"]["team_id"], m["date_utc"])
     try:

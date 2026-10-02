@@ -189,37 +189,94 @@ function RecoBody() {
 
   // 显式 ?tab= 优先;否则默认落在完全公开的「每日公推」(2026-09 起,站长
   // 明确要求:导航栏"每日精选"入口点进来直接看到公推,不需要登录门槛——
-  // 每日公推排最左,是这一路由现在的默认落点)。
+  // 每日公推排最左)。
+  // 2026-10-01(站长 P0):公推这 7 天一条都没有时,默认改落「历史战绩」——
+  // 新用户点进来第一眼看到"这 7 天还没发过公推"等于"这里什么都没有"。
+  // 公推还在加载时先不定标签(显示骨架),免得先闪公推再跳战绩。
   const explicit = searchParams.get("tab");
-  const tab: Tab =
+  const tab: Tab | null =
     explicit === "daily" || explicit === "record" || explicit === "public"
       ? explicit
-      : "public";
+      : pub
+        ? pub.slips.length > 0
+          ? "public"
+          : "record"
+        : pubErr
+          ? "record"
+          : null;
 
   return (
     <main className={styles.page}>
       <h1 className={styles.title}>每日精选</h1>
-      <p className={styles.subtitle}>每天人工精选，开通后在这里查看。</p>
+      <p className={styles.subtitle}>每天人工挑的比赛，结算后的每一单都公开，中没中都留着。</p>
+
+      {/* 战绩摘要(2026-10-01 站长 P0):来这页的人第一件事就是看准不准,
+          不能藏在第三个标签页里。口径与「历史战绩」页同一份 summary。 */}
+      {summary && summary.settled_count > 0 && (
+        <Link href="/reco?tab=record" className={styles.recordSummary} data-testid="reco-summary">
+          <span className={styles.recordSummaryItem}>
+            <b className="num">{summary.settled_count}</b>
+            <span>已结算</span>
+          </span>
+          <span className={styles.recordSummaryItem}>
+            <b className="num">
+              {summary.hit_rate == null ? "—" : `${(summary.hit_rate * 100).toFixed(1)}%`}
+            </b>
+            <span>命中率</span>
+          </span>
+          <span className={styles.recordSummaryItem}>
+            <b className={`num ${summary.net_units > 0 ? styles.recordSummaryUp : ""}`}>
+              {summary.net_units >= 0 ? "+" : ""}
+              {summary.net_units.toFixed(2)}
+            </b>
+            <span>盈利(单位)</span>
+          </span>
+          <span className={styles.recordSummaryHint}>
+            {summary.win_count} 中 {summary.lose_count} 不中
+            {summary.half_win_count > 0 ? ` ${summary.half_win_count} 半赢` : ""}
+            {summary.half_loss_count > 0 ? ` ${summary.half_loss_count} 半输` : ""}
+            {summary.push_count > 0 ? ` ${summary.push_count} 走水` : ""}
+            {summary.voided_count > 0 ? ` · 作废 ${summary.voided_count} 单不计` : ""}
+            {" · 每单按 1 单位算 · "}
+            {tab === "record" ? "每一单都在下面" : "看每一单 →"}
+          </span>
+        </Link>
+      )}
       {/* 入口(2026-09-26):未登录 → 登录;已登录但还没有任何授权 → 怎么开通;
           已开通或还没查到授权状态时不放按钮 */}
-      {me !== "loading" && !authed && (
-        <div className={`${styles.btnRow} ${styles.entryRow}`}>
-          <Link className={styles.btnPrimary} href="/login?next=/reco">
-            登录
-          </Link>
-        </div>
-      )}
-      {authed && noAccess && (
-        <div className={`${styles.btnRow} ${styles.entryRow}`}>
-          <Link className={styles.btnPrimary} href="/pricing#how-to-unlock">
-            怎么开通
-          </Link>
-        </div>
+      {/* 怎么看今日精选(2026-10-01 站长 P0):未登录、或已登录但还没开通时,写清三步。 */}
+      {((me !== "loading" && !authed) || (authed && noAccess)) && (
+        <section className={styles.unlockSteps} data-testid="reco-unlock-steps">
+          <h2 className={styles.unlockTitle}>怎么看今日精选</h2>
+          <ol className={styles.unlockList}>
+            <li className={authed ? styles.unlockDone : undefined}>
+              用微信验证码登录（免费）{authed ? " ✓" : ""}
+            </li>
+            <li>
+              在「<Link href="/account">我的</Link>」页找到你的 6 位用户编号
+            </li>
+            <li>把编号告诉我们，按场或按周给你开通</li>
+          </ol>
+          <div className={styles.btnRow}>
+            {!authed ? (
+              <Link className={styles.btnPrimary} href="/login?next=/reco">
+                去登录
+              </Link>
+            ) : (
+              <Link className={styles.btnPrimary} href="/account">
+                查看我的编号
+              </Link>
+            )}
+            <Link className={styles.btnGhost} href="/pricing#how-to-unlock">
+              怎么联系我们
+            </Link>
+          </div>
+        </section>
       )}
 
       <Tabs
         ariaLabel="精选内容切换"
-        activeKey={tab}
+        activeKey={tab ?? ""}
         items={[
           { key: "public", label: "每日公推", href: "/reco?tab=public" },
           { key: "daily", label: "今日精选", href: "/reco?tab=daily" },
@@ -229,7 +286,12 @@ function RecoBody() {
         ]}
       />
 
-      {tab === "daily" ? (
+      {tab == null ? (
+        <section className={styles.card} aria-busy="true">
+          <div className={styles.skeleton} />
+          <div className={styles.skeletonShort} />
+        </section>
+      ) : tab === "daily" ? (
         me === "loading" ? (
           <section className={styles.card} aria-busy="true">
             <div className={styles.skeleton} />
@@ -276,6 +338,7 @@ function RecoBody() {
           total={track?.total ?? 0}
           loading={!track && !trackErr}
           error={trackErr}
+          showSummary={false}
         />
       ) : (
         <section>

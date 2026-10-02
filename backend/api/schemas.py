@@ -1989,6 +1989,11 @@ class RecoLegDTO(BaseModel):
     selection: str
     odds: float
     result: Optional[Literal["win", "lose", "push", "half_win", "half_loss"]] = None
+    # 2026-10-01:按 match_id 从 dim_match 派生的联赛(公开战绩/公推列表填充)。
+    # 推荐单标题是人工自由文本("荷兰甲""荷甲早场""韩k精选"…),展示联赛统一用这里的
+    # 标准中文名。站外赛事(无 match_id)或未登记联赛时为 None,前端退回标题。
+    league_id: Optional[int] = None
+    league_name_zh: Optional[str] = None
 
 
 class RecoSlipDTO(BaseModel):
