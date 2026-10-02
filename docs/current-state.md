@@ -7855,3 +7855,11 @@ P95 约 1.2 秒(写库排队),其余接口 P95 均在 0.2 秒内;测试后库 in
 线上验收(2026-10-02):英超详情 200 + 公共缓存;巴甲详情/赔率、西甲积分榜、模拟器西甲参数 401 + no-store;
 公推/战绩 200;sitemap 只有 /league/47/;真浏览器匿名打开巴甲比赛 → /login?next=… ,HTML 无详情字段。
 未验证:Playwright 套件(e2e 种子另案修复中,新增 `e2e/login-gate.spec.ts` 尚未在种子库上跑过)。
+
+## 76. 页面不再出现数据源名称(2026-10-02,已上线 releases/bc38cde66304)
+
+站长要求删去:关于我们、xG 榜摘要与图下说明、球员象限图说明、比赛页"数据来源与说明"里的 FotMob/NowGoal;
+历史存档赔率来源标签改为"存档 C""存档重抓";球队数据口径说明 3 处 Opta/StatsBomb。
+生产关闭 `/api/v1/openapi.json` 与 `/api/v1/docs`(线上实测 404);前端类型仍由 export_openapi 本地生成。
+未处理(站长未要求):赔率表的公司名(Macauslot/Crown/Bet365)、球员头像直连 images.fotmob.com、
+队徽地址路径含 fotmob。
