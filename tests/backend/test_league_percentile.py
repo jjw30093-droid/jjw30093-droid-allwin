@@ -163,6 +163,7 @@ class TestMatchDataProfile:
         attack_group = next(g for g in profile.groups if g.key == "attack")
         xg_metric = next(m for m in attack_group.metrics if m.key == "xg")
         assert xg_metric.home_percentile == 100  # home_id 的 6.0 是主场分布里最高的(xg 越高越好)
+        assert xg_metric.home_rank == 1          # 页面显示"联赛第 1"(2026-10-02)
         assert xg_metric.away_percentile == 0  # away_id 的 0.5 是客场分布里最低的
 
         # home 100 对 away 0,差距远超 GAP_FLOOR(15),xg 应该出现在 highlights 里
@@ -351,6 +352,7 @@ class TestCrossLeagueProfile:
             assert group.home_peers == [] and group.away_peers == []
             for metric in group.metrics:
                 assert metric.home_percentile is None
+                assert metric.home_rank is None
                 assert metric.away_percentile is None
                 assert metric.league_sample_size == 0
         # 「最大的差距」榜按百分位差排序,没有百分位就不该有这个榜
@@ -659,3 +661,75 @@ class TestVenueModeAndWindowSwitchers:
         conn.commit()
         p = match_data_profile(conn, None, BEFORE, 3901, 3902, cross_league=True)
         assert p.scope_league_zh is None
+
+
+class TestRecentSeasonPool:
+    """2026-10-02 站长拍板的默认口径 "recent":只在本赛季这个联赛的参赛球队里
+    排名(上赛季降级队不进来,名次永远 1..本赛季队数);每队最近 N 场不分主客场、
+    不限赛事——升班马本联赛场次不够时用它此前在别的联赛的比赛,赛季初也有排名。"""
+
+    def _seed(self, data_dir):
+        from backend.db.connections import connect_rw
+        from tests.backend.coreseed import insert_match, seed_core_schema
+
+        conn = connect_rw("core")
+        seed_core_schema(conn)
+        # 本赛季(2026/2027)英超 6 队:1..5 打过几轮,6 是升班马(本联赛还没主场比赛)
+        mid = 70000
+        for i in range(1, 6):
+            for j in range(1, 6):
+                if i == j:
+                    continue
+                mid += 1
+                insert_match(conn, mid, league_id=47, season="2026/2027", date=f"2026-09-{(mid % 20) + 1:02d}",
+                             home_id=i, away_id=j, home=f"T{i}", away=f"T{j}", status="Finish",
+                             home_score=1, away_score=0)
+                conn.execute(
+                    "INSERT INTO fact_team_match_stats (Match_ID, Team_ID, Period, extra_json) VALUES (?,?,'All',?)",
+                    (mid, i, json.dumps({"expected_goals": float(i), "total_shots": 10 + i})),
+                )
+                conn.execute(
+                    "INSERT INTO fact_team_match_stats (Match_ID, Team_ID, Period, extra_json) VALUES (?,?,'All',?)",
+                    (mid, j, json.dumps({"expected_goals": float(j), "total_shots": 10 + j})),
+                )
+        # 升班马 6:上赛季在英冠(48)踢了 5 场;本赛季英超只有一场未开赛的赛程
+        for k in range(5):
+            mid += 1
+            insert_match(conn, mid, league_id=48, season="2025/2026", date=f"2026-04-{k + 1:02d}",
+                         home_id=6, away_id=900 + k, home="T6", away=f"C{k}", status="Finish",
+                         home_score=2, away_score=0)
+            conn.execute(
+                "INSERT INTO fact_team_match_stats (Match_ID, Team_ID, Period, extra_json) VALUES (?,?,'All',?)",
+                (mid, 6, json.dumps({"expected_goals": 9.0, "total_shots": 30})),
+            )
+        insert_match(conn, 79999, league_id=47, season="2026/2027", date="2026-10-20",
+                     home_id=6, away_id=1, home="T6", away="T1", status="NotStarted")
+        # 上赛季英超的降级队 7:不在本赛季名单里,不得进入排名池
+        for k in range(6):
+            mid += 1
+            insert_match(conn, mid, league_id=47, season="2025/2026", date=f"2026-05-{k + 1:02d}",
+                         home_id=7, away_id=1, home="T7", away="T1", status="Finish",
+                         home_score=0, away_score=1)
+            conn.execute(
+                "INSERT INTO fact_team_match_stats (Match_ID, Team_ID, Period, extra_json) VALUES (?,?,'All',?)",
+                (mid, 7, json.dumps({"expected_goals": 99.0, "total_shots": 99})),
+            )
+        conn.commit()
+        conn.close()
+
+    def test_promoted_team_ranked_and_relegated_team_excluded(self, data_dir):
+        from backend.db.connections import connect_ro
+
+        self._seed(data_dir)
+        conn = connect_ro("core")
+        try:
+            p = match_data_profile(conn, 47, "2026-10-20T14:00:00Z", 6, 1,
+                                   venue_mode="recent", season="2026/2027")
+        finally:
+            conn.close()
+        assert p.home_available and p.away_available
+        xg = next(m for g in p.groups for m in g.metrics if m.key == "xg")
+        # 6 队排名池(1..6),降级队 7 的 99.0 没进来,否则升班马 6 拿不到第 1
+        assert xg.home_rank == 1
+        assert xg.league_sample_size == 5
+        assert 1 <= xg.away_rank <= 6

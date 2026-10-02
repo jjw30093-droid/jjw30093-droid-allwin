@@ -1346,6 +1346,10 @@ class MatchProfileMetricDTO(BaseModel):
     home_complete: bool
     away_complete: bool
     league_sample_size: int
+    # 联赛内名次(1 = 最好;并列同名次),与百分位同一分布、同一方向;
+    # 页面显示"联赛第 N"(2026-10-02 站长:分位一般人看不懂)
+    home_rank: Optional[int] = None
+    away_rank: Optional[int] = None
 
 
 class MatchProfilePeerDTO(BaseModel):
@@ -1381,6 +1385,8 @@ class MatchProfileHighlightDTO(BaseModel):
     gap: int
     home_value: float
     away_value: float
+    home_rank: Optional[int] = None
+    away_rank: Optional[int] = None
 
 
 class MatchDataProfileDTO(BaseModel):
@@ -1414,7 +1420,7 @@ class MatchDataProfileDTO(BaseModel):
     # 两个字段都给默认值 ⇒ Pydantic 不放进 required ⇒ openapi-typescript 生成
     # 可选字段 ⇒ 前端既有的 DataProfile 字面量(测试 fixture、旧缓存响应)
     # 不带这两个键也照样编译通过,措辞函数用 `?? "same_venue"` 兜底。
-    venue_mode: Literal["same_venue", "all"] = "same_venue"
+    venue_mode: Literal["recent", "same_venue", "all"] = "recent"
     # 向后要了几场;实际用到几场看 home_matches/away_matches(可能更少)。
     window_n: int = 10
     # 这份画像圈在哪个联赛里(如 "英超")。窗口是 m.League_ID=? 的硬谓词,欧战和

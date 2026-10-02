@@ -647,7 +647,6 @@ export function TeamStyleQuadrant({
         <span className={pageStyles.sectionBar} aria-hidden />
         球队风格定位
       </h2>
-      <p className={styles.windowNote}>{view.windowLabel}</p>
 
       <div className={styles.viewTabs} role="tablist" aria-label="象限图视角">
         {/* N=0 时(如联赛缺 xg 档、team-stats 取数失败)该视角标签直接不出现,
@@ -681,14 +680,8 @@ export function TeamStyleQuadrant({
       <div className={styles.chartCard}>
         <div className={styles.chartHead}>
           <strong className={styles.chartTitle}>{view.title}</strong>
-          {/* 2026-09 真实缺陷修复:此前写死"每队 5 场",与上方 windowNote
-              (该队真实找到的场次,可能因样本不足而更少)矛盾——同一张卡里
-              两个互相矛盾的样本量。`view.window` 是上限,措辞改成"至多"。 */}
-          <span className={styles.chartSample}>
-            {pts.length} 支 · {view.window != null ? `每队至多 ${view.window} 场` : "本赛季全部已完赛比赛"}
-          </span>
         </div>
-        {/* 卡片自带摘要段落,关掉 EChart 内置摘要避免重复(a11y label 仍在) */}
+        {/* 摘要只给读屏(站长 2026-10-02 删去卡片底部的可见摘要段落),不显示 */}
         {/* 键盘路径走 Esc 与「恢复本场两队」,这个 div 的 onClick 只服务鼠标/触屏"点空白" */}
         <div
           ref={boxRef}
@@ -779,11 +772,6 @@ export function TeamStyleQuadrant({
                   </tbody>
                 </table>
               </div>
-              <p className={panelStyles.foot}>
-                「第 N/M」= 联赛内排名 / 该视角有数据的球队数，为{view.windowLabel}联赛内部比较；
-                {lowerY ? `${view.y_label}越低越好，排名按升序；` : ""}
-                点击其它队徽可换成与它对比，按 Esc 或点空白处回到本场两队。
-              </p>
             </>
           )}
         </div>
@@ -802,7 +790,6 @@ export function TeamStyleQuadrant({
             联赛其余球队（队徽半透明）
           </span>
         </div>
-        <p className={styles.summary}>{ariaSummary}</p>
       </div>
     </section>
   );

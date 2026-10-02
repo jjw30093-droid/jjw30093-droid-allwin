@@ -50,6 +50,20 @@ def percentile_of(
     return max(0, min(100, pct))
 
 
+def rank_of(
+    own_value: float | None, others: list[float], *, lower_is_better: bool,
+) -> int | None:
+    """`own_value` 在本队 + `others` 里的名次(1 = 最好),方向同 `percentile_of`
+    归一化;并列取同一名次(比它严格更好的队数 + 1)。样本门槛与 `percentile_of`
+    一致——分位为 None 时名次也为 None,两者永远同时有或同时没有。
+    (2026-10-02 站长:"第 77 分位"一般人看不懂,页面改写"联赛第 N"。)"""
+    if own_value is None or len(others) < MIN_LEAGUE_SAMPLE:
+        return None
+    sign = -1.0 if lower_is_better else 1.0
+    ov = sign * own_value
+    return 1 + sum(1 for v in others if sign * v > ov)
+
+
 def group_percentile(percentiles: list[int | None], *, min_metrics: int = 2) -> GroupPercentile:
     """一组百分位的平均值——只在至少 `min_metrics` 个指标都给出了百分位时才
     汇总,否则整组诚实返回 None(不用 1 个指标的百分位冒充"整组表现")。"""
@@ -68,6 +82,9 @@ class Highlight:
     gap: int
     home_value: float
     away_value: float
+    # 联赛内名次(1 = 最好),页面句子用名次而不是百分位(2026-10-02)
+    home_rank: int | None = None
+    away_rank: int | None = None
 
 
 # Δ百分位 < 此值一律措辞为"基本持平",不进"最大差距"榜——分位数会把

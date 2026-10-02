@@ -51,6 +51,7 @@ from backend.metrics.percentile import (
     group_percentile,
     nearest_peers,
     percentile_of,
+    rank_of,
     top_gaps,
 )
 from backend.metrics.registry import Direction, MetricDef, get_metric
@@ -88,7 +89,24 @@ Venue = Literal["home", "away", "any"]
 # 产品层的两档口径,与查询层的 `Venue` **刻意分开**:"same_venue" 会展开成
 # home/away 两次分布查询,"all" 展开成一次 `any`——一个产品选项对应几次查询
 # 是实现细节,不该泄漏进前端能看到的枚举里。
-VenueMode = Literal["same_venue", "all"]
+VenueMode = Literal["same_venue", "all", "recent"]
+
+# 「recent」口径(2026-10-02 站长拍板,页面默认):只在**本赛季这个联赛的球队**
+# 里排名(英超永远是 20 队,名次 1–20,不再把上赛季降级队算进来);每队取
+# 最近 max_n 场比赛,不分主客场、不限赛事——升班马赛季初本联赛场次不够,
+# 就用它上赛季次级联赛的比赛补,全年都有数据(站长:数据是展示用的,准确性
+# 不是第一位,不能赛季前三个月整块空白)。场次门槛只要 3 场。
+RECENT_MIN_N = 3
+
+
+def season_team_ids(conn: sqlite3.Connection, league_id: int, season: str) -> set[int]:
+    """本赛季这个联赛的参赛球队(按赛程表,含尚未开赛的比赛)。"""
+    rows = conn.execute(
+        "SELECT Home_Team_ID FROM dim_match WHERE League_ID=? AND Season=?"
+        " UNION SELECT Away_Team_ID FROM dim_match WHERE League_ID=? AND Season=?",
+        (league_id, season, league_id, season),
+    ).fetchall()
+    return {int(r[0]) for r in rows if r[0] is not None}
 
 GROUPS: dict[str, list[str]] = {
     "attack": ["xg", "shots", "shots_on_target", "touches_opp_box", "xgot"],
@@ -370,6 +388,9 @@ class MetricProfileDTO:
     home_complete: bool
     away_complete: bool
     league_sample_size: int
+    # 联赛内名次(1 = 最好,与百分位同一分布、同一方向);百分位为 None 时同为 None
+    home_rank: int | None = None
+    away_rank: int | None = None
 
 
 @dataclass(frozen=True)
@@ -516,6 +537,7 @@ ALL_VENUE_SCOPE_NOTE = "不分主客场,两队落在同一套联赛分布上;代
 _UNAVAILABLE_BY_VENUE: dict[str, str] = {
     "same_venue": "两队本赛季同主客场比赛都不足,暂无法给出联赛百分位画像。",
     "all": "两队本赛季比赛场次都不足,暂无法给出联赛百分位画像。",
+    "recent": "两队近期比赛数据不足。",
 }
 
 
@@ -525,6 +547,7 @@ def _scope_note_for(venue_mode: str, *, cross_league: bool) -> str | None:
     parts = [CROSS_LEAGUE_SCOPE_NOTE] if cross_league else []
     if venue_mode == "all":
         parts.append(ALL_VENUE_SCOPE_NOTE)
+    # "recent" 不给口径说明(站长 2026-10-02:口径细节没人看)
     return " ".join(parts) if parts else None
 
 
@@ -600,7 +623,7 @@ def _cross_league_profile(
 def match_data_profile(
     conn: sqlite3.Connection, league_id: int | None, before_boundary: str, home_id: int, away_id: int,
     *, max_n: int = DEFAULT_MAX_N, min_n: int | None = None, cross_league: bool = False,
-    venue_mode: VenueMode = "same_venue",
+    venue_mode: VenueMode = "same_venue", season: str | None = None,
 ) -> MatchDataProfileDTO:
     """本场两队的攻/守/控三组联赛百分位画像。
 
@@ -635,7 +658,19 @@ def match_data_profile(
         # 会变成"页面莫名其妙没数据"——正是本次要修的那个故障形态。
         raise ValueError("league_id 为 None 时必须显式传 cross_league=True")
 
-    if venue_mode == "all":
+    if venue_mode == "recent":
+        if season is None:
+            raise ValueError("venue_mode='recent' 需要 season(用来圈本赛季参赛球队)")
+        pool = season_team_ids(conn, league_id, season) | {home_id, away_id}
+        need = min_n if min_n is not None else min(RECENT_MIN_N, max_n)
+        raw = cross_league_metric_values(
+            conn, before_boundary, venue="any", team_ids=tuple(sorted(pool)), max_n=max_n,
+        )
+        home_dist = away_dist = {
+            tid: row for tid, row in raw.items()
+            if row and next(iter(row.values())).window_matches >= need
+        }
+    elif venue_mode == "all":
         # 不分主客场 = 两队落在**同一套**分布上,只需要查一次(不是查两次再
         # 各取各的)。下游 `_team_window_matches`/`percentile_of`/`nearest_peers`
         # 只吃 dist 字典,两侧指向同一个对象时语义正确:在同一把尺子上找邻居。
@@ -705,6 +740,8 @@ def match_data_profile(
                 home_complete=home_row.complete if home_row else False,
                 away_complete=away_row.complete if away_row else False,
                 league_sample_size=len(home_others) if home_pct is not None else len(away_others),
+                home_rank=rank_of(home_value, home_others, lower_is_better=lower_is_better),
+                away_rank=rank_of(away_value, away_others, lower_is_better=lower_is_better),
             ))
 
             if home_pct is not None and away_pct is not None:
@@ -714,6 +751,8 @@ def match_data_profile(
                         key=key, name_zh=meta.name_zh,
                         home_percentile=home_pct, away_percentile=away_pct, gap=gap,
                         home_value=round(home_value, 3), away_value=round(away_value, 3),
+                        home_rank=rank_of(home_value, home_others, lower_is_better=lower_is_better),
+                        away_rank=rank_of(away_value, away_others, lower_is_better=lower_is_better),
                     ))
 
         home_group = group_percentile(home_pcts)

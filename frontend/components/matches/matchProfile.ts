@@ -85,7 +85,15 @@ export function highlightSentence(
   const verb = isStyleMetric(semantic) ? "" : "，";
   // 「全部」口径下分布没有按主客场切分,"同场景"三个字就没有所指——与
   // profileWindowNote 同一条纪律,措辞必须跟着实际取数口径走。
-  const scope = venue === "all" ? "联赛" : "联赛同场景";
+  // 只有"相同主客场"口径才是两套场景分布;默认的 "recent" 与 "all" 都是同一个联赛排名池
+  const scope = venue === "same_venue" ? "联赛同场景" : "联赛";
+  // 2026-10-02 站长:百分位一般人看不懂,改写联赛名次;旧缓存响应没有名次时退回百分位
+  const homeLeads = h.home_percentile >= h.away_percentile;
+  const leaderRank = homeLeads ? h.home_rank : h.away_rank;
+  const otherRank = homeLeads ? h.away_rank : h.home_rank;
+  if (leaderRank != null && otherRank != null) {
+    return `「${h.name_zh}」${leader}${verb}${wording}：${scope}第 ${leaderRank} 对第 ${otherRank}。`;
+  }
   return `「${h.name_zh}」${leader}${verb}${wording}：${scope}第 ${leaderPct} 百分位对第 ${otherPct} 百分位。`;
 }
 
@@ -125,7 +133,7 @@ export type VenueMode = NonNullable<DataProfile["venue_mode"]>;
 /** 窗口长度白名单,由后端 `ProfileWindowN` 经 OpenAPI 生成,前端不另抄一份。 */
 export type WindowN = components["schemas"]["ProfileWindowN"];
 
-export const DEFAULT_VENUE_MODE: VenueMode = "same_venue";
+export const DEFAULT_VENUE_MODE: VenueMode = "recent";
 export const DEFAULT_WINDOW_N: WindowN = 10;
 
 export const VENUE_OPTIONS: { key: VenueMode; label: string }[] = [
@@ -163,11 +171,12 @@ export function profileOverviewFootNote(
   profile: DataProfile,
 ): string {
   if (profile.comparison_mode === "cross_league_raw") return profile.scope_note ?? "";
-  const tail = "百分位是历史统计描述,不是本场预测。";
+  // 2026-10-02 起页面显示联赛名次而不是百分位,脚注措辞跟着改
+  const tail = "这是历史统计,不是本场预测。";
   if ((profile.venue_mode ?? DEFAULT_VENUE_MODE) === "all") {
-    return `两队都对本联赛全部比赛的分布取百分位(不分主客场)——同一把尺子,可直接比;代价是主客场差异被抹平在均值里。${tail}`;
+    return `两队都按联赛全部比赛排名(不分主客场)。${tail}`;
   }
-  return `${homeName}对联赛主场分布取百分位,${awayName}对联赛客场分布取百分位——两套独立分布,不是同一把绝对尺子;${tail}`;
+  return `${homeName}按联赛主场数据排名,${awayName}按联赛客场数据排名。${tail}`;
 }
 
 /** 「口径说明」折叠区的正文。原来写死在 `PercentileGroupSection.tsx` 的 JSX
@@ -201,7 +210,7 @@ export function profileMethodNote(
  * 叫「进攻数据」——标题里留着"百分位"三个字而下面一个分位都没有,
  * 比不给标题更让人困惑。 */
 export function groupSectionTitle(titleZh: string, mode: ProfileMode = DEFAULT_MODE): string {
-  return mode === "cross_league_raw" ? `${titleZh}数据` : `${titleZh}百分位`;
+  return mode === "cross_league_raw" ? `${titleZh}数据` : `${titleZh}排名`;
 }
 
 /** 差距门槛,与后端 `backend/metrics/percentile.py::GAP_FLOOR` 同源——
@@ -371,7 +380,8 @@ export function valueDelta(
  * 返回 null——调用方据此不渲染这一行,不编造"接近谁"的答案。 */
 export function peerSentence(teamName: string, peers: PeerTeam[]): string | null {
   if (peers.length === 0) return null;
-  const names = peers.map((p) => `${p.name}(${Math.round(p.percentile)})`).join("、");
+  // 括号里原来带组级百分位(如"利兹联(22)"),2026-10-02 站长:分位一般人看不懂,只留队名
+  const names = peers.map((p) => p.name).join("、");
   return `${teamName}接近${names}`;
 }
 

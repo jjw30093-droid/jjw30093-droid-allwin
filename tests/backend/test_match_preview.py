@@ -216,9 +216,10 @@ class TestMatchDataProfileEndpoint:
         assert standalone == embedded
 
     def test_preview_still_reports_default_scope(self, seeded_preview, client):
-        """/preview 不带参数、也不该带——它恒为默认口径。"""
+        """/preview 不带参数、也不该带——它恒为默认口径(2026-10-02 起为 "recent":
+        本赛季联赛球队里排名、每队最近 10 场不分主客场)。"""
         p = client.get("/api/v1/matches/9002/preview").json()["data_profile"]
-        assert p["venue_mode"] == "same_venue"
+        assert p["venue_mode"] == "recent"
         assert p["window_n"] == 10
 
     def test_chosen_scope_is_echoed_back(self, seeded_preview, client):

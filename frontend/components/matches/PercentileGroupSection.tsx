@@ -91,7 +91,7 @@ function SideValue({
 }) {
   const digits = decimalsFor(metric.unit);
   const value = side === "home" ? metric.home_value : metric.away_value;
-  const pct = side === "home" ? metric.home_percentile : metric.away_percentile;
+  const rank = side === "home" ? metric.home_rank : metric.away_rank;
   const complete = side === "home" ? metric.home_complete : metric.away_complete;
   const showPct = mode !== "cross_league_raw";
   const partial = value != null && !complete;
@@ -110,8 +110,9 @@ function SideValue({
         </b>
         {(showPct || partial) && (
           <span className={styles.sidePct}>
-            {/* 跨联赛模式一个分位都没有,每行印一遍"暂无分位"只是噪声 */}
-            {showPct && (pct != null ? `第 ${pct} 分位` : "暂无分位")}
+            {/* 跨联赛模式一个名次都没有,每行印一遍"暂无排名"只是噪声。
+                2026-10-02 站长:"第 77 分位"一般人看不懂,改写联赛名次(后端直接给,不由分位倒推) */}
+            {showPct && (rank != null ? `联赛第 ${rank}` : "暂无排名")}
             {partial && <sup className={styles.partial}>*</sup>}
           </span>
         )}
@@ -166,9 +167,9 @@ function MetricRow({
           className={styles.axis}
           role="img"
           aria-label={`${metric.name_zh}:${homeName} ${formatMetricValue(metric.home_value ?? null, metric.unit, digits)}${
-            metric.home_percentile != null ? `,联赛第 ${metric.home_percentile} 百分位` : ",暂无联赛百分位"
+            metric.home_rank != null ? `,联赛第 ${metric.home_rank}` : ",暂无联赛排名"
           };${awayName} ${formatMetricValue(metric.away_value ?? null, metric.unit, digits)}${
-            metric.away_percentile != null ? `,联赛第 ${metric.away_percentile} 百分位` : ",暂无联赛百分位"
+            metric.away_rank != null ? `,联赛第 ${metric.away_rank}` : ",暂无联赛排名"
           }。`}
         >
           <span className={styles.meanTick} aria-hidden />
@@ -232,7 +233,6 @@ export function PercentileGroupSection({
   const { ordered, visibleCount } = splitMetricsByGap(group.metrics, mode);
   const visible = ordered.slice(0, visibleCount);
   const hidden = ordered.slice(visibleCount);
-  const sampleSize = group.metrics.find((m) => m.league_sample_size > 0)?.league_sample_size ?? 0;
   // 跨联赛模式下为空串——那句免责只在总览说一次,不在三张卡片各印一遍。
   const verdict = groupVerdict(group, semantic, homeName, awayName, mode);
 
@@ -257,10 +257,9 @@ export function PercentileGroupSection({
       </h2>
       {windowNote && <p className={styles.windowNote}>{windowNote}</p>}
       <div className={styles.card}>
-        {(verdict || sampleSize > 0) && (
+        {verdict && (
           <div className={styles.cardHead}>
-            {verdict && <span className={styles.verdict}>{verdict}</span>}
-            {sampleSize > 0 && <span className={styles.sampleNote}>联赛样本 {sampleSize} 队</span>}
+            <span className={styles.verdict}>{verdict}</span>
           </div>
         )}
         {visible.map(renderRow)}

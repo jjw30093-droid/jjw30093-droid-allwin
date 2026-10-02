@@ -24,6 +24,7 @@ function metric(overrides: Partial<GroupProfile["metrics"][number]> = {}): Group
     key: "xg", name_zh: "预期进球(xG)", unit: "球/场", direction: "higher_better", semantic: "performance",
     home_value: 1.9, away_value: 1.1, home_percentile: 87, away_percentile: 34,
     home_complete: true, away_complete: true, league_sample_size: 18,
+    home_rank: 3, away_rank: 13,
     ...overrides,
   };
 }
@@ -64,7 +65,7 @@ describe("PercentileGroupSection", () => {
   });
 
   it("does not render a dot when percentile is null, and says so honestly", () => {
-    const g = group({ metrics: [metric({ home_percentile: null, away_percentile: null })] });
+    const g = group({ metrics: [metric({ home_percentile: null, away_percentile: null, home_rank: null, away_rank: null })] });
     render(
       <PercentileGroupSection title="进攻百分位" windowNote="窗口说明" homeName="伯恩茅斯" awayName="布伦特福德" group={g} />,
     );
@@ -73,7 +74,7 @@ describe("PercentileGroupSection", () => {
     // 数字仍然如实展示(不是整行隐藏),只是没有可比的联赛百分位——
     // 措辞落在 aria-label 里(role="img" 的轴本身没有可读子文本)。
     const axis = screen.getByRole("img");
-    expect(axis.getAttribute("aria-label")).toMatch(/暂无联赛百分位/);
+    expect(axis.getAttribute("aria-label")).toMatch(/暂无联赛排名/);
     expect(screen.getByText("1.90球/场")).toBeTruthy();
   });
 
@@ -87,7 +88,7 @@ describe("PercentileGroupSection", () => {
   });
 
   it("renders an honest empty row when both sides lack the metric, not a zero-width bar", () => {
-    const g = group({ metrics: [metric({ home_value: null, away_value: null, home_percentile: null, away_percentile: null })] });
+    const g = group({ metrics: [metric({ home_value: null, away_value: null, home_percentile: null, away_percentile: null, home_rank: null, away_rank: null })] });
     render(<PercentileGroupSection title="进攻百分位" windowNote="窗口说明" homeName="伯恩茅斯" awayName="布伦特福德" group={g} />);
     expect(screen.getByText(/两队近期同主客场比赛都无该项数据/)).toBeTruthy();
   });
@@ -133,7 +134,7 @@ describe("2026-09 第三轮:差值胶囊与领先方强调", () => {
   });
 
   it("任一侧缺百分位时整个胶囊不渲染(不画 0)", () => {
-    render1(metric({ home_percentile: null }));
+    render1(metric({ home_percentile: null, home_rank: null }));
     expect(document.querySelector('[class*="deltaChip"]')).toBeNull();
   });
 });
@@ -188,7 +189,7 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     expect(container.querySelectorAll('[class*="axisLabels"]').length).toBe(1);
   });
 
-  it("「联赛样本 N 队」在卡片头出现一次,不是每行一次", () => {
+  it("不再显示「联赛样本 N 队」(站长 2026-10-02:口径细节没人看)", () => {
     const metrics = [m("a", 95, 5), m("b", 90, 10)];
     const { container } = render(
       <PercentileGroupSection
@@ -196,7 +197,8 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
         group={group({ metrics })}
       />,
     );
-    expect(container.querySelectorAll('[class*="sampleNote"]').length).toBe(1);
+    expect(container.querySelector('[class*="sampleNote"]')).toBeNull();
+    expect(container.textContent).not.toContain("联赛样本");
   });
 
   it("跨联赛模式:百分位轴/分位小注/联赛样本行全部不渲染,但差值胶囊还在", () => {
@@ -204,7 +206,7 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     // 每行印一遍「暂无分位」都只是噪声——但站长要的「多了多少」必须留着。
     const rawMetric = metric({
       unit: "球/场", home_value: 1.69, away_value: 1.22,
-      home_percentile: null, away_percentile: null, league_sample_size: 0,
+      home_percentile: null, away_percentile: null, home_rank: null, away_rank: null, league_sample_size: 0,
     });
     const g = group({
       metrics: [rawMetric], home_group_percentile: null, away_group_percentile: null,
@@ -218,8 +220,8 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
 
     expect(container.querySelector('[class*="axis"]')).toBeNull();
     expect(screen.queryByRole("img")).toBeNull();
-    expect(screen.queryByText(/第 \d+ 分位/)).toBeNull();
-    expect(screen.queryByText("暂无分位")).toBeNull();
+    expect(screen.queryByText(/联赛第 \d+/)).toBeNull();
+    expect(screen.queryByText("暂无排名")).toBeNull();
     expect(container.querySelector('[class*="sampleNote"]')).toBeNull();
     expect(screen.queryByText("联赛中游")).toBeNull();
 
@@ -234,7 +236,7 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     const g = group({
       metrics: [metric({
         home_value: 1.69, away_value: 1.22,
-        home_percentile: null, away_percentile: null, league_sample_size: 0,
+        home_percentile: null, away_percentile: null, home_rank: null, away_rank: null, league_sample_size: 0,
       })],
       home_group_percentile: null, away_group_percentile: null,
     });
@@ -254,7 +256,7 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
       metrics: [metric({
         key: "xga", name_zh: "让出预期进球(xGA)", direction: "lower_better",
         home_value: 1.61, away_value: 1.21,
-        home_percentile: null, away_percentile: null, league_sample_size: 0,
+        home_percentile: null, away_percentile: null, home_rank: null, away_rank: null, league_sample_size: 0,
       })],
       home_group_percentile: null, away_group_percentile: null,
     });
@@ -271,14 +273,17 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     expect(container.textContent).not.toContain("不比强弱");
   });
 
-  it("联赛模式完全不受影响:轴、分位、样本行照旧", () => {
+  it("联赛模式:轴、名次照旧,不显示样本行", () => {
     const { container } = render(
       <PercentileGroupSection
         title="进攻百分位" windowNote="窗口说明" homeName="伯恩茅斯" awayName="布伦特福德" group={group()} />,
     );
     expect(container.querySelector('[class*="axis"]')).not.toBeNull();
-    expect(screen.getByText("第 87 分位")).toBeTruthy();
-    expect(container.querySelector('[class*="sampleNote"]')).not.toBeNull();
+    // 2026-10-02 站长:"第 87 分位"一般人看不懂,显示后端给的联赛名次
+    expect(screen.getByText("联赛第 3")).toBeTruthy();
+    expect(screen.getByText("联赛第 13")).toBeTruthy();
+    expect(screen.queryByText(/第 \d+ 分位/)).toBeNull();
+    expect(container.textContent).not.toContain("联赛样本");
   });
 
   it("百分位模块不再有「口径说明」折叠(站长 2026-10-02:不要多余解释)", () => {

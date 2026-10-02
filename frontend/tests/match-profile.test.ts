@@ -315,7 +315,7 @@ describe("跨联赛模式(欧战):没有百分位,只并排原始值", () => {
   });
 
   it("段标题去掉「百分位」三字——下面一个分位都没有", () => {
-    expect(groupSectionTitle("进攻")).toBe("进攻百分位");
+    expect(groupSectionTitle("进攻")).toBe("进攻排名");
     expect(groupSectionTitle("进攻", "cross_league_raw")).toBe("进攻数据");
   });
 });
@@ -331,11 +331,11 @@ describe("peerSentence", () => {
 
   it("names peers in the order given (nearest_peers already sorted them), rounds the percentile", () => {
     const peers = [peer({ name: "阿森纳", percentile: 87.4 }), peer({ name: "曼城", percentile: 83 })];
-    expect(peerSentence("利物浦", peers)).toBe("利物浦接近阿森纳(87)、曼城(83)");
+    expect(peerSentence("利物浦", peers)).toBe("利物浦接近阿森纳、曼城");
   });
 
   it("handles a single peer without a trailing separator", () => {
-    expect(peerSentence("布伦特福德", [peer({ name: "狼队", percentile: 32 })])).toBe("布伦特福德接近狼队(32)");
+    expect(peerSentence("布伦特福德", [peer({ name: "狼队", percentile: 32 })])).toBe("布伦特福德接近狼队");
   });
 });
 
@@ -419,9 +419,10 @@ describe("profileMethodNote / profileOverviewFootNote", () => {
     };
     const same = profileOverviewFootNote("主队", "客队", { ...base, venue_mode: "same_venue" });
     const all = profileOverviewFootNote("主队", "客队", { ...base, venue_mode: "all" });
-    expect(same).toContain("两套独立分布");
-    expect(all).not.toContain("两套独立分布");
-    expect(all).toContain("同一把尺子");
+    expect(same).toBe("主队按联赛主场数据排名,客队按联赛客场数据排名。这是历史统计,不是本场预测。");
+    expect(all).not.toContain("主场数据");
+    expect(all).toContain("不分主客场");
+    expect(same + all).not.toContain("百分位");
   });
 });
 
@@ -447,6 +448,16 @@ describe("highlightSentence · venue_mode", () => {
 
   it("默认口径逐字不变(零回归锚)", () => {
     expect(highlightSentence(h, "performance", "主队", "客队")).toContain("联赛同场景第 88 百分位");
+  });
+
+  it("有联赛名次时句子写名次,不写百分位(2026-10-02 站长)", () => {
+    const ranked = { ...h, home_rank: 2, away_rank: 16 };
+    const s = highlightSentence(ranked, "performance", "主队", "客队");
+    expect(s).toContain("联赛同场景第 2 对第 16");
+    expect(s).not.toContain("百分位");
+    // 领先方是客队时,名次顺序跟着领先方走
+    const awayLeads = { ...h, home_percentile: 21, away_percentile: 88, home_rank: 16, away_rank: 2 };
+    expect(highlightSentence(awayLeads, "performance", "主队", "客队", "all")).toContain("客队，明显更强：联赛第 2 对第 16");
   });
 
   it("「全部」口径下不得再说「同场景」——那时分布压根没按主客场切分", () => {

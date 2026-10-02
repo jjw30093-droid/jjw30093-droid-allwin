@@ -695,7 +695,8 @@ def match_preview(
 def match_data_profile(
     match_id: int,
     response: Response,
-    venue: Literal["same_venue", "all"] = "same_venue",
+    # "recent"(默认,2026-10-02):本赛季联赛球队里排名,每队最近 N 场不分主客场
+    venue: Literal["recent", "same_venue", "all"] = "recent",
     n: ProfileWindowN = ProfileWindowN.N10,
     conn=Depends(core_ro),
     ctx: AuthContext = Depends(data_access_ctx),

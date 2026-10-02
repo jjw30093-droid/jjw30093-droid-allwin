@@ -42,7 +42,7 @@ from backend.queries.window import DEFAULT_MAX_N
 
 def match_data_profile_for(
     conn_core: sqlite3.Connection, match: dict, *,
-    max_n: int = DEFAULT_MAX_N, venue_mode: str = "same_venue",
+    max_n: int = DEFAULT_MAX_N, venue_mode: str = "recent",
 ) -> dict[str, Any]:
     """`/preview` 内嵌的 `data_profile` 与 `/matches/{id}/data-profile` 端点的
     **同一份**组装逻辑。
@@ -64,7 +64,9 @@ def match_data_profile_for(
             match["away"]["team_id"],
             max_n=max_n,
             cross_league=cross_league,
-            venue_mode=venue_mode,  # type: ignore[arg-type]
+            # 跨赛事(欧战)没有"本联赛参赛球队"可圈,"recent" 退回不分主客场
+            venue_mode=("all" if cross_league and venue_mode == "recent" else venue_mode),  # type: ignore[arg-type]
+            season=match.get("season"),
         )
     )
 

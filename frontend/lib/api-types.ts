@@ -2584,10 +2584,10 @@ export interface components {
             scope_note?: string | null;
             /**
              * Venue Mode
-             * @default same_venue
+             * @default recent
              * @enum {string}
              */
-            venue_mode: "same_venue" | "all";
+            venue_mode: "recent" | "same_venue" | "all";
             /**
              * Window N
              * @default 10
@@ -3134,6 +3134,10 @@ export interface components {
             home_value: number;
             /** Away Value */
             away_value: number;
+            /** Home Rank */
+            home_rank?: number | null;
+            /** Away Rank */
+            away_rank?: number | null;
         };
         /**
          * MatchProfileMetricDTO
@@ -3167,6 +3171,10 @@ export interface components {
             away_complete: boolean;
             /** League Sample Size */
             league_sample_size: number;
+            /** Home Rank */
+            home_rank?: number | null;
+            /** Away Rank */
+            away_rank?: number | null;
         };
         /**
          * MatchProfilePeerDTO
@@ -7047,7 +7055,7 @@ export interface operations {
     match_data_profile_api_v1_matches__match_id__data_profile_get: {
         parameters: {
             query?: {
-                venue?: "same_venue" | "all";
+                venue?: "recent" | "same_venue" | "all";
                 n?: components["schemas"]["ProfileWindowN"];
             };
             header?: never;

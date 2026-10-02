@@ -20,7 +20,6 @@ import styles from "./MatchProfileOverview.module.css";
 import {
   highlightSentence,
   peerSentence,
-  profileOverviewFootNote,
   type DataProfile,
 } from "./matchProfile";
 
@@ -78,7 +77,7 @@ export function MatchProfileOverview({
       <div className={styles.card}>
         <div className={styles.teams}>
           <span className={styles.teamName}>{homeName}</span>
-          <span className={styles.vs}>{crossLeague ? "近期数据对比" : "联赛百分位对比"}</span>
+          <span className={styles.vs}>{crossLeague ? "近期数据对比" : "联赛排名对比"}</span>
           <span className={styles.teamName}>{awayName}</span>
         </div>
 
@@ -131,10 +130,6 @@ export function MatchProfileOverview({
           </div>
         )}
 
-        {/* 这句话原来写死在 JSX 里,而"两套独立分布"在「全部」口径下恰好
-            说反了(那时两队共用同一套分布)——措辞必须跟着实际取数口径走,
-            所以收进 matchProfile.ts 按维度分支。 */}
-        <p className={styles.footNote}>{profileOverviewFootNote(homeName, awayName, profile)}</p>
       </div>
     </section>
   );

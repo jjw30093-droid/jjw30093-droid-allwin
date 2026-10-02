@@ -2333,11 +2333,12 @@
       "required": false,
       "schema": {
        "enum": [
+        "recent",
         "same_venue",
         "all"
        ],
        "type": "string",
-       "default": "same_venue",
+       "default": "recent",
        "title": "Venue"
       }
      },
@@ -10702,11 +10703,12 @@
      "venue_mode": {
       "type": "string",
       "enum": [
+       "recent",
        "same_venue",
        "all"
       ],
       "title": "Venue Mode",
-      "default": "same_venue"
+      "default": "recent"
      },
      "window_n": {
       "type": "integer",
@@ -12421,6 +12423,28 @@
      "away_value": {
       "type": "number",
       "title": "Away Value"
+     },
+     "home_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Rank"
+     },
+     "away_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Rank"
      }
     },
     "type": "object",
@@ -12512,6 +12536,28 @@
      "league_sample_size": {
       "type": "integer",
       "title": "League Sample Size"
+     },
+     "home_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Home Rank"
+     },
+     "away_rank": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Away Rank"
      }
     },
     "type": "object",
