@@ -87,3 +87,48 @@ describe("赛程 API 请求", () => {
     expect(new URLSearchParams(qs).get("sort")).toBe("time");
   });
 });
+
+describe("精选腿的直白说法(P1)", () => {
+  // 用线上真实出现过的选项格式(2026-10-02 从 /api/v1/reco/track-record 全量取)
+  it("让球:主队/客队换成真实队名,整数线去掉 .0", async () => {
+    const { legPick } = await import("@/lib/reco-labels");
+    const desc = "布雷斯特 vs 巴黎圣日耳曼 09/14 02:45";
+    expect(legPick({ market: "ah", selection: "客队让2.0球", match_desc: desc })).toEqual({ market: "让球", selection: "巴黎圣日耳曼 让 2 球" });
+    expect(legPick({ market: "ah", selection: "主队受让0.75球", match_desc: desc })).toEqual({ market: "让球", selection: "布雷斯特 受让 0.75 球" });
+  });
+  it("进球数 / 角球数 / 胜平负", async () => {
+    const { legPick } = await import("@/lib/reco-labels");
+    const desc = "科莫 vs 帕尔马 09/15 00:30";
+    expect(legPick({ market: "ou", selection: "大3.0", match_desc: desc })).toEqual({ market: "进球数", selection: "大 3 球" });
+    expect(legPick({ market: "ou", selection: "小2.25", match_desc: desc })).toEqual({ market: "进球数", selection: "小 2.25 球" });
+    expect(legPick({ market: "corners_ou", selection: "大角球9.5", match_desc: desc })).toEqual({ market: "角球数", selection: "大 9.5 个" });
+    expect(legPick({ market: "1x2", selection: "客胜", match_desc: desc })).toEqual({ market: "胜平负", selection: "帕尔马 胜" });
+  });
+  it("认不出的格式原样返回,不猜", async () => {
+    const { legPick } = await import("@/lib/reco-labels");
+    expect(legPick({ market: "btts", selection: "是", match_desc: "A vs B" }).selection).toBe("是");
+    expect(legPick({ market: "ah", selection: "主队让1球", match_desc: "没有对阵格式" }).selection).toBe("主队让1球");
+  });
+});
+
+describe("比赛页「模拟这场比赛」显示条件(docs/simulator-launch-plan.md §4.1)", () => {
+  const base = {
+    match_id: 5795465, league_id: 47, status: "NotStarted", kickoff_at_utc: "2026-10-10T11:30:00Z",
+    home: { team_id: 9825 }, away: { team_id: 8463 },
+  };
+  const now = new Date("2026-10-02T00:00:00Z");
+  it("开关开、五大联赛、未开赛:给出带两队与比赛编号的链接", async () => {
+    const { simulatorHrefFor } = await import("@/lib/simulator-entry");
+    expect(simulatorHrefFor(base, "1", now)).toBe("/simulator?lg=47&h=9825&a=8463&fx=5795465");
+  });
+  it("开关没开 / 非五大联赛 / 已开球 / 没有精确时间 / 缺队伍编号:不显示", async () => {
+    const { simulatorHrefFor } = await import("@/lib/simulator-entry");
+    expect(simulatorHrefFor(base, undefined, now)).toBeNull();
+    expect(simulatorHrefFor(base, "0", now)).toBeNull();
+    expect(simulatorHrefFor({ ...base, league_id: 268 }, "1", now)).toBeNull();
+    expect(simulatorHrefFor(base, "1", new Date("2026-10-11T00:00:00Z"))).toBeNull();
+    expect(simulatorHrefFor({ ...base, status: "Finish" }, "1", now)).toBeNull();
+    expect(simulatorHrefFor({ ...base, kickoff_at_utc: null }, "1", now)).toBeNull();
+    expect(simulatorHrefFor({ ...base, home: { team_id: null } }, "1", now)).toBeNull();
+  });
+});

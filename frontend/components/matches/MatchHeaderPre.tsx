@@ -15,11 +15,15 @@ import { LeagueBadge } from "@/components/matches/LeagueBadge";
 import { LocalTime } from "@/components/matches/LocalTime";
 import { TeamBadge } from "@/components/teams/TeamBadge";
 import { WinProbabilityBar } from "@/components/matches/WinProbabilityBar";
+import Link from "next/link";
+import { simulatorHrefFor } from "@/lib/simulator-entry";
 import { LEAGUE_ZH, STATUS_ZH } from "@/components/matches/zh";
 import type { MatchSummary } from "@/lib/api-v1";
 import styles from "./MatchHeaderPre.module.css";
 
 export function MatchHeaderPre({ match }: { match: MatchSummary }) {
+  // 服务端组件:运行时读开关(与 app/simulator/page.tsx 同一变量,改完重启 allwin-web 即生效)
+  const simHref = simulatorHrefFor(match, process.env.SIMULATOR_ENABLED, new Date());
   return (
     <header className={styles.card}>
       <div className={styles.metaRow}>
@@ -75,6 +79,13 @@ export function MatchHeaderPre({ match }: { match: MatchSummary }) {
           <p className={styles.probTitle}>胜平负概率</p>
           <WinProbabilityBar probability={match.win_probability} size="lg" />
         </div>
+      )}
+
+      {/* 模拟这场比赛(docs/simulator-launch-plan.md §4.1):开关开、五大联赛、未开赛才出现 */}
+      {simHref && (
+        <Link href={simHref} className={styles.simBtn} data-testid="simulate-match">
+          模拟这场比赛 →
+        </Link>
       )}
     </header>
   );

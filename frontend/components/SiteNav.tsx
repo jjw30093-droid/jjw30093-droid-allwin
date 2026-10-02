@@ -44,6 +44,11 @@ const NAV_ITEMS: NavItem[] = [
   // /track-record 路由保留(旧链接不失效),访问它时「每日精选」保持高亮;
   // 精选页里的「历史战绩」标签展示同样内容。
   { href: "/reco", label: "每日精选", mobile: true, also: ["/track-record"] },
+  // 模拟器(docs/simulator-launch-plan.md §4.2):构建期变量 NEXT_PUBLIC_SIMULATOR_NAV=1 才显示;
+  // 只在桌面顶栏(mobile:false),手机底部导航不改。
+  ...(process.env.NEXT_PUBLIC_SIMULATOR_NAV === "1"
+    ? [{ href: "/simulator", label: "模拟器", mobile: false }]
+    : []),
   // 「权限说明」从顶栏移到只留页脚(SiteFooter 里本来就有):.nav 是
   // overflow-x:auto,第 8 项在窄桌面会被推进横向滚动区、等于看不见,
   // 那新加的「战绩」就白加了。这两页都是低频说明页,页脚足够。

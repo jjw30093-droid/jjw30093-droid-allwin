@@ -43,16 +43,13 @@ import {
   DEFAULT_MODE,
   decimalsFor,
   formatMetricValue,
-  DEFAULT_VENUE_MODE,
   groupVerdict,
   metricGap,
-  profileMethodNote,
   splitMetricsByGap,
   valueDelta,
   type GroupProfile,
   type MetricProfile,
   type ProfileMode,
-  type VenueMode,
   type ValueDelta,
 } from "./matchProfile";
 
@@ -220,11 +217,7 @@ export function PercentileGroupSection({
   homeCrestUrl,
   awayCrestUrl,
   group,
-  /** 口径说明只在最后一个百分位模块底部出现一次——三段几乎相同的说明
-   * 原来每个模块各印一遍(「两套独立分布…」全页出现 4 次)。 */
-  showMethodNote = false,
   mode = DEFAULT_MODE,
-  venueMode = DEFAULT_VENUE_MODE,
 }: {
   title: string;
   windowNote: string;
@@ -233,11 +226,7 @@ export function PercentileGroupSection({
   homeCrestUrl?: string | null;
   awayCrestUrl?: string | null;
   group: GroupProfile;
-  showMethodNote?: boolean;
   mode?: ProfileMode;
-  /** 可选末位参数 + 默认值:常规调用点和既有测试逐字不变(matchProfile.ts:19-26
-   * 的既有约定)。只影响「口径说明」那段文案,不影响任何数值。 */
-  venueMode?: VenueMode;
 }) {
   const semantic = group.metrics[0]?.semantic ?? "performance";
   const { ordered, visibleCount } = splitMetricsByGap(group.metrics, mode);
@@ -279,15 +268,6 @@ export function PercentileGroupSection({
           <details className={styles.moreDetail}>
             <summary className={styles.moreSummary}>展开其余 {hidden.length} 项</summary>
             {hidden.map((m, i) => renderRow(m, visibleCount + i))}
-          </details>
-        )}
-        {showMethodNote && (
-          <details className={styles.methodDetail}>
-            <summary className={styles.methodSummary}>口径说明</summary>
-            {/* 原来这段是写死在 JSX 里的两个分支,其中"两套独立分布,不是同一把
-                绝对尺子"在 venueMode="all" 下是**错误陈述**(那时两队恰恰共用
-                同一套分布)。文案随取数口径走,收进 matchProfile.ts 的纯函数。 */}
-            <p className={styles.footNote}>{profileMethodNote(mode, venueMode)}</p>
           </details>
         )}
       </div>

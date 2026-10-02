@@ -144,3 +144,25 @@
   font-weight: 700;
   color: var(--ink);
 }
+
+/* 模拟这场比赛(2026-10-02,docs/simulator-launch-plan.md §4.1) */
+.simBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 12px;
+  border: 1px solid var(--brand-teal);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--brand-teal);
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .simBtn:hover {
+    background: color-mix(in srgb, var(--brand-teal) 8%, var(--surface));
+  }
+}

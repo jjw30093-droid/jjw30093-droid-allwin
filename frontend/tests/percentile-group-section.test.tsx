@@ -212,7 +212,7 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     const { container } = render(
       <PercentileGroupSection
         title="进攻数据" windowNote="窗口说明" homeName="维京" awayName="拜仁"
-        group={g} mode="cross_league_raw" showMethodNote
+        group={g} mode="cross_league_raw"
       />,
     );
 
@@ -261,7 +261,7 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     const { container } = render(
       <PercentileGroupSection
         title="防守数据" windowNote="窗口说明" homeName="维京" awayName="拜仁"
-        group={g} mode="cross_league_raw" showMethodNote
+        group={g} mode="cross_league_raw"
       />,
     );
     expect(container.textContent).not.toMatch(/更强|更弱|占优势/);
@@ -281,16 +281,11 @@ describe("2026-09 第三轮:默认只展开差距明显的项", () => {
     expect(container.querySelector('[class*="sampleNote"]')).not.toBeNull();
   });
 
-  it("口径说明只在被显式要求时渲染(全页只出现一次)", () => {
-    const g = group();
-    const { container: without } = render(
-      <PercentileGroupSection title="进攻百分位" windowNote="窗口说明" homeName="A" awayName="B" group={g} />,
+  it("百分位模块不再有「口径说明」折叠(站长 2026-10-02:不要多余解释)", () => {
+    const { container } = render(
+      <PercentileGroupSection title="进攻百分位" windowNote="窗口说明" homeName="A" awayName="B" group={group()} />,
     );
-    expect(without.querySelector('[class*="methodSummary"]')).toBeNull();
-    cleanup();
-    const { container: withNote } = render(
-      <PercentileGroupSection title="控球百分位" windowNote="窗口说明" homeName="A" awayName="B" group={g} showMethodNote />,
-    );
-    expect(withNote.querySelector('[class*="methodSummary"]')).not.toBeNull();
+    expect(container.querySelector('[class*="methodSummary"]')).toBeNull();
+    expect(container.textContent).not.toContain("口径说明");
   });
 });

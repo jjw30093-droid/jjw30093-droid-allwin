@@ -189,8 +189,7 @@ export function MomentumChart({
     if (points.length === 0) return "本场没有势头数据。";
     const lead = homeShare >= awayShare ? homeName : awayName;
     return (
-      `势头图:全场 ${lead} 占优时段更多(${homeShare} 分钟 vs ${awayShare} 分钟)。` +
-      `与「射门威胁时间轴」是两种不同的度量方式,数值不必一致。`
+      `势头图:全场 ${lead} 占优时段更多(${homeShare} 分钟 vs ${awayShare} 分钟)。`
     );
   }, [points, homeShare, awayShare, homeName, awayName]);
 
@@ -228,10 +227,6 @@ export function MomentumChart({
               <span className={styles.legendSide}>(客队 · 基线下方)</span>
             </span>
           </div>
-          <p className={styles.footNote}>
-            数据来自 FotMob 官方综合评分——与「射门威胁时间轴」是两种不同的度量方式,
-            两图走势不一致是正常的,不代表其中一张错了。
-          </p>
         </>
       )}
     </div>

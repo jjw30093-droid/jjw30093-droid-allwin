@@ -208,9 +208,7 @@ export function MatchProfilePanel({
           group={g}
           // 口径说明只在最后一个百分位模块底部出现一次——三段几乎相同的说明
           // 原来每个模块各印一遍。
-          showMethodNote={i === shown.groups.length - 1}
           mode={shown.comparison_mode}
-          venueMode={shown.venue_mode ?? DEFAULT_VENUE_MODE}
         />
       ))}
     </div>

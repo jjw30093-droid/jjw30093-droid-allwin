@@ -114,9 +114,12 @@ describe("/reco 已登录但无权限:中性投影,不泄漏任何正文字段",
     // 存在性 + 状态允许展示。
     expect(screen.queryByText("2026-08-16")).not.toBeNull();
     // 正文字段(标题/腿/赔率/理由)物理不在响应体里,页面上也就不可能出现。
-    for (const leaked of ["主胜", "客胜", "半赢", "@1.9", "@2.0"]) {
+    for (const leaked of ["主胜", "客胜", "半赢"]) {
       expect(screen.queryByText(leaked)).toBeNull();
     }
+    // 赔率无论旧写法(@1.90)还是新写法(赔率 1.90)都不得出现
+    expect(screen.queryByText(/@\s*\d/)).toBeNull();
+    expect(screen.queryByText(/赔率\s*\d/)).toBeNull();
   });
 });
 
@@ -151,7 +154,7 @@ describe("/reco 已登录且有权限:完整内容", () => {
               {
                 id: "leg-1",
                 match_id: null,
-                match_desc: "主队 vs 客队 08-20 20:00",
+                match_desc: "阿森纳 vs 切尔西 08-20 20:00",
                 market: "1x2",
                 selection: "主胜",
                 odds: 1.9,
@@ -167,7 +170,9 @@ describe("/reco 已登录且有权限:完整内容", () => {
     render(<RecoPage />);
 
     await waitFor(() => expect(screen.queryByText("已授权测试单")).not.toBeNull());
-    expect(screen.queryByText("主胜", { exact: false })).not.toBeNull();
+    // 2026-10-02:选项用真实队名说("主胜" → "阿森纳 胜"),赔率写"赔率 1.90"
+    expect(screen.queryByText("胜平负 · 阿森纳 胜", { exact: false })).not.toBeNull();
+    expect(screen.queryByText("赔率 1.90")).not.toBeNull();
     expect(
       screen.queryByText("本场每日精选需要单独授权，当前账号暂无查看权限。"),
     ).toBeNull();
@@ -214,7 +219,7 @@ describe("/reco 默认标签:每日公推(2026-09 起,导航栏「每日精选�
     render(<RecoPage />);
 
     await waitFor(() => expect(screen.queryByText("匿名可见公推单")).not.toBeNull());
-    expect(screen.queryByText("主胜", { exact: false })).not.toBeNull();
+    expect(screen.queryByText("公推队 胜", { exact: false })).not.toBeNull();
     // 默认标签不应该是「今日精选」的登录引导文案。
     expect(screen.queryByText(/每日精选按场开通/)).toBeNull();
   });

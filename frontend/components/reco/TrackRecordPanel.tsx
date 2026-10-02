@@ -16,10 +16,9 @@
  */
 
 import { useState } from "react";
-import { slipLeagueLabel } from "@/lib/reco-labels";
+import { legPick, slipLeagueLabel } from "@/lib/reco-labels";
 import Link from "next/link";
 import type { GetJson } from "@/lib/api-v1";
-import { MARKET_ZH } from "@/components/matches/zh";
 import { LoadMoreList } from "@/components/reco/LoadMoreList";
 import styles from "@/app/reco/reco.module.css";
 
@@ -106,12 +105,13 @@ function earliestKickoff(slip: Slip): string {
 function blockMetrics(slip: Slip, tone: SlipTone): { kicker: string; value: string } {
   if (tone === "pending") return { kicker: "最早开球", value: earliestKickoff(slip) };
   if (tone === "void") return { kicker: "", value: "不计分母" };
-  if (slip.return_units == null) return { kicker: "净单位", value: "—" };
+  if (slip.return_units == null) return { kicker: "盈亏", value: "—" };
   const net = slip.return_units - 1;
-  return { kicker: "净单位", value: `${net >= 0 ? "+" : ""}${net.toFixed(2)}` };
+  return { kicker: "盈亏", value: `${net >= 0 ? "+" : ""}${net.toFixed(2)}` };
 }
 
 function LegRow({ leg }: { leg: Slip["legs"][number] }) {
+  const pick = legPick(leg);
   const inner = (
     <>
       <span className={styles.legDesc}>{leg.match_desc}</span>
@@ -126,9 +126,9 @@ function LegRow({ leg }: { leg: Slip["legs"][number] }) {
         ›
       </span>
       <span className={styles.legPick}>
-        {MARKET_ZH[leg.market] ?? leg.market} · {leg.selection}
+        {pick.market} · {pick.selection}
       </span>
-      <span className={`${styles.legOdds} num`}>@{leg.odds.toFixed(2)}</span>
+      <span className={`${styles.legOdds} num`}>赔率 {leg.odds.toFixed(2)}</span>
     </>
   );
 
