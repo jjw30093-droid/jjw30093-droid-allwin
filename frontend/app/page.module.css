@@ -995,12 +995,11 @@
   margin: 0 4px;
   font-family: var(--font-latin), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
-  font-size: 46px;
+  font-size: 40px;
   font-weight: 700;
   line-height: 1;
-  vertical-align: -8px;
-  color: #f0ce55;
-  text-shadow: 0 0 18px rgba(240, 206, 85, 0.45);
+  vertical-align: -6px;
+  color: #ffffff;
 }
 
 .recordRate {
@@ -1012,12 +1011,21 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
+/* 命中率是这张卡的主角(2026-10-02 站长:"胜率醒目一点"):金色最大号 + 光晕 */
 .recordRate b {
   font-family: var(--font-latin), system-ui, sans-serif;
-  font-size: 30px;
+  font-size: 54px;
   font-weight: 700;
   line-height: 1;
-  color: #ffffff;
+  color: #f0ce55;
+  text-shadow: 0 0 22px rgba(240, 206, 85, 0.5);
+}
+
+.recordRate span {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f0ce55;
 }
 
 .recordCellSub {
@@ -1036,11 +1044,11 @@
     padding-left: 24px;
   }
   .recordBigNum {
-    font-size: 56px;
-    vertical-align: -10px;
+    font-size: 48px;
+    vertical-align: -8px;
   }
   .recordRate b {
-    font-size: 38px;
+    font-size: 72px;
   }
   /* 只有一个板块:命中数与命中率左右拉开,填满整张卡 */
   .recordCard[data-cells="1"] .recordStats {
