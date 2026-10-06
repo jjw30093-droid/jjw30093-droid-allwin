@@ -11,6 +11,7 @@ import { lastLineupSetup } from "@/features/simulator/formation";
 import { decodeResult, parseSetupQuery, parseTeamsQuery, resultToken, toTeamSetup } from "@/features/simulator/shareLink";
 import type { BadgeMode } from "@/features/simulator/slotBadge";
 import { ensureShotDetails, makeSnapshot, modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
+import { newStorySeed } from "@/features/simulator/rng";
 import type { SimParams } from "@/features/simulator/types";
 import { useSimTeamColors } from "@/features/simulator/useSimTeamColors";
 import { emptySlots, lineupIssue, marketStatus, pairWithAway, pairWithHome, type WizardStep } from "@/features/simulator/wizard";
@@ -27,7 +28,8 @@ import styles from "./simulator.module.css";
 // 只开放 v0.3 校准过的五大联赛(docs/simulator-launch-plan.md §2)
 const LEAGUE_NAME: Record<string, string> = { "47": "英超", "87": "西甲", "55": "意甲", "54": "德甲", "53": "法甲" };
 const LEAGUE_ORDER = ["47", "87", "55", "54", "53"];
-const DEFAULT_SEED = 20260929;
+// 只用于 1000 次分布和侧重点对照，保证相同设定的概率稳定；单场剧情每次点击都另取随机种子。
+const ANALYSIS_SEED = 20260929;
 const RUNS = 1000;
 const IMPACT_DEBOUNCE_MS = 300;
 
@@ -74,7 +76,6 @@ export function SimulatorClient({
   const [fixtureChoice, setFixtureChoice] = useState<number | null>(null);
   const [chaos, setChaos] = useState(false);
   const [recordMode, setRecordMode] = useState(false);
-  const [seed, setSeed] = useState(DEFAULT_SEED);
   const [step, setStep] = useState<WizardStep>(initialStep);
   const [badge, setBadge] = useState<BadgeMode>("position");
   const [showIssue, setShowIssue] = useState(false);
@@ -169,7 +170,7 @@ export function SimulatorClient({
         w.terminate();
         workerRef.current = null;
       };
-      w.postMessage({ config, seed: runSeed, runs: RUNS });
+      w.postMessage({ config, seed: runSeed, manySeed: ANALYSIS_SEED, runs: RUNS });
     },
     [prepared, params, leagueId, home, away, fixtureId, chaos],
   );
@@ -199,7 +200,6 @@ export function SimulatorClient({
         setUseMarket(shared.fixtureId != null);
         setFixtureChoice(shared.fixtureId);
         setChaos(shared.chaos);
-        setSeed(shared.seed);
         setStep(2);
       }
       if (snap) {
@@ -225,7 +225,7 @@ export function SimulatorClient({
     () => ({ leagueId: Number(leagueId), home, away, fixtureId, chaos }),
     [leagueId, home, away, fixtureId, chaos],
   );
-  const impactKey = useMemo(() => JSON.stringify([impactSetup, seed]), [impactSetup, seed]);
+  const impactKey = useMemo(() => JSON.stringify([impactSetup, ANALYSIS_SEED]), [impactSetup]);
   const [impact, setImpact] = useState<{ key: string; sides: [SideImpact | null, SideImpact | null] } | null>(null);
   const impactWorkerRef = useRef<Worker | null>(null);
   useEffect(() => {
@@ -239,10 +239,10 @@ export function SimulatorClient({
         w.terminate();
         if (impactWorkerRef.current === w) impactWorkerRef.current = null;
       };
-      w.postMessage({ kind: "impact", jobs: impactJobs(params, impactSetup), seed, runs: IMPACT_RUNS });
+      w.postMessage({ kind: "impact", jobs: impactJobs(params, impactSetup), seed: ANALYSIS_SEED, runs: IMPACT_RUNS });
     }, IMPACT_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [phase, prepared.ok, params, impactSetup, impactKey, seed]);
+  }, [phase, prepared.ok, params, impactSetup, impactKey]);
   useEffect(() => () => impactWorkerRef.current?.terminate(), []);
   const impactNow = impact?.key === impactKey ? impact.sides : null;
 
@@ -300,7 +300,7 @@ export function SimulatorClient({
 
       {phase === "result" && result?.shared ? (
         <section className={`${styles.card} ${styles.linkNotice}`} data-testid="shared-notice">
-          <p style={{ margin: 0 }}>这是朋友分享的一次模拟结果。想自己试试?点下面的「改阵容」或「再模拟一次」。</p>
+          <p style={{ margin: 0 }}>这是朋友分享的一次模拟结果。想自己试试？点下面的「改阵容」或「再来一次」。</p>
           {linkStale ? (
             <div className={styles.row} style={{ marginTop: 8 }} data-testid="params-updated">
               <span className={styles.hint} style={{ marginTop: 0 }}>
@@ -320,10 +320,9 @@ export function SimulatorClient({
           snap={result.snap}
           crests={crestsOf(params, result.snap.teams[0].teamId, result.snap.teams[1].teamId)}
           onRerun={() => {
-            const s = Math.floor(Math.random() * 2 ** 31);
-            setSeed(s);
-            run(s);
+            run(newStorySeed());
           }}
+          onReplay={() => setPhase("animating")}
           onBack={() => {
             setPhase("setup");
             goStep(2);
@@ -503,7 +502,7 @@ export function SimulatorClient({
                           }
                           // 录屏模式:在点击这一刻请求全屏(浏览器只允许在用户操作里请求);不支持时照样铺满视口
                           if (recordMode) document.documentElement.requestFullscreen?.().catch(() => {});
-                          run(seed);
+                          run(newStorySeed());
                         }}
                         data-testid="simulate-btn"
                       >

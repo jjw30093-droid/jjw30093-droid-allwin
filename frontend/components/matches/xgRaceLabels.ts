@@ -54,8 +54,8 @@ export function textWidth(name: string, font: number): number {
 
 const GAP = 1;
 const LIFT = 2;
-// 允许人名略微伸出绘图区(伸进坐标轴留白里,但不压图例、不压横轴刻度)
-const PAD = { left: 6, right: 14, top: 12, bottom: 0 };
+// 左边至少留 8px，避免靠前进球的人名跨过纵轴；右/上仍允许略微伸出绘图区。
+const BOUNDS = { leftInset: 8, rightExtra: 14, topExtra: 12, bottomExtra: 0 };
 
 function toPx(p: LabelPoint, g: PlotGeometry): [number, number] {
   return [(p.minute / g.xMax) * g.w, g.h - (p.total / g.yMax) * g.h];
@@ -73,11 +73,11 @@ export function stepSegments(points: LabelPoint[], g: PlotGeometry): Seg[] {
 }
 
 /** 锚点:左侧(UL/LL)= 文字右边缘,右侧(UR/LR)= 文字左边缘;上方(UL/UR)= 文字下边缘,下方(LR/LL)= 文字上边缘 */
-function boxFor(side: LabelSide, px: number, py: number, w: number, g: PlotGeometry, lift = 0): { box: Box; ox: number; oy: number } {
+function boxFor(side: LabelSide, px: number, py: number, w: number, g: PlotGeometry, lift = 0, push = 0): { box: Box; ox: number; oy: number } {
   const h = g.font + 2;
   const left = side === "UL" || side === "LL";
   const up = side === "UL" || side === "UR";
-  const ox = left ? -g.r - GAP : g.r + GAP;
+  const ox = left ? -g.r - GAP - push : g.r + GAP + push;
   const oy = up ? -LIFT - lift : LIFT + lift;
   const x0 = left ? px + ox - w : px + ox;
   const y0 = up ? py + oy - h : py + oy;
@@ -85,16 +85,29 @@ function boxFor(side: LabelSide, px: number, py: number, w: number, g: PlotGeome
 }
 
 /** 候选顺序:左上 → 右下(站长定的主方案);两处都放不下时(几乎只发生在开场 / 贴底的进球)
- *  再试右上、左下,以及把上方两处再抬高 12 / 24 像素 */
-const CANDIDATES: [LabelSide, number][] = [
-  ["UL", 0],
-  ["LR", 0],
-  ["UR", 0],
-  ["LL", 0],
-  ["UL", 12],
-  ["UR", 12],
-  ["UL", 24],
-  ["UR", 24],
+ *  再试右上、左下，并逐级横移/上下错开；靠左的长名字优先换侧，避免压住纵轴。
+ *  首个进球最多上下错开 24px，避免读图起点的名字离圆点太远。 */
+const CANDIDATES: [LabelSide, number, number][] = [
+  ["UL", 0, 0],
+  ["LR", 0, 0],
+  ["UR", 0, 0],
+  ["LL", 0, 0],
+  ["LR", 0, 12],
+  ["UR", 0, 12],
+  ["UL", 12, 0],
+  ["UR", 12, 0],
+  ["LR", 12, 0],
+  ["LL", 12, 0],
+  ["LR", 12, 12],
+  ["UR", 12, 12],
+  ["UL", 24, 0],
+  ["UR", 24, 0],
+  ["LR", 24, 0],
+  ["LL", 24, 0],
+  ["UL", 36, 0],
+  ["UR", 36, 0],
+  ["UL", 48, 0],
+  ["UR", 48, 0],
 ];
 
 function segHits(s: Seg, b: Box): boolean {
@@ -106,17 +119,17 @@ function segHits(s: Seg, b: Box): boolean {
 const overlap = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 function outside(b: Box, g: PlotGeometry): boolean {
-  return b.x0 < -PAD.left || b.x1 > g.w + PAD.right || b.y0 < -PAD.top || b.y1 > g.h + PAD.bottom;
+  return b.x0 < BOUNDS.leftInset || b.x1 > g.w + BOUNDS.rightExtra || b.y0 < -BOUNDS.topExtra || b.y1 > g.h + BOUNDS.bottomExtra;
 }
 
 /** 把框推回允许区域,返回需要的平移量 */
 function clampShift(b: Box, g: PlotGeometry): [number, number] {
   let dx = 0;
   let dy = 0;
-  if (b.x0 < -PAD.left) dx = -PAD.left - b.x0;
-  else if (b.x1 > g.w + PAD.right) dx = g.w + PAD.right - b.x1;
-  if (b.y0 < -PAD.top) dy = -PAD.top - b.y0;
-  else if (b.y1 > g.h + PAD.bottom) dy = g.h + PAD.bottom - b.y1;
+  if (b.x0 < BOUNDS.leftInset) dx = BOUNDS.leftInset - b.x0;
+  else if (b.x1 > g.w + BOUNDS.rightExtra) dx = g.w + BOUNDS.rightExtra - b.x1;
+  if (b.y0 < -BOUNDS.topExtra) dy = -BOUNDS.topExtra - b.y0;
+  else if (b.y1 > g.h + BOUNDS.bottomExtra) dy = g.h + BOUNDS.bottomExtra - b.y1;
   return [dx, dy];
 }
 
@@ -147,14 +160,26 @@ export function placeGoalLabels(goals: GoalLabelInput[], lines: [LabelPoint[], L
     const score = (c: ReturnType<typeof check>) => +c.ownLine * 4 + +c.otherLine * 2 + +c.label * 3 + +c.outside;
     // 每个候选先推回允许区域再评估:靠边的进球(开场、终场、最高点)被推回后可能压到自家竖线,
     // 这时另一侧往往是干净的(例如开场的进球,左上被推回右移会压线,右下天然在界内)
-    const cands = CANDIDATES.map(([side, lift]) => {
-      const f = boxFor(side, px, py, w, g, lift);
+    const candidates = i === order[0] ? CANDIDATES.filter(([, lift]) => lift <= 24) : CANDIDATES;
+    const cands = candidates.map(([side, lift, push]) => {
+      const f = boxFor(side, px, py, w, g, lift, push);
       const [dx, dy] = clampShift(f.box, g);
       const box = { x0: f.box.x0 + dx, x1: f.box.x1 + dx, y0: f.box.y0 + dy, y1: f.box.y1 + dy };
-      return { side, box, ox: f.ox + dx, oy: f.oy + dy, c: check(box) };
+      // 横向推回会让左侧文字靠近进球点和竖直跳线；同样干净时优先选天然在界内的右侧候选。
+      return {
+        side,
+        box,
+        ox: f.ox + dx,
+        oy: f.oy + dy,
+        c: check(box),
+        clampPenalty: Math.abs(dx) > 0.01 ? 1 : 0,
+        // 首个进球是读图起点，优先贴近圆点；后续标签仍以完全避让曲线为先。
+        distancePenalty: i === order[0] ? (lift + push) / 12 : 0,
+      };
     });
     // 取第一个完全干净的候选;都不干净时取冲突最少的(同样少取靠前的)
-    const best = cands.find((x) => score(x.c) === 0) ?? cands.reduce((a, b) => (score(b.c) < score(a.c) ? b : a));
+    const candidateScore = (x: (typeof cands)[number]) => score(x.c) + x.clampPenalty + x.distancePenalty;
+    const best = cands.find((x) => candidateScore(x) === 0) ?? cands.reduce((a, b) => (candidateScore(b) < candidateScore(a) ? b : a));
     placed.push(best.box);
     result[i] = { side: best.side, ox: best.ox, oy: best.oy, conflicts: best.c };
   }

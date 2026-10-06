@@ -1,7 +1,7 @@
 // 一次模拟结果的可序列化快照:结果页、分享图、分享链接都只读它。
 // 打开分享链接时直接展示链接里的快照,不依赖当前参数重新计算,保证"原样展示这次结果"。
 
-import type { Focus, ManyResult, MatchConfig, MatchSetup, SingleResult } from "./engine";
+import { SIMULATOR_ENGINE_VERSION, type Focus, type ManyResult, type MatchConfig, type MatchSetup, type SingleResult } from "./engine";
 import { withShotDetails } from "./shotDetail";
 import type { PosGroup, SimParams } from "./types";
 
@@ -43,7 +43,9 @@ export interface ResultSnapshot {
 const r = (x: number, d: number) => Math.round(x * 10 ** d) / 10 ** d;
 
 export function modelVersionOf(params: SimParams): string {
-  return params.meta.effective_version ?? params.meta.model_version;
+  // 保留参数入参：调用方用同一接口同时检查“当前参数日期”和“当前剧情引擎版本”。
+  void params;
+  return SIMULATOR_ENGINE_VERSION;
 }
 
 /** 快照保留全部事件(门将失误机会的 xG 计入累计 xG,伤病进事件流),xG 保留 3 位小数。 */

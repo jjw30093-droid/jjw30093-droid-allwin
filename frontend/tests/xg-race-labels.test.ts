@@ -39,6 +39,7 @@ describe("进球人名摆放(纯函数)", () => {
   it("300 场模拟:压自家线 ≤ 1%、压对方线 ≤ 4%、互相重叠 ≤ 2%、不出界", () => {
     let n = 0;
     const c = { own: 0, other: 0, label: 0, outside: 0 };
+    let maxFirstGoalYOffset = 0;
     for (const { shots, st, end } of matches(300)) {
       const lines: [ReturnType<typeof cumulativeSeries>, ReturnType<typeof cumulativeSeries>] = [cumulativeSeries(shots, true, st), cumulativeSeries(shots, false, st)];
       const ext = lines.map((l) => [...l, { ...l[l.length - 1], minute: end, goal: null }]) as typeof lines;
@@ -46,7 +47,12 @@ describe("进球人名摆放(纯函数)", () => {
       const y = niceYAxis(Math.max(...ext[0].map((p) => p.total), ...ext[1].map((p) => p.total)), plotH, 12);
       const g: PlotGeometry = { w: W - 46 - 18, h: plotH, xMax: end, yMax: y.max, font: 12, r: 5 };
       const goals = ext.flatMap((pts, team) => pts.filter((p) => p.goal).map((p) => ({ team: team as 0 | 1, minute: p.minute, total: p.total, name: p.goal!.player_name ?? "" })));
-      for (const p of placeGoalLabels(goals, ext, g)) {
+      const placements = placeGoalLabels(goals, ext, g);
+      if (goals.length) {
+        const first = goals.reduce((best, goal, i) => (goal.minute < goals[best].minute ? i : best), 0);
+        maxFirstGoalYOffset = Math.max(maxFirstGoalYOffset, Math.abs(placements[first].oy));
+      }
+      for (const p of placements) {
         n += 1;
         c.own += +p.conflicts.ownLine;
         c.other += +p.conflicts.otherLine;
@@ -59,6 +65,7 @@ describe("进球人名摆放(纯函数)", () => {
     expect(c.outside).toBe(0);
     expect(c.other / n).toBeLessThanOrEqual(0.04);
     expect(c.label / n).toBeLessThanOrEqual(0.02);
+    expect(maxFirstGoalYOffset).toBeLessThanOrEqual(30);
   });
 
   it("左上优先;左上被占时改右下", () => {
@@ -74,6 +81,21 @@ describe("进球人名摆放(纯函数)", () => {
     );
     expect(a.side).toBe("UL");
     expect(b.side).toBe("LR"); // 左上会压到萨卡的人名
+  });
+
+  it("靠前进球的人名留在纵轴右侧", () => {
+    const g: PlotGeometry = { w: 247, h: 158, xMax: 96, yMax: 1.8, font: 12, r: 5 };
+    const goal = { team: 0 as const, minute: 12, total: 0.24, name: "哈弗茨" };
+    const lines: [{ minute: number; total: number }[], { minute: number; total: number }[]] = [
+      [{ minute: 0, total: 0 }, goal, { minute: 96, total: 0.24 }],
+      [{ minute: 0, total: 0 }, { minute: 96, total: 0 }],
+    ];
+    const p = placeGoalLabels([goal], lines, g)[0];
+    const pointX = (goal.minute / g.xMax) * g.w;
+    const labelLeft = p.side === "UL" || p.side === "LL"
+      ? pointX + p.ox - textWidth(goal.name, g.font)
+      : pointX + p.ox;
+    expect(labelLeft).toBeGreaterThanOrEqual(8);
   });
 
   it("阶梯线线段:先水平到下一点再竖直跳升", () => {

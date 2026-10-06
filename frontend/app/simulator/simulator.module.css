@@ -1390,14 +1390,6 @@ button.stepInner {
   margin-bottom: 0;
 }
 
-/* 一句话解读 */
-.verdict {
-  margin: var(--sp-3) 0 0;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink);
-}
-
 .subsection + .subsection {
   margin-top: var(--sp-4);
   padding-top: var(--sp-4);
@@ -1580,6 +1572,10 @@ button.stepInner {
   margin-bottom: var(--sp-4);
 }
 
+.resultActions > .primaryBtn {
+  grid-column: 1 / -1;
+}
+
 /* 三个按钮按文字宽度分配,一行放下(375 宽约 280px / 311px);更窄时整颗换行,不在字中间折行 */
 .shareBtns {
   display: flex;
@@ -1603,6 +1599,10 @@ button.stepInner {
 @media (min-width: 700px) {
   .resultActions {
     display: flex;
+  }
+
+  .resultActions > .primaryBtn {
+    grid-column: auto;
   }
 
   .shareBtns > button {

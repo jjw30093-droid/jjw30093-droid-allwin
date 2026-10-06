@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { contrastRatioHex } from "@/components/charts/colorContrast";
 import { buildShareUrl, decodeResult, encodeResult, parseSetupQuery, resultToken, setupQuery, sharedSetupOf } from "@/features/simulator/shareLink";
 import { shareTeamColors } from "@/features/simulator/shareImage";
-import type { ResultSnapshot } from "@/features/simulator/snapshot";
+import { modelVersionOf, type ResultSnapshot } from "@/features/simulator/snapshot";
+import { simParams } from "./fixtures/simulatorParams";
 
 const POS = [11, 32, 34, 36, 38, 64, 66, 83, 85, 87, 115];
 
@@ -66,6 +67,9 @@ describe("分享链接:设定写在查询参数里", () => {
 });
 
 describe("分享链接:本次结果压缩后写在 # 片段里", () => {
+  it("分享标记剧情引擎版本,不冒充参数文件的球队级校准版本", () => {
+    expect(modelVersionOf(simParams())).toBe("v0.3.1");
+  });
   it("压缩 → 解压原样还原", async () => {
     const token = await encodeResult(snap());
     expect(token[0]).toBe("z");

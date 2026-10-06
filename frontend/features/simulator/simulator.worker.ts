@@ -2,7 +2,7 @@ import { simulateMany, simulateOnce, type MatchConfig } from "./engine";
 import { winRate, type ImpactJob } from "./focusImpact";
 
 type Req =
-  | { kind?: "run"; config: MatchConfig; seed: number; runs: number }
+  | { kind?: "run"; config: MatchConfig; seed: number; manySeed?: number; runs: number }
   | { kind: "impact"; jobs: ImpactJob[]; seed: number; runs: number };
 
 const ctx = self as unknown as {
@@ -17,8 +17,9 @@ ctx.onmessage = (e) => {
     ctx.postMessage({ kind: "impact", results });
     return;
   }
-  const { config, seed, runs } = req;
+  const { config, seed, manySeed, runs } = req;
   const single = simulateOnce(config, seed);
-  const many = simulateMany(config, seed, runs, single.score);
+  // 单场剧情每次换种子；统计分布用稳定种子，避免用户只是“换个剧本”时胜率也跟着抖动。
+  const many = simulateMany(config, manySeed ?? seed, runs, single.score);
   ctx.postMessage({ single, many });
 };

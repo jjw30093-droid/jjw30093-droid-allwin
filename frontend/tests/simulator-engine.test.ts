@@ -16,6 +16,7 @@ import {
 import { channelDeltas, formatDeltas, impactJobs, summarizeImpact } from "@/features/simulator/focusImpact";
 import { cumulativeXg, toReportShots } from "@/features/simulator/xg";
 import { marginDist, pEff, poissonPmf, totalDist } from "@/features/simulator/market";
+import { newStorySeed } from "@/features/simulator/rng";
 import type { PlayerParams, PosGroup, SimParams, TeamParams } from "@/features/simulator/types";
 
 // research/ah_signals/features_market.py::p_eff 在同样输入上的输出(2026-09-29 生成)。
@@ -411,6 +412,11 @@ describe("爆冷分级", () => {
 });
 
 describe("模拟", () => {
+  it("新剧情种子使用新的 32 位随机值", () => {
+    expect(newStorySeed(() => 0x1_0000_0001)).toBe(1);
+    expect(newStorySeed(() => 0xfedcba98)).toBe(0xfedcba98);
+  });
+
   it("同一种子复现同一结果", () => {
     const r = prepareMatch(buildParams(), setup());
     if (!r.ok) throw new Error(r.error);
@@ -434,4 +440,24 @@ describe("模拟", () => {
     const last = single.events.filter((e) => e.kind === "goal").at(-1);
     expect(last?.score ?? [0, 0]).toEqual(single.score);
   });
+
+  it("射门量相同时，个人 npxG/shot 更高的球员进球率更高", () => {
+    const p = buildParams();
+    for (const [id, x] of Object.entries(p.players)) {
+      if (!id.startsWith("h")) continue;
+      x.shots90 = 0;
+      x.npxg90 = 0;
+      x.penalties_taken = 0;
+    }
+    Object.assign(p.players.h9, { shots90: 2, npxg90: 0.4, minutes: 1800 });
+    Object.assign(p.players.h10, { shots90: 2, npxg90: 0.04, minutes: 1800 });
+    p.teams["10"].A.penalty = 0;
+    const r = prepareMatch(p, setup({ effects: NO_EFFECTS }));
+    if (!r.ok) throw new Error(r.error);
+    const m = simulateMany(r.config, 77, 20000, [0, 0]);
+    const high = m.scorerProb.find((x) => x.playerId === "h9")?.p ?? 0;
+    const low = m.scorerProb.find((x) => x.playerId === "h10")?.p ?? 0;
+    // scorerProb 是“至少进一球”，高概率端会饱和；仍应形成显著差距。
+    expect(high).toBeGreaterThan(low * 1.8);
+  }, 60000);
 });

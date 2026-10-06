@@ -1,5 +1,5 @@
 // 比赛模拟引擎(纯函数,可在 Web Worker 与测试里直接运行)。
-// 口径:docs/simulator-model.md v0 + v0.1 + v0.2。下面所有数值常量都是规格里的 [待校准] 初始假设。
+// 口径:docs/simulator-model.md v0–v0.3.1。下面标注为待校准的数值常量仍是产品假设。
 
 import { fairLine, pEff, type IntDist } from "./market";
 import { gamma, mulberry32, poisson, weightedPick, type Rng } from "./rng";
@@ -48,6 +48,9 @@ const INJURY_MULT = 0.98;
 const PRESS_LATE_MULT = 0.93;
 const PRESS_LATE_FROM = 70;
 const HEADER_BOOST_CROSSING = 1.5;
+// 个人射门质量向同队在场球员均值收缩，避免小样本球员因一两脚射门被极端放大。
+const PLAYER_QUALITY_PRIOR_SHOTS = 20;
+const PLAYER_QUALITY_SCALE_CLAMP: [number, number] = [0.5, 1.75];
 // 没有任何出场数据的球员(射门/90 为空)的射手权重底数——实现兜底,不是规格参数。
 const SHOTS90_FALLBACK = 0.3;
 const DEFENSIVE_GROUPS: ReadonlySet<PosGroup> = new Set(["GK", "CB", "FB", "DM"]);
@@ -73,6 +76,8 @@ export function slotGroup(params: SimParams, formation: string, positionId: numb
 
 // ------------------------------------------------------------------ 侧重点(§5)
 export type Focus = "setpiece" | "counter" | "possession" | "press" | "crossing" | "lowblock";
+/** 单场剧情与球员归因规则版本；球队级校准参数仍由参数文件单独声明。 */
+export const SIMULATOR_ENGINE_VERSION = "v0.3.1";
 export const FOCUS_LIST: Focus[] = ["setpiece", "counter", "possession", "press", "crossing", "lowblock"];
 export const FOCUS_LABEL: Record<Focus, string> = {
   setpiece: "定位球",
@@ -145,6 +150,7 @@ export interface SimPlayer {
   name: string;
   slotGroup: PosGroup;
   fPos: number;
+  minutes: number;
   shots90: number;
   headers90: number;
   npxg90: number;
@@ -415,6 +421,7 @@ export function prepareMatch(params: SimParams, setup: MatchSetup): PrepareResul
         name: playerName(p, p.player_id),
         slotGroup: slot.group,
         fPos: fPos(p.main_position, slot.group),
+        minutes: p.minutes,
         shots90: p.shots90 ?? SHOTS90_FALLBACK,
         headers90: p.headers90 ?? 0,
         npxg90: p.npxg90 ?? 0,
@@ -615,12 +622,12 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
   const concededTicks: number[][] = [[], []];
   const collapseUntil = [-1, -1];
 
-  const pickShooter = (t: number, c: ShotChannel | "gk_error"): SimPlayer | null => {
+  const pickShooter = (t: number, c: ShotChannel | "gk_error"): { player: SimPlayer; xgScale: number } | null => {
     const ps = onPitch[t];
     if (c === "penalty") {
       const best = Math.max(...ps.map((p) => p.pensTaken));
       const pool = best > 0 ? ps.filter((p) => p.pensTaken === best) : ps.filter((p) => p.npxg90 === Math.max(...ps.map((x) => x.npxg90)));
-      return pool[0] ?? null;
+      return pool[0] ? { player: pool[0], xgScale: 1 } : null;
     }
     const w = ps.map((p) => p.shots90 * p.fPos);
     if (c === "setpiece") {
@@ -628,7 +635,25 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
       const boost = cfg.teams[t].headerBoost;
       for (let i = 0; i < ps.length; i++) w[i] *= 1 + (teamH > 0 ? (boost * ps[i].headers90) / teamH : 0);
     }
-    return weightedPick(rng, ps, w);
+    const player = weightedPick(rng, ps, w);
+    if (!player) return null;
+    if (c === "gk_error") return { player, xgScale: 1 };
+
+    // 先选射门者，再让个人 npxG/shot 影响这脚球的质量。各球员缩放按射门权重归一，
+    // 截断前保持球队层平均缩放为 1；球队/盘口给出的机会量与 λ 不变，主要改变“谁更可能转化机会”。
+    const teamShots = ps.reduce((s2, p) => s2 + p.shots90 * p.fPos, 0);
+    const teamNpxg = ps.reduce((s2, p) => s2 + p.npxg90 * p.fPos, 0);
+    const teamQuality = teamShots > 0 && teamNpxg > 0 ? teamNpxg / teamShots : 0.1;
+    const scales = ps.map((p) => {
+      const sampleShots = Math.max(0, (p.shots90 * p.minutes) / 90);
+      const rawQuality = p.shots90 > 0 && p.npxg90 > 0 ? p.npxg90 / p.shots90 : teamQuality;
+      const shrunk = (sampleShots * rawQuality + PLAYER_QUALITY_PRIOR_SHOTS * teamQuality) / (sampleShots + PLAYER_QUALITY_PRIOR_SHOTS);
+      return clamp(shrunk / teamQuality, PLAYER_QUALITY_SCALE_CLAMP);
+    });
+    const weightedMean = w.reduce((s2, weight, i) => s2 + Math.max(0, weight) * scales[i], 0) /
+      Math.max(w.reduce((s2, weight) => s2 + Math.max(0, weight), 0), 1e-12);
+    const i = ps.indexOf(player);
+    return { player, xgScale: scales[i] / weightedMean };
   };
 
   const addGoal = (t: 0 | 1, tk: MinuteTick) => {
@@ -675,9 +700,12 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
         const n = poisson(rng, rate / perShot);
         if (c === "penalty") penalties += n;
         for (let k = 0; k < n; k++) {
-          const xg = c === "penalty" ? cfg.penaltyConversion : sampleXg(cfg, c, rng) * team.xgMult[c];
+          const picked = pickShooter(t, c);
+          const shooter = picked?.player ?? null;
+          const xg = c === "penalty"
+            ? cfg.penaltyConversion
+            : Math.min(0.95, sampleXg(cfg, c, rng) * team.xgMult[c] * (picked?.xgScale ?? 1));
           const isGoal = rng() < Math.min(1, xg * cfg.teams[o].mGk);
-          const shooter = pickShooter(t, c);
           if (isGoal) {
             addGoal(t, tk);
             if (shooter) scorers.push(`${t}:${shooter.id}`);
@@ -699,7 +727,7 @@ function runMatch(cfg: MatchConfig, rng: Rng, record: boolean): MatchRun {
 
       const gkErr = sched[o].gkError;
       if (gkErr && gkErr.half === tk.half && gkErr.minute === tk.minute && !tk.clock.includes("+")) {
-        const shooter = pickShooter(t, "gk_error");
+        const shooter = pickShooter(t, "gk_error")?.player ?? null;
         const isGoal = rng() < GK_ERROR_XG;
         if (isGoal) {
           addGoal(t, tk);

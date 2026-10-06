@@ -21,13 +21,14 @@ import { decodeResult, encodeResult } from "@/features/simulator/shareLink";
 import type { ShotSample, ShotSampleLibrary } from "@/features/simulator/types";
 import { fnv1a, matchSetup, simParams } from "./fixtures/simulatorParams";
 
-// 改动前(2026-09-30,引擎未改)用同一份夹具算出的指纹:[模拟编号, 比分, 事件数, simulateOnce 整体 JSON 的 FNV-1a]
+// v0.3.1“先选射门者、再按个人质量判定进球”启用后的固定指纹:
+// [模拟编号, 比分, 事件数, simulateOnce 整体 JSON 的 FNV-1a]。守住同一编号可复现。
 const GOLDEN: [number, string, number, string][] = [
-  [1, "4-2", 31, "a012ad6d"],
-  [7, "1-0", 28, "4e9c77be"],
-  [4242, "0-1", 32, "bc263ddb"],
-  [20260930, "2-4", 22, "b790de59"],
-  [123456789, "0-1", 27, "44d9afec"],
+  [1, "1-2", 31, "4263d756"],
+  [7, "0-3", 28, "d051bb2f"],
+  [4242, "1-2", 32, "0e965736"],
+  [20260930, "1-0", 22, "3b618866"],
+  [123456789, "2-2", 27, "0449c0ed"],
 ];
 
 function lib(): ShotSampleLibrary {
@@ -57,8 +58,8 @@ function run(seed: number) {
   return { config: r.config, single: simulateOnce(r.config, seed) };
 }
 
-describe("模拟本身不受影响", () => {
-  it("同一编号的比分与事件与改动前完全一致(指纹)", () => {
+describe("模拟与射门细节相互独立", () => {
+  it("同一编号的比分与事件保持 v0.3.1 固定指纹", () => {
     for (const [seed, score, n, hash] of GOLDEN) {
       const { single } = run(seed);
       expect([seed, single.score.join("-"), single.events.length, fnv1a(JSON.stringify(single))]).toEqual([seed, score, n, hash]);

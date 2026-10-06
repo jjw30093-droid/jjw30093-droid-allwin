@@ -6,7 +6,6 @@ import { TeamBadge } from "@/components/teams/TeamBadge";
 import type { SimEvent } from "@/features/simulator/engine";
 import { FOCUS_LABEL } from "@/features/simulator/engine";
 import { ahText, type ResultSnapshot } from "@/features/simulator/snapshot";
-import { verdictOf } from "@/features/simulator/verdict";
 import { cumulativeXg, toReportShots } from "@/features/simulator/xg";
 import { Fold } from "./Fold";
 import { SharePanel } from "./SharePanel";
@@ -24,12 +23,14 @@ export function ResultView({
   snap,
   crests,
   onRerun,
+  onReplay,
   onBack,
 }: {
   snap: ResultSnapshot;
   /** 同源队徽地址(来自参数文件);没有时显示队名首字 */
   crests: [string | null, string | null];
   onRerun: () => void;
+  onReplay: () => void;
   onBack: () => void;
 }) {
   const { single, many } = snap;
@@ -37,7 +38,6 @@ export function ResultView({
   const teamIds: [number, number] = [snap.teams[0].teamId, snap.teams[1].teamId];
   const shots = toReportShots(single.events, teamIds, single.halfTimeTick);
   const xgTotal = cumulativeXg(single.events);
-  const verdict = verdictOf(snap);
   const expected = snap.teams.map((t) => t.expectedGoals);
   // 进球/红牌按"记在哪一队名下"分两列(乌龙记在受益方,与比分一致)
   const sideEvents = ([0, 1] as const).map((t) => single.events.filter((e) => e.team === t && (e.kind === "goal" || e.kind === "red")));
@@ -58,7 +58,6 @@ export function ResultView({
             <span className={styles.rhScoreNum} data-testid="sim-score">
               {single.score[0]} - {single.score[1]}
             </span>
-            <span className={styles.rhTag}>模拟</span>
           </div>
         </div>
 
@@ -84,9 +83,6 @@ export function ResultView({
           </div>
         )}
 
-        <p className={styles.verdict} data-testid="sim-verdict" data-kind={verdict.kind}>
-          {verdict.text}
-        </p>
         {/* 用了已完赛比赛的参数必须如实告知(分享链接打开的人看不到排阵页的提示) */}
         {snap.market?.finalScore ? (
           <p className={styles.hint} data-testid="sim-postmatch">
@@ -95,7 +91,7 @@ export function ResultView({
         ) : null}
 
         <div className={styles.rhWdl}>
-          <p className={styles.rhWdlTitle}>再模拟 {many.runs} 次</p>
+          <p className={styles.rhWdlTitle}>每 {many.runs} 次模拟的胜平负分布</p>
           <div className={styles.wdl} role="img" aria-label={`${names[0]}胜 ${pct(many.pHome)},平 ${pct(many.pDraw)},${names[1]}胜 ${pct(many.pAway)}`}>
             <span className={styles.wdlHome} style={{ width: pct(many.pHome) }}>
               {many.pHome >= 0.12 ? pct0(many.pHome) : ""}
@@ -117,7 +113,10 @@ export function ResultView({
 
       <div className={styles.resultActions}>
         <button type="button" className={styles.primaryBtn} onClick={onRerun} data-testid="sim-rerun">
-          再模拟一次
+          再来一次
+        </button>
+        <button type="button" className={styles.secondaryBtn} onClick={onReplay} data-testid="sim-replay">
+          重播本场
         </button>
         <button type="button" className={styles.secondaryBtn} onClick={onBack} data-testid="sim-back">
           改阵容
@@ -165,7 +164,7 @@ export function ResultView({
         <div className={styles.subsection}>
           <h3 className={styles.subTitle}>谁最可能进球</h3>
           <ol className={styles.list}>
-            {many.scorerProb.map((s) => (
+            {many.scorerProb.slice(0, 10).map((s) => (
               <li key={`${s.team}:${s.playerId}`}>
                 <span className={styles.scorerRow}>
                   <PlayerAvatar playerId={s.playerId} playerName={s.name} shirtNumber={numOf(snap, s.playerId)} size={28} />

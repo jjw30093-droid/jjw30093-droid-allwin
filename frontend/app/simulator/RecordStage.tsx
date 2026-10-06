@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { TeamBadge } from "@/components/teams/TeamBadge";
 import type { ResultSnapshot } from "@/features/simulator/snapshot";
-import { verdictOf } from "@/features/simulator/verdict";
 import { MatchAnimation } from "./MatchAnimation";
 import styles from "./simulator.module.css";
 
@@ -54,7 +53,6 @@ export function RecordStage({
 function RecordResultCard({ snap, crests, onExit }: { snap: ResultSnapshot; crests: [string | null, string | null]; onExit: () => void }) {
   const names: [string, string] = [snap.teams[0].name, snap.teams[1].name];
   const goals = snap.single.events.filter((e) => e.kind === "goal");
-  const verdict = verdictOf(snap);
   return (
     <div className={styles.recResult} data-testid="record-result">
       <div className={styles.recResultTop}>
@@ -95,7 +93,6 @@ function RecordResultCard({ snap, crests, onExit }: { snap: ResultSnapshot; cres
       ) : (
         <p className={styles.rhNoGoal}>本场没有进球</p>
       )}
-      <p className={styles.verdict}>{verdict.text}</p>
       <p className={styles.recBrand}>喵弟数据研究室 · miaomiaodi.vip/simulator · 模拟比赛,非真实结果</p>
       <button type="button" className={styles.recExit} onClick={onExit} data-testid="record-exit">
         退出录屏

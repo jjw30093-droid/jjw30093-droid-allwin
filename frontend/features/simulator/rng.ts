@@ -2,6 +2,17 @@
 
 export type Rng = () => number;
 
+/**
+ * 每次新开一场比赛都用新的 32 位种子；分享/重播仍直接使用快照里的旧种子。
+ * 可注入 source 只为单元测试，产品代码走浏览器的密码学随机源。
+ */
+export function newStorySeed(source?: () => number): number {
+  if (source) return source() >>> 0;
+  const value = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(value);
+  return value[0];
+}
+
 export function mulberry32(seed: number): Rng {
   let a = seed >>> 0;
   return () => {
