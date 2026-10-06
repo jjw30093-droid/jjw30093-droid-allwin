@@ -288,10 +288,10 @@ test("手机底部导航:首页/比赛/联赛/精选/我的;匿名时「我的�
   await expect(nav.getByText("战绩")).toHaveCount(0);
 });
 
-test("手机顶部栏:品牌副标题是联赛数量、没有黄色登录按钮、深色模式按钮 ≥44×44 且纯图标", async ({ page }) => {
+test("手机顶部栏:品牌副标题使用统一文案、没有黄色登录按钮、深色模式按钮 ≥44×44 且纯图标", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(page.locator("header").first().getByText(/^\d+ 个联赛的数据图表$/)).toBeVisible();
+  await expect(page.locator("header").first().getByText("关注喵喵弟，祝您赢大钱", { exact: true })).toBeVisible();
   // 顶栏里不再有"登录"入口(手机)
   await expect(page.locator("header").first().getByRole("link", { name: "登录" })).toBeHidden();
   const toggle = page.getByTestId("theme-toggle");

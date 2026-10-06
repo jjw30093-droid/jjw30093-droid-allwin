@@ -5,7 +5,7 @@
  * - /track-record 访问时「精选」(底部)与「每日精选」(桌面)保持高亮;
  * - 顶部栏没有黄色"登录"入口(CSS 在手机断点隐藏 .account,这里断言 DOM 结构仍在但由 CSS 控制;
  *   真正的显示/隐藏由 e2e 在真实浏览器里验证);
- * - 品牌副标题的联赛数量来自联赛配置,不写死;
+ * - 品牌副标题使用统一品牌文案;
  * - 比赛详情页顶栏有返回箭头:有来源(?from=)回来源,同站 referrer 回上一页,否则回 /matches。
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -110,12 +110,13 @@ describe("桌面主导航", () => {
 });
 
 describe("品牌副标题", () => {
-  it("联赛数量从联赛配置计算(LEAGUE_ZH),不写死", () => {
+  it("使用统一品牌文案", () => {
     expect(LEAGUE_COUNT).toBe(Object.keys(LEAGUE_ZH).length);
-    expect(BRAND_DESCRIPTOR).toBe(`${Object.keys(LEAGUE_ZH).length} 个联赛的数据图表`);
+    expect(BRAND_DESCRIPTOR).toBe("关注喵喵弟，祝您赢大钱");
     mockMe({ authenticated: false });
     render(<SiteNav />);
     expect(screen.getByText(BRAND_DESCRIPTOR)).toBeTruthy();
+    expect(screen.queryByText(/^\d+ 个联赛的数据图表$/)).toBeNull();
     expect(screen.queryByText("足球数据研究室")).toBeNull();
   });
 });

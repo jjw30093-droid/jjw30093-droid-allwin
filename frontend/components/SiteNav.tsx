@@ -57,10 +57,10 @@ const NAV_ITEMS: NavItem[] = [
 
 type BottomNavIcon = "home" | "matches" | "leagues" | "picks" | "account";
 
-/** 顶部品牌副标题里的联赛数量:从联赛配置(LEAGUE_ZH,镜像后端 LEAGUE_META)
- * 计算,新增联赛自动跟着变,不写死数字。 */
+/** 顶部品牌副标题。LEAGUE_COUNT 继续导出供其它模块读取联赛配置规模，
+ * 但品牌文案不再随联赛数量变化。 */
 export { LEAGUE_COUNT };
-export const BRAND_DESCRIPTOR = `${LEAGUE_COUNT} 个联赛的数据图表`;
+export const BRAND_DESCRIPTOR = "关注喵喵弟，祝您赢大钱";
 
 function BottomIcon({ name }: { name: BottomNavIcon }) {
   if (name === "home") {
