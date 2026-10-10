@@ -20,7 +20,12 @@ import random
 import re
 from datetime import datetime
 
-BASE_URL = "https://www.nowgoal26.com"
+# 2026-10-10: nowgoal26.com started redirecting API requests to
+# live.nowgoal50.com.  Keeping the old Referer across that redirect makes the
+# new host return HTTP 200 + {"code":1002}, which used to be misclassified as
+# a successful empty response.  Use the canonical host so URL and Referer stay
+# consistent.
+BASE_URL = "https://live.nowgoal50.com"
 SCHEDULE_URL = BASE_URL + "/ajax/SoccerAjax"
 ODDS_URL = BASE_URL + "/ajax/soccerajax"
 
@@ -398,6 +403,17 @@ def _http_get(url: str, params: dict) -> str:
         raise WAFBlockedError(f"NowGoal WAF 拦截(HTTP {resp.status_code}): {url}")
     if resp.status_code != 200:
         raise NowGoalError(f"NowGoal HTTP {resp.status_code}: {url}")
+    # The API sometimes reports request rejection inside an HTTP-200 JSON
+    # envelope (observed after the 26 -> 50 domain migration).  Never let this
+    # become a false "success with zero rows".
+    try:
+        envelope = json.loads(text)
+    except json.JSONDecodeError:
+        envelope = None
+    if isinstance(envelope, dict) and "code" in envelope:
+        code = envelope.get("code")
+        if code not in (0, "0", None):
+            raise NowGoalError(f"NowGoal API 拒绝请求(code={code}): {url}")
     return text
 
 

@@ -9,6 +9,7 @@ titan_id 交叉验证过(见 docs/data-sources.md);odds_sample.json/poll_fixture
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,22 @@ from backend.db.util import sha256_hex
 from backend.providers import fotmob_snapshots, nowgoal
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "nowgoal"
+
+
+def test_live_endpoint_uses_canonical_host():
+    assert nowgoal.BASE_URL == "https://live.nowgoal50.com"
+    assert nowgoal.ODDS_URL.startswith(nowgoal.BASE_URL)
+
+
+def test_http_200_provider_rejection_is_not_empty_success(monkeypatch):
+    monkeypatch.setenv("THORDATA_PROXY_NOWGOAL", "http://proxy.invalid:9999")
+    response = SimpleNamespace(
+        text='{"code":1002}', status_code=200,
+    )
+    monkeypatch.setattr("httpx.get", lambda *args, **kwargs: response)
+
+    with pytest.raises(nowgoal.NowGoalError, match=r"code=1002"):
+        nowgoal._http_get(nowgoal.ODDS_URL, {"id": "3003899"})
 
 
 def _schedule_text() -> str:
