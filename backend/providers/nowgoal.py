@@ -455,7 +455,20 @@ def fetch_odds(titan_id: str, target_cids=DEFAULT_TARGET_CIDS) -> list[dict]:
         raise NowGoalError(f"NowGoal 赔率响应不是 JSON(前 80 字符): {stripped[:80]!r}")
     if not isinstance(payload, dict):
         payload = {"companies": payload}
-    return parse_odds(payload, target_cids=target_cids)
+    records = parse_odds(payload, target_cids=target_cids)
+    if not records:
+        # HTTP 200/ErrCode=0 也可能只是空壳响应。赔率轮询的成功语义必须是
+        # “至少拿到一条目标公司市场记录”，否则会推进 poll_state、延后重试，
+        # 并让覆盖率监控产生假阳性。
+        err_code = payload.get("ErrCode")
+        data = payload.get("Data")
+        mixodds = data.get("mixodds") if isinstance(data, dict) else None
+        raise NowGoalError(
+            "NowGoal 赔率响应为空"
+            f"(titan_id={titan_id}, ErrCode={err_code!r},"
+            f" mixodds={len(mixodds) if isinstance(mixodds, list) else 'missing'})"
+        )
+    return records
 
 
 def fetch_corner_odds(titan_id: str, company_id: str, company_name: str = "") -> dict | None:

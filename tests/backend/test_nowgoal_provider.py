@@ -35,6 +35,17 @@ def test_http_200_provider_rejection_is_not_empty_success(monkeypatch):
         nowgoal._http_get(nowgoal.ODDS_URL, {"id": "3003899"})
 
 
+def test_http_200_empty_odds_is_not_success(monkeypatch):
+    monkeypatch.setattr(
+        nowgoal,
+        "_http_get",
+        lambda *args, **kwargs: '{"ErrCode":0,"Data":{"mixodds":[]}}',
+    )
+
+    with pytest.raises(nowgoal.NowGoalError, match=r"赔率响应为空.*mixodds=0"):
+        nowgoal.fetch_odds("3003899")
+
+
 def _schedule_text() -> str:
     return (FIXTURES / "schedule_sample.txt").read_text(encoding="utf-8")
 
