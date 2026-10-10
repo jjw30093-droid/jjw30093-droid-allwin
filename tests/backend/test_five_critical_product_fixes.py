@@ -436,29 +436,6 @@ def product_seeded(data_dir):
     core.commit()
     core.close()
 
-    # 2026-08-25:WDL 模型与正式预测登记簿(backend.commands.predictions)
-    # 已整体废弃,不再有 register_snapshot/publish_snapshot 可调用;这里
-    # 直接写一行 prediction_snapshots(表本身未删除,只是没有写入代码),
-    # 只为满足 /api/v1/matches?content=analysis 的
-    # "match_id in prediction_snapshots(status published/locked)" 筛选口径,
-    # 保持本文件其余断言(content=analysis 命中该场)不变。
-    platform = connect_rw("platform")
-    platform.execute(
-        """INSERT INTO model_versions (id, algorithm, description, created_at)
-           VALUES ('product-fix-model', 'market-baseline', 'test only', ?)""",
-        (kickoff_at_utc,),
-    )
-    platform.execute(
-        """INSERT INTO prediction_snapshots
-           (id, match_id, kickoff_at_utc, model_version_id, generated_at, published_at,
-            prediction_hash, home_win, draw, away_win, visibility, status, is_official, created_at)
-           VALUES ('product-fix-snap', 5104968, ?, 'product-fix-model', ?, ?,
-                   'h', 0.4, 0.3, 0.3, 'public', 'published', 0, ?)""",
-        (kickoff_at_utc, kickoff_at_utc, kickoff_at_utc, kickoff_at_utc),
-    )
-    platform.commit()
-    platform.close()
-
     odds = connect_rw("odds")
     odds.execute(
         """INSERT INTO dim_match_xref
@@ -507,13 +484,13 @@ def test_league_catalog_and_match_content_filters_are_data_driven(
     # 推翻的旧规则(此前匿名不可访问,accessible 恒为 False)。
     assert "accessible" not in eliteserien
 
-    analysis = client.get(
+    retired_analysis = client.get(
         "/api/v1/matches?league_id=59&status=upcoming&content=analysis"
-    ).json()
+    )
     odds = client.get(
         "/api/v1/matches?league_id=59&status=upcoming&content=odds"
     ).json()
-    assert [row["match_id"] for row in analysis["matches"]] == [5104968]
+    assert retired_analysis.status_code == 422
     assert [row["match_id"] for row in odds["matches"]] == [5104968]
 
 

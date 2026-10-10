@@ -410,7 +410,7 @@ def list_matches(
         query=q,
         query_team_ids=query_team_ids,
         match_ids=match_ids,
-        priority_match_ids=None if sort == "time" else analysis_match_ids | odds_match_ids,
+        priority_match_ids=None if sort == "time" else odds_match_ids,
         top_priority_match_ids=None if sort == "time" else free_predicted_match_ids,
         limit=limit,
         offset=offset,
