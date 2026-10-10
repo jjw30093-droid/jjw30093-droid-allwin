@@ -30,7 +30,6 @@ umask 077   # 备份/manifest/metadata 默认不允许组或其他用户读取
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DATA_DIR="${ALLWIN_DATA_DIR:-$ROOT/data}"
 BACKUP_ROOT="$DATA_DIR/backups"
-MANIFEST_ROOT="$BACKUP_ROOT/manifests"
 TRIGGER="${BACKUP_TRIGGER:-daily}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 STAGING="$BACKUP_ROOT/.incomplete-$TS-$$"
@@ -177,23 +176,6 @@ STAGING=""   # 已改名,cleanup trap 不应再尝试删除旧路径
 
 echo "== 备份完成: $DEST(3 库,integrity_check 全部 ok,原子发布)=="
 
-# ── prediction manifest 导出(与数据库备份分开目录,非完整性判据的一部分) ──
-if [ -f "$DEST/platform.db" ]; then
-  has_table="$(sqlite3 "$DEST/platform.db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='prediction_manifests';")"
-  if [ "$has_table" = "1" ]; then
-    mkdir -p "$MANIFEST_ROOT/$TS"
-    chmod 700 "$MANIFEST_ROOT/$TS"
-    sqlite3 -json "$DEST/platform.db" \
-      "SELECT id, manifest_date, version, manifest_json, manifest_hash, created_at, s3_key, uploaded_at FROM prediction_manifests ORDER BY manifest_date, version;" \
-      > "$MANIFEST_ROOT/$TS/prediction_manifests.json"
-    chmod 600 "$MANIFEST_ROOT/$TS/prediction_manifests.json"
-    rows="$(sqlite3 "$DEST/platform.db" "SELECT count(*) FROM prediction_manifests;")"
-    echo "-- manifests: 导出 $rows 行 → $MANIFEST_ROOT/$TS/prediction_manifests.json"
-  else
-    echo "-- manifests: platform.db 无 prediction_manifests 表,跳过导出"
-  fi
-fi
-
 # ── 归属服务用户:否则 release.sh 造的备份 opscheck 读不了 ──
 #
 # 2026-08-29 真实生产发现(与上面 prune 那段是同一个"多用户共用备份根"问题的
@@ -212,7 +194,7 @@ fi
 # 整个备份判成失败、进而被 release.sh 误判成"备份失败不执行 migration"。
 SERVICE_USER="${ALLWIN_SERVICE_USER:-allwin}"
 if [ "$(id -un)" != "$SERVICE_USER" ] && id -u "$SERVICE_USER" >/dev/null 2>&1; then
-  for path in "$DEST" "$MANIFEST_ROOT/$TS"; do
+  for path in "$DEST"; do
     [ -e "$path" ] || continue
     if chown -R "$SERVICE_USER:$SERVICE_USER" "$path" 2>/dev/null \
        || sudo -n chown -R "$SERVICE_USER:$SERVICE_USER" "$path" 2>/dev/null; then
@@ -232,12 +214,7 @@ if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
   if ! aws s3 cp --recursive --sse AES256 "$DEST" "s3://$S3_BACKUP_BUCKET/db/$TS/"; then
     die "S3 上传失败: s3://$S3_BACKUP_BUCKET/db/$TS/"
   fi
-  if [ -d "$MANIFEST_ROOT/$TS" ]; then
-    if ! aws s3 cp --recursive --sse AES256 "$MANIFEST_ROOT/$TS" "s3://$S3_BACKUP_BUCKET/manifests/$TS/"; then
-      die "S3 上传失败(manifests): s3://$S3_BACKUP_BUCKET/manifests/$TS/"
-    fi
-  fi
-  echo "== S3: 已上传到 s3://$S3_BACKUP_BUCKET/{db,manifests}/$TS/ =="
+  echo "== S3: 已上传到 s3://$S3_BACKUP_BUCKET/db/$TS/ =="
 else
   echo "== S3: LOCAL_ONLY(S3_BACKUP_BUCKET 未配置,仅本地备份)=="
 fi

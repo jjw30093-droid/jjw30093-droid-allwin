@@ -15,9 +15,7 @@ import styles from "./MatchRow.module.css";
 
 /**
  * 免费层最高一项概率的类型定义——保留给 lib/homepage.ts 的既有类型引用用,
- * 渲染逻辑已被下面的 WinProbabilityBar 取代
- * (MatchListLive 此前每场发一个 /prediction 请求算这个字段,实测
- * prediction_snapshots 是 0 行,100% 返回空——纯粹的 N+1,直接删掉请求)。
+ * 渲染逻辑由下面的 WinProbabilityBar 负责。
  */
 export interface FreeTip {
   top_outcome: "home" | "draw" | "away";

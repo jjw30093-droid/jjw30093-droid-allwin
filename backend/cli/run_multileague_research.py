@@ -48,7 +48,7 @@ from pathlib import Path
 REQUIRED_TABLES = {
     "core": ("dim_match", "fact_team_match_stats"),
     "odds": ("dim_match_xref", "bronze_ng_odds_snap", "bronze_legacy_odds_summary"),
-    "platform": ("prediction_snapshots", "prediction_evaluations"),
+    "platform": (),
 }
 
 

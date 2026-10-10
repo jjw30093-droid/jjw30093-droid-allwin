@@ -22,7 +22,7 @@ export interface MatchFilters {
   season?: string;
   status: MatchStatusFilter;
   window: MatchWindowFilter;
-  content?: "analysis" | "odds";
+  content?: "odds";
   q?: string;
   page: number;
 }

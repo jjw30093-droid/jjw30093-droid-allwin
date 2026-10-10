@@ -115,7 +115,7 @@ export default async function MatchesPage({
   const status = parseStatus(sp.status);
   const window = parseWindow(sp.window, status);
   const content =
-    sp.content === "analysis" || sp.content === "odds" ? sp.content : undefined;
+    sp.content === "odds" ? sp.content : undefined;
   const q = (sp.q ?? "").trim().slice(0, 80) || undefined;
   const league = /^\d+$/.test(sp.league ?? "") ? Number(sp.league) : undefined;
   // 与后端 /api/v1/matches 的 season 校验同口径:"2024/2025" 或自然年 "2026"

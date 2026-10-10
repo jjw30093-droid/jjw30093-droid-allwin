@@ -639,32 +639,3 @@ INT_MATCH_FEATURES_COLUMNS += [
     ("updated_at", "TEXT"),
 ]
 del _side, _venue, _stat, _w
-
-
-# ── gold_wdl_predictions: WDL 概率卡(ROADMAP.md Phase 1.M.2,路线 1 baseline)──
-# Gold 层(CLAUDE.md §2),只存 test 段(walk-forward 的最近一个赛季)的预测结果，
-# 供 serving 层将来读。λ 由 rolling xG 估(进攻×防守×联赛基准的经典拆解)，
-# P(H/D/A) 由 Dixon-Coles 修正后的独立 Poisson 比分矩阵求得，再经 isotonic
-# 校准。calibrated 恒为 1(这张表只存校准后的最终概率，不存校准前的中间值，
-# 校准前后的对比数字是评估阶段的产物，不落表)。
-GOLD_WDL_PREDICTIONS_COLUMNS = [
-    ("match_id", "INTEGER PRIMARY KEY"),
-    ("league_id", "INTEGER"),
-    ("season", "TEXT"),
-    ("lambda_home", "REAL"),
-    ("lambda_away", "REAL"),
-    ("lambda_home_is_fallback", "INTEGER"),
-    ("lambda_away_is_fallback", "INTEGER"),
-    ("p_home", "REAL"),
-    ("p_draw", "REAL"),
-    ("p_away", "REAL"),
-    ("calibrated", "INTEGER"),
-    # confidence/reason(ROADMAP.md Phase C2 新增)：给未来赛程的预测标注数据
-    # 可信度——升班马/新球队在 bronze 无历史(rolling 全 NULL，走 λ=μ 兜底)标
-    # 'low'/'promoted_no_history'；rolling 样本不足 5 场标 'low'/
-    # 'insufficient_history'；其余 'normal'/NULL。历史(test 段)行这两列固定
-    # 为 NULL,只有 C2 写入的未来赛程行会填。
-    ("confidence", "TEXT"),
-    ("reason", "TEXT"),
-    ("updated_at", "TEXT"),
-]

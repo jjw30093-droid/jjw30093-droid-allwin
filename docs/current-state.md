@@ -7948,3 +7948,13 @@ P95 约 1.2 秒(写库排队),其余接口 P95 均在 0.2 秒内;测试后库 in
 **部署更新(2026-10-06 08:07 UTC)**:代码提交 `0898a4561754` 已由 `release.sh` 原子切换为
 `/opt/allwin/current`;候选与线上 `healthz/readyz`、业务冒烟和公开域名检查均通过。公网
 `/simulator?lg=47` 返回 200,HTML 已包含“关注喵喵弟，祝您赢大钱”且不再包含旧副标题。
+## 2026-10-10 — 下线旧 WDL 预测存储
+
+- `gold_wdl_predictions` 与 platform 预测登记簿已下线，新迁移会删除
+  `model_versions` / `prediction_runs` / `prediction_snapshots` /
+  `prediction_outcomes` / `prediction_evaluations` / `prediction_manifests` /
+  `prediction_snapshot_edits`。
+- 比赛列表不再接受 `content=analysis`；赔率折算概率与人工精选战绩是
+  独立功能，不在本次删除范围。
+- 历史迁移文件保持不变（migration runner 会校验已应用文件的 SHA-256），
+  删除通过 core `0024` 和 platform `0020` 追加迁移完成。

@@ -1730,7 +1730,7 @@
        "anyOf": [
         {
          "type": "string",
-         "pattern": "^(analysis|odds|shots)$"
+         "pattern": "^(odds|shots)$"
         },
         {
          "type": "null"

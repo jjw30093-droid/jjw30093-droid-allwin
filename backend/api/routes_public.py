@@ -315,7 +315,7 @@ def list_matches(
     window: str | None = Query(
         None, pattern="^(today|tomorrow|3d|7d|all|yesterday|past3d|past7d)$"
     ),
-    content: str | None = Query(None, pattern="^(analysis|odds|shots)$"),
+    content: str | None = Query(None, pattern="^(odds|shots)$"),
     # 首页重点位确定性选场(2026-08-16):default limit 分页天然只看"前 N 条
     # API 原始顺序",完整候选窗口里更靠后的比赛永远没机会被选中,哪怕它才是
     # 唯一一场"免费且已发布概率"的比赛。opt-in(默认不生效)——不改变其它
@@ -332,7 +332,6 @@ def list_matches(
     offset: int = Query(0, ge=0),
     ctx: AuthContext = Depends(data_access_ctx),
     conn=Depends(core_ro),
-    conn_platform=Depends(platform_ro),
     conn_odds=Depends(odds_ro),
 ):
     """比赛列表:所有已收录联赛的比赛都出现在列表里,对阵/时间/比分/胜平负
@@ -355,16 +354,6 @@ def list_matches(
             }
         except sqlite3.OperationalError:
             query_team_ids = set()
-    try:
-        analysis_match_ids = {
-            int(row[0])
-            for row in conn_platform.execute(
-                """SELECT DISTINCT match_id FROM prediction_snapshots
-                     WHERE status IN ('published','locked')"""
-            )
-        }
-    except sqlite3.OperationalError:
-        analysis_match_ids = set()
     # "有赔率"= 完整时间线(bronze_ng_odds_snap,经 xref)∪ 旧项目两点摘要
     # (bronze_legacy_odds_summary,直接以 fotmob_match_id 为键)。只算前者会漏掉
     # 8,336 场只有两点摘要的比赛——它们在比赛详情页确实能看到赔率,
@@ -377,13 +366,11 @@ def list_matches(
     full_set, legacy_set = q_odds.odds_coverage_sets(conn_odds)
     odds_match_ids = full_set | legacy_set
     # content=shots:双方球队都有历史射门数据 → 赛前射门分布图画得出来。
-    # 与 analysis(已发布预测)/odds(有赔率)并列的第三种"这场有东西可看"判据,
+    # 与 odds(有赔率)并列的另一种"这场有东西可看"判据,
     # 且是当前唯一大面积成立的一种(实测未来 7 天 38/77 场,而 analysis 为 0)。
     # 只在真正请求这一档时才算(要扫一遍 dim_match,不放进每请求的公共开销)。
     match_ids = (
-        analysis_match_ids
-        if content == "analysis"
-        else odds_match_ids
+        odds_match_ids
         if content == "odds"
         else q_matches.matches_with_shot_history(conn)
         if content == "shots"

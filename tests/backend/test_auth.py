@@ -157,8 +157,7 @@ class TestCodeLogin:
         body = client.get("/api/v1/me").json()
         assert body["authenticated"] is True
         assert body["plan"] == "member"     # 三段可见性:登录即 member 基线
-        assert "prediction:top_probability" in body["entitlements"]
-        assert "prediction:full_wdl" in body["entitlements"]
+        assert not any(e.startswith("prediction:") for e in body["entitlements"])
         assert "reco:track_record" in body["entitlements"]
         assert "reco:daily" not in body["entitlements"]
 

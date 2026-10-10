@@ -9,7 +9,6 @@
 #
 # P3 阶段尚未做事件驱动(赛后即时触发是 P4 的工作),这里只是固定 30 分钟
 # 轮询;每一步各自的内部节流/幂等(core_silver_build 按联赛+赛季
-# DELETE+INSERT、prediction_register 按 gold_wdl_predictions 幂等导入、
 # postmatch_settle/reco_auto_settle 只处理真正已完赛且未结算的部分)保证
 # 重复运行代价低。fotmob_incremental_multi 需要 THORDATA_PROXY 住宅代理。
 #

@@ -518,10 +518,7 @@ def apply_saved_artifacts(
             market_phase="pre_match",
         )
 
-    # 2026-08-25:WDL 模型与正式预测登记簿(prediction_snapshots)已整体废弃
-    # (胜率改由 bet365 赔率直接派生,CLAUDE.md 决策);本管线不再写入登记簿,
-    # market_baseline 概率只作为下方 script_sections/analysis_points 的口径
-    # 展示,不再落库、不再有 snapshot_id。
+    # 胜率只从 Bet365 赔率直接派生，不另行落库。
     snapshot_id = None
 
     core = connect_rw("core")

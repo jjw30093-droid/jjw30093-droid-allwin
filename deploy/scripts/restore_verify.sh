@@ -8,7 +8,7 @@
 #   - 三库(allwin/platform/odds.db)精确齐全,文件名与 metadata 记录一致;
 #   - 每库 SHA-256 与 metadata 记录一致(检测备份文件在落盘后被篡改/损坏);
 #   - 每库 PRAGMA integrity_check = ok(独立于 SHA-256,重新在恢复出的副本上验证);
-#   - 关键表可查询(dim_match / job_runs+prediction_snapshots / source_health+poll_state);
+#   - 关键表可查询(dim_match / job_runs / source_health+poll_state);
 #   - migration 无 pending、无 checksum_drift(用 backend.db.migrate.status 对恢复出
 #     的库副本做只读检查,不修改任何库,也不需要真的执行一次迁移)。
 #
@@ -129,8 +129,7 @@ for name in "${REQUIRED_DBS[@]}"; do
     allwin.db)
       echo "   dim_match=$(sqlite3 "$TMP/$name" 'SELECT count(*) FROM dim_match;' 2>/dev/null || echo '查询失败')" ;;
     platform.db)
-      echo "   job_runs=$(sqlite3 "$TMP/$name" 'SELECT count(*) FROM job_runs;' 2>/dev/null || echo '查询失败')" \
-           "prediction_snapshots=$(sqlite3 "$TMP/$name" 'SELECT count(*) FROM prediction_snapshots;' 2>/dev/null || echo '查询失败')"
+      echo "   job_runs=$(sqlite3 "$TMP/$name" 'SELECT count(*) FROM job_runs;' 2>/dev/null || echo '查询失败')"
       ;;
     odds.db)
       echo "   source_health=$(sqlite3 "$TMP/$name" 'SELECT count(*) FROM source_health;' 2>/dev/null || echo '查询失败')" \

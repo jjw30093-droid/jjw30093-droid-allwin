@@ -45,7 +45,7 @@ class TestProducts:
         assert [p["id"] for p in body["plans"]] == ["free", "member", "daily_picks"]
         assert body["products"] == []      # 定价不写(0010):无商品行,购买走公众号联系
         member = next(p for p in body["plans"] if p["id"] == "member")
-        assert "prediction:full_wdl" in member["entitlements"]
+        assert not any(e.startswith("prediction:") for e in member["entitlements"])
         picks = next(p for p in body["plans"] if p["id"] == "daily_picks")
         assert "reco:daily" in picks["entitlements"]
         assert "public" in r.headers["cache-control"]
@@ -63,7 +63,7 @@ class TestAdminGrant:
         assert r.status_code == 200, r.text
         first_ends = r.json()["ends_at"]
         assert client.get("/api/v1/me").json()["plan"] == "member"
-        assert "prediction:full_wdl" in client.get("/api/v1/me").json()["entitlements"]
+        assert not any(e.startswith("prediction:") for e in client.get("/api/v1/me").json()["entitlements"])
 
         # 再授 30 天 → 从上次 ends_at 顺延
         r2 = admin.post(f"/api/v1/admin/users/{user_id}/grant",
