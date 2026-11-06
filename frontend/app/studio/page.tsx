@@ -170,6 +170,7 @@ function StudioHome() {
     <main className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Creator Studio</h1>
+        <Link href="/studio/visualization">比赛可视化 →</Link>
         <span className={styles.headerNote}>
           同一份分析数据驱动网页、竖屏图卡与口播稿
         </span>
