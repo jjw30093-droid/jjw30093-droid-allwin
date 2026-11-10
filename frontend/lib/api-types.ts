@@ -359,6 +359,244 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/studio/prematch/fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fixtures */
+        get: operations["fixtures_api_v1_studio_prematch_fixtures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/prematch/matches/{match_id}/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Snapshots */
+        get: operations["snapshots_api_v1_studio_prematch_matches__match_id__snapshots_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/prematch/matches/{match_id}/snapshots/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Historical */
+        get: operations["historical_api_v1_studio_prematch_matches__match_id__snapshots__snapshot_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/prematch/matches/{match_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report */
+        get: operations["report_api_v1_studio_prematch_matches__match_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Candidates */
+        get: operations["candidates_api_v1_studio_reports_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listing */
+        get: operations["listing_api_v1_studio_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Jobs */
+        get: operations["jobs_api_v1_studio_reports_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate */
+        post: operations["generate_api_v1_studio_reports_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail */
+        get: operations["detail_api_v1_studio_reports__draft_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/{draft_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_api_v1_studio_reports__draft_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/{draft_id}/compare/{other_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compare */
+        get: operations["compare_api_v1_studio_reports__draft_id__compare__other_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/{draft_id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Edit */
+        post: operations["edit_api_v1_studio_reports__draft_id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/{draft_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review */
+        post: operations["review_api_v1_studio_reports__draft_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/reports/{draft_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export */
+        post: operations["export_api_v1_studio_reports__draft_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/leagues": {
         parameters: {
             query?: never;
@@ -2550,6 +2788,8 @@ export interface components {
             has_more: boolean;
             /** Excluded Events */
             excluded_events: number;
+            /** Periods */
+            periods?: components["schemas"]["MatchPeriod"][];
             /** Markers */
             markers: components["schemas"]["Event"][];
             /** Pass Edges */
@@ -2756,6 +2996,17 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** Edit */
+        Edit: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Editorial Notes */
+            editorial_notes: string;
+            /** Judgments */
+            judgments?: {
+                [key: string]: components["schemas"]["JudgmentEdit"];
+            };
+        };
         /** Event */
         Event: {
             /** Id */
@@ -2802,12 +3053,30 @@ export interface components {
             goal: boolean;
             /** Own Goal */
             own_goal: boolean;
+            /** Shot Outcome */
+            shot_outcome?: ("goal" | "on_target" | "off_target" | "blocked") | null;
             /** Penalty */
             penalty: boolean | null;
             /** Pv Value */
             pv_value: number | null;
             /** Pv Added */
             pv_added: number | null;
+        };
+        /** Export */
+        Export: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "json" | "pdf";
+            /**
+             * Pdf Profile
+             * @default reader
+             * @enum {string}
+             */
+            pdf_profile: "reader" | "evidence";
+            /** Expected Revision */
+            expected_revision: number;
         };
         /** ExportBody */
         ExportBody: {
@@ -2860,6 +3129,51 @@ export interface components {
             odds_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
             /** Reco State */
             reco_state?: ("FRESH" | "STALE" | "UNAVAILABLE") | null;
+        };
+        /** Generate */
+        Generate: {
+            /**
+             * Match Id
+             * Format: uuid
+             */
+            match_id: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "prematch" | "postmatch";
+            /**
+             * Window
+             * @default 5
+             * @enum {integer}
+             */
+            window: 5 | 10;
+            /** Since */
+            since?: string | null;
+            /**
+             * Venue
+             * @default all
+             * @enum {string}
+             */
+            venue: "all" | "home" | "away";
+            /**
+             * State
+             * @default all
+             * @enum {string}
+             */
+            state: "all" | "drawing" | "leading" | "trailing";
+            /**
+             * Eleven
+             * @default 1
+             * @enum {integer}
+             */
+            eleven: 0 | 1;
+            /** Opponent */
+            opponent?: string | null;
+            /** Pair A */
+            pair_a?: string | null;
+            /** Pair B */
+            pair_b?: string | null;
         };
         /** GoalMinuteBucket */
         GoalMinuteBucket: {
@@ -2978,6 +3292,29 @@ export interface components {
             error_summary?: string | null;
             /** Created At */
             created_at: string;
+        };
+        /** JudgmentEdit */
+        JudgmentEdit: {
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Video Note
+             * @default
+             */
+            video_note: string;
+            /**
+             * Withdrawn
+             * @default false
+             */
+            withdrawn: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /** LeagueBettingResponse */
         LeagueBettingResponse: {
@@ -3502,6 +3839,10 @@ export interface components {
             home_score: number | null;
             /** Away Score */
             away_score: number | null;
+            /** Home Crest Url */
+            home_crest_url?: string | null;
+            /** Away Crest Url */
+            away_crest_url?: string | null;
         };
         /**
          * MatchDataProfileDTO
@@ -3765,6 +4106,16 @@ export interface components {
             available: false;
             /** Reason */
             reason: string;
+        };
+        /** MatchPeriod */
+        MatchPeriod: {
+            /**
+             * Id
+             * @enum {integer}
+             */
+            id: 1 | 2 | 3 | 4;
+            /** Duration Seconds */
+            duration_seconds: number;
         };
         /** MatchPreviewAttackSourceDTO */
         MatchPreviewAttackSourceDTO: {
@@ -6306,6 +6657,60 @@ export interface components {
             /** Average Percentage */
             average_percentage?: number | null;
         };
+        /** Report */
+        Report: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "prematch-studio.v1";
+            /** Definition Version */
+            definition_version: string;
+            /** Match */
+            match: {
+                [key: string]: unknown;
+            };
+            /** Cutoff At */
+            cutoff_at: string;
+            /** Generated At */
+            generated_at: string;
+            /** Historical As Known Proven */
+            historical_as_known_proven: boolean;
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /** Teams */
+            teams: {
+                [key: string]: unknown;
+            }[];
+            /** Modules */
+            modules: {
+                [key: string]: unknown;
+            }[];
+            /** Findings */
+            findings: {
+                [key: string]: unknown;
+            }[];
+            /** References */
+            references: {
+                [key: string]: unknown;
+            }[];
+            /** Lineup */
+            lineup: {
+                [key: string]: unknown;
+            };
+            /** Notes */
+            notes: string[];
+            /** Revision */
+            revision: string;
+            /** Snapshot Observed At */
+            snapshot_observed_at?: string | null;
+            /** Competition Context */
+            competition_context?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** ReportLineupPlayerV2 */
         ReportLineupPlayerV2: {
             /** Player Id */
@@ -6904,6 +7309,16 @@ export interface components {
             expected_publication_version: number;
             /** Reason */
             reason: string;
+        };
+        /** Review */
+        Review: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "reviewed";
         };
         /** RevokeSessionBody */
         RevokeSessionBody: {
@@ -10595,6 +11010,421 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Bundle"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fixtures_api_v1_studio_prematch_fixtures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    snapshots_api_v1_studio_prematch_matches__match_id__snapshots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    historical_api_v1_studio_prematch_matches__match_id__snapshots__snapshot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                match_id: string;
+                snapshot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_api_v1_studio_prematch_matches__match_id__get: {
+        parameters: {
+            query?: {
+                window?: number;
+                since?: string | null;
+                venue?: string;
+                state?: string;
+                eleven?: number;
+                pair_a?: string | null;
+                pair_b?: string | null;
+                opponent?: string | null;
+            };
+            header?: never;
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    candidates_api_v1_studio_reports_candidates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    listing_api_v1_studio_reports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    jobs_api_v1_studio_reports_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    generate_api_v1_studio_reports_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Generate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_api_v1_studio_reports__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_v1_studio_reports__draft_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_api_v1_studio_reports__draft_id__compare__other_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+                other_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_api_v1_studio_reports__draft_id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Edit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_api_v1_studio_reports__draft_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Review"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_api_v1_studio_reports__draft_id__export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Export"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -7,15 +7,30 @@ def sequence_for_pitch(sequence,team_id,side):
     """Orient historical opponents relative to the analysed club, not target IDs."""
     return [dict(e,_display_side=(side if e['team_id']==team_id else 1-side) if e.get('team_id') else None) for e in sequence]
 
+def reader_report(original):
+    """Align legacy EPL snapshots using only their saved intervals and saved scope."""
+    r=deepcopy(original)
+    scope=next((x.get('scope') for x in r.get('checks',[]) if x.get('scope')),None)
+    if (r.get('phase')=='postmatch' and not r.get('regional_current') and r.get('regional_baseline')
+        and r.get('match',{}).get('competition')=='EPL'
+        and scope=={'eleven':True,'penalties':False,'periods':[1,2],'state':'all'}):
+        spans=(r.get('evidence') or {}).get('state_intervals',[])
+        total=sum(x['end_match_elapsed_ms']-x['start_match_elapsed_ms'] for x in spans)/60000
+        if spans and all(abs(total-t['minutes'])<1e-6 for t in r['teams']):
+            minutes=sum(x['end_match_elapsed_ms']-x['start_match_elapsed_ms'] for x in spans if x['home_players']==x['away_players']==11)/60000
+            r['regional_current']=[dict(id=t['id'],minutes=minutes,chains=[x for x in t['chains'] if x['period'] in (1,2) and not x.get('penalty') and x['home_players']==x['away_players']==11]) for t in r['teams']]
+            r['regional_baseline_info']={'status':'available','note':'保存的赛前历史样本；该赛前版本为事后重建','scope':scope,'view_definition':'saved-epl-interval-comparison.v1'}
+    return r
+
 def compact_report(value, font, pitch, palette):
     from reportlab.platypus import Paragraph, Table, TableStyle, PageBreak, Spacer
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib import colors
     from reportlab.graphics.shapes import Drawing, Rect, Circle, String
-    r=value['report'];teams=r['teams'];story=[];width=495;cell=242
+    r=reader_report(value['report']);teams=r['teams'];story=[];width=495;cell=242
     styles={k:ParagraphStyle(k,fontName=font,fontSize=size,leading=size*1.45,spaceAfter=5,
                             wordWrap='CJK',textColor=colors.HexColor('#263445'))
-            for k,size in [('title',19),('heading',11),('body',8.5),('small',7.5)]}
+            for k,size in [('title',19),('heading',11),('body',10),('small',9)]}
     def p(s,style='body',verbatim=False):return Paragraph(escape(str(s) if verbatim else reader_text(s)).replace('\n','<br/>'),styles[style])
     def num(v):return '暂无数据' if v is None else f'{v:.2f}' if isinstance(v,float) else str(v)
     def table(headers,rows,widths=None):
@@ -49,8 +64,8 @@ def compact_report(value, font, pitch, palette):
         return d
     def findings(topic,tid):return [x for x in r.get('tactical_analysis',{}).get('findings',[]) if x.get('topic')==topic and x.get('rule',{}).get('team_id')==tid]
     def summary(topic,t):
-        xs=findings(topic,t['id']);return p(xs[0]['text'] if xs else '本报告没有足够证据给出此项判断。','small')
-    def sources_note():return p('事件编号、完整球员数据、支持及限制条件均保留在后方证据附录。未展示记录不按零值处理。','small')
+        xs=findings(topic,t['id']);return p(xs[0]['text'],'small') if xs else Spacer(1,0)
+    def sources_note():return p('完整事件、来源及审计材料见独立证据附录；本报告缺失数据不计为零。','small')
 
     page(('赛前' if r['phase']=='prematch' else '赛后')+'分析 · 关键判断')
     story.extend([p('资料截止：'+reader_time(r['cutoff_at'])+' · '+reader_text(r['analysis_mode']),'small'),p('比赛数据：CC Opta；阵容与伤停：VIP。以下判断适用于本报告的比赛样本、比分及人数筛选。','small')])
@@ -59,15 +74,15 @@ def compact_report(value, font, pitch, palette):
     for h in r['hypotheses']:
         edit=value.get('judgments',{}).get(h['id'],{});manual=edit.get('text')
         body='已撤回：'+edit['reason'] if edit.get('withdrawn') else manual or h['text']
-        cards.append(card(h['title'],p(body,verbatim=bool(manual or edit.get('withdrawn'))),p('适用条件、样本限制及具体事件见本条判断的证据附录。','small')))
-    cards.append(card('统计范围与阅读方法',p('每队最近比赛数、有效统计分钟、xG有值射门数都会影响比较。整场xA不拆成任意时段数据。','small'),sources_note()))
+        cards.append(card(h['title'],p(body,verbatim=bool(manual or edit.get('withdrawn')))))
     grid(cards)
+    story.append(sources_note())
 
     page('阵容 · 预计与正式首发对照')
     cards=[]
     for side,t in enumerate(teams):
         key='away' if side else 'home'
-        for label,ctx in [('此前预计',r.get('lineup_baseline') or {}),('当前首发',r.get('lineup') or {})]:
+        for label,ctx in [('此前首发快照',r.get('lineup_baseline') or {}),('当前首发',r.get('lineup') or {})]:
             roster=next((x for x in ctx.get('teams',[]) if x.get('side')==key),{})
             players=roster.get('players',[])
             cards.append(card(t['name']+' · '+label+' '+str(roster.get('formation') or ''),small_pitch(roster=roster,side=side),
@@ -84,19 +99,21 @@ def compact_report(value, font, pitch, palette):
             p(f"射门{a['shots']}次，xG {num(a['xg'])}，有值{a['known_xg']}/{a['shots']}；对手xG {num(b['xg'])}。空心未进，实心进球，圆面积按xG。",'small')))
     for t in teams:
         cards.append(card(t['name']+' · 机会来自哪里',table(['进攻方式','射门','xG'],[[x['name'],x['shots'],x['xg']] for x in t['methods']])))
-    for t in teams:
-        players=sorted([x for x in t['players'] if x.get('xa') is not None],key=lambda x:-x['xa'])[:4]
-        cards.append(card(t['name']+' · 整场xA前4名',table(['球员','xA','有值场次'],[[x['name'],x['xa'],x.get('xa_match_count')] for x in players]),p('官方整场累计，不随比分／人数筛选拆分；出场时间和有值场次不同，不直接代表效率。','small')))
     grid(cards)
 
     page('区域对位 · 最后一传与关键机会')
     cards=[]
     for side,t in enumerate(teams):
-        own=[x for x in t['chains'] if x['direction']=='attack']
+        current=next((x for x in r.get('regional_current') or [] if x['id']==t['id']),None)
+        baseline=next((x for x in r.get('regional_baseline') or [] if x['id']==t['id']),None)
         if r['phase']=='postmatch':
-            baseline=(r.get('regional_baseline') or [{},{}])[side]
-            other=[x for x in baseline.get('chains',[]) if x['direction']=='attack']
-        else:other=[x for x in teams[1-side]['chains'] if x['direction']=='defence']
+            if not current or not baseline or not baseline.get('samples') or (r.get('regional_baseline_info') or {}).get('status')!='available':
+                cards.append(card(t['name']+' · 最后一传区域',p('历史基准缺失或口径不可比较，暂不绘制零值图。')));continue
+            own=[x for x in current['chains'] if x['direction']=='attack']
+            other=[x for x in baseline['chains'] if x['direction']=='attack']
+        else:
+            own=[x for x in t['chains'] if x['direction']=='attack']
+            other=[x for x in teams[1-side]['chains'] if x['direction']=='defence']
         maximum=max([sum(x.get('creator_zone')==z for x in g) for g in [own,other] for z in range(15)]+[1])
         d=Drawing(230,146)
         for j,g in enumerate([own,other]):
@@ -105,11 +122,7 @@ def compact_report(value, font, pitch, palette):
             for z in range(15):
                 count=sum(x.get('creator_zone')==z for x in g);base=colors.HexColor(palette[side]);a=count/maximum;fill=colors.Color(1-(1-base.red)*a,1-(1-base.green)*a,1-(1-base.blue)*a)
                 x=j*117+(z//5)*37;y=18+(z%5)*20;d.add(Rect(x,y,37,20,fillColor=fill,strokeColor=colors.white));d.add(String(x+14,y+6,str(count),fontName=font,fontSize=8))
-        cards.append(card(t['name']+' · 最后一传区域',d,p('左右两图同尺度；横向为后场→前场，纵向自下而上为右边路→左边路。格内为关联射门数，缺少最后一传的不分摊。','small'),summary('matchup',t)))
-    shots=sorted([(i,c) for i,t in enumerate(teams) for c in t['chains'] if c['direction']=='attack'],key=lambda x:(not x[1].get('goal'),-(x[1].get('xg') or 0)))[:2]
-    for side,c in shots:
-        sample=next((x for x in teams[side].get('samples',[]) if x['id']==c.get('match_id')),{})
-        cards.append(card(teams[side]['name']+' · '+('进球' if c.get('goal') else '主要机会')+f" {c['minute']}:{c['second']:02}",p(str(sample.get('kickoff_at',''))[:10]+' vs '+str(sample.get('opponent','')),'small'),small_pitch(sequence=c.get('sequence',[]),team_id=teams[side]['id'],side=side),p(c['method']+' · xG '+num(c.get('xg'))+'；仅画已记录动作，缺失动作不连线。','small')))
+        cards.append(card(t['name']+' · 最后一传区域',d,p(((r.get('regional_baseline_info') or {}).get('note','')+'；常规时间、11对11、非点球。' if r['phase']=='postmatch' else '')+'左右两图同尺度；横向为后场→前场，纵向自下而上为右边路→左边路。格内为关联射门数，缺少最后一传的不分摊。','small'),summary('matchup',t)))
     grid(cards)
 
     page('战术过程 · 推进、转换与定位球')
@@ -117,22 +130,12 @@ def compact_report(value, font, pitch, palette):
     for t in teams:
         rows=t['progression'];cards.append(card(t['name']+' · 向前推进',table(['成功推进','进入前场','进入禁区'],[[rows.get('completed'),rows.get('third_entries'),rows.get('box_entries')]]),summary('progression',t)))
     for t in teams:cards.append(card(t['name']+' · 攻防转换',summary('transition',t),p('丢球后的危险与夺回后的威胁分别核查；事件推导不等于真实无球阵型。','small')))
-    for t in teams:
-        rows=[]
-        for kind in ('角球','任意球','界外球','门球'):
-            es=[x for x in t['restarts'] if x['kind']==kind];rows.append([kind,sum(x['direction']=='attack' for x in es),sum(x['direction']=='defence' for x in es)])
-        cards.append(card(t['name']+' · 定位球',table(['类型','本队','对手'],rows),p('主罚、第一记录触球、争顶及后续射门在附录逐项核查；第一触球不等于已控制第二落点。','small')))
     grid(cards)
 
     page('人员与比赛状态 · 谁在承担任务')
     cards=[]
     for t in teams:
-        players=sorted(t['players'],key=lambda x:-(x.get('minutes') or 0))[:6]
-        cards.append(card(t['name']+' · 出场最多6人',table(['球员','分钟','xG','xA','xT'],[[x['name'],x['minutes'],x.get('xg'),x.get('xa'),x.get('model_xt')] for x in players],[91,33,35,35,36]),p('按出场时间选择，未列球员及来源覆盖保留在附录。','small')))
-    for t in teams:
         cards.append(card(t['name']+' · 比分状态',table(['状态','分钟','射门','xG','xGA'],[[{'drawing':'平局','leading':'领先','trailing':'落后'}.get(x['name'],x['name']),x['minutes'],x['shots'],x['xg'],x['defence']['xg']] for x in t['states']],[43,45,35,52,55]),p('各状态时长不同；不能仅比较累计值便认定某种打法更好。','small')))
-    cards.append(card('指标怎么读',*[p(a+'：'+b,'small') for a,b in GLOSSARY[:3]]))
-    cards.append(card('统计限制与完整证据',p(GLOSSARY[-1][1],'small'),p('xGA为对手xG，xGOT辅助分析射正后的门将表现，PV为来源模型的控球价值。','small'),sources_note()))
     grid(cards)
     # Compact the specialist material into analyst spreads as well, rather than
     # shortening the report merely by moving every specialist topic to an appendix.
@@ -184,7 +187,51 @@ def compact_report(value, font, pitch, palette):
     append_sections(value,story,p,table,card,grid,page,small_pitch,font,palette,num)
     if value.get('editorial_notes'):
         page('分析师补充');story.append(p(value['editorial_notes'],verbatim=True))
+    if r.get('phase')=='postmatch' and not r.get('checks'):
+        page('复盘 · 逐条核验赛前判断')
+        story.append(p('本场没有可关联的已保存赛前判断，不能事后补造预测；本报告仅展示实际过程与历史基准。'))
     if r.get('checks'):
         page('复盘 · 逐条核验赛前判断')
-        grid([card(c['status']+' · '+c['title'],p(c['reason']),p(c.get('criterion',''),'small'),p('支持与不支持的具体事件见完整附录。','small')) for c in r['checks']])
-    return story
+        grid([card(c['status']+' · '+c['title'],p(c['reason'])) for c in r['checks']])
+        for criterion in dict.fromkeys(c.get('criterion','') for c in r['checks']):
+            if criterion:story.append(p('核验口径：'+criterion,'small'))
+        story.append(p('完整支持、反驳事件及人工修订记录见独立证据附录。','small'))
+    return consolidate_reader(story,p,PageBreak,r)
+
+
+def consolidate_reader(story,p,page_break,report):
+    """Keep each analytical subject once; let full-size panels paginate naturally."""
+    blocks=[]
+    for item in story:
+        if hasattr(item,'_bookmark'):
+            blocks.append([item._bookmark[1],[]])
+        elif blocks and not isinstance(item,page_break):blocks[-1][1].append(item)
+    groups=[
+        ('关键判断',('分析 · 关键判断',)),
+        ('比赛背景与近期表现',('近期状态 ·','联赛背景 ·')),
+        ('首发变化、阵型与球员贡献',('阵容 ·','阵型与换人 ·','全部球员 ·')),
+        ('机会创造与终结',('两队总览 ·','终结 ·','xA分项 ·','射门细分 ·')),
+        ('区域对位',('区域对位 ·',)),
+        ('出球、推进与进攻路线',('战术过程 ·','传球结构 ·','传中 ·','直塞 ·','门球 ·')),
+        ('防守、转换与对抗',('防守与球权 ·','对抗 ·')),
+        ('定位球攻防',('定位球 ·',)),
+        ('门将表现',('门将 ·',)),
+        ('个人突破、纪律与控球威胁',('个人动作 ·','纪律与越位 ·','推进威胁 ·')),
+        ('比分状态与比赛时段',('人员与比赛状态 ·','组合与时段 ·')),
+        ('关键机会链',('机会链 ·',)),
+        ('球员组合',('双人组合 ·',)),
+        ('赛前判断核验',('复盘 ·',)),
+        ('分析师补充',('分析师补充',))]
+    output=[]
+    for title,prefixes in groups:
+        if title=='球员组合' and not any(t.get('pairs') for t in report['teams']):continue
+        chosen=[b for b in blocks if any(prefix in b[0] for prefix in prefixes)]
+        if not chosen:continue
+        if output:output.append(page_break())
+        h=p(title,'title');h._bookmark=('reader-'+str(len(output)),title);output.append(h)
+        for _,items in chosen:
+            items=list(items)
+            while items and items[-1].__class__.__name__=='Spacer':items.pop()
+            output.extend(items)
+        while output and output[-1].__class__.__name__=='Spacer':output.pop()
+    return output

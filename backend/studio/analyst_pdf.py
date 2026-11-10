@@ -321,7 +321,11 @@ def register_font():
     return 'AnalystCJK'
 
 
-def render(value, path, *, compact=True):
+def render(value, path, *, compact=True, profile="reader"):
+    if profile not in ("reader","evidence"):raise ValueError("invalid_pdf_profile")
+    if profile=="evidence":
+        from .analyst_pdf_evidence import render_evidence
+        return render_evidence(value,path)
     from reportlab.pdfbase import pdfmetrics
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
@@ -430,7 +434,7 @@ def render(value, path, *, compact=True):
         text('新增：'+('、'.join(p['name'] for p in change.get('added',[])) if change.get('comparable') else '没有可比较的此前名单'))
         text('退出：'+('、'.join(p['name'] for p in change.get('removed',[])) if change.get('comparable') else '无法比较'))
         before=next((t for t in (r.get('lineup_baseline') or {}).get('teams',[]) if t.get('side')==side),{})
-        text('此前预计：'+'、'.join(p['name'] for p in before.get('players',[])),'small')
+        text('此前名单：'+'、'.join(p['name'] for p in before.get('players',[])),'small')
         text('当前名单：'+'、'.join(p['name'] for p in roster.get('players',[])),'small')
         impact=next((x for x in r.get('lineup_impacts',[]) if x['team_id']==team['id']),None)
         if impact:
@@ -463,8 +467,13 @@ def render(value, path, *, compact=True):
     for side,t in enumerate(r['teams']):
         if side:new('区域对位 · 客队进攻视角')
         other=r['teams'][1-side]
-        a=[c for c in t['chains'] if c['direction']=='attack']
-        b=[c for c in ((r.get('regional_baseline') or [{},{}])[side].get('chains',[]) if r['phase']=='postmatch' else other['chains']) if c['direction']==('attack' if r['phase']=='postmatch' else 'defence')]
+        baseline=next((x for x in r.get('regional_baseline') or [] if x['id']==t['id']),None)
+        current=next((x for x in r.get('regional_current') or [] if x['id']==t['id']),None)
+        if r['phase']=='postmatch' and (not baseline or not baseline.get('samples') or not current or (r.get('regional_baseline_info') or {}).get('status')!='available'):
+            text('历史基准缺失或口径不可比较，暂不绘制零值图。');continue
+        a=[c for c in (current if r['phase']=='postmatch' else t)['chains'] if c['direction']=='attack']
+        b=[c for c in (baseline if r['phase']=='postmatch' else other)['chains'] if c['direction']==('attack' if r['phase']=='postmatch' else 'defence')]
+        if r['phase']=='postmatch':text((r.get('regional_baseline_info') or {}).get('note','')+'；常规时间、11对11、非点球口径。','small')
         labels=[t['name']+('本场' if r['phase']=='postmatch' else '进攻'),t['name']+'赛前样本' if r['phase']=='postmatch' else other['name']+'防守']
         text(' / '.join(labels),'heading')
         maximum=max([sum(c.get('creator_zone')==z for c in g) for g in (a,b) for z in range(15)]+[1])
@@ -549,5 +558,5 @@ def render(value, path, *, compact=True):
     if compact:
         from .analyst_pdf_layout import compact_report
         appendix=next(i for i,item in enumerate(story) if getattr(item,'_bookmark',(None,''))[1].startswith('证据附录 ·'))
-        story=compact_report(value,font,pitch,palette)+[PageBreak()]+story[appendix:]
+        story=compact_report(value,font,pitch,palette)
     BookmarkedDoc(str(path),pagesize=(595,842),rightMargin=50,leftMargin=50,topMargin=38,bottomMargin=42,title=value['title']).build(story,onFirstPage=footer,onLaterPages=footer)

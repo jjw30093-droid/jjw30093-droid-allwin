@@ -23,53 +23,7 @@ def analyst_source_base():
         raise ValueError('分析来源必须是本机内部HTTP隧道')
     return base
 
-def match_roster_profile(person,profiles,published_id):
-    """Keep published IDs intact; attach a scoped, inspectable roster join receipt."""
-    direct=next((p for p in profiles if p['id']==published_id),None) if published_id else None
-    if direct:return direct,{'method':'published_player_identity','evidence_player_id':direct['id']}
-    import unicodedata
-    def name(value):
-        value=''.join(c for c in unicodedata.normalize('NFKD',str(value or '')) if not unicodedata.combining(c))
-        return ' '.join(''.join(c if c.isalnum() else ' ' for c in value.casefold()).split())
-    full=name(person.get('name'));shirt=person.get('shirt_number')
-    if not full or shirt is None:return None,{'method':'unresolved'}
-    numbered=[p for p in profiles if str(shirt) in {str(n) for n in p.get('shirt_numbers',[])}]
-    candidates=[p for p in numbered if full in {name(n) for n in [*p.get('full_names',[]),*p.get('provider_name_aliases',[])]}]
-    # Some feeds publish a single given name. Require an exact first token,
-    # shirt and mapped team, and retain a scoped receipt rather than merge IDs.
-    if not candidates and len(full.split())==1 and len(full)>2:
-        mono=[p for p in numbered if full in {name(n).split()[0] for n in p.get('full_names',[]) if name(n)}]
-        if len(mono)==1:
-            return mono[0],{'method':'exact_mononym_given_shirt_within_mapped_team','evidence_player_id':mono[0]['id'],
-                            'scope':'this_report_roster_only','definition_version':'roster-evidence-link.v3'}
-    abbreviation=False
-    if not candidates:
-        # Provider display names abbreviate given names, while legal names may
-        # include middle names. Require surname, initial, shirt and team, and
-        # retain this report-scoped receipt rather than adopting a global ID.
-        compact=full.replace(' ','')
-        for p in numbered:
-            surname=name(p.get('surname')).replace(' ','')
-            initials={name(n)[0] for n in [p.get('name'),*p.get('full_names',[])] if name(n)}
-            if surname and compact.endswith(surname) and len(compact)>len(surname) and compact[0] in initials:
-                candidates.append(p)
-        abbreviation=True
-    display_join=False
-    if not candidates:
-        # Opta's legal surname can include a middle name (Braut Haaland) or
-        # second surname (Muñoz Mejía). Match the provider display surname plus
-        # the exact full given name, shirt and mapped team, without fuzzy text.
-        parts=full.split()
-        if len(parts)>=2 and len(parts[0])>1:
-            for p in numbered:
-                given={name(n).split()[0] for n in p.get('full_names',[]) if name(n)}
-                display=[name(n).split() for n in [p.get('name'),*p.get('provider_name_aliases',[])]]
-                if parts[0] in given and any(len(d)>=2 and len(d[0])==1 and d[0]==parts[0][0] and d[1:]==parts[1:] for d in display):candidates.append(p)
-        display_join=True
-    if len(candidates)!=1:return None,{'method':'unresolved'}
-    method='exact_given_display_surname_shirt_within_mapped_team' if display_join else 'surname_initial_shirt_within_mapped_team' if abbreviation else 'exact_full_name_shirt_within_mapped_team' if full in {name(n) for n in candidates[0].get('full_names',[])} else 'exact_provider_name_shirt_within_mapped_team'
-    return candidates[0],{'method':method,'evidence_player_id':candidates[0]['id'],
-                          'scope':'this_report_roster_only','definition_version':'roster-evidence-link.v2'}
+from backend.vendor.miaodi_standard.roster_link import match_roster_profile
 
 class Report(BaseModel):
     model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
@@ -173,8 +127,18 @@ def lineup_context(report):
                                 mapped=registry.execute("SELECT entity_id FROM source_ids WHERE kind='player' AND provider='fotmob' AND source_id=?",(str(item.get('id')),)).fetchone()
                                 pid=mapped[0] if mapped else None
                                 profile,receipt=match_roster_profile(item,report['teams'][index]['players'],pid)
+                                if profile is None and pid and receipt.get('method')=='unresolved':
+                                    receipt={'method':'published_player_identity_without_recent_history','evidence_player_id':pid}
                                 people.append({'id':pid,'name':item.get('name') or '未提供姓名','profile':profile,'identity_link':receipt,**lineup_position(item)})
                             groups[section]=people
+                        from collections import Counter
+                        linked=Counter((p.get('identity_link') or {}).get('evidence_player_id') for p in groups['starters']+groups['subs'])
+                        for person in groups['starters']+groups['subs']:
+                            evidence=(person.get('identity_link') or {}).get('evidence_player_id')
+                            if evidence and linked[evidence]>1:
+                                person.update(profile=None,identity_link={'method':'ambiguous_roster_collision'})
+                            person['identity_status']='matched' if (person.get('identity_link') or {}).get('evidence_player_id') else 'unresolved'
+                            person['history_status']='available' if person.get('profile') else 'no_recent_sample' if person['identity_status']=='matched' else 'identity_unresolved'
                         context['teams'].append({'side':side,'formation':raw.get('formation'),'players':groups['starters'],'subs':groups['subs']})
                 context.update(status='available',snapshot_id=str(row['id']),observed_at=row['observed_at'],type=row['lineup_type'] or payload.get('lineup_type'))
             for index,side in enumerate(('home','away')):

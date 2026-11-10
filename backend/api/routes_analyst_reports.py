@@ -74,6 +74,7 @@ class Review(BaseModel):
 
 class Export(BaseModel):
     kind:Literal['json','pdf']
+    pdf_profile:Literal['reader','evidence']='reader'
     expected_revision:int=Field(ge=1)
 
 
@@ -162,10 +163,10 @@ def export(draft_id:UUID,body:Export,ctx=Depends(require_admin),conn=Depends(pla
     if body.kind=='json':target.write_bytes(research.canonical(value))
     else:
         from backend.studio.analyst_pdf import render
-        try:render(value,target)
+        try:render(value,target,profile=body.pdf_profile)
         except ImportError:raise HTTPException(503,'PDF 运行依赖尚未安装') from None
         except ValueError:raise HTTPException(503,'PDF 中文字体未配置或报告内容无效') from None
     with tx(conn):
         conn.execute("INSERT INTO export_jobs(id,user_id,draft_id,kind,status,file_path,meta_json,created_at,finished_at) VALUES (?,?,?,?,'succeeded',?,?,?,?)",
-            (job,ctx.user_id,str(draft_id),body.kind,str(target),json.dumps({'profile':flow.VERSION,'revision':value['revision'],'review':value['review']}),utc_now_iso(),utc_now_iso()))
+            (job,ctx.user_id,str(draft_id),body.kind,str(target),json.dumps({'profile':flow.VERSION,'pdf_profile':body.pdf_profile,'revision':value['revision'],'review':value['review']}),utc_now_iso(),utc_now_iso()))
     return {'job_id':job,'download_url':f'/api/v1/studio/exports/{job}/download'}

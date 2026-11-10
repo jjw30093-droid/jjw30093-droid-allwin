@@ -153,3 +153,39 @@ def test_single_given_name_roster_link_requires_shirt_team_and_uniqueness():
     assert result==profile and receipt['scope']=='this_report_roster_only'
     assert match_roster_profile(dict(person,shirt_number=7),[profile],None)[0] is None
     assert match_roster_profile(person,[profile,dict(profile,id='ambiguous')],None)[0] is None
+
+
+def test_roster_full_given_prefix_and_conflicting_full_names():
+    from backend.studio.prematch import match_roster_profile
+    alysson={'id':'a','name':'Alysson','full_names':['Alysson Edward Franco da Rocha dos Santos'],'shirt_numbers':[47]}
+    person={'name':'Alysson Edward','shirt_number':47}
+    assert match_roster_profile(person,[alysson],None)[0]==alysson
+    assert match_roster_profile(person,[alysson,dict(alysson,id='b')],None)[0] is None
+    assert match_roster_profile(dict(person,shirt_number=7),[alysson],None)[0] is None
+    matz={'id':'m','name':'M. Sels','surname':'Sels','full_names':['Matz Willy Els Sels'],'shirt_numbers':[26]}
+    assert match_roster_profile({'name':'Mark Sels','shirt_number':26},[matz],None)[0] is None
+    harry={'id':'h','name':'H. Maguire','surname':'Maguire','full_names':['Jacob Harry Maguire'],'shirt_numbers':[5]}
+    assert match_roster_profile({'name':'Harry Maguire','shirt_number':5},[harry],None)[0]==harry
+    assert match_roster_profile({'name':'M. Sels','shirt_number':26},[matz],None)[0]==matz
+
+
+def test_regional_reconstruction_is_not_prior_prediction(monkeypatch):
+    r=report();r['regional_current']=deepcopy(r['teams'])
+    monkeypatch.setattr(f,'read_report',lambda *args:dict(report(),filters={'eleven':'1','state':'all'}))
+    f.regional_context(r)
+    assert r['regional_baseline_info']['mode']=='reconstructed'
+    assert r['regional_baseline_info']['status']=='available'
+    assert r['regional_baseline_info']['draft_id'] is None
+    monkeypatch.setattr(f,'read_report',lambda *args:(_ for _ in ()).throw(ValueError('source unavailable')))
+    f.regional_context(r)
+    assert r['regional_baseline'] is None
+    assert r['regional_baseline_info']['status']=='unavailable'
+
+
+def test_actual_lineup_coordinates_cannot_replace_opta_shirt_or_identity():
+    report={'lineup':{'teams':[{'side':'away','players':[{'id':'a','name':'Opta name','shirt_number':47}]}]}}
+    context={'type':'standard','teams':[{'side':'away','players':[{'id':'other','identity_link':{'evidence_player_id':'a'},'shirt_number':99,'name':'VIP name','pos_x':.4,'pos_y':.8,'coordinate_frame':'provider_vertical_0_1'}]}]}
+    f.attach_actual_positions(report,context)
+    player=report['lineup']['teams'][0]['players'][0]
+    assert player['id']=='a' and player['name']=='Opta name' and player['shirt_number']==47
+    assert player['pos_x']==.4 and player['pos_y']==.8

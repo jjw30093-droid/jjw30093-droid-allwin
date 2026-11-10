@@ -1,21 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Oswald, Noto_Sans_SC } from "next/font/google";
+import "./fonts/self-hosted.css";
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
-
-const oswald = Oswald({
-  variable: "--font-latin",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
-const notoSansSC = Noto_Sans_SC({
-  variable: "--font-cn",
-  subsets: ["latin"],
-  weight: ["400", "500", "900"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -50,7 +38,7 @@ export default function RootLayout({
       lang="zh-CN"
       data-theme="light"
       suppressHydrationWarning
-      className={`${oswald.variable} ${notoSansSC.variable}`}
+      className="localFontVariables"
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />

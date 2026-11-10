@@ -7958,3 +7958,9 @@ P95 约 1.2 秒(写库排队),其余接口 P95 均在 0.2 秒内;测试后库 in
   独立功能，不在本次删除范围。
 - 历史迁移文件保持不变（migration runner 会校验已应用文件的 SHA-256），
   删除通过 core `0024` 和 platform `0020` 追加迁移完成。
+
+## 2026-11-10 — Current-season analyst quality and PDF reader release preparation
+
+In isolated codex/analyst-release-20261110: shared report roster resolution, sparse-zero sample contract, regional reconstructed baseline, Q9 source repair and collector-v3 preservation. Metric inventory: docs/audits/cc-report-metric-scope-20261110.md. Reading/evidence PDFs separated; same immutable snapshot. Actual Opta XI identities/shirt numbers retained when attaching verified VIP coordinates. Identity-matched/no-recent-history distinct from unmatched.
+
+Build blocker resolved with pinned official Oswald/Noto Sans SC WOFF2 subsets, OFL licenses and source manifest; same families/weights and Unicode-range loading; no build-time external font fetch, no full-CJK preload. Isolated full webpack production build (24 static pages, normal TypeScript gate) passed. No type-check bypass. Source focused and preserved-runtime tests executed; production repair/re-audit and final release acceptance still pending at this entry. Preserve existing reviewed snapshots; generate new pending drafts.

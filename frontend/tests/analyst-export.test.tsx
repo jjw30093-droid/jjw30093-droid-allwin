@@ -27,15 +27,16 @@ beforeEach(()=>{
 });
 afterEach(()=>cleanup());
 describe('analyst report downloads',()=>{
- it.each([['导出 PDF','pdf'],['导出证据 JSON','json']])('downloads %s after asynchronous generation without a popup',async(label,kind)=>{
+ it.each([['导出阅读版 PDF','pdf','reader'],['导出独立证据附录','pdf','evidence'],['导出证据 JSON','json','reader']])('downloads %s after asynchronous generation without a popup',async(label,kind,profile)=>{
   const popup=vi.spyOn(window,'open');render(<ReportWorkflow/>);
   fireEvent.click(await screen.findByRole('button',{name:label}));
-  await waitFor(()=>expect(downloadServerExport).toHaveBeenCalledWith('/api/v1/studio/exports/file/download',`cc-report-prematch-saved-report-v3.${kind}`));
+  await waitFor(()=>expect(downloadServerExport).toHaveBeenCalledWith('/api/v1/studio/exports/file/download',`cc-report-prematch-${kind==='json'?'evidence':profile}-saved-report-v3.${kind}`));
+  expect(clientFetch).toHaveBeenCalledWith(expect.stringContaining('/export'),expect.objectContaining({body:expect.objectContaining({kind,pdf_profile:profile})}));
   expect(popup).not.toHaveBeenCalled();popup.mockRestore();
  });
  it('shows a failed file transfer instead of silently reporting success',async()=>{
   vi.mocked(downloadServerExport).mockRejectedValue(new Error('导出下载失败(HTTP 403)'));render(<ReportWorkflow/>);
-  fireEvent.click(await screen.findByRole('button',{name:'导出 PDF'}));
+  fireEvent.click(await screen.findByRole('button',{name:'导出阅读版 PDF'}));
   expect(await screen.findByRole('alert')).toHaveProperty('textContent','Error: 导出下载失败(HTTP 403)');
  });
 });

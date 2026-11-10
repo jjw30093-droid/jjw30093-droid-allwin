@@ -11,7 +11,7 @@ from . import research
 from .prematch import read_report, lineup_context, analyst_source_base
 from .predictions import _NoRedirect
 
-VERSION = 'analyst-workflow.v6'
+VERSION = 'analyst-workflow.v7'
 
 
 def source_read(path):
@@ -245,6 +245,40 @@ def predicted_context(report):
     except (OSError,ValueError,sqlite3.Error):return None
 
 
+def regional_context(report,pre=None):
+    """Historical reconstruction is a baseline, never an invented prior judgment."""
+    basis=pre['report'] if pre else None
+    mode='saved_prematch' if basis else 'reconstructed'
+    if basis is None:
+        try:basis=read_report('matches/'+report['match']['id'],{})
+        except (OSError,ValueError,RuntimeError):basis=None
+    report['regional_baseline']=None
+    report['regional_baseline_info']={'mode':mode,'status':'unavailable','cutoff_at':report['match']['kickoff_at']}
+    if basis:
+        filters=basis.get('filters',{})
+        comparable=all(str(filters.get(k,v))==v for k,v in [('eleven','1'),('state','all')])
+        report['regional_baseline']=[{k:t.get(k) for k in ('id','name','chains','samples','minutes','missing_layers')} for t in basis['teams']]
+        report['regional_baseline_info'].update(status='available' if comparable and report.get('regional_current') else 'incomparable',
+            cutoff_at=basis.get('cutoff_at'),filters=filters,revision=basis.get('revision'),draft_id=pre['id'] if pre else None,
+            note='保存的赛前样本' if pre else '赛前历史基准·事后重建，非当时保存的判断')
+    return report
+
+def attach_actual_positions(report,context):
+    """Only schematic coordinates cross sources; actual IDs/names/shirts stay Opta."""
+    if context.get('type') not in ('confirmed','standard'):return
+    from .analyst_insights import person_id
+    for side in ('home','away'):
+        src=next((t for t in context.get('teams',[]) if t.get('side')==side),{})
+        dst=next((t for t in report.get('lineup',{}).get('teams',[]) if t.get('side')==side),{})
+        positions={person_id(p):p for p in src.get('players',[]) if person_id(p)}
+        for player in dst.get('players',[]):
+            pos=positions.get(person_id(player),{})
+            if pos.get('coordinate_frame')=='provider_vertical_0_1':
+                player.update({k:pos.get(k) for k in ('pos_x','pos_y','coordinate_frame')})
+    report['lineup']['observed_at']=context.get('observed_at')
+    report['lineup']['positions_source']={'source':'VIP lineup schematic','snapshot_id':context.get('snapshot_id'),'observed_at':context.get('observed_at')}
+
+
 def generate(conn,user,mid,phase,params=None):
     mid=str(UUID(mid))
     previous=latest(conn,user,mid,phase)
@@ -260,19 +294,11 @@ def generate(conn,user,mid,phase,params=None):
         # schematic coordinates for players independently matched to that XI.
         position_report=deepcopy(report);position_report.setdefault('findings',[])
         context=lineup_context(position_report).get('lineup',{})
-        if context.get('type') in ('confirmed','standard'):
-            from .analyst_insights import person_id
-            for side in ('home','away'):
-                src=next((t for t in context.get('teams',[]) if t.get('side')==side),{})
-                dst=next((t for t in report.get('lineup',{}).get('teams',[]) if t.get('side')==side),{})
-                positions={person_id(p):p for p in src.get('players',[]) if person_id(p)}
-                for player in dst.get('players',[]):
-                    pos=positions.get(person_id(player),{})
-                    if pos.get('coordinate_frame')=='provider_vertical_0_1':
-                        player.update({k:pos.get(k) for k in ('pos_x','pos_y','coordinate_frame','shirt_number')})
-            report['lineup']['positions_source']={'source':'VIP lineup schematic','snapshot_id':context.get('snapshot_id'),'observed_at':context.get('observed_at')}
+        attach_actual_positions(report,context)
     else:raise ValueError('报告阶段无效')
     if report['match']['id']!=mid:raise ValueError('比赛身份不一致')
+    if any(i.get('component')=='core' for i in report.get('quality',{}).get('detail',{}).get('issues',[])):
+        raise ValueError('核心数据质量检查未通过，暂不能生成分析判断')
     from backend.api.standard_identity import configured_store
     from backend.api.routes_visualization import team_crest
     store=configured_store()
@@ -290,7 +316,7 @@ def generate(conn,user,mid,phase,params=None):
     if before==report.get('lineup'):before=None
     report['lineup_baseline']=before
     report['lineup_changes']=roster_diff(before,report.get('lineup'))
-    report['regional_baseline']=[{'id':t['id'],'name':t['name'],'chains':t['chains'],'samples':t['samples'],'minutes':t['minutes']} for t in pre['report']['teams']] if pre else None
+    if phase=='postmatch':regional_context(report,pre)
     from .analyst_insights import enrich
     enrich(report,pre['report'] if pre else None)
     report['checks']=assess(pre['report']['hypotheses'],report) if pre else []

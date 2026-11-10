@@ -290,9 +290,13 @@ def append_sections(value,story,p,table,card,grid,page,small_pitch,font,palette,
     # Every shot remains discoverable; full trajectories are shown for all goals
     # and the explicitly selected high-value chances, not just two examples.
     allshots=[(i,x) for i,t in enumerate(teams) for x in t['chains'] if x.get('direction')=='attack']
-    important=[(i,x) for i,x in allshots if x.get('goal') or x.get('xg') is not None and x['xg']>=.20]
+    if r['phase']=='prematch':
+        important=[(side,x) for side in (0,1) for x in sorted([x for i,x in allshots if i==side],key=lambda x:-(x.get('xg') or 0))[:3]]
+    else:
+        important=[(i,x) for i,x in allshots if x.get('goal')]
+        important += [(side,x) for side in (0,1) for x in sorted([x for i,x in allshots if i==side and not x.get('goal') and (x.get('xg') or 0)>=.2],key=lambda x:-(x.get('xg') or 0))[:2]]
     for start in range(0,len(important),4):
-        page('机会链 · 所有进球与xG≥0.20的机会 '+str(start+1)+'–'+str(min(start+4,len(important))));cards=[]
+        page('机会链 · 代表性高价值机会 '+str(start+1)+'–'+str(min(start+4,len(important))));cards=[]
         for side,x in important[start:start+4]:
             seq=[e for e in x.get('sequence',[]) if e.get('event_type') in (1,2,13,14,15,16)];actors=[names.get(e.get('player_id'),'未匹配') for e in seq if e.get('event_type') in (1,2)]
             cards.append(card(teams[side]['name']+f" · {x['minute']}:{x['second']:02} "+names.get(x.get('player_id'),''),p(match_label(teams[side],x),'small'),small_pitch(sequence=seq,team_id=teams[side]['id'],side=side),p(x['method']+' · xG '+num(x.get('xg'))+(' · 进球' if x.get('goal') else ''),'small'),p('记录中的传球人：'+' → '.join(actors[-5:]) if actors else '射门前没有可确认的传球记录。','small'),p('仅画已有传球与射门起终点；阈值是报告选择条件，不是供应商“大机会”标签。','small')))
@@ -324,7 +328,7 @@ def append_sections(value,story,p,table,card,grid,page,small_pitch,font,palette,
         pairs=t.get('pairs',[])
         labels={'both':'共同在场','only_a':'仅A在场','only_b':'仅B在场','neither':'均不在场'}
         selection=t.get('pair_selection',{}).get('names',[])
-        cards.append(card(t['name']+' · 双人组合',p('A / B：'+' / '.join(selection),'small') if selection else p('球员选择见报告筛选条件。','small'),table(['状态','分钟','xG','xGA'],[[labels.get(x['group'],x['group']),x['minutes'],x.get('xg'),x.get('xga')] for x in pairs],[80,50,50,50]) if pairs else p('本报告未选定两名球员，不能生成共同在场／仅一人在场／均不在场四组比较。不是没有数据，也不填假零。'),p('少于3场或180分钟标小样本；组合差异不直接解释为人员因果。','small')))
+        if pairs:cards.append(card(t['name']+' · 双人组合',p('A / B：'+' / '.join(selection),'small') if selection else p('球员选择见报告筛选条件。','small'),table(['状态','分钟','xG','xGA'],[[labels.get(x['group'],x['group']),x['minutes'],x.get('xg'),x.get('xga')] for x in pairs],[80,50,50,50]) if pairs else p('本报告未选定两名球员，不能生成共同在场／仅一人在场／均不在场四组比较。不是没有数据，也不填假零。'),p('少于3场或180分钟标小样本；组合差异不直接解释为人员因果。','small')))
         seg=[x for m in t.get('report_extensions',{}).get('matches',[]) for x in m.get('segments',[])]
         grouped=defaultdict(list)
         for x in seg:grouped[x.get('label','未标注')].append(x)
