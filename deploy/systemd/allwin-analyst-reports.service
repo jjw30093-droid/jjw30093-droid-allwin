@@ -1,0 +1,19 @@
+[Unit]
+Description=CC analyst prematch and postmatch report drafts
+After=network-online.target
+
+[Service]
+Type=simple
+User=allwin
+Group=allwin
+WorkingDirectory=/opt/allwin/current
+EnvironmentFile=/opt/allwin/shared/.env
+ExecStart=/opt/allwin/current/.venv/bin/python -m backend.cli.analyst_reports --owner ${STUDIO_REPORT_OWNER} --watch
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

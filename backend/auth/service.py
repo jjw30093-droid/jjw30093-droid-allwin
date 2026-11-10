@@ -8,6 +8,7 @@
 
 import secrets
 import sqlite3
+import os
 from datetime import timedelta
 
 from backend.db.util import new_token, new_uuid, sha256_hex, utc_now, utc_now_iso
@@ -120,6 +121,9 @@ def create_session(
     ip_hash: str | None = None,
 ) -> dict:
     """创建会话,返回原始 token/csrf(只此一次,之后只有 hash)。"""
+    if os.environ.get('ANALYSIS_ACCESS_ENABLED') == '1':
+        from .analysis_access import ensure_trial
+        ensure_trial(conn, user_id)
     token = new_token(SESSION_TOKEN_BYTES)
     csrf = new_token(SESSION_TOKEN_BYTES)
     session_id = new_uuid()

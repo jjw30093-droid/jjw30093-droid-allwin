@@ -27,10 +27,10 @@ type TeamStat = MatchReport["team_stats"][number];
 
 /** 某侧某时段的进攻区域三分区(投影自 MatchReportTeamStat 的
  * attacking_zone_* 字段;行缺失或任一字段缺失 → null,不补 0)。 */
-function zoneSplitOf(rows: TeamStat[], isHome: boolean, period: string): AttackingZoneSplit | null {
+function zoneSplitOf(rows: TeamStat[], isHome: boolean, period: TeamStat["period"]): AttackingZoneSplit | null {
   const row = rows.find((t) => t.is_home === isHome && t.period === period);
   if (!row) return null;
-  return zoneSplitFrom(row.attacking_zone_left, row.attacking_zone_center, row.attacking_zone_right);
+  return zoneSplitFrom(row.attack_share_left_percent, row.attack_share_centre_percent, row.attack_share_right_percent);
 }
 
 export function MatchShotsSection({
@@ -79,21 +79,21 @@ export function MatchShotsSection({
     lineups
       .flatMap((t) => [...t.starters, ...t.bench])
       .filter((p) => p.shirt_number != null)
-      .map((p) => [p.player_id, p.shirt_number as string]),
+      .map((p) => [p.participant_id, p.shirt_number as string]),
   );
 
-  // 进攻区域:全场取 team_stats(period='All'),半场取 team_stats_by_half;
+  // 进攻区域:全场取 team_stats(period='full_time'),半场取 team_stats_by_half;
   // AttackingZonesChart 自己判空(两侧全缺整个组件不渲染)。
-  const zonesHome = zoneSplitOf(teamStats, true, "All");
-  const zonesAway = zoneSplitOf(teamStats, false, "All");
+  const zonesHome = zoneSplitOf(teamStats, true, "full_time");
+  const zonesAway = zoneSplitOf(teamStats, false, "full_time");
   const zonesByPeriod = {
     FirstHalf: {
-      home: zoneSplitOf(teamStatsByHalf, true, "FirstHalf"),
-      away: zoneSplitOf(teamStatsByHalf, false, "FirstHalf"),
+      home: zoneSplitOf(teamStatsByHalf, true, "first_half"),
+      away: zoneSplitOf(teamStatsByHalf, false, "first_half"),
     },
     SecondHalf: {
-      home: zoneSplitOf(teamStatsByHalf, true, "SecondHalf"),
-      away: zoneSplitOf(teamStatsByHalf, false, "SecondHalf"),
+      home: zoneSplitOf(teamStatsByHalf, true, "second_half"),
+      away: zoneSplitOf(teamStatsByHalf, false, "second_half"),
     },
   };
   const hasZones =

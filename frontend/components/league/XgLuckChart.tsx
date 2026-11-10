@@ -6,11 +6,11 @@
  *
  * 数据来自 fact_league_table 的 `table_type='xg'`(695 行),此前 **100% 不可见**
  * —— queries/matches.standings 硬编码 `table_type='all'`,这一档连 API 都出不去。
- * `x_points_diff` 是 extra_json 里预算好的 xPointsDiff,实测确认口径就是
+ * `points_above_expected` 是 extra_json 里预算好的 xPointsDiff,实测确认口径就是
  * **实际积分 − 按 xG 应得积分**(阿森纳 85 实得 vs 77.8 应得 = +7.18)。
  *
  * 名次说明:xg 档行里的 `position` 是**按 xG 推导的名次**,不是实际名次;
- * 实际名次 = x_position + x_position_diff(已用真实 all 榜逐队核对:
+ * 实际名次 = expected_position + position_difference(已用真实 all 榜逐队核对:
  * 维拉 13+(-9)=4、桑德兰 18+(-11)=7、曼联 3+0=3,全部吻合)。
  *
  * 这是 FotMob 官方 xG 口径,**不是本站模型** —— 文案上必须说清来源,
@@ -34,14 +34,14 @@ type LuckRow = {
 
 export function buildLuckRows(rows: Row[]): LuckRow[] {
   return rows
-    .filter((r) => typeof r.x_points_diff === "number")
+    .filter((r) => typeof r.points_above_expected === "number")
     .map((r) => {
-      const xPos = typeof r.x_position === "number" ? r.x_position : null;
+      const xPos = typeof r.expected_position === "number" ? r.expected_position : null;
       const posDiff =
-        typeof r.x_position_diff === "number" ? r.x_position_diff : null;
+        typeof r.position_difference === "number" ? r.position_difference : null;
       return {
         name: r.team.name,
-        diff: r.x_points_diff as number,
+        diff: r.points_above_expected as number,
         xPosition: xPos,
         // 实际名次由 xG 名次 + 名次差反推(xg 档的 position 列是 xG 名次)
         actualPosition: xPos != null && posDiff != null ? xPos + posDiff : null,

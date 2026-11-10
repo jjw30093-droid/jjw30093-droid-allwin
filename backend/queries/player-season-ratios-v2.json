@@ -1,0 +1,14 @@
+{
+  "definition_version": "miaodi-player-season-ratios.v2",
+  "response_schema": "miaodi-website-player-quadrant.v2",
+  "changed_metrics": ["pass_completion_rate", "long_ball_share"],
+  "source_scope": "Completed matches within the requested competition and season; existing source-availability season gate retained.",
+  "sample_policy": "same_match_observed_inputs",
+  "pair_eligibility": "Numerator and attempted-pass denominator must be present finite nonnegative integer counts from the same player-match, with numerator no greater than denominator.",
+  "value": "100 * sum(eligible numerators) / sum(the same eligible denominators); zero or absent denominator gives null, never a measured zero.",
+  "incomplete_inputs": "Exclude incomplete pairs and report incomplete_paired_inputs; preserve all original rows.",
+  "invalid_inputs": "Exclude invalid pairs with an explicit issue; never clip a percentage to 100.",
+  "input_matches": "Count of input matches used by the declared method. This replaces the ambiguous paired_matches response name.",
+  "unchanged_metrics": "Other approved player ratio definitions retain v1 independent_available_sums, explicit source-version checks and their own input match counts.",
+  "history_policy": "Read-only v2 projection. Do not overwrite v1 materializations or prediction history."
+}

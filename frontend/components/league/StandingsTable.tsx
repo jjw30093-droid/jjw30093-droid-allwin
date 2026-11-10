@@ -47,9 +47,9 @@ function Row({ row, isChampion }: { row: StandingRow; isChampion: boolean }) {
         {isChampion && <span className={styles.championBadge}>冠军</span>}
       </td>
       <td className={`${styles.num} ${styles.points} ${styles.mOnly}`}>{row.points}</td>
-      <td className={`${styles.num} ${styles.cPlayed}`}>{row.played}</td>
+      <td className={`${styles.num} ${styles.cPlayed}`}>{row.matches_played}</td>
       <td className={styles.mOnly}>
-        <GoalDiff value={row.goal_diff} />
+        <GoalDiff value={row.goal_difference} />
       </td>
       <td className={`${styles.num} ${styles.wdl}`}>{row.wins}</td>
       <td className={`${styles.num} ${styles.wdl}`}>{row.draws}</td>
@@ -57,7 +57,7 @@ function Row({ row, isChampion }: { row: StandingRow; isChampion: boolean }) {
       <td className={`${styles.num} ${styles.gf}`}>{row.goals_for}</td>
       <td className={`${styles.num} ${styles.ga}`}>{row.goals_against}</td>
       <td className={styles.dOnly}>
-        <GoalDiff value={row.goal_diff} />
+        <GoalDiff value={row.goal_difference} />
       </td>
       <td className={`${styles.num} ${styles.points} ${styles.dOnly}`}>{row.points}</td>
     </tr>
@@ -108,7 +108,7 @@ export function StandingsTable({
             <tbody>
               {rows.map((row) => (
                 <Row
-                  key={row.team.team_id ?? row.position}
+                  key={row.record_id}
                   row={row}
                   isChampion={isChampion(row)}
                 />

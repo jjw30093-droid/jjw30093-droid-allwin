@@ -56,9 +56,10 @@ import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import type { components } from "@/lib/api-types";
 import type { TeamSeasonStatRow } from "@/lib/api-v1";
 
-type StyleView = components["schemas"]["MatchPreviewStyleViewDTO"];
-type StylePoint = components["schemas"]["MatchPreviewStylePointDTO"];
+type StyleView = components["schemas"]["StandardMatchPreviewStyleViewDTO"];
+type StylePoint = components["schemas"]["PreviewStylePoint"];
 type PlottedPoint = StylePoint & { x: number; y: number };
+const pointKey = (p: StylePoint) => p.team_id ?? p.record_id;
 
 /**
  * 「攻守 xG」视角(2026-09-28 起改为复用球队页 both-ends 视角与
@@ -140,7 +141,7 @@ export type StyleQuadrantOpts = {
   yr?: AxisRange;
   grid?: Grid;
   /** 高亮的球队 id(0~2 个);缺省 = 本场主客 */
-  selectedIds?: number[];
+  selectedIds?: string[];
   /** 2026-09 移动端修复:窄屏下非选中球队从队徽降级为小圆点(无队名),
    * 避让压力立刻消失——375px 屏实测绘图区只有约 241×242px 要塞 20 个
    * 队徽,人均可用空间 2916px² 但队徽视觉位置几乎完全由避让算法主导。
@@ -164,18 +165,18 @@ export function buildOption(
   pts: PlottedPoint[],
   mx: number,
   my: number,
-  homeTeamId: number,
-  awayTeamId: number,
+  homeTeamId: string | null,
+  awayTeamId: string | null,
   c: ChartColors,
   opts: StyleQuadrantOpts = {},
 ): EChartsOption {
   const sideOf = (p: StylePoint) =>
-    p.team_id === homeTeamId ? "home" : p.team_id === awayTeamId ? "away" : null;
+    (homeTeamId != null && p.team_id === homeTeamId) ? "home" : (awayTeamId != null && p.team_id === awayTeamId) ? "away" : null;
   const fmt = (v: number) => v.toFixed(view.digits);
   const quadOf = (p: { x: number; y: number }) => view.quadrants[quadrantIndex(p, mx, my)];
   const selectedIds = opts.selectedIds ?? [homeTeamId, awayTeamId];
   const selectedIndexes = pts
-    .map((p, i) => (selectedIds.includes(p.team_id) ? i : -1))
+    .map((p, i) => (selectedIds.includes(pointKey(p)) ? i : -1))
     .filter((i) => i >= 0);
   const isSelected = (i: number) => selectedIndexes.includes(i);
   const crestSize = opts.crestSize ?? 22;
@@ -408,8 +409,8 @@ export function TeamStyleQuadrant({
    *  为空(联赛缺 xg 档,或取数失败)时「攻守 xG」标签自动隐藏并说明原因,
    *  不静默降级成空白 tab。 */
   leagueTeamStats: TeamSeasonStatRow[] | null;
-  homeTeamId: number;
-  awayTeamId: number;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
   homeName: string;
   awayName: string;
   /** 2026-08-24:真实球队配色,缺失或对比度不达标时回退品牌青绿/蓝。 */
@@ -462,7 +463,8 @@ export function TeamStyleQuadrant({
       quadrants: REAL_VIEW.quadrants,
       y_lower_is_better: dirsOf(REAL_VIEW).y === true,
       points: realPts.map((p) => ({
-        team_id: p.teamId ?? -1,
+        team_id: typeof p.teamId === "string" ? p.teamId : null,
+        record_id: p.recordId ?? p.key,
         name: p.name,
         crest_url: p.crestUrl,
         x: p.x,
@@ -481,8 +483,8 @@ export function TeamStyleQuadrant({
   const available = useMemo(() => normalizedViews.filter(usable), [normalizedViews]);
   const [viewId, setViewId] = useState<string | null>(null);
   const view = available.find((v) => v.id === viewId) ?? available[0];
-  const defaultPair = useMemo(() => [homeTeamId, awayTeamId], [homeTeamId, awayTeamId]);
-  const [selectedIds, setSelectedIds] = useState<number[]>(defaultPair);
+  const defaultPair = useMemo(() => [homeTeamId, awayTeamId].filter((v): v is string => v != null), [homeTeamId, awayTeamId]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(defaultPair);
 
   const boxRef = useRef<HTMLDivElement>(null);
   const consumedRef = useRef(false);
@@ -541,7 +543,7 @@ export function TeamStyleQuadrant({
   const isNarrow = width != null && width < NARROW_WIDTH;
 
   const selected = useMemo(
-    () => selectedIds.map((id) => pts.find((p) => p.team_id === id)).filter((p): p is PlottedPoint => !!p),
+    () => selectedIds.map((id) => pts.find((p) => pointKey(p) === id)).filter((p): p is PlottedPoint => !!p),
     [selectedIds, pts],
   );
 
@@ -554,7 +556,7 @@ export function TeamStyleQuadrant({
       // 四象限角标、tooltip 措辞)完全一致,以后只用改一处。
       const realPtsList = view.realPts ?? [];
       const selectedIndexes = realPtsList
-        .map((p, i) => (p.teamId != null && selectedIds.includes(p.teamId) ? i : -1))
+        .map((p, i) => (p.teamId != null && selectedIds.includes(String(p.teamId)) ? i : -1))
         .filter((i) => i >= 0);
       const labelled = new Set([
         ...outlierNames(realPtsList, mx, my),
@@ -619,14 +621,14 @@ export function TeamStyleQuadrant({
     if (!hit) return;
     consumedRef.current = true;
     setSelectedIds((prev) => {
-      if (prev.includes(hit.team_id)) return prev.filter((id) => id !== hit.team_id);
-      const next = [...prev, hit.team_id];
+      if (prev.includes(pointKey(hit))) return prev.filter((id) => id !== pointKey(hit));
+      const next = [...prev, pointKey(hit)];
       return next.length > 2 ? next.slice(next.length - 2) : next;
     });
   };
 
-  const home = pts.find((p) => p.team_id === homeTeamId);
-  const away = pts.find((p) => p.team_id === awayTeamId);
+  const home = pts.find((p) => (homeTeamId != null && p.team_id === homeTeamId));
+  const away = pts.find((p) => (awayTeamId != null && p.team_id === awayTeamId));
   const ariaSummary =
     `${view.title}象限图,共 ${pts.length} 支球队。` +
     `虚线是这 ${pts.length} 支球队${view.windowLabel}的平均值(${view.x_label} ${fmt(mx)},${view.y_label} ${fmt(my)}),` +
@@ -639,7 +641,7 @@ export function TeamStyleQuadrant({
       : "");
 
   const sideColor = (p: StylePoint) =>
-    p.team_id === homeTeamId ? resolved.home : p.team_id === awayTeamId ? resolved.away : c.ink;
+    (homeTeamId != null && p.team_id === homeTeamId) ? resolved.home : (awayTeamId != null && p.team_id === awayTeamId) ? resolved.away : c.ink;
 
   return (
     <section className={pageStyles.section}>
@@ -710,7 +712,7 @@ export function TeamStyleQuadrant({
               <div className={panelStyles.head}>
                 <div className={panelStyles.teams}>
                   {selected.map((p) => (
-                    <div key={p.team_id} className={panelStyles.team}>
+                    <div key={pointKey(p)} className={panelStyles.team}>
                       <TeamBadge teamName={p.name} crestUrl={p.crest_url} size={28} />
                       <span className={panelStyles.teamName} style={{ color: sideColor(p) }}>
                         {p.name}
@@ -735,7 +737,7 @@ export function TeamStyleQuadrant({
                     <tr>
                       <th scope="col">{view.title}</th>
                       {selected.map((p) => (
-                        <th key={p.team_id} scope="col">
+                        <th key={pointKey(p)} scope="col">
                           {p.name}
                         </th>
                       ))}
@@ -751,7 +753,7 @@ export function TeamStyleQuadrant({
                           const delta = p[axis] - m;
                           const good = axis === "y" && lowerY ? delta < 0 : delta > 0;
                           return (
-                            <td key={p.team_id} data-label={p.name}>
+                            <td key={pointKey(p)} data-label={p.name}>
                               <span className={panelStyles.value}>{fmt(p[axis])}</span>
                               <span className={panelStyles.rank}>
                                 第 {r.rank}/{r.total}

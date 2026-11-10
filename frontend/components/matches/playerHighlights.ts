@@ -60,8 +60,6 @@ type EventCategory = {
   countable?: boolean;
 };
 
-const km = (v: number) => `${(v / 1000).toFixed(1)} 公里`;
-const kmh = (v: number) => `${v.toFixed(1)} km/h`;
 const dp2 = (v: number) => v.toFixed(2);
 const int = (v: number) => String(Math.round(v));
 
@@ -70,41 +68,33 @@ const RANK_CATEGORIES: RankCategory[] = [
   { key: "chances_created", label: "创造机会", tone: "positive", priority: 10, min: 2 },
   { key: "expected_goals", label: "xG", tone: "positive", priority: 12, min: 0.3, format: dp2 },
   { key: "shots_on_target", label: "射正", tone: "positive", priority: 14, min: 2 },
-  { key: "dribbles_succeeded", label: "成功过人", tone: "positive", priority: 16, min: 2 },
-  { key: "touches_opp_box", label: "对方禁区触球", tone: "positive", priority: 20, min: 3 },
+  { key: "dribbles_completed", label: "成功过人", tone: "positive", priority: 16, min: 2 },
+  { key: "touches_in_opposition_box", label: "对方禁区触球", tone: "positive", priority: 20, min: 3 },
   { key: "tackles", label: "抢断", tone: "positive", priority: 22, min: 3 },
   { key: "interceptions", label: "拦截", tone: "positive", priority: 23, min: 3 },
   { key: "defensive_actions", label: "防守行动", tone: "positive", priority: 25, min: 5 },
-  { key: "duel_won", label: "对抗成功", tone: "positive", priority: 26, min: 4 },
-  { key: "aerials_won", label: "争顶成功", tone: "positive", priority: 27, min: 3 },
-  { key: "recoveries", label: "回追", tone: "positive", priority: 28, min: 5 },
+  { key: "duels_won", label: "对抗成功", tone: "positive", priority: 26, min: 4 },
+  { key: "aerial_duels_won", label: "争顶成功", tone: "positive", priority: 27, min: 3 },
+  { key: "ball_recoveries", label: "回追", tone: "positive", priority: 28, min: 5 },
   { key: "touches", label: "触球", tone: "positive", priority: 30, min: 20 },
-  { key: "accurate_passes", label: "成功传球", tone: "positive", priority: 32, min: 20 },
-  {
-    key: "physical_metrics_topspeed",
-    label: "最高速度", tone: "positive", priority: 34, min: 25, format: kmh,
-  },
-  {
-    key: "physical_metrics_distance_covered",
-    label: "跑动距离", tone: "positive", priority: 35, min: 5000, format: km,
-  },
-  { key: "big_chance_missed", label: "错失绝佳机会", tone: "negative", priority: 45, min: 2 },
-  { key: "dispossessed", label: "丢球", tone: "negative", priority: 50, min: 4 },
-  { key: "dribbled_past", label: "被过人", tone: "negative", priority: 52, min: 3 },
-  { key: "fouls", label: "犯规", tone: "negative", priority: 54, min: 3 },
+  { key: "passes_completed", label: "成功传球", tone: "positive", priority: 32, min: 20 },
+  { key: "big_chances_missed", label: "错失绝佳机会", tone: "negative", priority: 45, min: 2 },
+  { key: "times_dispossessed", label: "丢球", tone: "negative", priority: 50, min: 4 },
+  { key: "times_dribbled_past", label: "被过人", tone: "negative", priority: 52, min: 3 },
+  { key: "fouls_committed", label: "犯规", tone: "negative", priority: 54, min: 3 },
 ];
 
 /** 事件类目:发生即播报,不声称排名(来源只发非零项,池子永远凑不够)。 */
 const EVENT_CATEGORIES: EventCategory[] = [
   { key: "own_goals", label: "乌龙球", tone: "negative", priority: 1, min: 1, countable: true },
-  { key: "errors_led_to_goal", label: "失误导致丢球", tone: "negative", priority: 2, min: 1, countable: true },
-  { key: "missed_penalty", label: "射失点球", tone: "negative", priority: 3, min: 1, countable: true },
-  { key: "saved_penalties", label: "扑出点球", tone: "positive", priority: 4, min: 1, countable: true },
+  { key: "errors_leading_to_goal", label: "失误导致丢球", tone: "negative", priority: 2, min: 1, countable: true },
+  { key: "penalties_missed", label: "射失点球", tone: "negative", priority: 3, min: 1, countable: true },
+  { key: "penalties_saved", label: "扑出点球", tone: "positive", priority: 4, min: 1, countable: true },
   { key: "penalties_won", label: "赢得点球", tone: "positive", priority: 5, min: 1, countable: true },
-  { key: "conceded_penalties", label: "送点", tone: "negative", priority: 6, min: 1, countable: true },
-  { key: "clearance_off_the_line", label: "门线解围", tone: "positive", priority: 7, min: 1, countable: true },
-  { key: "last_man_tackle", label: "最后一人抢断", tone: "positive", priority: 8, min: 1, countable: true },
-  { key: "shots_woodwork", label: "击中门框", tone: "negative", priority: 9, min: 1, countable: true },
+  { key: "penalties_conceded", label: "送点", tone: "negative", priority: 6, min: 1, countable: true },
+  { key: "goal_line_clearances", label: "门线解围", tone: "positive", priority: 7, min: 1, countable: true },
+  { key: "last_defender_tackles", label: "最后一人抢断", tone: "positive", priority: 8, min: 1, countable: true },
+  { key: "shots_hit_woodwork", label: "击中门框", tone: "negative", priority: 9, min: 1, countable: true },
 ];
 
 function numeric(p: PlayerStat, key: NumericKey): number | null {
@@ -194,7 +184,7 @@ export function summarizePlayerShots(
   shots: readonly MatchReport["shots"][number][],
   player: PlayerStat
 ): ShotSummary | null {
-  const mine = shots.filter((s) => String(s.player_id) === String(player.player_id));
+  const mine = shots.filter((s) => s.participant_id != null && s.participant_id === player.participant_id);
   if (mine.length === 0) return null;
   let xgTotal = 0;
   let xgCounted = 0;

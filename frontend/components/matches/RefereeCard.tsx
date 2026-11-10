@@ -8,8 +8,8 @@
  * 一律直用,不自算阈值。配色纪律:判罚尺度没有好坏之分,统一中性色 + 文字
  * 表达方向,不套"绿=好/红=坏"(CLAUDE.md §11.2:红只用于真实错误)。
  *
- * 头像与球员头像同一套机制:用 referee_id 拼 FotMob CDN 的 playerimages
- * URL(PlayerAvatar,经站长明确批准的热链例外);国旗不展示图片(来源
+ * 头像使用后端提供的本场裁判同源 URL，不将裁判编号当作球员身份。
+ * 国旗不展示图片(来源
  * imgUrl 是 FotMob CDN 的 teamlogo 国旗,本站没有对应的同源代理路径,
  * 热链例外只覆盖人物头像)——国籍用文字如实展示。
  *
@@ -87,9 +87,10 @@ export function RefereeCard({ match }: { match: Match }) {
     <section className={styles.card} aria-label="裁判信息" data-testid="referee-card">
       <h3 className={styles.title}>裁判</h3>
       <div className={styles.person}>
-        {match.referee_id != null && (
+        {match.referee_avatar_url != null && (
           <PlayerAvatar
-            playerId={match.referee_id}
+            playerId={null}
+            avatarUrl={match.referee_avatar_url}
             playerName={name}
             size={40}
             decorative={false}

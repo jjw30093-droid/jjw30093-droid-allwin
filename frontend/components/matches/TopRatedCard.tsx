@@ -38,6 +38,7 @@ export function TopRatedCard({
     <div className={styles.card} data-testid="top-rated-card">
       <PlayerAvatar
         playerId={topRated.player_id}
+        avatarUrl={topRated.avatar_url}
         playerName={topRated.name}
         shirtNumber={topRated.shirt_number}
         size={48}

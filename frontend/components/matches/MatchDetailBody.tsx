@@ -18,6 +18,7 @@
  */
 
 import Link from "next/link";
+import { buildMatchHref } from "@/lib/match-links";
 import type {
   GetJson,
   MatchDetailResponse,
@@ -179,8 +180,8 @@ function DataGroup({
   const m = detail.match;
   const homeName = m.home.name;
   const awayName = m.away.name;
-  const homeTeamId = m.home.team_id;
-  const awayTeamId = m.away.team_id;
+  const homeTeamId = preview?.home_team_id ?? null;
+  const awayTeamId = preview?.away_team_id ?? null;
   // 两队各自最近 5 场(同联赛口径优先)射门分布,后端已算好、拼进
   // /analysis 的 chart_specs(backend/studio/bundle.py)——组件本身早就写好
   // (ChartWithSummary + SpecChart 的 shot_map_explorer 分支),此前只是没有
@@ -200,9 +201,9 @@ function DataGroup({
               <ProjectedLineupSection
                 homeName={homeName}
                 awayName={awayName}
-                lineupType={preview.lineups.lineup_type ?? null}
-                source={preview.lineups.source ?? null}
-                observedAt={preview.lineups.observed_at ?? null}
+                basis={preview.lineups.context.basis}
+                availability={preview.lineups.availability}
+                observedAt={preview.lineups.context.observed_at}
                 home={preview.lineups.home ?? null}
                 away={preview.lineups.away ?? null}
                 homeSidelined={preview.sidelined.home}
@@ -491,8 +492,8 @@ export function MatchDetailBody({
           返回箭头(components/SiteNav.tsx::BackArrow);这里只留上一场/下一场。 */}
       {(previousMatch || nextMatch) && (
         <nav className={styles.contextNav} aria-label="比赛上下文导航">
-          {previousMatch && <Link href={`/matches/${previousMatch.match_id}`}>上一场</Link>}
-          {nextMatch && <Link href={`/matches/${nextMatch.match_id}`}>下一场</Link>}
+          {previousMatch && <Link href={buildMatchHref(previousMatch)}>上一场</Link>}
+          {nextMatch && <Link href={buildMatchHref(nextMatch)}>下一场</Link>}
         </nav>
       )}
 

@@ -150,6 +150,7 @@ def _team_source_boards(
     conn: sqlite3.Connection, league_id: int, season: str | None,
     *,
     filtered: bool = False,
+    source_metadata: bool = False,
 ) -> list[dict]:
     """来源方球队榜(top 10/维度)。空维度整条不返回,不制造空卡片墙。
 
@@ -206,6 +207,7 @@ def _team_source_boards(
                         "team": _team_ref(r["Team_ID"], r["Team_Name"], display),
                         "rank": r["rank"],
                         "value": r["value"],
+                        **({'_source_metadata':r['extra_json']} if source_metadata else {}),
                         "team_color": colors.get(int(r["Team_ID"]))
                         if r["Team_ID"] is not None
                         else None,
@@ -372,6 +374,8 @@ def team_season_stats(
     *,
     recency: int | None = None,
     venue: str = "all",
+    include_ratios: bool = True,
+    source_metadata: bool = False,
 ) -> dict:
     """`recency`/`venue`(2026-09-14,球队数据页"最近 N 场/主客场"筛选新增,
     均可选)——两者都是默认值(`recency=None, venue="all"`)时行为与筛选
@@ -387,7 +391,7 @@ def team_season_stats(
             "season": season,
             "available_seasons": [],
             "rows": [],
-            "boards": _team_source_boards(conn, league_id, season, filtered=filtered),
+            "boards": _team_source_boards(conn, league_id, season, filtered=filtered, source_metadata=source_metadata),
         }
     season = _resolve_season(
         seasons,
@@ -447,7 +451,7 @@ def team_season_stats(
                ORDER BY s.Team_ID""",
             (league_id, season),
         ).fetchall()
-        ratios_by_team = _team_ratios(conn, league_id, season)
+        ratios_by_team = _team_ratios(conn, league_id, season) if include_ratios else {}
     else:
         # 现算路径:被创造 xG(avg_expected_goals_conceded)来自
         # fact_league_table 的赛季级 xg 档,没有逐场明细,筛选窗口下算不出
@@ -463,12 +467,12 @@ def team_season_stats(
         ratios_by_team = _team_ratios(
             conn, league_id, season,
             window_pairs=window_pairs, matches_played_by_team=matches_played_by_team,
-        )
+        ) if include_ratios else {}
 
     return {
         "season": season,
         "available_seasons": seasons,
-        "boards": _team_source_boards(conn, league_id, season, filtered=filtered),
+        "boards": _team_source_boards(conn, league_id, season, filtered=filtered, source_metadata=source_metadata),
         "rows": [
             {
                 "team": _team_ref(r["Team_ID"], None, display),
@@ -527,7 +531,8 @@ def _rank_by_value(prev_entries: list[dict], value, index: int) -> int:
 
 
 def player_leaderboards(
-    conn: sqlite3.Connection, league_id: int, season: str | None = None
+    conn: sqlite3.Connection, league_id: int, season: str | None = None,
+    *, source_metadata: bool = False,
 ) -> dict:
     seasons = _seasons_of(conn, "fact_season_player_stats", league_id)
     if not seasons:
@@ -540,7 +545,7 @@ def player_leaderboards(
     boards = []
     for stat_name, label_zh in FREE_PLAYER_BOARDS:
         rows = conn.execute(
-            """SELECT Player_ID, Player_Name, Team_ID, Team_Name, rank, value
+            """SELECT Player_ID, Player_Name, Team_ID, Team_Name, rank, value, extra_json
                FROM fact_season_player_stats
                WHERE League_ID=? AND Season=? AND stat_name=?
                ORDER BY rank LIMIT ?""",
@@ -564,6 +569,9 @@ def player_leaderboards(
                     else None,
                 }
             )
+            if source_metadata:
+                # Private projection input; never part of a legacy/public DTO.
+                entries[-1]['_source_metadata'] = r['extra_json']
         boards.append(
             {
                 "stat_name": stat_name,

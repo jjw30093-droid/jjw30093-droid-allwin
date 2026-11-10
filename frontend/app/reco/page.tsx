@@ -51,7 +51,6 @@ import { fmtUnitsAsYuan, STAKE_YUAN } from "@/lib/profit-curve";
 import { resultTallyText } from "@/lib/reco-labels";
 import styles from "./reco.module.css";
 
-export { SlipCard, slipTone };
 export type { Slip };
 
 type DailyResp = GetJson<"/api/v1/reco/daily">;

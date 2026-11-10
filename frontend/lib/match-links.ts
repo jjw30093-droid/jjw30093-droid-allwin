@@ -5,9 +5,26 @@
  * "/matches"(审计 B5 的一部分)。统一收口到这里。
  */
 
-/** 构造比赛详情 href;returnTo 为发起页的站内路径(含查询串)。 */
-export function buildMatchHref(matchId: number, returnTo?: string): string {
-  const base = `/matches/${matchId}`;
+import type { MatchSummary } from "@/lib/api-v1";
+
+/** URL 边界同时接受已发布的自有 UUID 和旧数字链接,不接受任意路径。 */
+export function parseMatchIdentity(value: string): string | null {
+  if (/^[1-9][0-9]*$/.test(value) && Number.isSafeInteger(Number(value))) return value;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    return value.toLowerCase();
+  }
+  return null;
+}
+
+/** 构造比赛详情 href;未同步自有 ID 的新比赛暂用旧链接。 */
+export function buildMatchHref(
+  match: number | string | Pick<MatchSummary, "match_id" | "canonical_match_id">,
+  returnTo?: string,
+): string {
+  const value = typeof match === "object" ? match.canonical_match_id ?? match.match_id : match;
+  const identity = parseMatchIdentity(String(value));
+  if (!identity) throw new Error("Invalid match identity");
+  const base = `/matches/${identity}`;
   return returnTo ? `${base}?from=${encodeURIComponent(returnTo)}` : base;
 }
 

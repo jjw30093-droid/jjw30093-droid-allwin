@@ -1,0 +1,22 @@
+{
+  "definition_version": "miaodi-observed-metrics.v3",
+  "metrics": [
+    {
+      "metric_code": "passes_per_defensive_action",
+      "entity_scope": "team",
+      "observation_kind": "observed_supplier_ratio",
+      "unit": "ratio",
+      "scalar_type": "finite_number_or_null",
+      "minimum": 0,
+      "missing_policy": "preserve_null",
+      "calculation_policy": "Preserve the captured ratio. Do not recompute from aggregate passes or tackles without the supplier's exact action and spatial definition.",
+      "comparison_policy": "Retain the feed series. Do not merge with ratios from another provider, zone definition, or action set.",
+      "prediction_policy": "Not an expected count; excluded from TM15 count prediction mappings.",
+      "private_binding": {
+        "provider": "opta",
+        "source_key": "ppda",
+        "definition_evidence": "CC metric_dim: entity_scope=team, verification_status=project_verified, analysis_eligible=1, unit=ratio"
+      }
+    }
+  ]
+}

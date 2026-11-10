@@ -17,6 +17,8 @@ import {
   ApiError,
   clientFetch,
   leagueSectionPath,
+  clientStandardPlayerSeasonPath,
+  clientStandardCompetitionSectionPath,
   type GetJson,
   type LeagueFixturesResponse,
   type PlayerQuadrantResponse,
@@ -65,12 +67,8 @@ async function loadSection(
   const { season, tableType, recency, venue } = opts;
   switch (kind) {
     case "standings": {
-      const qs = new URLSearchParams();
-      if (season) qs.set("season", season);
-      if (tableType && tableType !== "all") qs.set("table_type", tableType);
-      const q = qs.toString();
       const body = await clientFetch<StandingsResponse>(
-        `/api/v1/leagues/${leagueId}/standings${q ? `?${q}` : ""}`,
+        await clientStandardCompetitionSectionPath("standings", leagueId, { season, table_type: tableType }),
       );
       return { kind, body };
     }
@@ -80,16 +78,16 @@ async function loadSection(
       return {
         kind,
         body: await clientFetch<TeamStatsResponse>(
-          leagueSectionPath(kind, leagueId, { season, recency, venue }),
+          await clientStandardCompetitionSectionPath("team-stats", leagueId, { season, recency, venue }),
         ),
       };
     case "season-profile":
       return { kind, body: await clientFetch<SeasonProfile>(leagueSectionPath(kind, leagueId, { season })) };
     case "players": {
-      const body = await clientFetch<PlayersResponse>(leagueSectionPath(kind, leagueId, { season }));
+      const body = await clientFetch<PlayersResponse>(await clientStandardPlayerSeasonPath(kind, leagueId, { season }));
       // 象限图是补充内容,单独失败不拖垮球员榜(与 players/page.tsx 一致)
       const quadrant = await clientFetch<PlayerQuadrantResponse>(
-        leagueSectionPath("player-quadrant", leagueId, { season }),
+        await clientStandardPlayerSeasonPath("player-quadrant", body.competition_id, { season }),
       ).catch(() => null);
       return { kind, body, quadrant };
     }

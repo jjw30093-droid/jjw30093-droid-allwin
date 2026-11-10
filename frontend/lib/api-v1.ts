@@ -38,21 +38,25 @@ export type PatchJson<P extends keyof paths> = paths[P] extends { patch: infer G
 
 export type MeResponse = GetJson<"/api/v1/me">;
 export type LeagueInfo = GetJson<"/api/v1/leagues">[number];
-export type StandingsResponse = GetJson<"/api/v1/leagues/{league_id}/standings">;
+export type StandingsResponse = GetJson<"/api/v1/standard/competitions/{identity}/standings">;
 export type StandingRow = StandingsResponse["rows"][number];
 export type LeagueFixturesResponse = GetJson<"/api/v1/leagues/{league_id}/fixtures">;
-export type TeamStatsResponse = GetJson<"/api/v1/leagues/{league_id}/team-stats">;
+export type TeamStatsResponse = GetJson<"/api/v1/standard/competitions/{identity}/team-stats">;
 export type TeamSeasonStatRow = TeamStatsResponse["rows"][number];
+/** Existing match-style consumer stays explicitly on its legacy contract until migrated. */
+export type LegacyTeamStatsResponse = GetJson<"/api/v1/leagues/{league_id}/team-stats">;
+export type LegacyTeamSeasonStatRow = LegacyTeamStatsResponse["rows"][number];
+export type TeamMetricRow = TeamSeasonStatRow | LegacyTeamSeasonStatRow;
 export type TeamSourceBoard = TeamStatsResponse["boards"][number];
-export type PlayersResponse = GetJson<"/api/v1/leagues/{league_id}/players">;
-export type PlayerQuadrantResponse = GetJson<"/api/v1/leagues/{league_id}/player-quadrant">;
+export type PlayersResponse = GetJson<"/api/v1/standard/competitions/{identity}/players">;
+export type PlayerQuadrantResponse = GetJson<"/api/v1/standard/competitions/{identity}/player-quadrant">;
 export type PlayerQuadrantRow = PlayerQuadrantResponse["rows"][number];
 export type MatchListResponse = GetJson<"/api/v1/matches">;
 export type MatchSummary = MatchListResponse["matches"][number];
 export type WinProbability = NonNullable<MatchSummary["win_probability"]>;
 export type MatchDetailResponse = GetJson<"/api/v1/matches/{match_id}">;
-export type MatchReportResponse = GetJson<"/api/v1/matches/{match_id}/report">;
-export type MatchPreviewResponse = GetJson<"/api/v1/matches/{match_id}/preview">;
+export type MatchReportResponse = GetJson<"/api/v1/standard/matches/{identity}/report-v2">;
+export type MatchPreviewResponse = GetJson<"/api/v1/standard/matches/{identity}/preview">;
 export type MatchMarketCardsResponse = GetJson<"/api/v1/matches/{match_id}/markets">;
 export type MarketCard = MatchMarketCardsResponse["cards"][number];
 export type AuthMethodsResponse = GetJson<"/api/v1/auth/methods">;
@@ -84,6 +88,53 @@ export function leagueSectionPath(
   if (venue && venue !== "all") params.set("venue", venue);
   const qs = params.toString();
   return `/api/v1/leagues/${leagueId}/${kind}${qs ? `?${qs}` : ""}`;
+}
+
+/** Resolve existing website navigation through the published competition catalog.
+ * Only UUIDs enter the new data route; source IDs are not player/team references. */
+type StandardCompetitionCatalog = GetJson<"/api/v1/standard/competitions">;
+type PlayerSeasonKind = "players" | "player-quadrant";
+type CompetitionSectionKind = PlayerSeasonKind | "standings" | "team-stats";
+type CompetitionSectionOptions = { season?: string; table_type?: string; recency?: number; venue?: string };
+
+async function resolvedCompetitionSectionPath(
+  kind: CompetitionSectionKind, leagueId: string, opts: CompetitionSectionOptions | undefined,
+  loadCatalog: () => Promise<StandardCompetitionCatalog>,
+): Promise<string> {
+  let identity = leagueId;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(identity)) {
+    const catalog = await loadCatalog();
+    const competition = catalog.find((item) => item.website_path === `/league/${leagueId}`);
+    if (!competition) throw new ApiError(404, { code: "not_found", message: "赛事数据尚未接入", details: null });
+    identity = competition.competition_id;
+  }
+  const query = new URLSearchParams();
+  if (opts?.season) query.set("season", opts.season);
+  if (kind === "standings" && opts?.table_type && opts.table_type !== "all") query.set("table_type", opts.table_type);
+  if (kind === "team-stats") {
+    if (opts?.recency) query.set("recency", String(opts.recency));
+    if (opts?.venue && opts.venue !== "all") query.set("venue", opts.venue);
+  }
+  return `/api/v1/standard/competitions/${identity}/${kind}${query.size ? `?${query}` : ""}`;
+}
+
+export async function standardCompetitionSectionPath(kind: CompetitionSectionKind, leagueId: string, opts?: CompetitionSectionOptions): Promise<string> {
+  return resolvedCompetitionSectionPath(kind, leagueId, opts,
+    () => serverGet<StandardCompetitionCatalog>("/api/v1/standard/competitions"));
+}
+
+/** Separate entry point so server readers are absent from browser bundles. */
+export async function clientStandardCompetitionSectionPath(kind: CompetitionSectionKind, leagueId: string, opts?: CompetitionSectionOptions): Promise<string> {
+  return resolvedCompetitionSectionPath(kind, leagueId, opts,
+    () => clientFetch<StandardCompetitionCatalog>("/api/v1/standard/competitions"));
+}
+
+export async function standardPlayerSeasonPath(kind: PlayerSeasonKind, leagueId: string, opts?: { season?: string }): Promise<string> {
+  return standardCompetitionSectionPath(kind, leagueId, opts);
+}
+
+export async function clientStandardPlayerSeasonPath(kind: PlayerSeasonKind, leagueId: string, opts?: { season?: string }): Promise<string> {
+  return clientStandardCompetitionSectionPath(kind, leagueId, opts);
 }
 
 /* ── 服务端(RSC)读取:匿名公开数据 ───────────────────── */
@@ -245,7 +296,7 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
 
 export async function clientFetch<T>(
   path: string,
-  opts: { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown } = {},
+  opts: { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = opts.method ?? "GET";
   const headers: Record<string, string> = {};
@@ -255,6 +306,7 @@ export async function clientFetch<T>(
     method,
     headers,
     credentials: "include",
+    signal: opts.signal,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 204) return undefined as T;

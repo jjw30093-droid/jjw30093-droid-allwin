@@ -42,10 +42,10 @@ function PitchMarkings({ endId, neutral }: { endId: string; neutral: boolean }) 
   </g>;
 }
 
-export function Pitch({events,match,onSelect,selected,heat,network=false,shotMap=false,region,onRegion,onPair,onHeatRegion,players=[]}: {
+export function Pitch({events,match,onSelect,selected,heat,network=false,shotMap=false,region,onRegion,onPair,onHeatRegion,players=[],directionLabels=true}: {
   events:Event[];match:Bundle;onSelect:(e:Event)=>void;selected?:string;heat?:'density'|'touches';network?:boolean;shotMap?:boolean;
   region?:number[]|null;onRegion?:(r:number[])=>void;players?:string[];
-  onPair?:(a:string,b:string,n:number)=>void;onHeatRegion?:(region:number[])=>void;
+  onPair?:(a:string,b:string,n:number)=>void;onHeatRegion?:(region:number[])=>void;directionLabels?:boolean;
 }) {
   const uid=useId().replace(/:/g,'');const ref=useRef<SVGSVGElement>(null);
   const [start,setStart]=useState<number[]|null>(null);const [end,setEnd]=useState<number[]|null>(null);
@@ -83,7 +83,7 @@ export function Pitch({events,match,onSelect,selected,heat,network=false,shotMap
   };
   const active=start&&end?[Math.min(start[0],end[0]),Math.min(start[1],end[1]),Math.max(start[0],end[0]),Math.max(start[1],end[1])]:region;
   const names=new Map(match.players.map(p=>[p.id,p]));
-  return <svg ref={ref} viewBox="-5 -5 110 74" role="group" aria-label={heat ? heat === 'density' ? '事件分布热图' : '球上事件点图' : network ? '整场传球网络' : `${shotMap ? '射门图' : '事件战术板'}；主队向右进攻，客队向左进攻`} style={{width:'100%',display:'block',touchAction:onRegion?'none':'auto'}}
+  return <svg ref={ref} viewBox="-5 -5 110 74" role="group" aria-label={!directionLabels?'球场底图':heat ? heat === 'density' ? '事件分布热图' : '球上事件点图' : network ? '整场传球网络' : `${shotMap ? '射门图' : '事件战术板'}；主队向右进攻，客队向左进攻`} style={{width:'100%',display:'block',touchAction:onRegion?'none':'auto'}}
     onPointerDown={onRegion?e=>{ref.current?.setPointerCapture(e.pointerId);const p=xy(e);setStart(p);setEnd(p);}:undefined}
     onPointerMove={onRegion?e=>{if(start)setEnd(xy(e));}:undefined}
     onPointerCancel={onRegion?()=>{setStart(null);setEnd(null);}:undefined}
@@ -113,10 +113,10 @@ export function Pitch({events,match,onSelect,selected,heat,network=false,shotMap
       })}
     </>}
     <PitchMarkings endId={`${uid}-pitch-end`} neutral={shotMap}/>
-    {network ? <text x="50" y="68" textAnchor="middle" fill="#455b51" fontSize="1.8">本队进攻方向 →</text> : <g textAnchor="middle" fontSize="1.8">
+    {directionLabels&&(network ? <text x="50" y="68" textAnchor="middle" fill="#455b51" fontSize="1.8">本队进攻方向 →</text> : <g textAnchor="middle" fontSize="1.8">
       <text x="25" y="68" fill={AWAY}>← 客队进攻方向</text>
       <text x="75" y="68" fill={HOME}>主队进攻方向 →</text>
-    </g>}
+    </g>)}
     {network&&match.pass_edges.map((edge,i)=>{
       const a=match.pass_nodes.find(p=>p.id===edge.from_id&&p.team_id===edge.team_id),b=match.pass_nodes.find(p=>p.id===edge.to_id&&p.team_id===edge.team_id);
       if(!a||!b||a.x===null||a.y===null||b.x===null||b.y===null||!names.has(a.id)||!names.has(b.id))return null;

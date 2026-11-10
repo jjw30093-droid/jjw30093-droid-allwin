@@ -38,8 +38,9 @@ import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import { formatBeijingDateTime } from "./zh";
 import type { components } from "@/lib/api-types";
 
-type LineupSide = components["schemas"]["MatchPreviewLineupSideDTO"];
-type SidelinedPlayer = components["schemas"]["MatchPreviewSidelinedPlayerDTO"];
+type LineupSide = components["schemas"]["PreviewRosterSide"];
+type SidelinedPlayer = components["schemas"]["PreviewSidelinedPlayer"];
+type SidelinedSide = components["schemas"]["PreviewSidelinedSide"];
 
 const REASON_ZH: Record<string, string> = {
   injury: "伤病",
@@ -55,43 +56,25 @@ type LineupPresentation = {
   benchEmpty: string;
 };
 
-/** predicted 且 source==="enetpulse":2026-08-18 真实探测确认这类名单的键集
- * 里根本没有 subs 键(上游结构性不下发),不是"这次观测没带"。 */
-const BENCH_EMPTY_ENETPULSE =
-  "这类预测名单只有首发 11 人，本来就不带替补。开赛前会再拿一次。";
-
-/** 其余类型(含 lastStarting11,它平时是带替补的,真实探测与仓内 fixture
- * 都是 9 人)→ 这次观测确实没带,不是结构性缺失。 */
 const BENCH_EMPTY_GENERIC = "这次只拿到首发，没有替补。开赛前会再拿一次。";
 
 /** 三个未确认分支(predicted/lastStarting11/类型未知)notice 共同的收尾句,
  * 抽到板块底部只渲染一次,避免同一句"请以官方公布为准"重复三遍。 */
 const OFFICIAL_NOTE = "官方名单一般在开赛前一小时出，到时以官方为准。";
 
-/**
- * lineup_type → 展示文案。三个互斥分支,不能合并成一个"确认/未确认"布尔值——
- * `predicted`(第三方对本场的预测)和 `lastStarting11`(上一场真实首发)是两种
- * 完全不同的数据来源,共用一句"数据源给的是两队上一场的首发"会把预测说成事实。
- * `confirmed` 分支从未在真实数据里出现过,文案不承诺"稍后会自动变成这个状态"。
- *
- * benchEmpty 由 `source` 是否为 "enetpulse" 单独判定,**不能**用
- * `lineupType==="predicted"` 代替——vendor 名是 `source` 的属性,`lineup_type`
- * 只是名单的性质(预测/上一场首发),哪天换了预测供应商但 lineup_type 仍是
- * "predicted",用 lineup_type 判定就会对用户说假话(声称"Enetpulse"其实是
- * 别家给的)。
- */
-function describeLineup(lineupType: string | null, source: string | null): LineupPresentation {
-  const benchEmpty = source === "enetpulse" ? BENCH_EMPTY_ENETPULSE : BENCH_EMPTY_GENERIC;
-  if (lineupType === "confirmed") {
+/** 网站契约区分预测、历史首发和来源自称已确认；替补覆盖单独呈现。 */
+function describeLineup(basis: string | null): LineupPresentation {
+  const benchEmpty = BENCH_EMPTY_GENERIC;
+  if (basis === "source_reported_confirmed") {
     return {
       confirmed: true,
-      tag: "已确认首发",
-      notice: "数据源已更新为本场官方名单。",
-      pitchCaption: "已确认首发",
+      tag: "来源标注已确认",
+      notice: "来源将这份名单标注为已确认，本站尚未独立核实其官方性质。",
+      pitchCaption: "来源标注已确认阵容",
       benchEmpty,
     };
   }
-  if (lineupType === "predicted") {
+  if (basis === "third_party_prediction") {
     return {
       confirmed: false,
       tag: "预测阵容 · 第三方预测",
@@ -100,7 +83,7 @@ function describeLineup(lineupType: string | null, source: string | null): Lineu
       benchEmpty,
     };
   }
-  if (lineupType === "lastStarting11") {
+  if (basis === "previous_match") {
     return {
       confirmed: false,
       tag: "预计首发 · 基于上一场",
@@ -126,8 +109,9 @@ function toPitchSide(side: LineupSide | null, name: string): VerticalPitchSide {
     name,
     formation: side?.formation ?? null,
     players: (side?.starters ?? []).map((p) => ({
-      key: String(p.id),
-      avatarId: p.id,
+      key: p.record_id,
+      avatarId: null,
+      avatarUrl: p.avatar_url,
       name: p.name,
       shirtNumber: p.shirt_number,
       x: p.pos_x,
@@ -156,6 +140,7 @@ function TeamColumn({
    * 按纯名单如实列出(不猜站位)。 */
   showStartersAsList: boolean;
 }) {
+  benchEmpty = side?.bench_availability === "not_supplied_by_prediction_feed" ? "该预测来源未提供替补名单。" : benchEmpty;
   return (
     <div className={styles.teamCol}>
       <h3 className={styles.teamTitle}>
@@ -172,8 +157,8 @@ function TeamColumn({
               拼头像 URL,退回不渲染头像(文字名称仍然照常显示)。 */}
           <p className={styles.coachRow}>
             <span className={styles.coachLabel}>主教练</span>
-            {side.coach?.id != null && (
-              <PlayerAvatar playerId={side.coach.id} playerName={side.coach.name} size={24} />
+            {side.coach?.avatar_url != null && (
+              <PlayerAvatar playerId={null} avatarUrl={side.coach.avatar_url} playerName={side.coach.name} size={24} />
             )}
             <span className={styles.coachName} data-empty={side.coach == null}>
               {side.coach?.name ?? "本条快照未包含主教练信息"}
@@ -187,7 +172,7 @@ function TeamColumn({
           ) : showStartersAsList ? (
             <ul className={styles.plainList}>
               {side.starters.map((p) => (
-                <li key={p.id} className={styles.plainRow}>
+                <li key={p.record_id} className={styles.plainRow}>
                   {p.shirt_number ? `${p.shirt_number} ` : ""}
                   {p.name}
                 </li>
@@ -200,8 +185,8 @@ function TeamColumn({
               <summary className={styles.benchSummary}>替补席 {side.subs.length} 人</summary>
               <ul className={styles.benchList}>
                 {side.subs.map((p) => (
-                  <li key={p.id} className={styles.benchRow}>
-                    <PlayerAvatar playerId={p.id} playerName={p.name} shirtNumber={p.shirt_number} size={24} />
+                  <li key={p.record_id} className={styles.benchRow}>
+                    <PlayerAvatar playerId={null} avatarUrl={p.avatar_url} playerName={p.name} shirtNumber={p.shirt_number} size={24} />
                     <span className={`${styles.benchNo} num`}>{p.shirt_number ?? "—"}</span>
                     <span className={styles.benchName}>{p.name}</span>
                   </li>
@@ -225,19 +210,11 @@ function TeamColumn({
   );
 }
 
-function SidelinedCard({
-  teamName,
-  players,
-  observedAt,
-  hasSnapshot,
-}: {
-  teamName: string;
-  players: SidelinedPlayer[];
-  observedAt: string;
-  /** 该场是否曾被采集过(阵容/伤停快照耦合写入)——为 false 时"0 人"是
-   * "从未采集",不能显示成"确认无伤停",两者是完全不同的诚实结论。 */
-  hasSnapshot: boolean;
-}) {
+function SidelinedCard({teamName,observation}:{teamName:string;observation:SidelinedSide}) {
+  const players=observation.players;
+  const hasSnapshot=observation.availability==="observed";
+  const observedAt=observation.observed_at ? formatBeijingDateTime(observation.observed_at) ?? observation.observed_at : "时间未知";
+
   return (
     <div className={styles.card}>
       <div className={styles.cardHead}>
@@ -249,18 +226,20 @@ function SidelinedCard({
           {hasSnapshot ? `${players.length} 人` : "暂无数据"}
         </span>
       </div>
-      {!hasSnapshot ? (
+      {observation.availability === "invalid" ? (
+        <p className={styles.emptyInline}>伤停快照格式异常，暂不展示。</p>
+      ) : !hasSnapshot ? (
         <p className={styles.emptyInline}>
           该场暂无伤停快照采集记录,开赛前会再次采集——这不是「确认无伤停」。
         </p>
       ) : players.length === 0 ? (
         <p className={styles.emptyInline}>
-          {observedAt} 查的时候这队没有伤停。是真没有，不是没查到。
+          {observedAt} 的快照中名单为空，本站未独立确认当前伤停情况。
         </p>
       ) : (
         <ul className={styles.sidelinedList}>
           {players.map((p) => (
-            <li key={p.id} className={styles.sidelinedRow}>
+            <li key={p.record_id} className={styles.sidelinedRow}>
               <span className={styles.sidelinedName}>{p.name}</span>
               <span className={styles.reason} data-reason={p.reason ?? undefined}>
                 {(p.reason && REASON_ZH[p.reason]) ?? p.reason ?? "—"}
@@ -279,8 +258,8 @@ function SidelinedCard({
 export function ProjectedLineupSection({
   homeName,
   awayName,
-  lineupType,
-  source,
+  basis,
+  availability,
   observedAt,
   home,
   away,
@@ -289,26 +268,25 @@ export function ProjectedLineupSection({
 }: {
   homeName: string;
   awayName: string;
-  lineupType: string | null;
+  basis: string | null;
+  availability: "observed" | "not_collected" | "invalid";
   /** bronze_fm_lineup_snap 的 provider 口径(如 "enetpulse"/"lastStartingLineups")
    * ——决定替补空态该说哪句话,详见 describeLineup 的 benchEmpty 注释。 */
-  source: string | null;
+
   observedAt: string | null;
   home: LineupSide | null;
   away: LineupSide | null;
-  homeSidelined: SidelinedPlayer[];
-  awaySidelined: SidelinedPlayer[];
+  homeSidelined: SidelinedSide;
+  awaySidelined: SidelinedSide;
 }) {
-  const { confirmed, tag, notice, pitchCaption, benchEmpty } = describeLineup(lineupType, source);
+  const { confirmed, tag, notice, pitchCaption, benchEmpty } = describeLineup(basis);
   // 赛程相关时间戳按北京时间展示(CLAUDE.md §11.2)。formatBeijingDateTime 是
   // 纯算术(固定 +8,不依赖 Intl/ICU),SSR 与水合结果一致;date_only 或非法
   // 输入返回 null,此时退回原始字符串而不是伪造一个北京时间。刻意不做相对时间
   // ("N 分钟前")——那需要渲染期 now,会造成 SSR/水合不一致。
   const observedBeijing = observedAt ? formatBeijingDateTime(observedAt) : null;
   const observedLabel = observedBeijing ? `${observedBeijing}(北京时间)` : (observedAt ?? "—");
-  // 阵容/伤停快照耦合写入(见 backend/queries/lineup_preview.py)——两队都没
-  // 阵容快照时,伤停的"0 人"也不是"确认无伤停",而是这场从未被采集过。
-  const hasSnapshot = home != null || away != null;
+  // 伤停拥有独立采集状态，不能由阵容是否存在推断。
   // 窗口放宽到 72h 后(CLAUDE.md §6.3),远端比赛的第一枪常常拿到空阵容——
   // §6.3 明确"这一枪拿不到数据属正常,不是失败告警"。两侧首发都是 0 人时,
   // describeLineup(null) 的"数据源未标注这份名单的类型"是在对一份不存在的
@@ -328,7 +306,7 @@ export function ProjectedLineupSection({
           预计阵容
         </h2>
 
-        {!home && !away ? (
+        {availability === "invalid" ? (<p className={pageStyles.emptyText}>阵容快照格式异常，暂不展示。</p>) : availability === "not_collected" ? (
           <p className={pageStyles.emptyText}>
             该场暂无阵容快照。数据源尚未提供两队的上一场首发,开赛前会再次采集。
           </p>
@@ -400,15 +378,11 @@ export function ProjectedLineupSection({
         <div className={styles.sidelinedGrid}>
           <SidelinedCard
             teamName={homeName}
-            players={homeSidelined}
-            observedAt={observedLabel}
-            hasSnapshot={hasSnapshot}
+            observation={homeSidelined}
           />
           <SidelinedCard
             teamName={awayName}
-            players={awaySidelined}
-            observedAt={observedLabel}
-            hasSnapshot={hasSnapshot}
+            observation={awaySidelined}
           />
         </div>
         <p className={styles.footNote}>

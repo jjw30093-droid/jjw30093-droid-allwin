@@ -17,6 +17,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from backend.content_status import load_content_status, public_status_for_match
+from backend.media.match_portraits import referee_portrait_url
 from backend.queries import freshness as q_freshness
 from backend.queries import league_stats as q_league_stats
 from backend.queries import market_cards as q_market_cards
@@ -35,6 +36,8 @@ from backend.queries.leagues import (
 
 from .cache_policy import PUBLIC_CACHE, PUBLIC_CACHE_SHORT
 from .data_access import data_access_ctx, require_league_access
+from .match_identity import LegacyMatchId
+from .standard_identity import project_match_ids
 from .deps import NO_STORE, AuthContext, core_ro, odds_ro, platform_ro
 from .schemas import (
     AnalysisBundleDTO,
@@ -170,7 +173,7 @@ def league_fixtures(
     result = q_matches.list_matches(
         conn, {league_id}, status=status, season=season, limit=limit, offset=offset
     )
-    result["matches"] = [_with_content_status(match) for match in result["matches"]]
+    result["matches"] = project_match_ids([_with_content_status(match) for match in result["matches"]])
     if not result["matches"]:
         result["empty_reason"] = "该联赛该赛季暂无赛程数据"
     return {
@@ -415,7 +418,7 @@ def list_matches(
         limit=limit,
         offset=offset,
     )
-    result["matches"] = [_with_content_status(match) for match in result["matches"]]
+    result["matches"] = project_match_ids([_with_content_status(match) for match in result["matches"]])
     # D8:逐场标注赔率覆盖档位;full_set/legacy_set 已在上面算过一次并复用,
     # 不重新查(2026-08-19 起不再是"每请求批量算一次"的独立第二次调用)。
     #
@@ -460,7 +463,7 @@ def list_matches(
 
 @router.get("/matches/{match_id}", response_model=MatchDetailResponse)
 def match_detail(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     conn=Depends(core_ro),
     conn_platform=Depends(platform_ro),
@@ -472,7 +475,8 @@ def match_detail(
         raise HTTPException(status_code=404, detail="比赛不存在")
     require_league_access(ctx, m["league_id"], m)
     response.headers["Cache-Control"] = PUBLIC_CACHE_SHORT if m["league_id"] in ANON_CACHEABLE else NO_STORE
-    m = _with_content_status(m)
+    m = project_match_ids([_with_content_status(m)])[0]
+    m['referee_avatar_url'] = referee_portrait_url(m['canonical_match_id'], m.get('referee_id'))
     # 单场端点用单场版查询(2026-08-19 性能修复):odds_coverage_sets()/
     # odds_last_observed_by_match() 是给列表路由"一次算全部、避免 N+1"用的,
     # 这里只需要这一场比赛的结果,不该为它遍历全站 737K 条快照——
@@ -510,7 +514,7 @@ def match_detail(
 
 @router.get("/matches/{match_id}/analysis", response_model=AnalysisBundleDTO)
 def match_analysis(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     conn_core=Depends(core_ro),
     conn_platform=Depends(platform_ro),
@@ -538,7 +542,7 @@ def match_analysis(
 
 @router.get("/matches/{match_id}/odds", response_model=MatchOddsResponse)
 def match_odds(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     conn_core=Depends(core_ro),
     conn_odds=Depends(odds_ro),
@@ -631,7 +635,7 @@ def _legacy_odds_fallback(conn_odds, match_id: int,
 
 @router.get("/matches/{match_id}/report", response_model=MatchReportResponse)
 def match_report(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     conn=Depends(core_ro),
     ctx: AuthContext = Depends(data_access_ctx),
@@ -658,7 +662,7 @@ def match_report(
 
 @router.get("/matches/{match_id}/preview", response_model=MatchPreviewResponse)
 def match_preview(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     conn_core=Depends(core_ro),
     conn_odds=Depends(odds_ro),
@@ -683,7 +687,7 @@ def match_preview(
 
 @router.get("/matches/{match_id}/data-profile", response_model=MatchDataProfileResponse)
 def match_data_profile(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     # "recent"(默认,2026-10-02):本赛季联赛球队里排名,每队最近 N 场不分主客场
     venue: Literal["recent", "same_venue", "all"] = "recent",
@@ -725,7 +729,7 @@ def match_data_profile(
 
 @router.get("/matches/{match_id}/markets", response_model=MatchMarketCardsResponse)
 def match_markets(
-    match_id: int,
+    match_id: LegacyMatchId,
     response: Response,
     conn_core=Depends(core_ro),
     conn_platform=Depends(platform_ro),

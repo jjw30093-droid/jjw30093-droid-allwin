@@ -10,6 +10,7 @@ httpx
 argon2-cffi
 dashscope
 cryptography
+reportlab>=4.4,<6
 
 # dev/test
 pytest

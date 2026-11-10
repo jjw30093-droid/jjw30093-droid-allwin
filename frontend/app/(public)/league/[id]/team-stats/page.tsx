@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
 import { leagueSectionMetadata } from "@/lib/league-metadata";
-import { leagueSectionPath, serverGetOptional, type TeamStatsResponse } from "@/lib/api-v1";
+import { standardCompetitionSectionPath, serverGetOptional, type TeamStatsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { TeamStatsSections } from "@/components/league/TeamStatsSections";
 import { TeamQuadrantChart } from "@/components/league/TeamQuadrantChart";
@@ -50,7 +50,7 @@ export default async function TeamStatsPage({
   let data: TeamStatsResponse | null;
   try {
     data = await serverGetOptional<TeamStatsResponse>(
-      leagueSectionPath("team-stats", id, { season: seasonParam, recency, venue })
+      await standardCompetitionSectionPath("team-stats", id, { season: seasonParam, recency, venue })
     );
   } catch {
     return (

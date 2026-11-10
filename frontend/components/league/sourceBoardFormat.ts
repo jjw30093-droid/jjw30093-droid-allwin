@@ -15,29 +15,21 @@
 import type { TeamSourceBoard } from "@/lib/api-v1";
 
 /** 按来源自报的 stat_format / stat_decimals 格式化,不按指标名硬编码小数位。 */
-export function formatBoardValue(
-  value: number | null | undefined,
-  format: string | null | undefined,
-  decimals: number | null | undefined
-): string | null {
+export function formatBoardValue(value: number | null | undefined, unit: string | null | undefined, decimals: number | null | undefined): string | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  switch (format) {
-    case "percent":
-      return `${value.toFixed(decimals ?? 1)}%`;
-    case "meter":
-      // 场均跑动是 118540.1 米这种量级,按米原样显示没人读得出来
-      return `${(value / 1000).toFixed(1)} km`;
-    case "number":
-      return String(Math.round(value));
-    case "fraction":
-      return value.toFixed(decimals ?? 1);
-    default:
-      return value.toFixed(decimals ?? 0);
-  }
+  if (unit === "metres") return `${(value / 1000).toFixed(1)} km`;
+  if (unit === "percent") return `${value.toFixed(decimals ?? 1)}%`;
+  return value.toFixed(decimals ?? (Number.isInteger(value) ? 0 : 1));
 }
 
 export function boardTitle(board: TeamSourceBoard): string {
-  if (board.per_match === true) return `${board.label_zh} · 场均`;
-  if (board.per_match === false) return `${board.label_zh} · 赛季合计`;
-  return board.label_zh;
+  const bases = new Set(board.entries.map((e) => e.aggregation));
+  if (bases.size !== 1) return board.label_zh;
+  switch ([...bases][0]) {
+    case "per_match": return `${board.label_zh} · 场均`;
+    case "season_total": return `${board.label_zh} · 赛季合计`;
+    case "per_90_minutes": return `${board.label_zh} · 每90分钟`;
+    case "mean": return `${board.label_zh} · 平均`;
+    default: return board.label_zh;
+  }
 }

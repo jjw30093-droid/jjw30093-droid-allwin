@@ -8,7 +8,7 @@
  * - 目标球队自身缺值时排名为 null(不是"排最后")。
  */
 
-import type { TeamSeasonStatRow } from "@/lib/api-v1";
+import type { TeamMetricRow as TeamSeasonStatRow } from "@/lib/api-v1";
 
 /** 小样本门槛。挂在**指标**上而不是视角上:噪声下限是指标本身的属性——
  *  "定位球 xG 占比"在赛季累计定位球 xG 只有 0.4 的队身上是噪声,它出现在
@@ -125,8 +125,8 @@ export function sampleText(m: { sample?: SampleRule }, windowScale = 1): string 
 
 /** 选中态与排名的身份键。不能用对象引用:ECharts 在 setOption 里会克隆
  *  data[i] 的嵌套对象,params.data.pt 与原始对象引用不相等。 */
-export function teamKey(t: { team_id?: number | null; name: string }): string {
-  return t.team_id != null ? `id:${t.team_id}` : `name:${t.name}`;
+export function teamKey(t: { team_id?: string | number | null; record_id?: string; name: string }): string {
+  return t.team_id != null ? `id:${t.team_id}` : t.record_id ? `record:${t.record_id}` : `name:${t.name}`;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);

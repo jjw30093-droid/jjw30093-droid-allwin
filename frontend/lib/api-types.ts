@@ -138,6 +138,227 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/standard/matches/{identity}/team-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Team Statistics */
+        get: operations["standard_team_statistics_api_v1_standard_matches__identity__team_statistics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/matches/{identity}/player-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Player Statistics */
+        get: operations["standard_player_statistics_api_v1_standard_matches__identity__player_statistics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/matches/{identity}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Report */
+        get: operations["standard_report_api_v1_standard_matches__identity__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/matches/{identity}/report-v2": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Report V2 */
+        get: operations["standard_report_v2_api_v1_standard_matches__identity__report_v2_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/competitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Competitions */
+        get: operations["standard_competitions_api_v1_standard_competitions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/competitions/{identity}/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Players */
+        get: operations["standard_players_api_v1_standard_competitions__identity__players_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/competitions/{identity}/player-quadrant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Player Quadrant */
+        get: operations["standard_player_quadrant_api_v1_standard_competitions__identity__player_quadrant_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/competitions/{identity}/standings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Standings */
+        get: operations["standard_standings_api_v1_standard_competitions__identity__standings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/competitions/{identity}/team-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Team Season */
+        get: operations["standard_team_season_api_v1_standard_competitions__identity__team_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/matches/{identity}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Match Preview */
+        get: operations["standard_match_preview_api_v1_standard_matches__identity__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standard/matches/{identity}/data-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standard Match Profile */
+        get: operations["standard_match_profile_api_v1_standard_matches__identity__data_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/visualization/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Matches */
+        get: operations["matches_api_v1_studio_visualization_matches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/visualization/matches/{match_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Match */
+        get: operations["match_api_v1_studio_visualization_matches__match_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/leagues": {
         parameters: {
             query?: never;
@@ -526,6 +747,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media/team-crests/{digest}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Team Crest Asset */
+        get: operations["team_crest_asset_api_v1_media_team_crests__digest__png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/media/team-crests/{provider}/{provider_team_id}.png": {
         parameters: {
             query?: never;
@@ -535,6 +773,57 @@ export interface paths {
         };
         /** Team Crest */
         get: operations["team_crest_api_v1_media_team_crests__provider___provider_team_id__png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/match-portraits/{identity}/referee.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Match Referee Portrait */
+        get: operations["match_referee_portrait_api_v1_media_match_portraits__identity__referee_png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/player-avatars/{identity}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Player Avatar */
+        get: operations["player_avatar_api_v1_media_player_avatars__identity__png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/prematch-portraits/{identity}/{record}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prematch Person Portrait */
+        get: operations["prematch_person_portrait_api_v1_media_prematch_portraits__identity___record__png_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1289,6 +1578,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/studio/prediction-fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Studio Prediction Fixtures */
+        get: operations["studio_prediction_fixtures_api_v1_studio_prediction_fixtures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/predictions/{source_match_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Studio Prediction */
+        get: operations["studio_prediction_api_v1_studio_predictions__source_match_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/studio/matches/{match_id}/bundle": {
         parameters: {
             query?: never;
@@ -1298,6 +1621,57 @@ export interface paths {
         };
         /** Match Bundle */
         get: operations["match_bundle_api_v1_studio_matches__match_id__bundle_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Research */
+        post: operations["import_research_api_v1_studio_research_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Research Drafts */
+        get: operations["list_research_drafts_api_v1_studio_research_drafts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/drafts/{draft_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Research History */
+        get: operations["research_history_api_v1_studio_research_drafts__draft_id__history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1390,6 +1764,212 @@ export interface paths {
         get: operations["download_export_api_v1_studio_exports__job_id__download_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/predictions/{source_match_id}/comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Market Comparison */
+        get: operations["market_comparison_api_v1_studio_predictions__source_match_id__comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Research Inbox */
+        get: operations["research_inbox_api_v1_studio_research_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Weekly Research */
+        get: operations["weekly_research_api_v1_studio_research_weekly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/import-prematch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Prematch */
+        post: operations["import_prematch_api_v1_studio_research_import_prematch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/import-round": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Round */
+        post: operations["import_round_api_v1_studio_research_import_round_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/analysis-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Access */
+        get: operations["my_access_api_v1_me_analysis_access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/analysis-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** User Access */
+        get: operations["user_access_api_v1_admin_users__user_id__analysis_access_get"];
+        put?: never;
+        /** Update Access */
+        post: operations["update_access_api_v1_admin_users__user_id__analysis_access_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/analysis-access/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Access History */
+        get: operations["access_history_api_v1_admin_users__user_id__analysis_access_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Articles */
+        get: operations["articles_api_v1_analysis_articles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/articles/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Article */
+        get: operations["article_api_v1_analysis_articles__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/drafts/{draft_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Publication State */
+        get: operations["publication_state_api_v1_studio_research_drafts__draft_id__publication_get"];
+        put?: never;
+        /** Publish */
+        post: operations["publish_api_v1_studio_research_drafts__draft_id__publication_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studio/research/drafts/{draft_id}/retract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retract */
+        post: operations["retract_api_v1_studio_research_drafts__draft_id__retract_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1766,6 +2346,31 @@ export interface components {
             /** Users */
             users: components["schemas"]["AdminUserItem"][];
         };
+        /** AnalysisAccessDTO */
+        AnalysisAccessDTO: {
+            /**
+             * Product
+             * @constant
+             */
+            product: "analysis";
+            /** Allowed */
+            allowed: boolean;
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "none" | "account_disabled" | "membership" | "trial";
+            /** Checked At */
+            checked_at: string;
+            /** Trial Ends At */
+            trial_ends_at: string | null;
+            /** Membership Ends At */
+            membership_ends_at: string | null;
+            /** Membership Revision */
+            membership_revision: number;
+            /** Membership Status */
+            membership_status: ("active" | "revoked") | null;
+        };
         /**
          * AnalysisBundleDTO
          * @description GET /matches/{id}/analysis:公开投影(无 subtitle_cues)。
@@ -1838,6 +2443,58 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ArticleDetail */
+        ArticleDetail: {
+            /** Slug */
+            slug: string;
+            /** Publication Version */
+            publication_version: number;
+            /** Title */
+            title: string;
+            /** Excerpt */
+            excerpt: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prematch" | "postmatch" | "round";
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "public" | "member";
+            /** Published At */
+            published_at: string;
+            content: components["schemas"]["PublishedBody"];
+        };
+        /** ArticleList */
+        ArticleList: {
+            /** Articles */
+            articles: components["schemas"]["ArticleSummary"][];
+        };
+        /** ArticleSummary */
+        ArticleSummary: {
+            /** Slug */
+            slug: string;
+            /** Publication Version */
+            publication_version: number;
+            /** Title */
+            title: string;
+            /** Excerpt */
+            excerpt: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prematch" | "postmatch" | "round";
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "public" | "member";
+            /** Published At */
+            published_at: string;
+        };
         /** AuditLogItem */
         AuditLogItem: {
             /** Id */
@@ -1866,6 +2523,52 @@ export interface components {
         AuthMethodsDTO: {
             /** Wechat Enabled */
             wechat_enabled: boolean;
+        };
+        /** Bundle */
+        Bundle: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "match-visualization.v1";
+            match: components["schemas"]["Match"];
+            /** Version */
+            version: string;
+            /** Updated At */
+            updated_at: string;
+            /** Players */
+            players: components["schemas"]["Player"][];
+            /** Events */
+            events: components["schemas"]["Event"][];
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Event Total */
+            event_total: number;
+            /** Has More */
+            has_more: boolean;
+            /** Excluded Events */
+            excluded_events: number;
+            /** Markers */
+            markers: components["schemas"]["Event"][];
+            /** Pass Edges */
+            pass_edges: components["schemas"]["Edge"][];
+            /** Pass Nodes */
+            pass_nodes: components["schemas"]["Node"][];
+            /** Player Stats */
+            player_stats: components["schemas"]["Stat"][];
+            /** Momentum */
+            momentum: components["schemas"]["Momentum"][];
+            /** Pv Teams */
+            pv_teams: components["schemas"]["ValueRow"][];
+            /** Pv Players */
+            pv_players: components["schemas"]["ValueRow"][];
+            /** Pv Observed At */
+            pv_observed_at: string | null;
+            capabilities: components["schemas"]["Capabilities"];
+            /** Notes */
+            notes: string[];
         };
         /** BundleChartSpec */
         BundleChartSpec: {
@@ -1961,6 +2664,46 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** Capabilities */
+        Capabilities: {
+            /** Events */
+            events: boolean;
+            /** Shots */
+            shots: boolean;
+            /** Passes */
+            passes: boolean;
+            /** Player Stats */
+            player_stats: boolean;
+            /** Momentum */
+            momentum: boolean;
+            /** Pv */
+            pv: boolean;
+        };
+        /** Catalog */
+        Catalog: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "match-visualization.v1";
+            /** Matches */
+            matches: components["schemas"]["Match"][];
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Has More */
+            has_more: boolean;
+        };
+        /** Coverage */
+        Coverage: {
+            /** Expected */
+            expected: number;
+            /** Available */
+            available: number;
+            /** Complete */
+            complete: boolean;
+        };
         /** CreateDraftBody */
         CreateDraftBody: {
             /** Match Id */
@@ -1999,6 +2742,72 @@ export interface components {
         DraftStatusBody: {
             /** Status */
             status: string;
+            /** Expected Revision */
+            expected_revision?: number | null;
+        };
+        /** Edge */
+        Edge: {
+            /** From Id */
+            from_id: string;
+            /** To Id */
+            to_id: string;
+            /** Team Id */
+            team_id: string;
+            /** Count */
+            count: number;
+        };
+        /** Event */
+        Event: {
+            /** Id */
+            id: string;
+            /** Team Id */
+            team_id: string | null;
+            /** Player Id */
+            player_id: string | null;
+            /** Player Name */
+            player_name: string | null;
+            /** Period */
+            period: number;
+            /** Minute */
+            minute: number;
+            /** Second */
+            second: number;
+            /** Clock */
+            clock: string;
+            /** Elapsed */
+            elapsed: number | null;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Success */
+            success: boolean | null;
+            /** X */
+            x: number | null;
+            /** Y */
+            y: number | null;
+            /** End X */
+            end_x: number | null;
+            /** End Y */
+            end_y: number | null;
+            /** Key Pass */
+            key_pass: boolean;
+            /** Assist */
+            assist: boolean;
+            /** Xg */
+            xg: number | null;
+            /** Xgot */
+            xgot: number | null;
+            /** Goal */
+            goal: boolean;
+            /** Own Goal */
+            own_goal: boolean;
+            /** Penalty */
+            penalty: boolean | null;
+            /** Pv Value */
+            pv_value: number | null;
+            /** Pv Added */
+            pv_added: number | null;
         };
         /** ExportBody */
         ExportBody: {
@@ -2084,10 +2893,66 @@ export interface components {
             /** Ends At */
             ends_at: string;
         };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** HealthzDTO */
         HealthzDTO: {
             /** Ok */
             ok: boolean;
+        };
+        /** ImportPrematchBody */
+        ImportPrematchBody: {
+            /** Match Id */
+            match_id: string;
+        };
+        /** ImportResearchBody */
+        ImportResearchBody: {
+            /** Snapshot Id */
+            snapshot_id: string;
+        };
+        /** IndependentPlayerRatioValue */
+        IndependentPlayerRatioValue: {
+            /** Value */
+            value: number | null;
+            /** Numerator */
+            numerator: number | null;
+            /** Denominator */
+            denominator: number | null;
+            /** Input Matches */
+            input_matches: number | null;
+            /**
+             * Definition Version
+             * @constant
+             */
+            definition_version: "miaodi-player-season-ratios.v1";
+            /**
+             * Sample Policy
+             * @constant
+             */
+            sample_policy: "independent_available_sums";
+        };
+        /** Issue */
+        Issue: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "invalid_source_value" | "outside_pitch_bounds" | "unmapped_period" | "unresolved_identity" | "source_event_id_missing" | "ambiguous_source_event_id" | "unmapped_event_kind" | "invalid_metric_value" | "unmapped_team_identity" | "unmapped_table_scope" | "unverified_aggregation" | "unverified_unit" | "identity_reference_only" | "unverified_metric_definition" | "conflicting_aggregation_evidence";
+            /** Field */
+            field?: string | null;
+            /** Record Id */
+            record_id?: string | null;
+            /** Player Id */
+            player_id?: string | null;
+            /** Observation Id */
+            observation_id?: string | null;
+            /** Metric Code */
+            metric_code?: string | null;
+            /** Series Id */
+            series_id?: string | null;
         };
         /** JobRunItem */
         JobRunItem: {
@@ -2460,6 +3325,32 @@ export interface components {
             /** Avg Expected Goals On Target */
             avg_expected_goals_on_target: number | null;
         };
+        /** LineupContext */
+        LineupContext: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-lineup-context.v1";
+            /**
+             * Definition Version
+             * @constant
+             */
+            definition_version: "miaodi-lineup-basis.v1";
+            /** Series Id */
+            series_id: string;
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "previous_match" | "third_party_prediction" | "source_reported_confirmed" | "unknown";
+            /** Observed At */
+            observed_at: string | null;
+            /** Source Updated At */
+            source_updated_at: null;
+            /** Issues */
+            issues: ("unmapped_lineup_basis" | "invalid_observation_time")[];
+        };
         /** MarketCardDTO */
         MarketCardDTO: {
             /** Market */
@@ -2508,6 +3399,45 @@ export interface components {
             /** No Calibration Reason */
             no_calibration_reason?: ("line_not_calibrated" | "line_unresolved") | null;
         };
+        /** MarketComparisonDTO */
+        MarketComparisonDTO: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "unavailable";
+            /**
+             * Display Name
+             * @default 喵弟模型
+             * @constant
+             */
+            display_name: "喵弟模型";
+            /** Canonical Match Id */
+            canonical_match_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Model Total Goals */
+            model_total_goals?: number | null;
+            /** Market Line */
+            market_line?: number | null;
+            /** Over Decimal */
+            over_decimal?: number | null;
+            /** Under Decimal */
+            under_decimal?: number | null;
+            /** Model Observed At */
+            model_observed_at?: string | null;
+            /** Market Observed At */
+            market_observed_at?: string | null;
+            /** Market Age Hours */
+            market_age_hours?: number | null;
+            /**
+             * Market Stale
+             * @default false
+             */
+            market_stale: boolean;
+            /** As Of */
+            as_of: string;
+        };
         /** MarketDriverFactorDTO */
         MarketDriverFactorDTO: {
             /** Key */
@@ -2549,6 +3479,29 @@ export interface components {
             hit_rate?: number | null;
             /** Sample Size */
             sample_size?: number | null;
+        };
+        /** Match */
+        Match: {
+            /** Id */
+            id: string;
+            /** Competition */
+            competition: string | null;
+            /** Date */
+            date: string | null;
+            /** Kickoff At */
+            kickoff_at: string | null;
+            /** Home Id */
+            home_id: string;
+            /** Away Id */
+            away_id: string;
+            /** Home Name */
+            home_name: string;
+            /** Away Name */
+            away_name: string;
+            /** Home Score */
+            home_score: number | null;
+            /** Away Score */
+            away_score: number | null;
         };
         /**
          * MatchDataProfileDTO
@@ -2656,6 +3609,8 @@ export interface components {
         MatchDetailSummary: {
             /** Match Id */
             match_id: number;
+            /** Canonical Match Id */
+            canonical_match_id?: string | null;
             /** League Id */
             league_id: number;
             /** Season */
@@ -2725,6 +3680,8 @@ export interface components {
             weather_icon_code?: number | null;
             /** Referee Id */
             referee_id?: number | null;
+            /** Referee Avatar Url */
+            referee_avatar_url?: string | null;
             /** Referee Country */
             referee_country?: string | null;
             /** Referee Country Code */
@@ -3690,6 +4647,8 @@ export interface components {
         MatchSummary: {
             /** Match Id */
             match_id: number;
+            /** Canonical Match Id */
+            canonical_match_id?: string | null;
             /** League Id */
             league_id: number;
             /** Season */
@@ -3756,6 +4715,93 @@ export interface components {
              */
             nickname_set: boolean;
         };
+        /** MembershipBody */
+        MembershipBody: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "grant" | "revoke";
+            /** Ends At */
+            ends_at?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Request Key */
+            request_key: string;
+            /** Reason */
+            reason: string;
+        };
+        /** MembershipDTO */
+        MembershipDTO: {
+            /** User Id */
+            user_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "revoked";
+            /** Starts At */
+            starts_at: string;
+            /** Ends At */
+            ends_at: string;
+            /** Revision */
+            revision: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** MembershipEventDTO */
+        MembershipEventDTO: {
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id: string;
+            /** Actor Id */
+            actor_id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "grant" | "revoke";
+            /** Reason */
+            reason: string;
+            /** Created At */
+            created_at: string;
+            before: components["schemas"]["MembershipDTO"] | null;
+            after: components["schemas"]["MembershipDTO"];
+        };
+        /** MembershipHistoryDTO */
+        MembershipHistoryDTO: {
+            /** Events */
+            events: components["schemas"]["MembershipEventDTO"][];
+        };
+        /** Momentum */
+        Momentum: {
+            /** Period */
+            period: number;
+            /** Minute */
+            minute: number;
+            /** Second */
+            second: number;
+            /** Home */
+            home: number | null;
+            /** Away */
+            away: number | null;
+            /** Net */
+            net: number | null;
+        };
+        /** Node */
+        Node: {
+            /** Id */
+            id: string;
+            /** Team Id */
+            team_id: string;
+            /** X */
+            x: number | null;
+            /** Y */
+            y: number | null;
+        };
         /** OddsSnapshotItem */
         OddsSnapshotItem: {
             /** Market */
@@ -3796,6 +4842,27 @@ export interface components {
             /** Under Pct */
             under_pct?: number | null;
         };
+        /** PairedPlayerRatioValue */
+        PairedPlayerRatioValue: {
+            /** Value */
+            value: number | null;
+            /** Numerator */
+            numerator: number | null;
+            /** Denominator */
+            denominator: number | null;
+            /** Input Matches */
+            input_matches: number | null;
+            /**
+             * Definition Version
+             * @constant
+             */
+            definition_version: "miaodi-player-season-ratios.v2";
+            /**
+             * Sample Policy
+             * @constant
+             */
+            sample_policy: "same_match_observed_inputs";
+        };
         /** PasswordLoginBody */
         PasswordLoginBody: {
             /** Username */
@@ -3815,6 +4882,21 @@ export interface components {
             rank: number;
             /** Entitlements */
             entitlements: string[];
+        };
+        /** Player */
+        Player: {
+            /** Id */
+            id: string;
+            /** Team Id */
+            team_id: string;
+            /** Name */
+            name: string;
+            /** Number */
+            number: number | null;
+            /** Minutes */
+            minutes: number | null;
+            /** Starter */
+            starter: boolean;
         };
         /** PlayerBoard */
         PlayerBoard: {
@@ -3845,6 +4927,34 @@ export interface components {
             /** Value */
             value?: number | null;
             team_color?: components["schemas"]["TeamBrandColor"] | null;
+        };
+        /** PlayerMetric */
+        PlayerMetric: {
+            /** Metric Code */
+            metric_code: string;
+            /** Value */
+            value: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "minutes" | "percent" | "expected_count" | "rating_points" | "points" | "unverified" | "unverified_currency" | "metres" | "people" | "model_points" | "ratio";
+            /**
+             * Definition Version
+             * @enum {string}
+             */
+            definition_version: "miaodi-observed-metrics.v1" | "miaodi-observed-metrics.v2" | "miaodi-observed-metrics.v3";
+            /** Team Id */
+            team_id: string | null;
+            /** Series Id */
+            series_id: string;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "full_time" | "first_half" | "second_half" | "extra_time_first_half" | "extra_time_second_half" | "penalty_shootout" | "non_playing";
+            /** Player Id */
+            player_id: string | null;
         };
         /** PlayerQuadrantResponse */
         PlayerQuadrantResponse: {
@@ -3946,6 +5056,21 @@ export interface components {
             pass_completion_rate?: components["schemas"]["PlayerRatioValue"] | null;
             long_ball_share?: components["schemas"]["PlayerRatioValue"] | null;
         };
+        /** PlayerStatistics */
+        PlayerStatistics: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-player-statistics.v1";
+            /** Match Id */
+            match_id: string;
+            /** Series Id */
+            series_id: string;
+            /** Observations */
+            observations: components["schemas"]["PlayerMetric"][];
+            quality: components["schemas"]["Quality"];
+        };
         /** PlayersResponse */
         PlayersResponse: {
             /** League Id */
@@ -3958,6 +5083,276 @@ export interface components {
             boards: components["schemas"]["PlayerBoard"][];
             /** Empty Reason */
             empty_reason?: string | null;
+        };
+        /** PredictionFixture */
+        PredictionFixture: {
+            /** Match Id */
+            match_id: string;
+            /**
+             * Competition Code
+             * @enum {string}
+             */
+            competition_code: "EPL" | "J1L" | "ALM" | "UCL";
+            /** Kickoff Utc */
+            kickoff_utc: string;
+            /** Home Team Id */
+            home_team_id: string | null;
+            /** Away Team Id */
+            away_team_id: string | null;
+            /** Home Team Name */
+            home_team_name: string | null;
+            /** Away Team Name */
+            away_team_name: string | null;
+            /**
+             * Capture Status
+             * @enum {string}
+             */
+            capture_status: "not_captured" | "capture_recorded";
+        };
+        /** PredictionMetric */
+        PredictionMetric: {
+            /** Metric Code */
+            metric_code: string;
+            /** Label */
+            label: string;
+            /** Target */
+            target?: number | null;
+            /** Season Average */
+            season_average?: number | null;
+            /** Team Id */
+            team_id: string;
+            /** Registered */
+            registered: boolean;
+        };
+        /** PreviewCoach */
+        PreviewCoach: {
+            /** Reference Id */
+            reference_id: string;
+            /** Coach Id */
+            coach_id: null;
+            /**
+             * Identity Status
+             * @constant
+             */
+            identity_status: "snapshot_reference";
+            /** Name */
+            name: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+        };
+        /** PreviewIssue */
+        PreviewIssue: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "unresolved_identity" | "identity_reference_only" | "invalid_source_value" | "invalid_snapshot" | "incomplete_metric_coverage" | "unmapped_situation" | "non_playing_source_rows";
+            /** Field */
+            field: string;
+            /** Record Id */
+            record_id?: string | null;
+        };
+        /** PreviewKeeper */
+        PreviewKeeper: {
+            /** Record Id */
+            record_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Name */
+            name: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Issues */
+            issues: components["schemas"]["PreviewIssue"][];
+            /** Appearances */
+            appearances: number;
+            /** Saves */
+            saves: number | null;
+            /** Xgot Faced */
+            xgot_faced: number | null;
+            /** Xgot Faced Complete */
+            xgot_faced_complete: boolean;
+            /** Goals Conceded */
+            goals_conceded: number | null;
+            /** Goals Prevented */
+            goals_prevented: number | null;
+        };
+        /** PreviewLineups */
+        PreviewLineups: {
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "not_collected" | "observed" | "invalid";
+            /** Snapshot Id */
+            snapshot_id: string | null;
+            context: components["schemas"]["LineupContext"];
+            /**
+             * Capture Phase
+             * @enum {string}
+             */
+            capture_phase: "before_kickoff" | "at_or_after_kickoff" | "unknown";
+            home: components["schemas"]["PreviewRosterSide"] | null;
+            away: components["schemas"]["PreviewRosterSide"] | null;
+        };
+        /** PreviewPeer */
+        PreviewPeer: {
+            /** Record Id */
+            record_id: string;
+            /** Team Id */
+            team_id: string | null;
+            /** Name */
+            name: string;
+            /** Crest Url */
+            crest_url: string | null;
+            /** Percentile */
+            percentile: number;
+        };
+        /** PreviewRosterPlayer */
+        PreviewRosterPlayer: {
+            /** Record Id */
+            record_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Name */
+            name: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Issues */
+            issues: components["schemas"]["PreviewIssue"][];
+            /** Shirt Number */
+            shirt_number: string | null;
+            /** Pos X */
+            pos_x: number | null;
+            /** Pos Y */
+            pos_y: number | null;
+        };
+        /** PreviewRosterSide */
+        PreviewRosterSide: {
+            /** Team Id */
+            team_id: string | null;
+            /** Formation */
+            formation: string | null;
+            coach: components["schemas"]["PreviewCoach"] | null;
+            /** Starters */
+            starters: components["schemas"]["PreviewRosterPlayer"][];
+            /** Subs */
+            subs: components["schemas"]["PreviewRosterPlayer"][];
+            /**
+             * Bench Availability
+             * @enum {string}
+             */
+            bench_availability: "observed" | "not_supplied_by_prediction_feed" | "unknown";
+        };
+        /** PreviewShareBlock */
+        PreviewShareBlock: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "dribbles" | "creating" | "defending";
+            /** Title */
+            title: string;
+            /** Metric */
+            metric: string;
+            /**
+             * Metric Code
+             * @enum {string}
+             */
+            metric_code: "dribbles_completed" | "chances_created" | "tackles_plus_interceptions";
+            /**
+             * Unit
+             * @constant
+             */
+            unit: "count";
+            /**
+             * Definition Version
+             * @constant
+             */
+            definition_version: "miaodi-player-window-shares.v1";
+            /**
+             * Denominator Policy
+             * @constant
+             */
+            denominator_policy: "reported_player_observations";
+            /** Coverage Complete */
+            coverage_complete: boolean;
+            /** Rows */
+            rows: components["schemas"]["PreviewShareRow"][];
+        };
+        /** PreviewShareRow */
+        PreviewShareRow: {
+            /** Record Id */
+            record_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Name */
+            name: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Issues */
+            issues: components["schemas"]["PreviewIssue"][];
+            /** Pct */
+            pct: number | null;
+            /** Appearances */
+            appearances: number;
+            /** Minutes */
+            minutes: number;
+            /** Count */
+            count: number | null;
+            /** Observed Matches */
+            observed_matches: number;
+        };
+        /** PreviewSidelined */
+        PreviewSidelined: {
+            home: components["schemas"]["PreviewSidelinedSide"];
+            away: components["schemas"]["PreviewSidelinedSide"];
+        };
+        /** PreviewSidelinedPlayer */
+        PreviewSidelinedPlayer: {
+            /** Record Id */
+            record_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Name */
+            name: string;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Issues */
+            issues: components["schemas"]["PreviewIssue"][];
+            /** Reason */
+            reason: string | null;
+            /** Expected Return */
+            expected_return: string | null;
+        };
+        /** PreviewSidelinedSide */
+        PreviewSidelinedSide: {
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "not_collected" | "observed" | "invalid";
+            /** Observed At */
+            observed_at: string | null;
+            /** Source Updated At */
+            source_updated_at: null;
+            /** Players */
+            players: components["schemas"]["PreviewSidelinedPlayer"][];
+        };
+        /** PreviewStylePoint */
+        PreviewStylePoint: {
+            /** Record Id */
+            record_id: string;
+            /** Team Id */
+            team_id: string | null;
+            /** Name */
+            name: string;
+            /** X */
+            x: number | null;
+            /** Y */
+            y: number | null;
+            /** Crest Url */
+            crest_url: string | null;
         };
         /** ProductDTO */
         ProductDTO: {
@@ -4002,6 +5397,88 @@ export interface components {
          * @enum {integer}
          */
         ProfileWindowN: 3 | 5 | 10;
+        /** PublicationCommand */
+        PublicationCommand: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Expected Publication Version */
+            expected_publication_version: number;
+            /** Slug */
+            slug: string;
+            /** Excerpt */
+            excerpt: string;
+            /** Body */
+            body: string;
+            /**
+             * Kind
+             * @default postmatch
+             * @enum {string}
+             */
+            kind: "prematch" | "postmatch" | "round";
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "public" | "member";
+            /** Reason */
+            reason: string;
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: true;
+        };
+        /** PublicationState */
+        PublicationState: {
+            /** Slug */
+            slug: string | null;
+            /** Publication Version */
+            publication_version: number;
+            /** Published */
+            published: boolean;
+        };
+        /** PublishedBody */
+        PublishedBody: {
+            /** Body */
+            body: string;
+            /** Data Cutoff At */
+            data_cutoff_at: string;
+            /**
+             * Analysis Mode
+             * @enum {string}
+             */
+            analysis_mode: "current" | "reconstructed";
+            /** Teams */
+            teams: {
+                [key: string]: string;
+            };
+            /** Metrics */
+            metrics: components["schemas"]["PublishedMetric"][];
+            /** Coverage */
+            coverage?: {
+                [key: string]: number | boolean;
+            } | null;
+        };
+        /** PublishedMetric */
+        PublishedMetric: {
+            /** Label */
+            label: string | null;
+            /** Value */
+            value: number | null;
+            /** Unit */
+            unit: string | null;
+            /** Side */
+            side: string | null;
+            /** Definition Version */
+            definition_version: string | null;
+        };
+        /** Quality */
+        Quality: {
+            /** Issues */
+            issues: components["schemas"]["Issue"][];
+            /** Unmapped Field Count */
+            unmapped_field_count?: number | null;
+        };
         /**
          * ReadyzProblemsDTO
          * @description /readyz 503 时的诚实故障说明。
@@ -4829,6 +6306,605 @@ export interface components {
             /** Average Percentage */
             average_percentage?: number | null;
         };
+        /** ReportLineupPlayerV2 */
+        ReportLineupPlayerV2: {
+            /** Player Id */
+            player_id: string | null;
+            /** Participant Id */
+            participant_id: string;
+            /**
+             * Participant Scope
+             * @enum {string}
+             */
+            participant_scope: "match_participant" | "report_record";
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en?: string | null;
+            /** Shirt Number */
+            shirt_number?: string | null;
+            /** Position Group */
+            position_group?: string | null;
+            /** Is Starter */
+            is_starter: boolean;
+            /** Is Captain */
+            is_captain: boolean;
+            /** Country Code */
+            country_code?: string | null;
+            /** Rating */
+            rating?: number | null;
+            /** Sub In Time */
+            sub_in_time?: number | null;
+            /** Sub Out Time */
+            sub_out_time?: number | null;
+            /** Pitch X */
+            pitch_x?: number | null;
+            /** Pitch Y */
+            pitch_y?: number | null;
+            /** Pitch W */
+            pitch_w?: number | null;
+            /**
+             * Is Player Of The Match
+             * @default false
+             */
+            is_player_of_the_match: boolean;
+        };
+        /** ReportLineupTeamV2 */
+        ReportLineupTeamV2: {
+            /** Team Id */
+            team_id: string | null;
+            /** Is Home */
+            is_home: boolean;
+            /** Formation */
+            formation?: string | null;
+            /** Starters */
+            starters: components["schemas"]["ReportLineupPlayerV2"][];
+            /** Bench */
+            bench: components["schemas"]["ReportLineupPlayerV2"][];
+        };
+        /** ReportMetricDefinition */
+        ReportMetricDefinition: {
+            /**
+             * Entity Scope
+             * @enum {string}
+             */
+            entity_scope: "team" | "player";
+            /** Metric Code */
+            metric_code: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "minutes" | "percent" | "expected_count" | "rating_points" | "points" | "unverified" | "unverified_currency" | "metres" | "people" | "model_points" | "ratio";
+            /**
+             * Definition Version
+             * @enum {string}
+             */
+            definition_version: "miaodi-observed-metrics.v1" | "miaodi-observed-metrics.v2";
+            /**
+             * Definition Status
+             * @enum {string}
+             */
+            definition_status: "mapped" | "unverified";
+        };
+        /** ReportPlayerStatV2 */
+        ReportPlayerStatV2: {
+            /** Player Id */
+            player_id: string | null;
+            /** Participant Id */
+            participant_id: string;
+            /**
+             * Participant Scope
+             * @enum {string}
+             */
+            participant_scope: "match_participant" | "report_record";
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Team Id */
+            team_id: string | null;
+            /** Name */
+            name: string;
+            /** Is Home */
+            is_home: boolean;
+            /** Is Goalkeeper */
+            is_goalkeeper: boolean;
+            /** Rating */
+            rating: number | null;
+            /** Goals */
+            goals?: number | null;
+            /** Shots Total */
+            shots_total?: number | null;
+            /** Shots On Target */
+            shots_on_target?: number | null;
+            /** Shots Off Target */
+            shots_off_target?: number | null;
+            /** Shots Blocked */
+            shots_blocked?: number | null;
+            /** Shots Hit Woodwork */
+            shots_hit_woodwork?: number | null;
+            /** Goal Assists */
+            goal_assists?: number | null;
+            /** Passes Completed */
+            passes_completed?: number | null;
+            /** Passes Attempted */
+            passes_attempted?: number | null;
+            /** Crosses Completed */
+            crosses_completed?: number | null;
+            /** Crosses Attempted */
+            crosses_attempted?: number | null;
+            /** Touches */
+            touches?: number | null;
+            /** Touches In Opposition Box */
+            touches_in_opposition_box?: number | null;
+            /** Interceptions */
+            interceptions?: number | null;
+            /** Ball Recoveries */
+            ball_recoveries?: number | null;
+            /** Clearances */
+            clearances?: number | null;
+            /** Saves */
+            saves?: number | null;
+            /** Corners Taken */
+            corners_taken?: number | null;
+            /** Offsides */
+            offsides?: number | null;
+            /** Own Goals */
+            own_goals?: number | null;
+            /** Penalties Won */
+            penalties_won?: number | null;
+            /** Penalties Conceded */
+            penalties_conceded?: number | null;
+            /** Duels Won */
+            duels_won?: number | null;
+            /** Duels Lost */
+            duels_lost?: number | null;
+            /** Errors Leading To Goal */
+            errors_leading_to_goal?: number | null;
+            /** Big Chances Missed */
+            big_chances_missed?: number | null;
+            /** Big Chances Created */
+            big_chances_created?: number | null;
+            /** Minutes Played */
+            minutes_played?: number | null;
+            /** Possession Percent */
+            possession_percent?: number | null;
+            /** Expected Goals */
+            expected_goals?: number | null;
+            /** Expected Assists */
+            expected_assists?: number | null;
+            /** Expected Goals On Target */
+            expected_goals_on_target?: number | null;
+            /** Expected Goals Non Penalty */
+            expected_goals_non_penalty?: number | null;
+            /** Big Chances */
+            big_chances?: number | null;
+            /** Yellow Cards */
+            yellow_cards?: number | null;
+            /** Red Cards */
+            red_cards?: number | null;
+            /** Shots Inside Penalty Area */
+            shots_inside_penalty_area?: number | null;
+            /** Shots Outside Penalty Area */
+            shots_outside_penalty_area?: number | null;
+            /** Passes Completed Own Half */
+            passes_completed_own_half?: number | null;
+            /** Passes Completed Opposition Half */
+            passes_completed_opposition_half?: number | null;
+            /** Long Passes Completed */
+            long_passes_completed?: number | null;
+            /** Long Passes Attempted */
+            long_passes_attempted?: number | null;
+            /** Tackles */
+            tackles?: number | null;
+            /** Shots Blocked Defensively */
+            shots_blocked_defensively?: number | null;
+            /** Ground Duels Won */
+            ground_duels_won?: number | null;
+            /** Ground Duels Contested */
+            ground_duels_contested?: number | null;
+            /** Aerial Duels Won */
+            aerial_duels_won?: number | null;
+            /** Aerial Duels Contested */
+            aerial_duels_contested?: number | null;
+            /** Dribbles Completed */
+            dribbles_completed?: number | null;
+            /** Dribbles Attempted */
+            dribbles_attempted?: number | null;
+            /** Fouls Committed */
+            fouls_committed?: number | null;
+            /** Fouls Won */
+            fouls_won?: number | null;
+            /** Penalties Missed */
+            penalties_missed?: number | null;
+            /** Chances Created */
+            chances_created?: number | null;
+            /** Passes Into Final Third */
+            passes_into_final_third?: number | null;
+            /** Times Dispossessed */
+            times_dispossessed?: number | null;
+            /** Headed Clearances */
+            headed_clearances?: number | null;
+            /** Times Dribbled Past */
+            times_dribbled_past?: number | null;
+            /** Defensive Actions */
+            defensive_actions?: number | null;
+            /** Last Defender Tackles */
+            last_defender_tackles?: number | null;
+            /** Goal Line Clearances */
+            goal_line_clearances?: number | null;
+            /** Goals Conceded */
+            goals_conceded?: number | null;
+            /** Diving Saves */
+            diving_saves?: number | null;
+            /** Saves Inside Penalty Area */
+            saves_inside_penalty_area?: number | null;
+            /** Sweeper Actions */
+            sweeper_actions?: number | null;
+            /** Keeper Punches */
+            keeper_punches?: number | null;
+            /** High Claims */
+            high_claims?: number | null;
+            /** Penalties Saved */
+            penalties_saved?: number | null;
+            /** Shootout Penalties Saved */
+            shootout_penalties_saved?: number | null;
+            /** Line Breaking Passes */
+            line_breaking_passes?: number | null;
+            /** Sprints */
+            sprints?: number | null;
+            /** Expected Goals Open Play */
+            expected_goals_open_play?: number | null;
+            /** Expected Goals Set Play */
+            expected_goals_set_play?: number | null;
+            /** Expected Goals On Target Faced */
+            expected_goals_on_target_faced?: number | null;
+            /** Expected Goals Plus Assists */
+            expected_goals_plus_assists?: number | null;
+            /** Goals Prevented */
+            goals_prevented?: number | null;
+            /** Player Rating */
+            player_rating?: number | null;
+            /** Fantasy Points */
+            fantasy_points?: number | null;
+            /** Shot Accuracy Percent */
+            shot_accuracy_percent?: number | null;
+            /** Attack Share Left Percent */
+            attack_share_left_percent?: number | null;
+            /** Attack Share Centre Percent */
+            attack_share_centre_percent?: number | null;
+            /** Attack Share Right Percent */
+            attack_share_right_percent?: number | null;
+            /** Top Speed */
+            top_speed?: number | null;
+            /** Distance Covered */
+            distance_covered?: number | null;
+            /** Walking Distance */
+            walking_distance?: number | null;
+            /** Jogging Distance */
+            jogging_distance?: number | null;
+            /** Running Distance */
+            running_distance?: number | null;
+            /** Sprinting Distance */
+            sprinting_distance?: number | null;
+            /** Throws */
+            throws?: number | null;
+        };
+        /** ReportShotV2 */
+        ReportShotV2: {
+            /** Player Id */
+            player_id: string | null;
+            /** Player Name */
+            player_name?: string | null;
+            /** Team Id */
+            team_id: string | null;
+            /** Is Home */
+            is_home: boolean;
+            /** Minute */
+            minute?: number | null;
+            /** Period */
+            period?: string | null;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
+            /** Xg */
+            xg?: number | null;
+            /** Xgot */
+            xgot?: number | null;
+            /** Situation */
+            situation?: string | null;
+            /** Outcome */
+            outcome?: string | null;
+            /** Shot Type */
+            shot_type?: string | null;
+            /** Is Blocked */
+            is_blocked?: boolean | null;
+            /** Is On Target */
+            is_on_target?: boolean | null;
+            /** Blocked X */
+            blocked_x?: number | null;
+            /** Blocked Y */
+            blocked_y?: number | null;
+            /** Goal Crossed Y */
+            goal_crossed_y?: number | null;
+            /** Goal Crossed Z */
+            goal_crossed_z?: number | null;
+            /** On Goal Shot X */
+            on_goal_shot_x?: number | null;
+            /** On Goal Shot Y */
+            on_goal_shot_y?: number | null;
+            /** On Goal Shot Zoom Ratio */
+            on_goal_shot_zoom_ratio?: number | null;
+            /**
+             * Is Own Goal
+             * @default false
+             */
+            is_own_goal: boolean;
+            /**
+             * Is Own Goal Inferred
+             * @default false
+             */
+            is_own_goal_inferred: boolean;
+            /** Participant Id */
+            participant_id: string | null;
+            /** Avatar Url */
+            avatar_url: string | null;
+        };
+        /** ReportStatisticsQuality */
+        ReportStatisticsQuality: {
+            team: components["schemas"]["Quality"];
+            player: components["schemas"]["Quality"];
+        };
+        /** ReportTeamStatV2 */
+        ReportTeamStatV2: {
+            /** Team Id */
+            team_id: string | null;
+            /** Is Home */
+            is_home: boolean;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "full_time" | "first_half" | "second_half";
+            /** Goals */
+            goals?: number | null;
+            /** Shots Total */
+            shots_total?: number | null;
+            /** Shots On Target */
+            shots_on_target?: number | null;
+            /** Shots Off Target */
+            shots_off_target?: number | null;
+            /** Shots Blocked */
+            shots_blocked?: number | null;
+            /** Shots Hit Woodwork */
+            shots_hit_woodwork?: number | null;
+            /** Goal Assists */
+            goal_assists?: number | null;
+            /** Passes Completed */
+            passes_completed?: number | null;
+            /** Passes Attempted */
+            passes_attempted?: number | null;
+            /** Crosses Completed */
+            crosses_completed?: number | null;
+            /** Crosses Attempted */
+            crosses_attempted?: number | null;
+            /** Touches */
+            touches?: number | null;
+            /** Touches In Opposition Box */
+            touches_in_opposition_box?: number | null;
+            /** Interceptions */
+            interceptions?: number | null;
+            /** Ball Recoveries */
+            ball_recoveries?: number | null;
+            /** Clearances */
+            clearances?: number | null;
+            /** Saves */
+            saves?: number | null;
+            /** Corners Taken */
+            corners_taken?: number | null;
+            /** Offsides */
+            offsides?: number | null;
+            /** Own Goals */
+            own_goals?: number | null;
+            /** Penalties Won */
+            penalties_won?: number | null;
+            /** Penalties Conceded */
+            penalties_conceded?: number | null;
+            /** Duels Won */
+            duels_won?: number | null;
+            /** Duels Lost */
+            duels_lost?: number | null;
+            /** Errors Leading To Goal */
+            errors_leading_to_goal?: number | null;
+            /** Big Chances Missed */
+            big_chances_missed?: number | null;
+            /** Big Chances Created */
+            big_chances_created?: number | null;
+            /** Minutes Played */
+            minutes_played?: number | null;
+            /** Possession Percent */
+            possession_percent?: number | null;
+            /** Expected Goals */
+            expected_goals?: number | null;
+            /** Expected Assists */
+            expected_assists?: number | null;
+            /** Expected Goals On Target */
+            expected_goals_on_target?: number | null;
+            /** Expected Goals Non Penalty */
+            expected_goals_non_penalty?: number | null;
+            /** Big Chances */
+            big_chances?: number | null;
+            /** Yellow Cards */
+            yellow_cards?: number | null;
+            /** Red Cards */
+            red_cards?: number | null;
+            /** Shots Inside Penalty Area */
+            shots_inside_penalty_area?: number | null;
+            /** Shots Outside Penalty Area */
+            shots_outside_penalty_area?: number | null;
+            /** Passes Completed Own Half */
+            passes_completed_own_half?: number | null;
+            /** Passes Completed Opposition Half */
+            passes_completed_opposition_half?: number | null;
+            /** Long Passes Completed */
+            long_passes_completed?: number | null;
+            /** Long Passes Attempted */
+            long_passes_attempted?: number | null;
+            /** Tackles */
+            tackles?: number | null;
+            /** Shots Blocked Defensively */
+            shots_blocked_defensively?: number | null;
+            /** Ground Duels Won */
+            ground_duels_won?: number | null;
+            /** Ground Duels Contested */
+            ground_duels_contested?: number | null;
+            /** Aerial Duels Won */
+            aerial_duels_won?: number | null;
+            /** Aerial Duels Contested */
+            aerial_duels_contested?: number | null;
+            /** Dribbles Completed */
+            dribbles_completed?: number | null;
+            /** Dribbles Attempted */
+            dribbles_attempted?: number | null;
+            /** Fouls Committed */
+            fouls_committed?: number | null;
+            /** Fouls Won */
+            fouls_won?: number | null;
+            /** Penalties Missed */
+            penalties_missed?: number | null;
+            /** Chances Created */
+            chances_created?: number | null;
+            /** Passes Into Final Third */
+            passes_into_final_third?: number | null;
+            /** Times Dispossessed */
+            times_dispossessed?: number | null;
+            /** Headed Clearances */
+            headed_clearances?: number | null;
+            /** Times Dribbled Past */
+            times_dribbled_past?: number | null;
+            /** Defensive Actions */
+            defensive_actions?: number | null;
+            /** Last Defender Tackles */
+            last_defender_tackles?: number | null;
+            /** Goal Line Clearances */
+            goal_line_clearances?: number | null;
+            /** Goals Conceded */
+            goals_conceded?: number | null;
+            /** Diving Saves */
+            diving_saves?: number | null;
+            /** Saves Inside Penalty Area */
+            saves_inside_penalty_area?: number | null;
+            /** Sweeper Actions */
+            sweeper_actions?: number | null;
+            /** Keeper Punches */
+            keeper_punches?: number | null;
+            /** High Claims */
+            high_claims?: number | null;
+            /** Penalties Saved */
+            penalties_saved?: number | null;
+            /** Shootout Penalties Saved */
+            shootout_penalties_saved?: number | null;
+            /** Line Breaking Passes */
+            line_breaking_passes?: number | null;
+            /** Sprints */
+            sprints?: number | null;
+            /** Expected Goals Open Play */
+            expected_goals_open_play?: number | null;
+            /** Expected Goals Set Play */
+            expected_goals_set_play?: number | null;
+            /** Expected Goals On Target Faced */
+            expected_goals_on_target_faced?: number | null;
+            /** Expected Goals Plus Assists */
+            expected_goals_plus_assists?: number | null;
+            /** Goals Prevented */
+            goals_prevented?: number | null;
+            /** Player Rating */
+            player_rating?: number | null;
+            /** Fantasy Points */
+            fantasy_points?: number | null;
+            /** Shot Accuracy Percent */
+            shot_accuracy_percent?: number | null;
+            /** Attack Share Left Percent */
+            attack_share_left_percent?: number | null;
+            /** Attack Share Centre Percent */
+            attack_share_centre_percent?: number | null;
+            /** Attack Share Right Percent */
+            attack_share_right_percent?: number | null;
+            /** Top Speed */
+            top_speed?: number | null;
+            /** Distance Covered */
+            distance_covered?: number | null;
+            /** Walking Distance */
+            walking_distance?: number | null;
+            /** Jogging Distance */
+            jogging_distance?: number | null;
+            /** Running Distance */
+            running_distance?: number | null;
+            /** Sprinting Distance */
+            sprinting_distance?: number | null;
+            /** Throw Ins */
+            throw_ins?: number | null;
+        };
+        /** ReportTopRatedV2 */
+        ReportTopRatedV2: {
+            /** Player Id */
+            player_id: string | null;
+            /** Participant Id */
+            participant_id: string;
+            /**
+             * Participant Scope
+             * @enum {string}
+             */
+            participant_scope: "match_participant" | "report_record";
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Name */
+            name: string;
+            /** Team Id */
+            team_id: string | null;
+            /** Is Home */
+            is_home: boolean;
+            /** Rating */
+            rating?: number | null;
+            /** Shirt Number */
+            shirt_number?: string | null;
+            /**
+             * Is Official
+             * @default false
+             */
+            is_official: boolean;
+        };
+        /** ResearchInboxDTO */
+        ResearchInboxDTO: {
+            /** Entries */
+            entries: components["schemas"]["ResearchInboxEntry"][];
+            /** Invalid Snapshot Ids */
+            invalid_snapshot_ids: string[];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** ResearchInboxEntry */
+        ResearchInboxEntry: {
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Cutoff At */
+            cutoff_at: string;
+            /** Metric Count */
+            metric_count: number;
+            /** Topic Count */
+            topic_count: number;
+        };
+        /** RetractCommand */
+        RetractCommand: {
+            /** Expected Publication Version */
+            expected_publication_version: number;
+            /** Reason */
+            reason: string;
+        };
         /** RevokeSessionBody */
         RevokeSessionBody: {
             /** Session Id */
@@ -4901,6 +6977,1198 @@ export interface components {
             /** Error Summary */
             error_summary?: string | null;
         };
+        /** StandardCompetition */
+        StandardCompetition: {
+            /** Competition Id */
+            competition_id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string;
+            /** Website Path */
+            website_path: string;
+        };
+        /** StandardDataProfileResponse */
+        StandardDataProfileResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-data-profile.v1";
+            /** Match Id */
+            match_id: string;
+            profile: components["schemas"]["StandardMatchDataProfileDTO"];
+        };
+        /** StandardMatchDataProfileDTO */
+        StandardMatchDataProfileDTO: {
+            /** Home Matches */
+            home_matches: number;
+            /** Away Matches */
+            away_matches: number;
+            /** Home Available */
+            home_available: boolean;
+            /** Away Available */
+            away_available: boolean;
+            /** Groups */
+            groups: components["schemas"]["StandardMatchProfileGroupDTO"][];
+            /** Highlights */
+            highlights: components["schemas"]["StandardMatchProfileHighlightDTO"][];
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
+            /**
+             * Comparison Mode
+             * @default league_percentile
+             * @enum {string}
+             */
+            comparison_mode: "league_percentile" | "cross_league_raw";
+            /** Scope Note */
+            scope_note?: string | null;
+            /**
+             * Venue Mode
+             * @default recent
+             * @enum {string}
+             */
+            venue_mode: "recent" | "same_venue" | "all";
+            /**
+             * Window N
+             * @default 10
+             */
+            window_n: number;
+            /** Scope League Zh */
+            scope_league_zh?: string | null;
+        };
+        /** StandardMatchPreviewAttackSourceDTO */
+        StandardMatchPreviewAttackSourceDTO: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Shots */
+            shots: number;
+            /** Shot Pct */
+            shot_pct: number;
+            /** Xg */
+            xg?: number | null;
+        };
+        /** StandardMatchPreviewAttackSourcesDTO */
+        StandardMatchPreviewAttackSourcesDTO: {
+            /** Home */
+            home: components["schemas"]["StandardMatchPreviewAttackSourceDTO"][];
+            /** Away */
+            away: components["schemas"]["StandardMatchPreviewAttackSourceDTO"][];
+        };
+        /** StandardMatchPreviewKeepersDTO */
+        StandardMatchPreviewKeepersDTO: {
+            /** Home */
+            home: components["schemas"]["PreviewKeeper"][];
+            /** Away */
+            away: components["schemas"]["PreviewKeeper"][];
+        };
+        /** StandardMatchPreviewKeyPlayersDTO */
+        StandardMatchPreviewKeyPlayersDTO: {
+            /** Home */
+            home: components["schemas"]["PreviewShareBlock"][];
+            /** Away */
+            away: components["schemas"]["PreviewShareBlock"][];
+        };
+        /** StandardMatchPreviewMatchupProfileDTO */
+        StandardMatchPreviewMatchupProfileDTO: {
+            /** Tier */
+            tier: string;
+            /** Matches */
+            matches: number;
+            /** Label Zh */
+            label_zh: string;
+            /** Situations */
+            situations: components["schemas"]["StandardMatchPreviewMatchupSituationDTO"][];
+        };
+        /** StandardMatchPreviewMatchupProfilesDTO */
+        StandardMatchPreviewMatchupProfilesDTO: {
+            home: components["schemas"]["StandardMatchPreviewMatchupProfileDTO"];
+            away: components["schemas"]["StandardMatchPreviewMatchupProfileDTO"];
+        };
+        /** StandardMatchPreviewMatchupSituationDTO */
+        StandardMatchPreviewMatchupSituationDTO: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Own Shots Pg */
+            own_shots_pg?: number | null;
+            /** Own Xg Pg */
+            own_xg_pg?: number | null;
+            /**
+             * Own Xg Complete
+             * @default false
+             */
+            own_xg_complete: boolean;
+            /** Own Xg Matches */
+            own_xg_matches?: number | null;
+            /** Conceded Shots Pg */
+            conceded_shots_pg?: number | null;
+            /** Conceded Xg Pg */
+            conceded_xg_pg?: number | null;
+            /**
+             * Conceded Xg Complete
+             * @default false
+             */
+            conceded_xg_complete: boolean;
+            /** Conceded Xg Matches */
+            conceded_xg_matches?: number | null;
+            /**
+             * Comparison Metric
+             * @default xg
+             */
+            comparison_metric: string;
+            /** Own Comparison Value */
+            own_comparison_value?: number | null;
+            /** Conceded Comparison Value */
+            conceded_comparison_value?: number | null;
+            /** Own Baseline Value */
+            own_baseline_value?: number | null;
+            /** Conceded Baseline Value */
+            conceded_baseline_value?: number | null;
+            /**
+             * Comparison Complete
+             * @default false
+             */
+            comparison_complete: boolean;
+        };
+        /** StandardMatchPreviewStyleViewDTO */
+        StandardMatchPreviewStyleViewDTO: {
+            /** Id */
+            id: string;
+            /** Tab */
+            tab: string;
+            /** Title */
+            title: string;
+            /** X Label */
+            x_label: string;
+            /** Y Label */
+            y_label: string;
+            /** Digits */
+            digits: number;
+            /** Quadrants */
+            quadrants: string[];
+            /** Points */
+            points: components["schemas"]["PreviewStylePoint"][];
+            /**
+             * Y Lower Is Better
+             * @default false
+             */
+            y_lower_is_better: boolean;
+            /** Window */
+            window: number;
+        };
+        /** StandardMatchPreviewWindowDTO */
+        StandardMatchPreviewWindowDTO: {
+            /** Matches */
+            matches: number;
+            /** From */
+            from: string;
+            /** To */
+            to: string;
+        };
+        /** StandardMatchProfileGroupDTO */
+        StandardMatchProfileGroupDTO: {
+            /** Key */
+            key: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Metrics */
+            metrics: components["schemas"]["StandardMatchProfileMetricDTO"][];
+            /** Home Group Percentile */
+            home_group_percentile?: number | null;
+            /** Away Group Percentile */
+            away_group_percentile?: number | null;
+            /**
+             * Home Peers
+             * @default []
+             */
+            home_peers: components["schemas"]["PreviewPeer"][];
+            /**
+             * Away Peers
+             * @default []
+             */
+            away_peers: components["schemas"]["PreviewPeer"][];
+        };
+        /** StandardMatchProfileHighlightDTO */
+        StandardMatchProfileHighlightDTO: {
+            /** Key */
+            key: string;
+            /** Name Zh */
+            name_zh: string;
+            /** Home Percentile */
+            home_percentile: number;
+            /** Away Percentile */
+            away_percentile: number;
+            /** Gap */
+            gap: number;
+            /** Home Value */
+            home_value: number;
+            /** Away Value */
+            away_value: number;
+            /** Home Rank */
+            home_rank?: number | null;
+            /** Away Rank */
+            away_rank?: number | null;
+        };
+        /** StandardMatchProfileMetricDTO */
+        StandardMatchProfileMetricDTO: {
+            /** Key */
+            key: string;
+            /** Name Zh */
+            name_zh: string;
+            /** Unit */
+            unit: string;
+            /** Direction */
+            direction: string;
+            /** Semantic */
+            semantic: string;
+            /** Home Value */
+            home_value?: number | null;
+            /** Away Value */
+            away_value?: number | null;
+            /** Home Percentile */
+            home_percentile?: number | null;
+            /** Away Percentile */
+            away_percentile?: number | null;
+            /** Home Complete */
+            home_complete: boolean;
+            /** Away Complete */
+            away_complete: boolean;
+            /** League Sample Size */
+            league_sample_size: number;
+            /** Home Rank */
+            home_rank?: number | null;
+            /** Away Rank */
+            away_rank?: number | null;
+        };
+        /** StandardPlayerBoard */
+        StandardPlayerBoard: {
+            /** Metric Code */
+            metric_code: string;
+            /** Series Id */
+            series_id: string;
+            /** Label Zh */
+            label_zh: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "high_good" | "high_bad";
+            /** Entries */
+            entries: components["schemas"]["StandardPlayerBoardEntry"][];
+        };
+        /** StandardPlayerBoardEntry */
+        StandardPlayerBoardEntry: {
+            /** Record Id */
+            record_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string | null;
+            /** Avatar Url */
+            avatar_url: string | null;
+            team: components["schemas"]["StandardSeasonTeam"];
+            /** Rank */
+            rank: number | null;
+            /** Value */
+            value: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "minutes" | "percent" | "expected_count" | "rating_points" | "points" | "unverified" | "unverified_currency" | "metres" | "people" | "model_points" | "ratio";
+            /**
+             * Aggregation
+             * @enum {string}
+             */
+            aggregation: "season_total" | "per_match" | "per_90_minutes" | "mean" | "unverified";
+            /**
+             * Definition Version
+             * @enum {string}
+             */
+            definition_version: "miaodi-season-board-metrics.v1" | "miaodi-season-board-metrics.v2";
+            team_color: components["schemas"]["TeamBrandColor"] | null;
+            /** Issues */
+            issues: components["schemas"]["StandardSeasonIssue"][];
+        };
+        /** StandardPlayerQuadrantResponse */
+        StandardPlayerQuadrantResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-player-quadrant.v2";
+            /**
+             * Definition Version
+             * @constant
+             */
+            definition_version: "miaodi-player-season-ratios.v2";
+            /** Competition Id */
+            competition_id: string;
+            /** Season */
+            season: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Rows */
+            rows: components["schemas"]["StandardPlayerQuadrantRow"][];
+            /** Excluded Below Floor */
+            excluded_below_floor: number;
+            /** Empty Reason */
+            empty_reason: string | null;
+        };
+        /** StandardPlayerQuadrantRow */
+        StandardPlayerQuadrantRow: {
+            player: components["schemas"]["StandardSeasonPlayer"];
+            team: components["schemas"]["StandardSeasonTeam"];
+            team_color: components["schemas"]["TeamBrandColor"] | null;
+            /** Usual Position */
+            usual_position: (0 | 1 | 2 | 3) | null;
+            /** Appearances */
+            appearances: number | null;
+            /** Minutes Played */
+            minutes_played: number | null;
+            /** Team Minutes */
+            team_minutes: number | null;
+            /** Minutes Share */
+            minutes_share: number | null;
+            /** Teams Count */
+            teams_count: number | null;
+            ratios: components["schemas"]["StandardPlayerSeasonRatios"] | null;
+            /** Issues */
+            issues: components["schemas"]["StandardSeasonIssue"][];
+        };
+        /** StandardPlayerSeasonRatios */
+        StandardPlayerSeasonRatios: {
+            npxg_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            finishing_delta_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            chances_created_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            xa_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            defensive_actions_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            duel_win_rate?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            touches_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            progression_rate?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            xgot_faced_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            goals_prevented_per90?: components["schemas"]["IndependentPlayerRatioValue"] | null;
+            pass_completion_rate?: components["schemas"]["PairedPlayerRatioValue"] | null;
+            long_ball_share?: components["schemas"]["PairedPlayerRatioValue"] | null;
+        };
+        /** StandardPlayersResponse */
+        StandardPlayersResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-player-boards.v1";
+            /** Competition Id */
+            competition_id: string;
+            /** Season */
+            season: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Boards */
+            boards: components["schemas"]["StandardPlayerBoard"][];
+            /** Empty Reason */
+            empty_reason: string | null;
+        };
+        /** StandardPreviewResponse */
+        StandardPreviewResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-preview.v1";
+            /** Match Id */
+            match_id: string;
+            /** Home Team Id */
+            home_team_id: string | null;
+            /** Away Team Id */
+            away_team_id: string | null;
+            /** Generated At */
+            generated_at: string;
+            home_window: components["schemas"]["StandardMatchPreviewWindowDTO"] | null;
+            away_window: components["schemas"]["StandardMatchPreviewWindowDTO"] | null;
+            lineups: components["schemas"]["PreviewLineups"];
+            sidelined: components["schemas"]["PreviewSidelined"];
+            /** Style Views */
+            style_views: components["schemas"]["StandardMatchPreviewStyleViewDTO"][];
+            attack_sources: components["schemas"]["StandardMatchPreviewAttackSourcesDTO"];
+            data_profile: components["schemas"]["StandardMatchDataProfileDTO"];
+            matchup_profiles: components["schemas"]["StandardMatchPreviewMatchupProfilesDTO"];
+            key_players: components["schemas"]["StandardMatchPreviewKeyPlayersDTO"];
+            keepers: components["schemas"]["StandardMatchPreviewKeepersDTO"];
+            /** Issues */
+            issues: components["schemas"]["PreviewIssue"][];
+        };
+        /** StandardReportAvailable */
+        StandardReportAvailable: {
+            /** Match Id */
+            match_id: string;
+            /**
+             * Available
+             * @constant
+             */
+            available: true;
+            coverage: components["schemas"]["MatchReportCoverage"];
+            /** Lineups */
+            lineups: components["schemas"]["MatchReportLineupTeam"][];
+            /** Events */
+            events: components["schemas"]["MatchReportEvent"][];
+            /** Shots */
+            shots: components["schemas"]["MatchReportShot"][];
+            /** Team Stats */
+            team_stats: components["schemas"]["StandardReportTeamStat"][];
+            /** Team Stats By Half */
+            team_stats_by_half: components["schemas"]["StandardReportTeamStat"][];
+            /** Player Stats */
+            player_stats: components["schemas"]["StandardReportPlayerStat"][];
+            /**
+             * Momentum
+             * @default []
+             */
+            momentum: components["schemas"]["MatchReportMomentumPoint"][];
+            top_rated?: components["schemas"]["MatchReportTopRated"] | null;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-report.v1";
+            /** Metric Definitions */
+            metric_definitions: components["schemas"]["ReportMetricDefinition"][];
+            statistics_quality: components["schemas"]["ReportStatisticsQuality"];
+        };
+        /** StandardReportAvailableV2 */
+        StandardReportAvailableV2: {
+            /** Match Id */
+            match_id: string;
+            /**
+             * Available
+             * @constant
+             */
+            available: true;
+            coverage: components["schemas"]["MatchReportCoverage"];
+            /** Lineups */
+            lineups: components["schemas"]["ReportLineupTeamV2"][];
+            /** Events */
+            events: components["schemas"]["MatchReportEvent"][];
+            /** Shots */
+            shots: components["schemas"]["ReportShotV2"][];
+            /** Team Stats */
+            team_stats: components["schemas"]["ReportTeamStatV2"][];
+            /** Team Stats By Half */
+            team_stats_by_half: components["schemas"]["ReportTeamStatV2"][];
+            /** Player Stats */
+            player_stats: components["schemas"]["ReportPlayerStatV2"][];
+            /**
+             * Momentum
+             * @default []
+             */
+            momentum: components["schemas"]["MatchReportMomentumPoint"][];
+            top_rated: components["schemas"]["ReportTopRatedV2"] | null;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-report.v2";
+            /** Metric Definitions */
+            metric_definitions: components["schemas"]["ReportMetricDefinition"][];
+            statistics_quality: components["schemas"]["ReportStatisticsQuality"];
+        };
+        /** StandardReportPlayerStat */
+        StandardReportPlayerStat: {
+            /** Player Id */
+            player_id: string;
+            /** Canonical Player Id */
+            canonical_player_id: string | null;
+            /** Team Id */
+            team_id: number;
+            /** Canonical Team Id */
+            canonical_team_id: string | null;
+            /** Name */
+            name: string;
+            /** Is Home */
+            is_home: boolean;
+            /** Is Goalkeeper */
+            is_goalkeeper: boolean;
+            /** Rating */
+            rating: number | null;
+            /** Goals */
+            goals?: number | null;
+            /** Shots Total */
+            shots_total?: number | null;
+            /** Shots On Target */
+            shots_on_target?: number | null;
+            /** Shots Off Target */
+            shots_off_target?: number | null;
+            /** Shots Blocked */
+            shots_blocked?: number | null;
+            /** Shots Hit Woodwork */
+            shots_hit_woodwork?: number | null;
+            /** Goal Assists */
+            goal_assists?: number | null;
+            /** Passes Completed */
+            passes_completed?: number | null;
+            /** Passes Attempted */
+            passes_attempted?: number | null;
+            /** Crosses Completed */
+            crosses_completed?: number | null;
+            /** Crosses Attempted */
+            crosses_attempted?: number | null;
+            /** Touches */
+            touches?: number | null;
+            /** Touches In Opposition Box */
+            touches_in_opposition_box?: number | null;
+            /** Interceptions */
+            interceptions?: number | null;
+            /** Ball Recoveries */
+            ball_recoveries?: number | null;
+            /** Clearances */
+            clearances?: number | null;
+            /** Saves */
+            saves?: number | null;
+            /** Corners Taken */
+            corners_taken?: number | null;
+            /** Offsides */
+            offsides?: number | null;
+            /** Own Goals */
+            own_goals?: number | null;
+            /** Penalties Won */
+            penalties_won?: number | null;
+            /** Penalties Conceded */
+            penalties_conceded?: number | null;
+            /** Duels Won */
+            duels_won?: number | null;
+            /** Duels Lost */
+            duels_lost?: number | null;
+            /** Errors Leading To Goal */
+            errors_leading_to_goal?: number | null;
+            /** Big Chances Missed */
+            big_chances_missed?: number | null;
+            /** Big Chances Created */
+            big_chances_created?: number | null;
+            /** Minutes Played */
+            minutes_played?: number | null;
+            /** Possession Percent */
+            possession_percent?: number | null;
+            /** Expected Goals */
+            expected_goals?: number | null;
+            /** Expected Assists */
+            expected_assists?: number | null;
+            /** Expected Goals On Target */
+            expected_goals_on_target?: number | null;
+            /** Expected Goals Non Penalty */
+            expected_goals_non_penalty?: number | null;
+            /** Big Chances */
+            big_chances?: number | null;
+            /** Yellow Cards */
+            yellow_cards?: number | null;
+            /** Red Cards */
+            red_cards?: number | null;
+            /** Shots Inside Penalty Area */
+            shots_inside_penalty_area?: number | null;
+            /** Shots Outside Penalty Area */
+            shots_outside_penalty_area?: number | null;
+            /** Passes Completed Own Half */
+            passes_completed_own_half?: number | null;
+            /** Passes Completed Opposition Half */
+            passes_completed_opposition_half?: number | null;
+            /** Long Passes Completed */
+            long_passes_completed?: number | null;
+            /** Long Passes Attempted */
+            long_passes_attempted?: number | null;
+            /** Tackles */
+            tackles?: number | null;
+            /** Shots Blocked Defensively */
+            shots_blocked_defensively?: number | null;
+            /** Ground Duels Won */
+            ground_duels_won?: number | null;
+            /** Ground Duels Contested */
+            ground_duels_contested?: number | null;
+            /** Aerial Duels Won */
+            aerial_duels_won?: number | null;
+            /** Aerial Duels Contested */
+            aerial_duels_contested?: number | null;
+            /** Dribbles Completed */
+            dribbles_completed?: number | null;
+            /** Dribbles Attempted */
+            dribbles_attempted?: number | null;
+            /** Fouls Committed */
+            fouls_committed?: number | null;
+            /** Fouls Won */
+            fouls_won?: number | null;
+            /** Penalties Missed */
+            penalties_missed?: number | null;
+            /** Chances Created */
+            chances_created?: number | null;
+            /** Passes Into Final Third */
+            passes_into_final_third?: number | null;
+            /** Times Dispossessed */
+            times_dispossessed?: number | null;
+            /** Headed Clearances */
+            headed_clearances?: number | null;
+            /** Times Dribbled Past */
+            times_dribbled_past?: number | null;
+            /** Defensive Actions */
+            defensive_actions?: number | null;
+            /** Last Defender Tackles */
+            last_defender_tackles?: number | null;
+            /** Goal Line Clearances */
+            goal_line_clearances?: number | null;
+            /** Goals Conceded */
+            goals_conceded?: number | null;
+            /** Diving Saves */
+            diving_saves?: number | null;
+            /** Saves Inside Penalty Area */
+            saves_inside_penalty_area?: number | null;
+            /** Sweeper Actions */
+            sweeper_actions?: number | null;
+            /** Keeper Punches */
+            keeper_punches?: number | null;
+            /** High Claims */
+            high_claims?: number | null;
+            /** Penalties Saved */
+            penalties_saved?: number | null;
+            /** Shootout Penalties Saved */
+            shootout_penalties_saved?: number | null;
+            /** Line Breaking Passes */
+            line_breaking_passes?: number | null;
+            /** Sprints */
+            sprints?: number | null;
+            /** Expected Goals Open Play */
+            expected_goals_open_play?: number | null;
+            /** Expected Goals Set Play */
+            expected_goals_set_play?: number | null;
+            /** Expected Goals On Target Faced */
+            expected_goals_on_target_faced?: number | null;
+            /** Expected Goals Plus Assists */
+            expected_goals_plus_assists?: number | null;
+            /** Goals Prevented */
+            goals_prevented?: number | null;
+            /** Player Rating */
+            player_rating?: number | null;
+            /** Fantasy Points */
+            fantasy_points?: number | null;
+            /** Shot Accuracy Percent */
+            shot_accuracy_percent?: number | null;
+            /** Attack Share Left Percent */
+            attack_share_left_percent?: number | null;
+            /** Attack Share Centre Percent */
+            attack_share_centre_percent?: number | null;
+            /** Attack Share Right Percent */
+            attack_share_right_percent?: number | null;
+            /** Top Speed */
+            top_speed?: number | null;
+            /** Distance Covered */
+            distance_covered?: number | null;
+            /** Walking Distance */
+            walking_distance?: number | null;
+            /** Jogging Distance */
+            jogging_distance?: number | null;
+            /** Running Distance */
+            running_distance?: number | null;
+            /** Sprinting Distance */
+            sprinting_distance?: number | null;
+            /** Throws */
+            throws?: number | null;
+        };
+        /** StandardReportTeamStat */
+        StandardReportTeamStat: {
+            /** Team Id */
+            team_id: number;
+            /** Canonical Team Id */
+            canonical_team_id: string | null;
+            /** Is Home */
+            is_home: boolean;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "full_time" | "first_half" | "second_half";
+            /** Goals */
+            goals?: number | null;
+            /** Shots Total */
+            shots_total?: number | null;
+            /** Shots On Target */
+            shots_on_target?: number | null;
+            /** Shots Off Target */
+            shots_off_target?: number | null;
+            /** Shots Blocked */
+            shots_blocked?: number | null;
+            /** Shots Hit Woodwork */
+            shots_hit_woodwork?: number | null;
+            /** Goal Assists */
+            goal_assists?: number | null;
+            /** Passes Completed */
+            passes_completed?: number | null;
+            /** Passes Attempted */
+            passes_attempted?: number | null;
+            /** Crosses Completed */
+            crosses_completed?: number | null;
+            /** Crosses Attempted */
+            crosses_attempted?: number | null;
+            /** Touches */
+            touches?: number | null;
+            /** Touches In Opposition Box */
+            touches_in_opposition_box?: number | null;
+            /** Interceptions */
+            interceptions?: number | null;
+            /** Ball Recoveries */
+            ball_recoveries?: number | null;
+            /** Clearances */
+            clearances?: number | null;
+            /** Saves */
+            saves?: number | null;
+            /** Corners Taken */
+            corners_taken?: number | null;
+            /** Offsides */
+            offsides?: number | null;
+            /** Own Goals */
+            own_goals?: number | null;
+            /** Penalties Won */
+            penalties_won?: number | null;
+            /** Penalties Conceded */
+            penalties_conceded?: number | null;
+            /** Duels Won */
+            duels_won?: number | null;
+            /** Duels Lost */
+            duels_lost?: number | null;
+            /** Errors Leading To Goal */
+            errors_leading_to_goal?: number | null;
+            /** Big Chances Missed */
+            big_chances_missed?: number | null;
+            /** Big Chances Created */
+            big_chances_created?: number | null;
+            /** Minutes Played */
+            minutes_played?: number | null;
+            /** Possession Percent */
+            possession_percent?: number | null;
+            /** Expected Goals */
+            expected_goals?: number | null;
+            /** Expected Assists */
+            expected_assists?: number | null;
+            /** Expected Goals On Target */
+            expected_goals_on_target?: number | null;
+            /** Expected Goals Non Penalty */
+            expected_goals_non_penalty?: number | null;
+            /** Big Chances */
+            big_chances?: number | null;
+            /** Yellow Cards */
+            yellow_cards?: number | null;
+            /** Red Cards */
+            red_cards?: number | null;
+            /** Shots Inside Penalty Area */
+            shots_inside_penalty_area?: number | null;
+            /** Shots Outside Penalty Area */
+            shots_outside_penalty_area?: number | null;
+            /** Passes Completed Own Half */
+            passes_completed_own_half?: number | null;
+            /** Passes Completed Opposition Half */
+            passes_completed_opposition_half?: number | null;
+            /** Long Passes Completed */
+            long_passes_completed?: number | null;
+            /** Long Passes Attempted */
+            long_passes_attempted?: number | null;
+            /** Tackles */
+            tackles?: number | null;
+            /** Shots Blocked Defensively */
+            shots_blocked_defensively?: number | null;
+            /** Ground Duels Won */
+            ground_duels_won?: number | null;
+            /** Ground Duels Contested */
+            ground_duels_contested?: number | null;
+            /** Aerial Duels Won */
+            aerial_duels_won?: number | null;
+            /** Aerial Duels Contested */
+            aerial_duels_contested?: number | null;
+            /** Dribbles Completed */
+            dribbles_completed?: number | null;
+            /** Dribbles Attempted */
+            dribbles_attempted?: number | null;
+            /** Fouls Committed */
+            fouls_committed?: number | null;
+            /** Fouls Won */
+            fouls_won?: number | null;
+            /** Penalties Missed */
+            penalties_missed?: number | null;
+            /** Chances Created */
+            chances_created?: number | null;
+            /** Passes Into Final Third */
+            passes_into_final_third?: number | null;
+            /** Times Dispossessed */
+            times_dispossessed?: number | null;
+            /** Headed Clearances */
+            headed_clearances?: number | null;
+            /** Times Dribbled Past */
+            times_dribbled_past?: number | null;
+            /** Defensive Actions */
+            defensive_actions?: number | null;
+            /** Last Defender Tackles */
+            last_defender_tackles?: number | null;
+            /** Goal Line Clearances */
+            goal_line_clearances?: number | null;
+            /** Goals Conceded */
+            goals_conceded?: number | null;
+            /** Diving Saves */
+            diving_saves?: number | null;
+            /** Saves Inside Penalty Area */
+            saves_inside_penalty_area?: number | null;
+            /** Sweeper Actions */
+            sweeper_actions?: number | null;
+            /** Keeper Punches */
+            keeper_punches?: number | null;
+            /** High Claims */
+            high_claims?: number | null;
+            /** Penalties Saved */
+            penalties_saved?: number | null;
+            /** Shootout Penalties Saved */
+            shootout_penalties_saved?: number | null;
+            /** Line Breaking Passes */
+            line_breaking_passes?: number | null;
+            /** Sprints */
+            sprints?: number | null;
+            /** Expected Goals Open Play */
+            expected_goals_open_play?: number | null;
+            /** Expected Goals Set Play */
+            expected_goals_set_play?: number | null;
+            /** Expected Goals On Target Faced */
+            expected_goals_on_target_faced?: number | null;
+            /** Expected Goals Plus Assists */
+            expected_goals_plus_assists?: number | null;
+            /** Goals Prevented */
+            goals_prevented?: number | null;
+            /** Player Rating */
+            player_rating?: number | null;
+            /** Fantasy Points */
+            fantasy_points?: number | null;
+            /** Shot Accuracy Percent */
+            shot_accuracy_percent?: number | null;
+            /** Attack Share Left Percent */
+            attack_share_left_percent?: number | null;
+            /** Attack Share Centre Percent */
+            attack_share_centre_percent?: number | null;
+            /** Attack Share Right Percent */
+            attack_share_right_percent?: number | null;
+            /** Top Speed */
+            top_speed?: number | null;
+            /** Distance Covered */
+            distance_covered?: number | null;
+            /** Walking Distance */
+            walking_distance?: number | null;
+            /** Jogging Distance */
+            jogging_distance?: number | null;
+            /** Running Distance */
+            running_distance?: number | null;
+            /** Sprinting Distance */
+            sprinting_distance?: number | null;
+            /** Throw Ins */
+            throw_ins?: number | null;
+        };
+        /** StandardReportUnavailable */
+        StandardReportUnavailable: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-report.v1";
+            /** Match Id */
+            match_id: string;
+            /**
+             * Available
+             * @constant
+             */
+            available: false;
+            /** Reason */
+            reason: string;
+        };
+        /** StandardReportUnavailableV2 */
+        StandardReportUnavailableV2: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-report.v2";
+            /** Match Id */
+            match_id: string;
+            /**
+             * Available
+             * @constant
+             */
+            available: false;
+            /** Reason */
+            reason: string;
+        };
+        /** StandardSeasonIssue */
+        StandardSeasonIssue: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "unresolved_identity" | "unverified_aggregation" | "unverified_unit" | "invalid_metric_value" | "conflicting_aggregation_evidence" | "unverified_derived_definition" | "unmapped_derived_metric" | "invalid_derived_metric_value" | "missing_pairing_count" | "incomplete_paired_inputs";
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "player_id" | "team_id" | "value" | "aggregation" | "unit" | "ratios";
+        };
+        /** StandardSeasonPlayer */
+        StandardSeasonPlayer: {
+            /** Record Id */
+            record_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string | null;
+            /** Avatar Url */
+            avatar_url: string | null;
+        };
+        /** StandardSeasonTeam */
+        StandardSeasonTeam: {
+            /** Team Id */
+            team_id: string | null;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string | null;
+            /** Crest Url */
+            crest_url: string | null;
+        };
+        /** StandardStandingRow */
+        StandardStandingRow: {
+            /** Record Id */
+            record_id: string;
+            team: components["schemas"]["TeamSeasonReference"];
+            /** Group Name */
+            group_name: string | null;
+            /** Qual Color */
+            qual_color: string | null;
+            /** Issues */
+            issues: components["schemas"]["TeamSeasonIssue"][];
+            /** Position */
+            position?: number | null;
+            /** Matches Played */
+            matches_played?: number | null;
+            /** Wins */
+            wins?: number | null;
+            /** Draws */
+            draws?: number | null;
+            /** Losses */
+            losses?: number | null;
+            /** Goals For */
+            goals_for?: number | null;
+            /** Goals Against */
+            goals_against?: number | null;
+            /** Goal Difference */
+            goal_difference?: number | null;
+            /** Points */
+            points?: number | null;
+            /** Expected Goals For */
+            expected_goals_for?: number | null;
+            /** Expected Goals Against */
+            expected_goals_against?: number | null;
+            /** Expected Points */
+            expected_points?: number | null;
+            /** Expected Position */
+            expected_position?: number | null;
+            /** Points Above Expected */
+            points_above_expected?: number | null;
+            /** Position Difference */
+            position_difference?: number | null;
+        };
+        /** StandardStandingsResponse */
+        StandardStandingsResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-standings.v1";
+            /** Competition Id */
+            competition_id: string;
+            /** Season */
+            season: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /**
+             * Table Type
+             * @enum {string}
+             */
+            table_type: "all" | "home" | "away" | "form" | "xg";
+            /** Season Finished */
+            season_finished: boolean;
+            /** Rows */
+            rows: components["schemas"]["StandardStandingRow"][];
+            /** Empty Reason */
+            empty_reason: string | null;
+        };
+        /** StandardTeamAggregateRow */
+        StandardTeamAggregateRow: {
+            /** Record Id */
+            record_id: string;
+            team: components["schemas"]["TeamSeasonReference"];
+            team_color: components["schemas"]["TeamBrandColor"] | null;
+            ratios: components["schemas"]["StandardTeamRatios"] | null;
+            /** Issues */
+            issues: components["schemas"]["TeamSeasonIssue"][];
+            /** Matches Played */
+            matches_played?: number | null;
+            /** Avg Total Shots */
+            avg_total_shots?: number | null;
+            /** Avg Shots On Target */
+            avg_shots_on_target?: number | null;
+            /** Avg Possession */
+            avg_possession?: number | null;
+            /** Avg Expected Goals */
+            avg_expected_goals?: number | null;
+            /** Avg Expected Goals On Target */
+            avg_expected_goals_on_target?: number | null;
+            /** Avg Expected Goals Open Play */
+            avg_expected_goals_open_play?: number | null;
+            /** Avg Expected Goals Set Play */
+            avg_expected_goals_set_play?: number | null;
+            /** Avg Expected Goals Non Penalty */
+            avg_expected_goals_non_penalty?: number | null;
+            /** Avg Expected Goals Conceded */
+            avg_expected_goals_conceded?: number | null;
+            /** Avg Corners */
+            avg_corners?: number | null;
+            /** Avg Fouls */
+            avg_fouls?: number | null;
+            /** Avg Yellow Cards */
+            avg_yellow_cards?: number | null;
+            /** Avg Red Cards */
+            avg_red_cards?: number | null;
+            /** Clean Sheets */
+            clean_sheets?: number | null;
+            /** Btts Matches */
+            btts_matches?: number | null;
+            /** Btts Pct */
+            btts_pct?: number | null;
+        };
+        /** StandardTeamBoard */
+        StandardTeamBoard: {
+            /** Metric Code */
+            metric_code: string;
+            /** Series Id */
+            series_id: string;
+            /** Label Zh */
+            label_zh: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "focus" | "attack" | "defence" | "discipline" | "unclassified";
+            /** Entries */
+            entries: components["schemas"]["StandardTeamBoardEntry"][];
+        };
+        /** StandardTeamBoardEntry */
+        StandardTeamBoardEntry: {
+            /** Record Id */
+            record_id: string;
+            team: components["schemas"]["TeamSeasonReference"];
+            /** Rank */
+            rank: number | null;
+            /** Value */
+            value: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "minutes" | "percent" | "expected_count" | "rating_points" | "points" | "unverified" | "unverified_currency" | "metres" | "people" | "model_points" | "ratio";
+            /**
+             * Aggregation
+             * @enum {string}
+             */
+            aggregation: "season_total" | "per_match" | "per_90_minutes" | "mean" | "unverified";
+            /**
+             * Definition Version
+             * @enum {string}
+             */
+            definition_version: "miaodi-season-board-metrics.v1" | "miaodi-season-board-metrics.v2";
+            /** Display Decimals */
+            display_decimals: number | null;
+            team_color: components["schemas"]["TeamBrandColor"] | null;
+            /** Issues */
+            issues: components["schemas"]["TeamSeasonIssue"][];
+        };
+        /** StandardTeamRatio */
+        StandardTeamRatio: {
+            /** Value */
+            value: number | null;
+            /** Numerator */
+            numerator: number | null;
+            /** Denominator */
+            denominator: number | null;
+            /** Paired Matches */
+            paired_matches: number | null;
+            /** Matches Played */
+            matches_played: number | null;
+            /** Sample Count */
+            sample_count: number | null;
+            /** Unit */
+            unit: string;
+            /** Definition Version */
+            definition_version: string;
+            /**
+             * Sample Policy
+             * @constant
+             */
+            sample_policy: "paired_source_observations";
+        };
+        /** StandardTeamRatios */
+        StandardTeamRatios: {
+            opp_half_pass_share?: components["schemas"]["StandardTeamRatio"] | null;
+            set_piece_xg_share?: components["schemas"]["StandardTeamRatio"] | null;
+            set_piece_xga_share?: components["schemas"]["StandardTeamRatio"] | null;
+            opp_xg_per_shot?: components["schemas"]["StandardTeamRatio"] | null;
+            shot_accuracy?: components["schemas"]["StandardTeamRatio"] | null;
+            box_shot_share?: components["schemas"]["StandardTeamRatio"] | null;
+            big_chance_conversion?: components["schemas"]["StandardTeamRatio"] | null;
+            aerial_win_share?: components["schemas"]["StandardTeamRatio"] | null;
+            fast_break_xg_share?: components["schemas"]["StandardTeamRatio"] | null;
+            box_touch_share?: components["schemas"]["StandardTeamRatio"] | null;
+            npxg_per_box_touch?: components["schemas"]["StandardTeamRatio"] | null;
+            def_action_density?: components["schemas"]["StandardTeamRatio"] | null;
+            opp_territory_share?: components["schemas"]["StandardTeamRatio"] | null;
+            corner_shot_rate?: components["schemas"]["StandardTeamRatio"] | null;
+            finishing_delta?: components["schemas"]["StandardTeamRatio"] | null;
+            gk_saves_above_expected?: components["schemas"]["StandardTeamRatio"] | null;
+        };
+        /** StandardTeamStatsResponse */
+        StandardTeamStatsResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-website-team-season.v1";
+            /** Competition Id */
+            competition_id: string;
+            /** Season */
+            season: string | null;
+            /** Available Seasons */
+            available_seasons: string[];
+            /** Rows */
+            rows: components["schemas"]["StandardTeamAggregateRow"][];
+            /** Boards */
+            boards: components["schemas"]["StandardTeamBoard"][];
+            /** Metric Definitions */
+            metric_definitions: components["schemas"]["TeamAggregateDefinition"][];
+            /** Empty Reason */
+            empty_reason: string | null;
+            /** Recency */
+            recency: number | null;
+            /**
+             * Venue
+             * @enum {string}
+             */
+            venue: "all" | "home" | "away";
+        };
         /**
          * StandingRow
          * @description fact_league_table 行 + team 引用(列名保留数据库原始大小写)。
@@ -4971,6 +8239,19 @@ export interface components {
              * @default false
              */
             season_finished: boolean;
+        };
+        /** Stat */
+        Stat: {
+            /** Player Id */
+            player_id: string;
+            /** Code */
+            code: string;
+            /** Label */
+            label: string;
+            /** Unit */
+            unit: string;
+            /** Value */
+            value: number | null;
         };
         /**
          * StudioBundleDTO
@@ -5064,6 +8345,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Revision */
+            revision?: number | null;
         };
         /** StudioDraftListItem */
         StudioDraftListItem: {
@@ -5125,6 +8408,113 @@ export interface components {
             /** Profile Id */
             profile_id: string;
         };
+        /** StudioPredictionDTO */
+        StudioPredictionDTO: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "tm15-display.v1";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "unavailable";
+            /**
+             * Display Name
+             * @constant
+             */
+            display_name: "喵弟模型";
+            /** Match Id */
+            match_id: string;
+            /** As Of */
+            as_of: string;
+            /** Reason */
+            reason?: ("no_capture_database" | "no_proven_prematch_capture_at_cutoff" | "match_has_started_at_cutoff") | null;
+            /** Kickoff Utc */
+            kickoff_utc?: string | null;
+            /** Snapshot Id */
+            snapshot_id?: string | null;
+            /** Receipt Id */
+            receipt_id?: string | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Stored At */
+            stored_at?: string | null;
+            /** Age Hours */
+            age_hours?: number | null;
+            /** Teams */
+            teams?: components["schemas"]["TeamPrediction"][];
+            /** Team Predictions */
+            team_predictions?: components["schemas"]["PredictionMetric"][];
+        };
+        /** StudioPredictionFixturesDTO */
+        StudioPredictionFixturesDTO: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "prediction-fixtures.v1";
+            /** As Of */
+            as_of: string;
+            /**
+             * Horizon Hours
+             * @constant
+             */
+            horizon_hours: 72;
+            /** Matches */
+            matches: components["schemas"]["PredictionFixture"][];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** StudioResearchEventDTO */
+        StudioResearchEventDTO: {
+            /** Revision */
+            revision: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "import" | "edit" | "review" | "reopen";
+            /** Actor Id */
+            actor_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Content Json */
+            content_json: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** StudioResearchHistoryDTO */
+        StudioResearchHistoryDTO: {
+            /** Events */
+            events: components["schemas"]["StudioResearchEventDTO"][];
+        };
+        /** TeamAggregateDefinition */
+        TeamAggregateDefinition: {
+            /** Metric Code */
+            metric_code: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "minutes" | "percent" | "expected_count" | "rating_points" | "points" | "unverified" | "unverified_currency" | "metres" | "people" | "model_points" | "ratio";
+            /**
+             * Aggregation
+             * @enum {string}
+             */
+            aggregation: "season_total" | "per_match" | "mean" | "ratio_of_totals";
+            /**
+             * Definition Version
+             * @constant
+             */
+            definition_version: "miaodi-team-season-aggregates.v1";
+            /**
+             * Sample Policy
+             * @constant
+             */
+            sample_policy: "source_derived_metric_coverage_unavailable";
+        };
         /**
          * TeamBrandColor
          * @description 榜单里用来给球队上色的一组代表色(浅色/深色模式各一个)。
@@ -5176,6 +8566,44 @@ export interface components {
              */
             result: "W" | "D" | "L";
         };
+        /** TeamMetric */
+        TeamMetric: {
+            /** Metric Code */
+            metric_code: string;
+            /** Value */
+            value: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "minutes" | "percent" | "expected_count" | "rating_points" | "points" | "unverified" | "unverified_currency" | "metres" | "people" | "model_points" | "ratio";
+            /**
+             * Definition Version
+             * @enum {string}
+             */
+            definition_version: "miaodi-observed-metrics.v1" | "miaodi-observed-metrics.v2" | "miaodi-observed-metrics.v3";
+            /** Team Id */
+            team_id: string | null;
+            /** Series Id */
+            series_id: string;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "full_time" | "first_half" | "second_half" | "extra_time_first_half" | "extra_time_second_half" | "penalty_shootout" | "non_playing";
+        };
+        /** TeamPrediction */
+        TeamPrediction: {
+            /** Team Id */
+            team_id: string;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "home" | "away";
+            /** Name */
+            name?: string | null;
+        };
         /**
          * TeamRatioValue
          * @description 比值类指标的赛季口径(silver_team_season_ratios 一行,
@@ -5216,6 +8644,16 @@ export interface components {
             /** Crest Url */
             crest_url?: string | null;
         };
+        /** TeamSeasonIssue */
+        TeamSeasonIssue: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "unresolved_identity" | "invalid_metric_value" | "unverified_aggregation" | "unverified_unit" | "conflicting_aggregation_evidence" | "unverified_derived_definition" | "unmapped_derived_metric" | "missing_pairing_count" | "invalid_pairing_count";
+            /** Field */
+            field: string;
+        };
         /**
          * TeamSeasonRatios
          * @description 每加一个比值型视角指标 = 这里加一个具名字段 + backend/silver/
@@ -5240,6 +8678,19 @@ export interface components {
             corner_shot_rate?: components["schemas"]["TeamRatioValue"] | null;
             finishing_delta?: components["schemas"]["TeamRatioValue"] | null;
             gk_saves_above_expected?: components["schemas"]["TeamRatioValue"] | null;
+        };
+        /** TeamSeasonReference */
+        TeamSeasonReference: {
+            /** Team Id */
+            team_id: string | null;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string | null;
+            /** Crest Url */
+            crest_url: string | null;
+            /** Record Id */
+            record_id: string;
         };
         /**
          * TeamSeasonStatRow
@@ -5321,6 +8772,19 @@ export interface components {
             value?: number | null;
             team_color?: components["schemas"]["TeamBrandColor"] | null;
         };
+        /** TeamStatistics */
+        TeamStatistics: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "miaodi-team-statistics.v2";
+            /** Match Id */
+            match_id: string;
+            /** Observations */
+            observations: components["schemas"]["TeamMetric"][];
+            quality: components["schemas"]["Quality"];
+        };
         /** TeamStatsResponse */
         TeamStatsResponse: {
             /** League Id */
@@ -5347,6 +8811,8 @@ export interface components {
             overrides?: {
                 [key: string]: unknown;
             } | null;
+            /** Expected Revision */
+            expected_revision?: number | null;
         };
         /** UserStatusBody */
         UserStatusBody: {
@@ -5360,6 +8826,75 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
+        /** ValueMetric */
+        ValueMetric: {
+            /** Code */
+            code: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: number | null;
+        };
+        /** ValueRow */
+        ValueRow: {
+            /** Team Id */
+            team_id: string;
+            /** Player Id */
+            player_id: string | null;
+            /** Metrics */
+            metrics: components["schemas"]["ValueMetric"][];
+        };
+        /** WeeklyCandidate */
+        WeeklyCandidate: {
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Limitation */
+            limitation: string;
+        };
+        /** WeeklyResearchDTO */
+        WeeklyResearchDTO: {
+            /** Week Start */
+            week_start: string;
+            /** Stale */
+            stale: boolean;
+            /** Status */
+            status: string;
+            /** Rounds */
+            rounds: components["schemas"]["WeeklyRound"][];
+        };
+        /** WeeklyRound */
+        WeeklyRound: {
+            /** Import Id */
+            import_id: string;
+            /** Competition */
+            competition: string;
+            /** Label */
+            label: string;
+            coverage: components["schemas"]["Coverage"];
+            /** Total Goals */
+            total_goals: number | null;
+            /** Goals Per Match */
+            goals_per_match: number | null;
+            /** Score Matches */
+            score_matches: number;
+            /** Candidates */
+            candidates: components["schemas"]["WeeklyCandidate"][];
         };
         /**
          * WinProbabilityDTO
@@ -6155,6 +9690,924 @@ export interface operations {
             };
         };
     };
+    standard_team_statistics_api_v1_standard_matches__identity__team_statistics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStatistics"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_player_statistics_api_v1_standard_matches__identity__player_statistics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerStatistics"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_report_api_v1_standard_matches__identity__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardReportAvailable"] | components["schemas"]["StandardReportUnavailable"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_report_v2_api_v1_standard_matches__identity__report_v2_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardReportAvailableV2"] | components["schemas"]["StandardReportUnavailableV2"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_competitions_api_v1_standard_competitions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardCompetition"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_players_api_v1_standard_competitions__identity__players_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+            };
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardPlayersResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_player_quadrant_api_v1_standard_competitions__identity__player_quadrant_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+            };
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardPlayerQuadrantResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_standings_api_v1_standard_competitions__identity__standings_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+                table_type?: "all" | "home" | "away" | "form" | "xg";
+            };
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardStandingsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_team_season_api_v1_standard_competitions__identity__team_stats_get: {
+        parameters: {
+            query?: {
+                season?: string | null;
+                recency?: components["schemas"]["RecencyWindow"] | null;
+                venue?: "all" | "home" | "away";
+            };
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardTeamStatsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_match_preview_api_v1_standard_matches__identity__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardPreviewResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    standard_match_profile_api_v1_standard_matches__identity__data_profile_get: {
+        parameters: {
+            query?: {
+                venue?: "recent" | "same_venue" | "all";
+                n?: components["schemas"]["ProfileWindowN"];
+            };
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardDataProfileResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    matches_api_v1_studio_visualization_matches_get: {
+        parameters: {
+            query?: {
+                date?: string | null;
+                competition?: string;
+                q?: string;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Catalog"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_api_v1_studio_visualization_matches__match_id__get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Bundle"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_leagues_api_v1_leagues_get: {
         parameters: {
             query?: never;
@@ -6722,7 +11175,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -6789,7 +11242,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -6856,7 +11309,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -6923,7 +11376,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -6990,7 +11443,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -7060,7 +11513,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -7127,7 +11580,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                match_id: number;
+                match_id: number | string;
             };
             cookie?: never;
         };
@@ -7319,6 +11772,55 @@ export interface operations {
             };
         };
     };
+    team_crest_asset_api_v1_media_team_crests__digest__png_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                digest: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Manifest-verified content-addressed crest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     team_crest_api_v1_media_team_crests__provider___provider_team_id__png_get: {
         parameters: {
             query: {
@@ -7353,6 +11855,181 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    match_referee_portrait_api_v1_media_match_portraits__identity__referee_png_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Match-scoped official portrait through the internal media cache */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    player_avatar_api_v1_media_player_avatars__identity__png_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Same-origin player image through the internal media cache */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    prematch_person_portrait_api_v1_media_prematch_portraits__identity___record__png_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity: string;
+                record: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Observed match-scoped person portrait */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10059,6 +14736,174 @@ export interface operations {
             };
         };
     };
+    studio_prediction_fixtures_api_v1_studio_prediction_fixtures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioPredictionFixturesDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    studio_prediction_api_v1_studio_predictions__source_match_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioPredictionDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
     match_bundle_api_v1_studio_matches__match_id__bundle_get: {
         parameters: {
             query?: never;
@@ -10077,6 +14922,234 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudioBundleDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    import_research_api_v1_studio_research_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportResearchBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDraftCreatedDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    list_research_drafts_api_v1_studio_research_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDraftsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    research_history_api_v1_studio_research_drafts__draft_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioResearchHistoryDTO"];
                 };
             };
             /** @description Bad Request */
@@ -10670,6 +15743,1069 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    market_comparison_api_v1_studio_predictions__source_match_id__comparison_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketComparisonDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    research_inbox_api_v1_studio_research_inbox_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchInboxDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    weekly_research_api_v1_studio_research_weekly_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyResearchDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    import_prematch_api_v1_studio_research_import_prematch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportPrematchBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDraftCreatedDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    import_round_api_v1_studio_research_import_round_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportResearchBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDraftCreatedDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    my_access_api_v1_me_analysis_access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisAccessDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    user_access_api_v1_admin_users__user_id__analysis_access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisAccessDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    update_access_api_v1_admin_users__user_id__analysis_access_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    access_history_api_v1_admin_users__user_id__analysis_access_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipHistoryDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    articles_api_v1_analysis_articles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    article_api_v1_analysis_articles__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleDetail"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    publication_state_api_v1_studio_research_drafts__draft_id__publication_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    publish_api_v1_studio_research_drafts__draft_id__publication_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+        };
+    };
+    retract_api_v1_studio_research_drafts__draft_id__retract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetractCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

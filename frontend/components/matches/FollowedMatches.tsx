@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { buildMatchHref } from "@/lib/match-links";
 import { clientFetch, type MatchDetailResponse } from "@/lib/api-v1";
 import { loadFavorites } from "@/lib/favorites";
 import { getFollowedMatchIds } from "@/lib/followed-matches";
@@ -79,7 +80,7 @@ export function FollowedMatches({ variant = "standalone", onVisibilityChange }: 
       <ul className={styles.list}>
         {rows.map((m) => (
           <li key={m.match_id}>
-            <Link href={`/matches/${m.match_id}`} className={styles.row}>
+            <Link href={buildMatchHref(m)} className={styles.row}>
               <span className={styles.league}>
                 {LEAGUE_ZH[m.league_id] ?? `联赛 ${m.league_id}`}
               </span>

@@ -1,0 +1,1014 @@
+{
+  "schema_version": "miaodi-advanced-value-bindings.v1",
+  "scope": "four_content_verified_CC_feature_contracts",
+  "identity_policy": "Map match/team/player through the published registry; internal source keys are never public entity IDs.",
+  "missing_policy": "Preserve absent/null; zero-default source policy remains explicit.",
+  "bindings": [
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "event_level_header_shot",
+      "entity_scope": "event",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "unavailable",
+      "reason": "declared_unavailable",
+      "source_table": null
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "event_level_restart_type",
+      "entity_scope": "event",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "unavailable",
+      "reason": "declared_unavailable",
+      "source_table": null
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "half_space_box_entries_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "half_space_box_entries_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "half_space_final_third_entries_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "half_space_final_third_entries_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_accurate_crosses",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_accurate_crosses",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_accurate_non_corner_crosses",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_accurate_non_corner_crosses",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_corner_pattern_shots",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_corner_pattern_shots",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_corners_taken",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_corners_taken",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_direct_free_kick_shots",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_direct_free_kick_shots",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_header_shots",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_header_shots",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_indirect_free_kick_pattern_shots",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_indirect_free_kick_pattern_shots",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_non_corner_crosses",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_non_corner_crosses",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_shots_inside_box",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_shots_inside_box",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_shots_outside_box",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_shots_outside_box",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "official_total_crosses",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "official_total_crosses",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "outside_box_shots_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "outside_box_shots_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_attacking_methods_v1",
+      "metric_code": "set_piece_second_phase_sequences_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_attacking_method_match",
+      "source_column": "set_piece_second_phase_sequences_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_attacking_methods_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "box_target_contribution_proxy",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "box_target_contribution_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "consecutive_starts_entering_match",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_workload_match",
+      "source_column": "consecutive_starts_entering_match",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "cumulative_minutes_before_match",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_workload_match",
+      "source_column": "cumulative_minutes_before_match",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "days_since_previous_appearance",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_workload_match",
+      "source_column": "days_since_previous_appearance",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "defensive_screen_contribution",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "defensive_screen_contribution",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "final_passer_contribution",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "final_passer_contribution",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "finisher_contribution",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "finisher_contribution",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "minutes_played",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "minutes_played",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "minutes_previous_14d",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_workload_match",
+      "source_column": "minutes_previous_14d",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "minutes_previous_7d",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_workload_match",
+      "source_column": "minutes_previous_7d",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "organizer_contribution",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "organizer_contribution",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "primary_role",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "primary_role",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_player_roles_v1",
+      "metric_code": "progressor_contribution",
+      "entity_scope": "player_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_player_role_match",
+      "source_column": "progressor_contribution",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "player_id"
+      ],
+      "required_row_definition_version": "opta_player_roles_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "build_up_exit_attempts",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "build_up_exit_attempts",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "build_up_exits_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "build_up_exits_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "build_up_sequences",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "build_up_sequences",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "build_up_sequences_ending_shot",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "build_up_sequences_ending_shot",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "build_up_sequences_reaching_box",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "build_up_sequences_reaching_box",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "build_up_sequences_reaching_final_third",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "build_up_sequences_reaching_final_third",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "final_third_entries_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "final_third_entries_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "final_third_entry_attempts",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "final_third_entry_attempts",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "five_channel_progression",
+      "entity_scope": "channel_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "components",
+      "source_table": "op_team_progression_channel_match",
+      "components": [
+        {
+          "component_code": "pass_attempts",
+          "source_column": "pass_attempts",
+          "unit": "count"
+        },
+        {
+          "component_code": "passes_completed",
+          "source_column": "passes_completed",
+          "unit": "count"
+        },
+        {
+          "component_code": "progressive_pass_attempts_proxy",
+          "source_column": "progressive_pass_attempts_proxy",
+          "unit": "count"
+        },
+        {
+          "component_code": "progressive_passes_completed_proxy",
+          "source_column": "progressive_passes_completed_proxy",
+          "unit": "count"
+        },
+        {
+          "component_code": "final_third_entry_attempts",
+          "source_column": "final_third_entry_attempts",
+          "unit": "count"
+        },
+        {
+          "component_code": "final_third_entries_completed",
+          "source_column": "final_third_entries_completed",
+          "unit": "count"
+        },
+        {
+          "component_code": "penalty_area_entry_attempts",
+          "source_column": "penalty_area_entry_attempts",
+          "unit": "count"
+        },
+        {
+          "component_code": "penalty_area_entries_completed",
+          "source_column": "penalty_area_entries_completed",
+          "unit": "count"
+        },
+        {
+          "component_code": "build_up_exit_attempts",
+          "source_column": "build_up_exit_attempts",
+          "unit": "count"
+        },
+        {
+          "component_code": "build_up_exits_completed",
+          "source_column": "build_up_exits_completed",
+          "unit": "count"
+        }
+      ],
+      "combine_policy": "never_sum_parent_feature",
+      "channel_key": "channel_id",
+      "source_grain": [
+        "match_id",
+        "team_id",
+        "channel_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "official_pass_attempts",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "official_pass_attempts",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "official_passes_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "official_passes_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "penalty_area_entries_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "penalty_area_entries_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "penalty_area_entry_attempts",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "penalty_area_entry_attempts",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "progressive_carries",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "unavailable",
+      "reason": "declared_unavailable",
+      "source_table": null
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "progressive_pass_attempts_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "progressive_pass_attempts_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "progressive_passes_completed_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "progressive_passes_completed_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "raw_coordinate_pass_attempts",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "raw_coordinate_pass_attempts",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_progression_v1",
+      "metric_code": "raw_coordinate_passes_completed",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_progression_match",
+      "source_column": "raw_coordinate_passes_completed",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_progression_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "counterpress_regains_within_10s_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "counterpress_regains_within_10s_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "counterpress_regains_within_5s_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "counterpress_regains_within_5s_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "event_level_defensive_actions",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "unavailable",
+      "reason": "declared_unavailable",
+      "source_table": null
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "high_block_regain_share_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "high_block_regain_share_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "low_block_box_protection_rate_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "low_block_box_protection_rate_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "official_defensive_actions",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "components",
+      "source_table": "op_team_transition_pressing_match",
+      "components": [
+        {
+          "component_code": "tackles",
+          "source_column": "official_total_tackles",
+          "unit": "count"
+        },
+        {
+          "component_code": "interceptions",
+          "source_column": "official_interceptions",
+          "unit": "count"
+        },
+        {
+          "component_code": "passes_blocked",
+          "source_column": "official_blocked_passes",
+          "unit": "count"
+        },
+        {
+          "component_code": "ball_recoveries",
+          "source_column": "official_ball_recoveries",
+          "unit": "count"
+        }
+      ],
+      "combine_policy": "never_sum_parent_feature",
+      "channel_key": null,
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "official_ppda",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "official_ppda",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "opponent_build_up_stop_before_final_third_rate_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "opponent_build_up_stop_before_final_third_rate_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "opponent_shots_after_loss_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "components",
+      "source_table": "op_team_transition_pressing_match",
+      "components": [
+        {
+          "component_code": "within_10_seconds",
+          "source_column": "losses_followed_by_opponent_shot_within_10s_proxy",
+          "unit": "count"
+        },
+        {
+          "component_code": "within_15_seconds",
+          "source_column": "losses_followed_by_opponent_shot_within_15s_proxy",
+          "unit": "count"
+        }
+      ],
+      "combine_policy": "never_sum_parent_feature",
+      "channel_key": null,
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "possession_changes_lost_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "possession_changes_lost_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "quick_transition_outputs_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "components",
+      "source_table": "op_team_transition_pressing_match",
+      "components": [
+        {
+          "component_code": "shots",
+          "source_column": "quick_transition_shots_proxy",
+          "unit": "count"
+        },
+        {
+          "component_code": "goals",
+          "source_column": "quick_transition_goals_proxy",
+          "unit": "count"
+        },
+        {
+          "component_code": "shots_with_known_expected_goals",
+          "source_column": "quick_transition_shots_xg_known",
+          "unit": "count"
+        },
+        {
+          "component_code": "known_expected_goals",
+          "source_column": "quick_transition_xg_known",
+          "unit": "expected_count"
+        }
+      ],
+      "combine_policy": "never_sum_parent_feature",
+      "channel_key": null,
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    },
+    {
+      "private_definition_version": "opta_transition_pressing_v1",
+      "metric_code": "quick_transition_sequences_proxy",
+      "entity_scope": "team_match",
+      "public_adapter_status": "pending",
+      "contract_evidence": "hash-and-definition-row-verified",
+      "representation": "scalar",
+      "source_table": "op_team_transition_pressing_match",
+      "source_column": "quick_transition_sequences_proxy",
+      "source_grain": [
+        "match_id",
+        "team_id"
+      ],
+      "required_row_definition_version": "opta_transition_pressing_v1"
+    }
+  ]
+}

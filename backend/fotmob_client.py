@@ -1636,10 +1636,20 @@ class FotMobClient:
                 continue
 
             top_lists = data.get("TopLists") or []
-            stat_list = top_lists[0].get("StatList", []) if top_lists else []
+            top = top_lists[0] if top_lists else {}
+            stat_list = top.get("StatList", [])
+            meta = {
+                "stat_title": top.get("Title"),
+                "stat_format": top.get("StatFormat"),
+                "stat_decimals": top.get("StatDecimals"),
+                "category": top.get("Category"),
+            }
 
             for row in stat_list:
                 extra = {k: v for k, v in row.items() if k not in mapped_keys}
+                # Board metadata is evidence for units/denominators, not a
+                # derived total. Keep it alongside the unchanged source value.
+                extra.update(meta)
                 records.append({
                     "League_ID":   int(league_id),
                     "Season":      season,

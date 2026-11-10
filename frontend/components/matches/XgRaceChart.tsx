@@ -29,7 +29,12 @@ type MatchReport = Extract<MatchReportResponse, { available: true }>;
 type Shot = MatchReport["shots"][number];
 
 /** 可选携带补时分钟数(minute_added);只有启用补时横轴(stoppage)时才会用到。 */
-export type XgRaceShot = Shot & { minute_added?: number | null };
+// Both observed matches and the simulator use this chart. Simulated team IDs
+// are local identifiers, not entries in the website's canonical entity registry.
+export type XgRaceShot = Pick<Shot,
+  "is_home" | "minute" | "period" | "xg" | "outcome" | "player_name" |
+  "is_own_goal" | "is_own_goal_inferred" | "situation"
+> & { player_id?: string | null; team_id?: string | number | null; minute_added?: number | null };
 
 /** 上 / 下半场补时长度(分钟)。传入时横轴展开补时:上半场补时排在 45' 之后、
  * 下半场之前,下半场整体右移上半场补时的长度,终点为 90+下半场补时。 */

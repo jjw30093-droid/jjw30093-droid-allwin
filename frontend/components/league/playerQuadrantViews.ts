@@ -45,7 +45,6 @@
  */
 
 import type { PlayerQuadrantRow } from "@/lib/api-v1";
-import { playerAvatarUrl } from "@/components/players/playerAvatarUrl";
 import {
   meetsMinutesShare,
   playerKey,
@@ -235,7 +234,7 @@ export function playerPlotSet(rows: PlayerQuadrantRow[], view: PlayerView): Play
       x,
       y,
       mp: r.appearances ?? null,
-      avatarUrl: r.player.player_id ? playerAvatarUrl(r.player.player_id) : null,
+      avatarUrl: r.player.avatar_url ?? null,
       playerId: r.player.player_id ?? null,
       teamName: r.team.name,
       teamCrestUrl: r.team.crest_url ?? null,

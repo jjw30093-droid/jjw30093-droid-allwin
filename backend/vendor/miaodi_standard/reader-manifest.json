@@ -1,0 +1,21 @@
+{
+  "schema_version": "miaodi-standard-reader.v1",
+  "source": "miaomiaodi-opta-hub/backend/standard",
+  "files": {
+    "__init__.py": "1750f988ecdd70a97dbffab4314d90673a5fd34bba29df7f9f2bdf3adc9d0658",
+    "contract.py": "cef4570386b9e9833903ec3c703ca109bab5f278bcbf9a13c169aff710749117",
+    "identity_lookup.py": "5a7ba1bebd017715e866f404003d402d9405b8c2807e313ed03f24d63b1e7726",
+    "codec.py": "b3e5565ffc8475a53999d1a834800998f8a0b2c98ebb7d3f9aa5490375af4086",
+    "metrics.py": "92d48068ef684b484a5c90d35c38a487f4becf56dbaa5b035662422428b3ba78",
+    "facts.py": "bb1aa64040191aa6de725feffe5a32a981f8963f34efbe16395a3f5c244c6aa7",
+    "records.py": "73b01826b832fe27b557ff546a75e0c3a5b670d9e55ae73e9551500e7563c1e5",
+    "api_contract.py": "a2e931e9f8e187ecdf3bbfa8b8b39a3f8df58342b30b594e9d58a70af5cccecd",
+    "season_metrics.py": "f9235fc1ebfe7376aeee17325ca9dbcfd94afaaf2ad32f188463d62b52af33e2",
+    "metric-definitions-v3.json": "7971a7349a1fce66cb127f0e925b2a5bd1a3eaeccbe4c152b7e3ef8e7dd191f5",
+    "lineup_context.py": "8355a96f277242df56db4d748d2d46d21373dcf5db7b865afc9b3ee8d8ce1040",
+    "advanced_definitions.py": "8911a8260bdf46403e3ff6ba5c56a70926e11f4adceacc6d35c9fb2acfb29aef",
+    "season-board-metrics-v2.json": "abe8edd409af33784a6ec08840fd54ff807500b01c15bc72e859a70e28edbcd3",
+    "advanced-value-bindings-v1.json": "651576dd844afa8597ddabb648b3d51af231d18d65f30b4a8cb08992c6a36514"
+  },
+  "content_sha256": "3b562cf01869847350ac297a9b572301aa9ab89544740c6ca3cc869665f664c4"
+}

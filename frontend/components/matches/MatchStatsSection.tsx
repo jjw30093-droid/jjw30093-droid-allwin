@@ -24,7 +24,7 @@ import {
   TEAM_STAT_LABELS,
   formatTeamStat,
   type TeamStatLabel,
-} from "@/components/matches/zh";
+} from "@/components/matches/standard-stat-labels";
 import pageStyles from "@/app/matches/[matchId]/match-detail.module.css";
 import styles from "./MatchStatsSection.module.css";
 
@@ -122,7 +122,7 @@ function CompareRows({ home, away }: { home: TeamStat; away: TeamStat }) {
 const PLAYER_COLS: { key: keyof PlayerStat; label: string; wide?: boolean }[] = [
   { key: "minutes_played", label: "分钟" },
   { key: "goals", label: "进球" },
-  { key: "assists", label: "助攻" },
+  { key: "goal_assists", label: "助攻" },
   { key: "expected_goals", label: "xG", wide: true },
   { key: "shots_on_target", label: "射正", wide: true },
   { key: "chances_created", label: "创造机会", wide: true },
@@ -161,11 +161,11 @@ const PLAYER_DETAIL_GROUPS: {
     fields: [
       { key: "expected_goals_on_target", label: "xGOT", decimals: 2 },
       { key: "expected_assists", label: "xA", decimals: 2 },
-      { key: "xg_and_xa", label: "xG+xA", decimals: 2 },
+      { key: "expected_goals_plus_assists", label: "xG+xA", decimals: 2 },
       { key: "expected_goals_non_penalty", label: "非点球 xG", decimals: 2 },
       { key: "shots_off_target", label: "射偏" },
-      { key: "big_chance_created", label: "创造绝佳机会" },
-      { key: "big_chance_missed", label: "错失绝佳机会" },
+      { key: "big_chances_created", label: "创造绝佳机会" },
+      { key: "big_chances_missed", label: "错失绝佳机会" },
     ],
     hideForGoalkeeper: true,
   },
@@ -173,36 +173,36 @@ const PLAYER_DETAIL_GROUPS: {
     key: "attack", label: "进攻", hideForGoalkeeper: true,
     fields: [
       { key: "touches", label: "触球" },
-      { key: "touches_opp_box", label: "对方禁区内触球" },
-      { key: "accurate_passes", label: "成功传球", totalKey: "accurate_passes_total" },
+      { key: "touches_in_opposition_box", label: "对方禁区内触球" },
+      { key: "passes_completed", label: "成功传球", totalKey: "passes_attempted" },
       { key: "passes_into_final_third", label: "传向进攻三区" },
-      { key: "long_balls_accurate", label: "成功长传" },
-      { key: "dribbles_succeeded", label: "成功过人" },
-      { key: "accurate_crosses", label: "成功传中" },
-      { key: "dispossessed", label: "丢球" },
+      { key: "long_passes_completed", label: "成功长传" },
+      { key: "dribbles_completed", label: "成功过人" },
+      { key: "crosses_completed", label: "成功传中" },
+      { key: "times_dispossessed", label: "丢球" },
     ],
   },
   {
     key: "defence", label: "防守", hideForGoalkeeper: true,
     fields: [
-      { key: "recoveries", label: "回追" },
+      { key: "ball_recoveries", label: "回追" },
       { key: "defensive_actions", label: "防守行动" },
       { key: "clearances", label: "解围" },
-      { key: "headed_clearance", label: "头球解围" },
+      { key: "headed_clearances", label: "头球解围" },
       { key: "interceptions", label: "拦截" },
-      { key: "shot_blocks", label: "封堵射门" },
-      { key: "dribbled_past", label: "被过人" },
+      { key: "shots_blocked_defensively", label: "封堵射门" },
+      { key: "times_dribbled_past", label: "被过人" },
     ],
   },
   {
     key: "duels", label: "对抗", hideForGoalkeeper: true,
     fields: [
-      { key: "duel_won", label: "对抗成功" },
-      { key: "duel_lost", label: "对抗失败" },
+      { key: "duels_won", label: "对抗成功" },
+      { key: "duels_lost", label: "对抗失败" },
       { key: "ground_duels_won", label: "地面对抗成功" },
-      { key: "aerials_won", label: "争顶成功" },
-      { key: "fouls", label: "犯规" },
-      { key: "was_fouled", label: "被侵犯" },
+      { key: "aerial_duels_won", label: "争顶成功" },
+      { key: "fouls_committed", label: "犯规" },
+      { key: "fouls_won", label: "被侵犯" },
     ],
   },
   {
@@ -212,13 +212,13 @@ const PLAYER_DETAIL_GROUPS: {
       { key: "goals_conceded", label: "失球" },
       { key: "expected_goals_on_target_faced", label: "面对 xGOT", decimals: 2 },
       { key: "goals_prevented", label: "阻止进球", decimals: 2 },
-      { key: "keeper_diving_save", label: "鱼跃扑救" },
-      { key: "saves_inside_box", label: "禁区内扑救" },
-      { key: "keeper_sweeper", label: "出击解围" },
-      { key: "punches", label: "击球出局" },
-      { key: "keeper_high_claim", label: "高球摘取" },
-      { key: "player_throws", label: "手抛球" },
-      { key: "saved_penalties", label: "扑出点球" },
+      { key: "diving_saves", label: "鱼跃扑救" },
+      { key: "saves_inside_penalty_area", label: "禁区内扑救" },
+      { key: "sweeper_actions", label: "出击解围" },
+      { key: "keeper_punches", label: "击球出局" },
+      { key: "high_claims", label: "高球摘取" },
+      { key: "throws", label: "抛球（定义待核实）" },
+      { key: "penalties_saved", label: "扑出点球" },
     ],
   },
   {
@@ -228,13 +228,13 @@ const PLAYER_DETAIL_GROUPS: {
     // 比当初的抽样估计(英超约 50%)低得多,所以这一组大多数比赛不出现。
     key: "physical", label: "体能",
     fields: [
-      { key: "physical_metrics_distance_covered", label: "跑动距离", unit: "m" },
-      { key: "physical_metrics_topspeed", label: "最高速度", unit: "km/h", decimals: 1 },
-      { key: "physical_metrics_sprinting", label: "冲刺跑动", unit: "m" },
-      { key: "physical_metrics_running", label: "中高速跑动", unit: "m" },
-      { key: "physical_metrics_jogging", label: "慢跑", unit: "m" },
-      { key: "physical_metrics_walking", label: "步行", unit: "m" },
-      { key: "physical_metrics_number_of_sprints", label: "冲刺次数" },
+      { key: "distance_covered", label: "跑动距离", unit: "（单位待核实）", decimals: 2 },
+      { key: "top_speed", label: "最高速度", unit: "（单位待核实）", decimals: 2 },
+      { key: "sprinting_distance", label: "冲刺跑动", unit: "（单位待核实）", decimals: 2 },
+      { key: "running_distance", label: "中高速跑动", unit: "（单位待核实）", decimals: 2 },
+      { key: "jogging_distance", label: "慢跑", unit: "（单位待核实）", decimals: 2 },
+      { key: "walking_distance", label: "步行", unit: "（单位待核实）", decimals: 2 },
+      { key: "sprints", label: "冲刺次数" },
     ],
   },
 ];
@@ -270,6 +270,7 @@ function PlayerIdentityRow({
     <div className={styles.detailIdentity}>
       <PlayerAvatar
         playerId={player.player_id}
+        avatarUrl={player.avatar_url}
         playerName={player.name}
         shirtNumber={lineup?.shirt_number}
         size={36}
@@ -433,17 +434,17 @@ function PlayerTable({
         </thead>
         <tbody>
           {players.map((p) => (
-            <Fragment key={p.player_id}>
+            <Fragment key={p.participant_id}>
               <tr
                 className={styles.playerRow}
                 role="button"
                 tabIndex={0}
-                aria-expanded={expanded === p.player_id}
-                onClick={() => toggle(p.player_id)}
+                aria-expanded={expanded === p.participant_id}
+                onClick={() => toggle(p.participant_id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    toggle(p.player_id);
+                    toggle(p.participant_id);
                   }
                 }}
               >
@@ -464,12 +465,12 @@ function PlayerTable({
                   );
                 })}
               </tr>
-              {expanded === p.player_id && (
+              {expanded === p.participant_id && (
                 <tr className={styles.detailRow}>
                   <td colSpan={2 + PLAYER_COLS.length}>
                     <PlayerDetailPanel
                       player={p}
-                      lineup={lineupById.get(p.player_id)}
+                      lineup={lineupById.get(p.participant_id)}
                       allPlayers={allPlayers}
                       shots={shots}
                       finished={finished}
@@ -485,10 +486,10 @@ function PlayerTable({
   );
 }
 
-const HALF_OPTIONS: { key: "All" | "FirstHalf" | "SecondHalf"; label: string }[] = [
-  { key: "All", label: "全场" },
-  { key: "FirstHalf", label: "上半场" },
-  { key: "SecondHalf", label: "下半场" },
+const HALF_OPTIONS: { key: "full_time" | "first_half" | "second_half"; label: string }[] = [
+  { key: "full_time", label: "全场" },
+  { key: "first_half", label: "上半场" },
+  { key: "second_half", label: "下半场" },
 ];
 
 export function MatchStatsSection({
@@ -512,16 +513,16 @@ export function MatchStatsSection({
   homeName: string;
   awayName: string;
 }) {
-  const [period, setPeriod] = useState<"All" | "FirstHalf" | "SecondHalf">("All");
+  const [period, setPeriod] = useState<"full_time" | "first_half" | "second_half">("full_time");
   const hasHalves = teamStatsByHalf.length > 0;
-  const activeTeamStats = period === "All" ? teamStats : teamStatsByHalf.filter((t) => t.period === period);
+  const activeTeamStats = period === "full_time" ? teamStats : teamStatsByHalf.filter((t) => t.period === period);
   const home = activeTeamStats.find((t) => t.is_home);
   const away = activeTeamStats.find((t) => !t.is_home);
   const homePlayers = playerStats.filter((p) => p.is_home);
   const awayPlayers = playerStats.filter((p) => !p.is_home);
   const lineupById = new Map<string, LineupPlayer>();
   for (const team of lineups) {
-    for (const p of [...team.starters, ...team.bench]) lineupById.set(p.player_id, p);
+    for (const p of [...team.starters, ...team.bench]) lineupById.set(p.participant_id, p);
   }
   return (
     <section className={pageStyles.section}>

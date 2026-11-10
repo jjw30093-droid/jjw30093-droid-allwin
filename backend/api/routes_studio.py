@@ -15,6 +15,9 @@ from backend.db.connections import connect_ro, tx
 from backend.db.paths import data_dir
 from backend.db.util import new_uuid, utc_now_iso
 from backend.studio.bundle import build_analysis_bundle, render_srt, render_txt
+from backend.studio import research
+from backend.studio.predictions import PredictionUnavailable, StudioPredictionDTO, read_prediction
+from backend.studio.predictions import StudioPredictionFixturesDTO, read_prediction_fixtures
 from backend.studio.team_style import (
     DOUYIN_SAFE_PROFILE,
     TeamStyleError,
@@ -36,6 +39,7 @@ from .schemas import (
     StudioDraftDetailDTO,
     StudioDraftsResponse,
     StudioExportResponse,
+    StudioResearchHistoryDTO,
     error_responses,
 )
 
@@ -46,7 +50,7 @@ router = APIRouter(
 )
 
 EXPORT_KINDS = ("png_1080x1920", "png_1080x1350", "txt", "json", "srt")
-STUDIO_PROFILES = (DOUYIN_SAFE_PROFILE, "internal-full-v1")
+STUDIO_PROFILES = (DOUYIN_SAFE_PROFILE, "internal-full-v1", research.PROFILE)
 
 
 def require_analyst(ctx: AuthContext = Depends(require_user)) -> AuthContext:
@@ -63,6 +67,30 @@ def require_analyst_csrf(ctx: AuthContext = Depends(require_csrf)) -> AuthContex
 
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = NO_STORE
+
+
+@router.get('/prediction-fixtures', response_model=StudioPredictionFixturesDTO,
+            responses=error_responses(503))
+def studio_prediction_fixtures(response: Response, ctx: AuthContext = Depends(require_analyst)):
+    _no_store(response)
+    try:
+        return read_prediction_fixtures()
+    except PredictionUnavailable:
+        raise HTTPException(status_code=503, detail='赛程暂不可用，请稍后重试') from None
+
+
+@router.get('/predictions/{source_match_id}', response_model=StudioPredictionDTO,
+            responses=error_responses(503))
+def studio_prediction(source_match_id: str, response: Response,
+                      ctx: AuthContext = Depends(require_analyst)):
+    _no_store(response)
+    if (not source_match_id.isascii() or len(source_match_id) > 128
+            or not source_match_id.replace('-', '').replace('_', '').isalnum()):
+        raise HTTPException(status_code=422, detail='比赛标识格式不正确')
+    try:
+        return read_prediction(source_match_id)
+    except PredictionUnavailable:
+        raise HTTPException(status_code=503, detail='预测数据暂不可用，请稍后重试') from None
 
 
 def _build_bundle_now(match_id: int) -> dict:
@@ -99,6 +127,45 @@ class CreateDraftBody(BaseModel):
     title: str = ""
 
 
+class ImportResearchBody(BaseModel):
+    snapshot_id: str = Field(pattern="^[0-9a-f]{64}$")
+
+
+@router.post("/research/import", response_model=StudioDraftCreatedDTO)
+def import_research(body: ImportResearchBody, response: Response,
+                    ctx: AuthContext = Depends(require_analyst_csrf), conn=Depends(platform_rw)):
+    _no_store(response)
+    try:
+        return research.import_draft(conn, ctx.user_id, body.snapshot_id)
+    except (ValueError, OSError, KeyError, TypeError):
+        raise HTTPException(status_code=409, detail="研究证据未就绪或校验失败") from None
+
+
+@router.get("/research/drafts", response_model=StudioDraftsResponse)
+def list_research_drafts(response: Response, ctx: AuthContext = Depends(require_analyst),
+                         conn=Depends(platform_ro)):
+    _no_store(response)
+    rows = conn.execute(
+        "SELECT d.id,d.match_id,d.title,d.status,d.created_at,d.updated_at FROM content_drafts d "
+        "JOIN research_draft_links r ON r.draft_id=d.id WHERE d.user_id=? "
+        "AND NOT EXISTS (SELECT 1 FROM analyst_report_links a WHERE a.draft_id=d.id) "
+        "ORDER BY d.updated_at DESC LIMIT 100", (ctx.user_id,),
+    ).fetchall()
+    return {"drafts": [dict(r) for r in rows]}
+
+
+@router.get("/research/drafts/{draft_id}/history", response_model=StudioResearchHistoryDTO)
+def research_history(draft_id: str, response: Response,
+                     ctx: AuthContext = Depends(require_analyst), conn=Depends(platform_ro)):
+    _no_store(response)
+    _get_draft(conn, draft_id, ctx.user_id)
+    rows = conn.execute(
+        "SELECT revision,action,actor_id,content_hash,content_json,created_at "
+        "FROM research_draft_events WHERE draft_id=? ORDER BY revision DESC LIMIT 100", (draft_id,),
+    ).fetchall()
+    return {"events": [dict(r) for r in rows]}
+
+
 @router.post("/drafts", response_model=StudioDraftCreatedDTO)
 def create_draft(
     body: CreateDraftBody,
@@ -131,7 +198,8 @@ def list_drafts(
     _no_store(response)
     rows = conn.execute(
         "SELECT id, match_id, title, status, created_at, updated_at FROM content_drafts"
-        " WHERE user_id=? ORDER BY updated_at DESC LIMIT 100",
+        " WHERE user_id=? AND NOT EXISTS (SELECT 1 FROM research_draft_links r WHERE r.draft_id=content_drafts.id)"
+        " ORDER BY updated_at DESC LIMIT 100",
         (ctx.user_id,),
     ).fetchall()
     return {"drafts": [dict(r) for r in rows]}
@@ -143,6 +211,9 @@ def _get_draft(conn, draft_id: str, user_id: str):
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="草稿不存在")
+    workflow=conn.execute('SELECT 1 FROM analyst_report_links WHERE draft_id=?',(draft_id,)).fetchone()
+    if workflow and not conn.execute("SELECT 1 FROM users WHERE id=? AND role='admin'",(user_id,)).fetchone():
+        raise HTTPException(status_code=403,detail='分析工作流仅管理员可用')
     return row
 
 
@@ -164,12 +235,14 @@ def get_draft(
         "overrides": json.loads(row["overrides_json"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "revision": research.revision(conn, draft_id),
     }
 
 
 class UpdateDraftBody(BaseModel):
     title: str | None = None
     overrides: dict | None = None      # 标题/证据/风险/口播稿等编辑覆盖
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
 @router.post("/drafts/{draft_id}", response_model=OkDTO)
@@ -182,6 +255,13 @@ def update_draft(
 ):
     _no_store(response)
     row = _get_draft(conn, draft_id, ctx.user_id)
+    if research.revision(conn, draft_id) is not None:
+        try:
+            research.change(conn, draft_id, ctx.user_id, body.expected_revision,
+                            title=body.title, overrides=body.overrides)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        return {"status": "ok"}
     overrides = json.loads(row["overrides_json"])
     if body.overrides is not None:
         overrides.update(body.overrides)
@@ -195,6 +275,7 @@ def update_draft(
 
 class DraftStatusBody(BaseModel):
     status: str = Field(pattern="^(draft|reviewed|published)$")
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
 @router.post("/drafts/{draft_id}/status", response_model=OkDTO)
@@ -207,6 +288,12 @@ def set_draft_status(
 ):
     _no_store(response)
     _get_draft(conn, draft_id, ctx.user_id)
+    if research.revision(conn, draft_id) is not None:
+        try:
+            research.change(conn, draft_id, ctx.user_id, body.expected_revision, status=body.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        return {"status": "ok"}
     with tx(conn):
         conn.execute(
             "UPDATE content_drafts SET status=?, updated_at=? WHERE id=?",
@@ -237,6 +324,15 @@ def export_draft(
     row = _get_draft(conn, draft_id, ctx.user_id)
     bundle = json.loads(row["bundle_json"])
     overrides = json.loads(row["overrides_json"])
+    research_export = None
+    is_research = research.revision(conn, draft_id) is not None
+    if is_research or body.profile == research.PROFILE:
+        if not is_research or body.profile != research.PROFILE or body.kind != "json":
+            raise HTTPException(status_code=409, detail="研究草稿使用 research-evidence-v1 JSON 导出")
+        try:
+            research_export = research.export_packet(conn, row)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
     safe_profile = None
     if body.profile == DOUYIN_SAFE_PROFILE:
         safe_profile = bundle.get("social_profiles", {}).get(DOUYIN_SAFE_PROFILE)
@@ -286,7 +382,7 @@ def export_draft(
     else:
         content = json.dumps(
             (
-                {"profile": safe_profile}
+                research_export if research_export is not None else {"profile": safe_profile}
                 if safe_profile is not None
                 else {"bundle": bundle, "overrides": overrides}
             ),
@@ -307,6 +403,7 @@ def export_draft(
              json.dumps({
                  "bundle_hash": bundle.get("bundle_hash"),
                  "profile_id": body.profile,
+                 **({"research_review": research_export["review"]} if research_export is not None else {}),
              }), now, now),
         )
     return {"job_id": job_id, "side": "server",
@@ -336,6 +433,8 @@ def download_export(
     ).fetchone()
     if row is None or not row["file_path"]:
         raise HTTPException(status_code=404, detail="导出不存在或为客户端导出")
+    if row['draft_id']:
+        _get_draft(conn,row['draft_id'],ctx.user_id)
     path = Path(row["file_path"])
     if not path.exists():
         raise HTTPException(status_code=410, detail="导出文件已清理")
@@ -344,3 +443,74 @@ def download_export(
         filename=path.name,
         headers={"Cache-Control": NO_STORE},
     )
+
+
+from backend.studio.market_comparison import MarketComparisonDTO, read_comparison
+
+
+@router.get('/predictions/{source_match_id}/comparison',response_model=MarketComparisonDTO,
+            responses=error_responses(503))
+def market_comparison(source_match_id:str,response:Response,ctx:AuthContext=Depends(require_analyst)):
+    _no_store(response)
+    try:return read_comparison(source_match_id)
+    except ValueError:raise HTTPException(422,detail='比赛编号无效') from None
+    except PredictionUnavailable:raise HTTPException(503,detail='模型与市场对照暂不可用') from None
+
+
+class ResearchInboxEntry(BaseModel):
+    snapshot_id: str
+    title: str
+    cutoff_at: str
+    metric_count: int
+    topic_count: int
+
+
+class ResearchInboxDTO(BaseModel):
+    entries: list[ResearchInboxEntry]
+    invalid_snapshot_ids: list[str]
+    truncated: bool
+
+
+@router.get('/research/inbox',response_model=ResearchInboxDTO,responses=error_responses(503))
+def research_inbox(ctx:AuthContext=Depends(require_analyst)):
+    try:return research.inbox_index()
+    except (OSError,ValueError,KeyError,TypeError):raise HTTPException(503,detail='研究收件箱暂不可用') from None
+
+
+from backend.studio.weekly_research import WeeklyResearchDTO, read_weekly
+
+
+@router.get('/research/weekly', response_model=WeeklyResearchDTO, responses=error_responses(503))
+def weekly_research(response: Response, ctx: AuthContext = Depends(require_analyst)):
+    _no_store(response)
+    try:
+        return read_weekly()
+    except (OSError, ValueError, KeyError, TypeError):
+        raise HTTPException(503, detail='周度研究材料暂不可用') from None
+
+
+class ImportPrematchBody(BaseModel):
+    match_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,128}$')
+
+
+@router.post('/research/import-prematch',response_model=StudioDraftCreatedDTO)
+def import_prematch(body:ImportPrematchBody,response:Response,ctx:AuthContext=Depends(require_analyst_csrf),conn=Depends(platform_rw)):
+    from backend.studio.research_subjects import prematch
+    from backend.studio.predictions import PredictionUnavailable
+    _no_store(response)
+    try:
+        packet,anchor=prematch(body.match_id)
+        return research.store_packet(conn,ctx.user_id,packet,anchor)
+    except (ValueError,OSError,KeyError,TypeError,PredictionUnavailable):
+        raise HTTPException(409,detail='赛前证据暂不可用或缺少已核对映射') from None
+
+
+@router.post('/research/import-round',response_model=StudioDraftCreatedDTO)
+def import_round(body:ImportResearchBody,response:Response,ctx:AuthContext=Depends(require_analyst_csrf),conn=Depends(platform_rw)):
+    from backend.studio.research_subjects import round_packet
+    _no_store(response)
+    try:
+        packet,anchor=round_packet(body.snapshot_id)
+        return research.store_packet(conn,ctx.user_id,packet,anchor)
+    except (ValueError,OSError,KeyError,TypeError):
+        raise HTTPException(409,detail='轮次证据暂不可用或校验失败') from None

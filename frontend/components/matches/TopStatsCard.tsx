@@ -16,7 +16,7 @@
 import type { MatchReportResponse } from "@/lib/api-v1";
 import type { TeamBrandColor, TeamColorPair } from "@/components/charts/matchTeamColors";
 import { useMatchColors } from "@/components/charts/useMatchColors";
-import { TEAM_STAT_LABELS, formatTeamStat } from "@/components/matches/zh";
+import { TEAM_STAT_LABELS, formatTeamStat } from "@/components/matches/standard-stat-labels";
 import { useMatchTabSwitch } from "./MatchTabs";
 import styles from "./TopStatsCard.module.css";
 
@@ -26,11 +26,11 @@ type TeamStat = MatchReport["team_stats"][number];
 /** FotMob topStatsCard 的 5 项(APK 字节码顺序);key 对应 MatchReportTeamStat
  * 字段,label/format 复用 zh.ts 的 TEAM_STAT_LABELS 单一真源。 */
 const TOP5_KEYS = [
-  "possession",
+  "possession_percent",
   "expected_goals",
-  "total_shots",
+  "shots_total",
   "shots_on_target",
-  "touches_opp_box",
+  "touches_in_opposition_box",
 ] as const;
 
 const LABEL_BY_KEY = new Map(TEAM_STAT_LABELS.map((l) => [l.key, l]));

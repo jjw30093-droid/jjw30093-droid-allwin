@@ -53,7 +53,7 @@ function ownCard(rows: TeamSeasonStatRow[], metric: OwnMetric): Card | null {
 function sourceCard(board: TeamSourceBoard): Card | null {
   const rows: LeaderboardRow[] = [];
   board.entries.forEach((e, i) => {
-    const value = formatBoardValue(e.value, board.stat_format, board.stat_decimals);
+    const value = formatBoardValue(e.value, e.unit, e.display_decimals);
     // 没有数值的行不占位:排名榜里显示一个空值等于骗人说"这队排第 N"
     if (value == null) return;
     rows.push({
@@ -65,7 +65,7 @@ function sourceCard(board: TeamSourceBoard): Card | null {
     });
   });
   if (rows.length === 0) return null;
-  return { key: `src:${board.stat_name}`, title: boardTitle(board), rows };
+  return { key: `src:${board.metric_code}`, title: boardTitle(board), rows };
 }
 
 export function TeamStatsSections({
@@ -104,6 +104,9 @@ export function TeamStatsSections({
   // 包一层容器:sticky 受父容器约束,榜单结束后吸顶条跟着滚走。
   return (
     <div>
+      {boards.some((b) => b.entries.some((e) => e.issues.some((i) => i.code === "unverified_aggregation" || i.code === "unverified_unit"))) && (
+        <p aria-label="球队榜单口径说明">部分榜单的单位或合计／场均口径尚未确认，保留原数值，不合并比较。</p>
+      )}
       <BoardSectionTabs sections={present.map((key) => ({ id: key, label: SECTION_TITLES[key] }))} />
       {present.map((key) => {
         const cards = bySection.get(key)!;

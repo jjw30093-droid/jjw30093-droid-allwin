@@ -8,6 +8,7 @@
 
 from enum import IntEnum
 from typing import Any, Literal, Optional, Union
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -92,6 +93,7 @@ class WinProbabilityDTO(BaseModel):
 
 class MatchSummary(BaseModel):
     match_id: int
+    canonical_match_id: Optional[UUID] = None  # 自有公开 ID;等待标准库同步时为空
     league_id: int
     season: str
     date_utc: str                          # 比赛自然日(match_date)
@@ -245,6 +247,7 @@ class MatchDetailSummary(MatchSummary):
     weather_localized_key: Optional[str] = None
     weather_icon_code: Optional[int] = None
     referee_id: Optional[int] = None
+    referee_avatar_url: Optional[str] = None  # 本场裁判图片的同源地址，不能当作球员身份
     referee_country: Optional[str] = None
     referee_country_code: Optional[str] = None
     referee_stats: list[RefereeStatDTO] = []
@@ -1810,6 +1813,19 @@ class StudioDraftsResponse(BaseModel):
     drafts: list[StudioDraftListItem]
 
 
+class StudioResearchEventDTO(BaseModel):
+    revision: int
+    action: Literal["import", "edit", "review", "reopen"]
+    actor_id: str
+    content_hash: str
+    content_json: str
+    created_at: str
+
+
+class StudioResearchHistoryDTO(BaseModel):
+    events: list[StudioResearchEventDTO]
+
+
 class StudioDraftDetailDTO(BaseModel):
     """bundle 为创建草稿时冻结的 analysis_bundle 快照(历史版本形状可能不同,故为 dict)。"""
 
@@ -1821,6 +1837,7 @@ class StudioDraftDetailDTO(BaseModel):
     overrides: dict
     created_at: str
     updated_at: str
+    revision: Optional[int] = None
 
 
 class StudioExportClientDTO(BaseModel):

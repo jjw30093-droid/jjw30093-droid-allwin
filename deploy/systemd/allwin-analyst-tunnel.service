@@ -1,0 +1,23 @@
+[Unit]
+Description=Restricted VIP to CC analyst report SSH tunnel
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=ubuntu
+# Reuse the existing restricted identity; CC PermitOpen must also allow 127.0.0.1:8769.
+ExecStart=/usr/bin/ssh -N -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o UserKnownHostsFile=/opt/allwin/shared/prediction_tunnel/known_hosts -i /opt/allwin/shared/prediction_tunnel/id_ed25519 -L 127.0.0.1:18769:127.0.0.1:8769 prediction-tunnel@18.183.136.5
+Restart=always
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+MemoryMax=64M
+TasksMax=16
+
+[Install]
+WantedBy=multi-user.target

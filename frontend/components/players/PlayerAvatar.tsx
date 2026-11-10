@@ -39,6 +39,7 @@ function fallbackText(playerName: string, shirtNumber?: string | null): string {
 
 export function PlayerAvatar({
   playerId,
+  avatarUrl,
   playerName,
   shirtNumber,
   size = 32,
@@ -46,7 +47,9 @@ export function PlayerAvatar({
   accessibleName,
   eager = false,
 }: {
-  playerId: string | number;
+  playerId: string | number | null;
+  /** Explicit URL/null for canonical report consumers; undefined retains legacy compatibility. */
+  avatarUrl?: string | null;
   playerName: string;
   shirtNumber?: string | null;
   size?: PlayerAvatarSize;
@@ -54,9 +57,9 @@ export function PlayerAvatar({
   accessibleName?: string;
   eager?: boolean;
 }) {
-  const url = playerAvatarUrl(playerId);
+  const url = avatarUrl !== undefined ? avatarUrl : playerId != null ? playerAvatarUrl(playerId) : null;
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const showImage = failedUrl !== url;
+  const showImage = url != null && failedUrl !== url;
   const label = accessibleName ?? `${playerName}头像`;
   const className = `${styles.avatar} ${SIZE_CLASS[size]}`;
 

@@ -40,7 +40,7 @@ function MatchRowView({ m, returnTo }: { m: MatchSummary; returnTo?: string }) {
   const isFinished = m.status === "Finish";
   const beijingKickoff = m.kickoff_at_utc ? formatBeijingZh(m.kickoff_at_utc) : null;
   return (
-    <Link href={buildMatchHref(m.match_id, returnTo)} className={styles.matchRow}>
+    <Link href={buildMatchHref(m, returnTo)} className={styles.matchRow}>
       <span className={styles.homeTeam}>{m.home.name}</span>
       {/* 全 span:整行在 <a> 内,沿用 MatchRow 的结构约定 */}
       <span className={styles.center}>

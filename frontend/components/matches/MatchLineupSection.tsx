@@ -22,7 +22,7 @@ type LineupPlayer = LineupTeam["starters"][number];
 function PlayerRow({ p, bench }: { p: LineupPlayer; bench?: boolean }) {
   return (
     <li className={styles.playerRow}>
-      <PlayerAvatar playerId={p.player_id} playerName={p.name} shirtNumber={p.shirt_number} size={28} />
+      <PlayerAvatar playerId={p.player_id} avatarUrl={p.avatar_url} playerName={p.name} shirtNumber={p.shirt_number} size={28} />
       <span className={`${styles.shirtNo} num`}>{p.shirt_number ?? "—"}</span>
       <span className={styles.pos}>
         {p.position_group ? POSITION_ZH[p.position_group] ?? p.position_group : "—"}
@@ -52,7 +52,7 @@ function TeamColumn({ team, teamName }: { team: LineupTeam; teamName: string }) 
       <h4 className={styles.groupTitle}>首发</h4>
       <ul className={styles.playerList}>
         {team.starters.map((p) => (
-          <PlayerRow key={p.player_id} p={p} />
+          <PlayerRow key={p.participant_id} p={p} />
         ))}
       </ul>
       {team.bench.length > 0 && (
@@ -60,7 +60,7 @@ function TeamColumn({ team, teamName }: { team: LineupTeam; teamName: string }) 
           <h4 className={styles.groupTitle}>替补</h4>
           <ul className={styles.playerList}>
             {team.bench.map((p) => (
-              <PlayerRow key={p.player_id} p={p} bench />
+              <PlayerRow key={p.participant_id} p={p} bench />
             ))}
           </ul>
         </>
@@ -76,8 +76,9 @@ function toPitchSide(team: LineupTeam, name: string): VerticalPitchSide {
     name,
     formation: team.formation,
     players: team.starters.map((p) => ({
-      key: p.player_id,
+      key: p.participant_id,
       avatarId: p.player_id,
+      avatarUrl: p.avatar_url,
       name: p.name,
       shirtNumber: p.shirt_number,
       x: p.pitch_x,

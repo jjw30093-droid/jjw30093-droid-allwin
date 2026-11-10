@@ -102,7 +102,8 @@ def _ratios_by_player(conn: sqlite3.Connection, league_id: int, season: str) -> 
 
 
 def player_quadrant_stats(
-    conn: sqlite3.Connection, league_id: int, season: str | None = None
+    conn: sqlite3.Connection, league_id: int, season: str | None = None,
+    *, include_ratios: bool = True,
 ) -> dict:
     seasons = _seasons_of(conn, league_id)
     if not seasons:
@@ -127,7 +128,7 @@ def player_quadrant_stats(
     display = team_display_map(conn)
     colors = team_brand_color_map(conn, league_id, season)
     player_zh = _player_i18n_map(conn)
-    ratios_by_player = _ratios_by_player(conn, league_id, season)
+    ratios_by_player = _ratios_by_player(conn, league_id, season) if include_ratios else {}
 
     all_rows = conn.execute(
         """SELECT Player_ID, Team_ID, player_name, usual_position, appearances,

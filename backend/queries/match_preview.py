@@ -73,6 +73,7 @@ def match_data_profile_for(
 
 def build_match_preview(
     conn_core: sqlite3.Connection, conn_odds: sqlite3.Connection, match: dict,
+    *, include_rosters: bool = True, include_players: bool = True,
 ) -> dict[str, Any]:
     match_id = match["match_id"]
     home_id = match["home"]["team_id"]
@@ -94,7 +95,7 @@ def build_match_preview(
     scoped_league_id = None if cross_league else league_id
     scoped_season = None if cross_league else season
 
-    lineup = lineup_preview.latest_lineup(conn_odds, conn_core, match_id)
+    lineup = lineup_preview.latest_lineup(conn_odds, conn_core, match_id) if include_rosters else None
 
     return {
         "match_id": match_id,
@@ -109,8 +110,8 @@ def build_match_preview(
             "away": lineup["away"] if lineup else None,
         },
         "sidelined": {
-            "home": lineup_preview.latest_sidelined_for_team(conn_odds, conn_core, match_id, home_id),
-            "away": lineup_preview.latest_sidelined_for_team(conn_odds, conn_core, match_id, away_id),
+            "home": lineup_preview.latest_sidelined_for_team(conn_odds, conn_core, match_id, home_id) if include_rosters else [],
+            "away": lineup_preview.latest_sidelined_for_team(conn_odds, conn_core, match_id, away_id) if include_rosters else [],
         },
         "style_views": team_style_preview.league_style_views(conn_core, league_id, season, before_date),
         "attack_sources": {
@@ -126,11 +127,11 @@ def build_match_preview(
             "away": matchup.team_matchup_profile(conn_core, away_id, scoped_league_id, before_date, is_home=False),
         },
         "key_players": {
-            "home": player_form.team_key_players(conn_core, home_id, league_id, before_date),
-            "away": player_form.team_key_players(conn_core, away_id, league_id, before_date),
+            "home": player_form.team_key_players(conn_core, home_id, league_id, before_date) if include_players else [],
+            "away": player_form.team_key_players(conn_core, away_id, league_id, before_date) if include_players else [],
         },
         "keepers": {
-            "home": player_form.team_goalkeepers(conn_core, home_id, league_id, before_date),
-            "away": player_form.team_goalkeepers(conn_core, away_id, league_id, before_date),
+            "home": player_form.team_goalkeepers(conn_core, home_id, league_id, before_date) if include_players else [],
+            "away": player_form.team_goalkeepers(conn_core, away_id, league_id, before_date) if include_players else [],
         },
     }

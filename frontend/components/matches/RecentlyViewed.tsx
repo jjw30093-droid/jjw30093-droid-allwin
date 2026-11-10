@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { buildMatchHref } from "@/lib/match-links";
 import { clientFetch, type MatchDetailResponse } from "@/lib/api-v1";
 import { getFollowedMatchIds } from "@/lib/followed-matches";
 import { getRecentlyViewedIds } from "@/lib/recently-viewed";
@@ -70,7 +71,7 @@ export function RecentlyViewed({ variant = "standalone", onVisibilityChange }: P
       <ul className={styles.list}>
         {rows.map((m) => (
           <li key={m.match_id}>
-            <Link href={`/matches/${m.match_id}`} className={styles.row}>
+            <Link href={buildMatchHref(m)} className={styles.row}>
               <span className={styles.league}>
                 {LEAGUE_ZH[m.league_id] ?? `联赛 ${m.league_id}`}
               </span>

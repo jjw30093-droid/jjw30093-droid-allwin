@@ -82,7 +82,7 @@ export function ShotDetailPanel({
   const teamName = shot.is_home ? homeName : awayName;
   const crestUrl = shot.is_home ? homeCrestUrl : awayCrestUrl;
   const markerColor = (shot.is_home ? homeColor : awayColor) ?? "var(--brand-teal)";
-  const shirtNumber = shirtNumberByPlayerId?.[shot.player_id];
+  const shirtNumber = shot.participant_id ? shirtNumberByPlayerId?.[shot.participant_id] : undefined;
   const situationLabel = shot.situation
     ? (SHOT_SITUATION_ZH[shot.situation] ?? shot.situation)
     : null;
@@ -161,12 +161,13 @@ export function ShotDetailPanel({
           <div className={styles.playerRow}>
             <PlayerAvatar
               playerId={shot.player_id}
-              playerName={shot.player_name ?? shot.player_id}
+              avatarUrl={shot.avatar_url}
+              playerName={shot.player_name ?? "未知球员"}
               shirtNumber={shirtNumber}
               size={40}
             />
             <div className={styles.playerMeta}>
-              <span className={styles.playerName}>{shot.player_name ?? shot.player_id}</span>
+              <span className={styles.playerName}>{shot.player_name ?? "未知球员"}</span>
               <span className={styles.teamRow}>
                 <TeamBadge teamName={teamName} crestUrl={crestUrl} size={24} />
                 <span className={styles.teamName}>{teamName}</span>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
 import { leagueSectionMetadata } from "@/lib/league-metadata";
-import { serverGetOptional, type StandingsResponse } from "@/lib/api-v1";
+import { standardCompetitionSectionPath, serverGetOptional, type StandingsResponse } from "@/lib/api-v1";
 import { LeagueNav } from "@/components/LeagueNav";
 import { StandingsTable } from "@/components/league/StandingsTable";
 import { XgLuckChart } from "@/components/league/XgLuckChart";
@@ -55,15 +55,10 @@ export default async function StandingsPage({
     ? tableTypeParam
     : "all";
 
-  const query = new URLSearchParams();
-  if (seasonParam) query.set("season", seasonParam);
-  if (tableType !== "all") query.set("table_type", tableType);
-  const qs = query.toString();
-
   let data: StandingsResponse | null;
   try {
     data = await serverGetOptional<StandingsResponse>(
-      `/api/v1/leagues/${id}/standings${qs ? `?${qs}` : ""}`,
+      await standardCompetitionSectionPath("standings", id, { season: seasonParam, table_type: tableType }),
     );
   } catch {
     return (

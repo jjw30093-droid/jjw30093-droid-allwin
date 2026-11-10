@@ -19,6 +19,7 @@ import {
   ApiError,
   clientFetch,
   leagueSectionPath,
+  clientStandardCompetitionSectionPath,
   type MatchDetailResponse,
   type MatchListResponse,
   type MatchPreviewResponse,
@@ -55,7 +56,7 @@ type State =
 export function MemberMatchDetail({
   matchId,
 }: {
-  matchId: number;
+  matchId: number | string;
 }) {
   const [state, setState] = useState<State>({ phase: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -71,12 +72,12 @@ export function MemberMatchDetail({
         clientFetch<AnalysisBundle>(`/api/v1/matches/${matchId}/analysis`).catch(
           () => null,
         ),
-        clientFetch<MatchReportResponse>(`/api/v1/matches/${matchId}/report`).catch(
+        detail.match.canonical_match_id
+          ? clientFetch<MatchReportResponse>(`/api/v1/standard/matches/${detail.match.canonical_match_id}/report-v2`).catch(() => null)
+          : Promise.resolve(null),
+        detail.match.canonical_match_id ? clientFetch<MatchPreviewResponse>(`/api/v1/standard/matches/${detail.match.canonical_match_id}/preview`).catch(
           () => null,
-        ),
-        clientFetch<MatchPreviewResponse>(`/api/v1/matches/${matchId}/preview`).catch(
-          () => null,
-        ),
+        ) : Promise.resolve(null),
         // query 串收口到 lib/match-links.ts::relatedMatchesQuery——与 SSR 路径
         // (app/matches/[matchId]/page.tsx)共用同一个函数,不允许出现第二套
         // 拼接逻辑(2026-08-19 性能修复;此前这里独立内联了一份 limit=200,
@@ -85,14 +86,12 @@ export function MemberMatchDetail({
           `/api/v1/matches?${relatedMatchesQuery(detail.match.league_id)}`,
         ).catch(() => null),
         // 与 SSR 路径同一个 leagueSectionPath,同一份数据(见 page.tsx 同一天的改动)。
-        clientFetch<TeamStatsResponse>(
-          leagueSectionPath("team-stats", String(detail.match.league_id), {
-            season: detail.match.season,
-          }),
-        ).catch(() => null),
+        clientStandardCompetitionSectionPath("team-stats", String(detail.match.league_id), {
+          season: detail.match.season,
+        }).then((path) => clientFetch<TeamStatsResponse>(path)).catch(() => null),
       ]);
       const relatedMatches = related?.matches ?? [];
-      const idx = relatedMatches.findIndex((item) => item.match_id === matchId);
+      const idx = relatedMatches.findIndex((item) => item.match_id === detail.match.match_id);
       return {
         detail,
         analysis,
@@ -172,7 +171,7 @@ export function MemberMatchDetail({
   const { data } = state;
   return (
     <MatchDetailBody
-      idNum={matchId}
+      idNum={data.detail.match.match_id}
       detail={data.detail}
       analysis={data.analysis}
       report={data.report}

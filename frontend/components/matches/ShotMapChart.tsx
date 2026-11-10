@@ -206,12 +206,10 @@ export function trajectoryEndpoint(
   return null;
 }
 
-/** 射门的稳定结构化标识(2026-08-26)。`shot_id` 来源侧经常缺失(见调试
- * 实测,历史场次普遍为 null),不能单独作为 key;球员+分钟+半场+落点坐标+
- * 结果的组合在同一场比赛里不会撞(同一球员同一分钟不可能两次射门落在
- * 完全相同的坐标又是相同结果)。 */
+/** 本场参与者、主客、时间与位置组成的展示匹配键，不当作全局事件编号。
+ * 主球员编号可能缺失；匿名或重复记录仍可能碰撞，调用方必须拒绝歧义。 */
 function shotKey(s: Shot): string {
-  return `${s.player_id}|${s.minute}|${s.period}|${s.x}|${s.y}|${s.outcome}`;
+  return `${s.participant_id}|${s.is_home}|${s.minute}|${s.period}|${s.x}|${s.y}|${s.outcome}`;
 }
 
 /** 筛选变化导致选中射门不在新的 plotted 里时返回 null——这是唯一的处理点,
@@ -229,8 +227,10 @@ function shotKey(s: Shot): string {
  * 本身),保证下游拿到的对象与图上正在渲染的对象是同一个。 */
 export function resolveSelectedShot(plotted: Shot[], selected: Shot | null): Shot | null {
   if (!selected) return null;
+  if (plotted.includes(selected)) return selected;
   const key = shotKey(selected);
-  return plotted.find((s) => shotKey(s) === key) ?? null;
+  const matches = plotted.filter((s) => shotKey(s) === key);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export interface ShotSideSummary {

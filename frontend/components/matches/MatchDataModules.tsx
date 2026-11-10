@@ -148,7 +148,7 @@ export function AttackSourceSection({ children }: { children: React.ReactNode })
 
 /* ── 模块四 ─────────────────────────────────────────────── */
 
-type PlayerShareBlock = components["schemas"]["MatchPreviewPlayerShareBlockDTO"];
+type PlayerShareBlock = components["schemas"]["PreviewShareBlock"];
 
 export function KeyPlayersSection({
   homeName,
@@ -172,7 +172,7 @@ export function KeyPlayersSection({
       <details className={styles.methodDetail}>
         <summary className={styles.methodSummary}>口径与入选门槛</summary>
         <p className={styles.windowNote}>
-          占全队总量的比例,不做 per-90 外推 —— 5 场窗口下低分钟替补会被系统性抬高。
+          占已入库、已观测球员统计总量的比例,缺失不会当作零。不做 per-90 外推 —— 5 场窗口下低分钟替补会被系统性抬高。
           入选门槛:近 5 场至少出场 3 次。这是近 5 场数据最突出的球员,不代表本场首发。
         </p>
       </details>
@@ -207,21 +207,21 @@ export function KeyPlayersSection({
             ) : (
               <ul className={styles.shareList}>
                 {b.rows.map((p, i) => (
-                  <li key={p.player_id} className={styles.shareRow}>
+                  <li key={p.record_id} className={styles.shareRow}>
                     <span className={styles.shareName}>{p.name}</span>
-                    <span className={`${styles.sharePct} num`}>{p.pct.toFixed(1)}%</span>
+                    <span className={`${styles.sharePct} num`}>{p.pct == null ? "—" : `${p.pct.toFixed(1)}%`}</span>
                     <span className={styles.shareBar}>
                       <span
                         className={styles.shareFill}
                         style={{
-                          width: `${p.pct}%`,
+                          width: `${p.pct ?? 0}%`,
                           background: i === 0 ? "var(--brand-teal)" : "#3f8781",
                         }}
                       />
                     </span>
                     {/* 出场次数与分钟必须同时给:116 分钟排第三是「少量高效」不是「稳定输出」 */}
                     <span className={styles.shareMeta}>
-                      {p.appearances} 场 · {p.minutes} 分钟 · {p.count} 次
+                      {p.appearances} 场 · {p.minutes} 分钟 · {p.count ?? "—"} 次
                     </span>
                   </li>
                 ))}
@@ -236,7 +236,7 @@ export function KeyPlayersSection({
 
 /* ── 模块五 ─────────────────────────────────────────────── */
 
-type KeeperRow = components["schemas"]["MatchPreviewKeeperDTO"];
+type KeeperRow = components["schemas"]["PreviewKeeper"];
 
 export function GoalkeeperSection({
   teams,
@@ -277,11 +277,11 @@ export function GoalkeeperSection({
                     // 全部出场场次(xgot_faced_complete)才允许现算估算——
                     // 用不完整分母算出的数字会看似精确、实则把缺数据的门将
                     // 显示成表现更差,宁可不给数字也不能给一个误导性的数字。
-                    const canEstimate = k.xgot_faced_complete && k.xgot_faced != null;
+                    const canEstimate = k.xgot_faced_complete && k.xgot_faced != null && k.goals_conceded != null;
                     const estimated = k.goals_prevented == null;
-                    const prevented = k.goals_prevented ?? (canEstimate ? k.xgot_faced! - k.goals_conceded : null);
+                    const prevented = k.goals_prevented ?? (canEstimate ? k.xgot_faced! - k.goals_conceded! : null);
                     return (
-                      <li key={k.player_id} className={styles.keeperRow}>
+                      <li key={k.record_id} className={styles.keeperRow}>
                         <div className={styles.keeperHead}>
                           <span className={styles.keeperName}>{k.name}</span>
                           {prevented == null ? (
@@ -301,9 +301,9 @@ export function GoalkeeperSection({
                         <div className={styles.keeperCells}>
                           {[
                             [String(k.appearances), "出场"],
-                            [String(k.saves), "扑救"],
+                            [k.saves == null ? "—" : String(k.saves), "扑救"],
                             [k.xgot_faced == null ? "—" : k.xgot_faced.toFixed(2), "面对 xGOT"],
-                            [String(k.goals_conceded), "失球"],
+                            [k.goals_conceded == null ? "—" : String(k.goals_conceded), "失球"],
                           ].map(([v, label]) => (
                             <span key={label} className={styles.keeperCell}>
                               <b className="num">{v}</b>

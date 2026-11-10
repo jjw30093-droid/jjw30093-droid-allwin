@@ -38,7 +38,7 @@ export function MatchRow({
   // 卡片内只显示开球时间(北京时间,如 18:00):日期已在分组标题里,不再重复。
   // 来源只给了日期、没有精确开球时刻时写"时间待定",不拿日期顶替。
   const kickoffHM = match.kickoff_at_utc ? formatBeijingHM(match.kickoff_at_utc) : null;
-  const detailHref = buildMatchHref(match.match_id, returnTo);
+  const detailHref = buildMatchHref(match, returnTo);
   return (
     <Link href={detailHref} className={styles.row}>
       <span className={styles.home}>

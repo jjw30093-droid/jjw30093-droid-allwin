@@ -37,13 +37,13 @@ export const SECTION_ORDER: SectionKey[] = ["top", "attack", "defend", "discipli
 
 export function sectionOfSourceCategory(category: string | null | undefined): SectionKey {
   switch (category) {
-    case "Top Stat":
+    case "focus":
       return "top";
-    case "Attacking":
+    case "attack":
       return "attack";
-    case "Defending":
+    case "defence":
       return "defend";
-    case "Discipline":
+    case "discipline":
       return "discipline";
     default:
       // 来源新增了没见过的分组时归入「重点数据」,不静默丢弃整张榜
@@ -107,29 +107,29 @@ export const OWN_METRICS: OwnMetric[] = [
  */
 export const SECTION_LEAD: Record<SectionKey, string[]> = {
   top: [
-    "src:goals_team_match",
-    "src:goals_conceded_team_match",
+    "src:goals",
+    "src:goals_conceded",
     "own:avg_possession",
     "own:clean_sheets",
-    "src:phys_tdc_team",
+    "src:distance_covered",
   ],
   attack: [
     "own:avg_total_shots",
     "own:avg_shots_on_target",
     "own:avg_expected_goals",
     "own:avg_expected_goals_on_target",
-    "src:big_chance_team",
-    "src:big_chance_missed_team",
-    "src:touches_in_opp_box_team",
+    "src:big_chances",
+    "src:big_chances_missed",
+    "src:touches_in_opposition_box",
     "own:avg_corners",
   ],
   defend: [
     "own:avg_expected_goals_conceded",
-    "src:total_tackle_team",
-    "src:interception_team",
-    "src:effective_clearance_team",
-    "src:saves_team",
-    "src:poss_won_att_3rd_team",
+    "src:tackles",
+    "src:interceptions",
+    "src:clearances",
+    "src:saves",
+    "src:possession_won_attacking_third",
   ],
   discipline: ["own:avg_fouls", "own:avg_yellow_cards", "own:avg_red_cards"],
 };

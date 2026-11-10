@@ -61,6 +61,16 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
     from . import routes_auth
 
     app.include_router(routes_auth.router)
+    # Required standard readers must fail startup if unavailable, rather than
+    # being silently skipped by the optional legacy router discovery below.
+    from . import routes_standard
+    app.include_router(routes_standard.router)
+    from . import routes_visualization
+    app.include_router(routes_visualization.router)
+    from . import routes_prematch
+    app.include_router(routes_prematch.router)
+    from . import routes_analyst_reports
+    app.include_router(routes_analyst_reports.router)
     # 认证三态(CLAUDE.md §7.3):WECHAT_AUTH_ENABLED=0 时微信端点统一
     # 503 + {"code":"AUTH_DISABLED","message","details":null}(provider 由
     # build_provider 装配为 Disabled;body 已是全站统一形状,直接透传)。
@@ -78,6 +88,8 @@ def create_app(settings: AuthSettings | None = None) -> FastAPI:
         "routes_admin",
         "routes_admin_odds",
         "routes_studio",
+        "routes_analysis_access",
+        "routes_analysis",
         "routes_analytics",
         "routes_simulator",
     ):

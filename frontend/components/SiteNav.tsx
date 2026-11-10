@@ -11,7 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { LEAGUE_COUNT } from "@/components/matches/zh";
 import { getMe, type MeResponse } from "@/lib/api-v1";
-import { sanitizeReturnTo } from "@/lib/match-links";
+import { parseMatchIdentity, sanitizeReturnTo } from "@/lib/match-links";
 import styles from "./SiteNav.module.css";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -175,7 +175,8 @@ function BottomNavLinks({
  *  有来源页(同站 referrer 且浏览历史里有上一页)就回来源页,否则回 /matches。
  *  这取代了页面里原来的"← 返回当前筛选结果"文字链接。 */
 export function isMatchDetailPath(pathname: string): boolean {
-  return /^\/matches\/\d+/.test(pathname);
+  const match = /^\/matches\/([^/]+)\/?$/.exec(pathname);
+  return !!match && parseMatchIdentity(match[1]) !== null;
 }
 
 function BackArrow() {
@@ -336,7 +337,7 @@ export function SiteNav() {
         </div>
       </header>
 
-      <BottomNavLinks pathname={pathname} authed={me?.authenticated === true} />
+      {!pathname.startsWith("/analysis") && <BottomNavLinks pathname={pathname} authed={me?.authenticated === true} />}
     </>
   );
 }

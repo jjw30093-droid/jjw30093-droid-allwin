@@ -100,7 +100,7 @@ export function PlayerQuadrantDetail({
         <div className={styles.teams}>
           {playerRows.map(({ pt, row }) => (
             <div key={pt.key} className={styles.team}>
-              <PlayerAvatar playerId={pt.playerId ?? pt.key} playerName={pt.name} size={28} />
+              <PlayerAvatar playerId={null} avatarUrl={pt.avatarUrl} playerName={pt.name} size={28} />
               <span className={styles.teamName}>{pt.name}</span>
               <span className={styles.quad}>{view.quadrants[quadrantOf(pt, mx, my, dirs)]}</span>
               <span className={styles.sample}>

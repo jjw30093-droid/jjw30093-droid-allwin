@@ -22,7 +22,7 @@
  *   筛选状态变化,不再恒等于整赛季平均)。
  */
 
-import type { TeamSeasonStatRow } from "@/lib/api-v1";
+import type { TeamMetricRow as TeamSeasonStatRow } from "@/lib/api-v1";
 import { METRICS, meetsSample, sampleText, teamKey, type MetricDef } from "./teamMetrics";
 
 export { teamKey };
@@ -296,6 +296,7 @@ export const VIEWS: View[] = [
 
 export type Pt = {
   key: string;
+  recordId?: string;
   name: string;
   x: number;
   y: number;
@@ -305,7 +306,7 @@ export type Pt = {
    *  队徽,quadrantOption.ts 的 resolveLabelVisibility 仍会摘掉这个标签——
    *  该队的圆点、点击、下方分组名单都不受影响,只是不再飘字。 */
   crestUrl: string | null;
-  teamId: number | null;
+  teamId: string | number | null;
 };
 
 /** plotSet/collectPoints 只需要两根轴的取值函数与门槛;View 结构上满足它,
@@ -358,6 +359,7 @@ export function plotSet(rows: TeamSeasonStatRow[], view: __TestView, windowScale
     hiddenByKey.delete(key);
     pts.push({
       key,
+      recordId: "record_id" in r ? r.record_id : undefined,
       name,
       x,
       y,

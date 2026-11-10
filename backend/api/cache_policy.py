@@ -47,6 +47,17 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/v1/track-record"),
         # 只是三个聚合时间戳,不含比赛/推荐内容,身份无关,允许共享缓存。
         ("GET", "/api/v1/status/freshness"),
+        ("GET", "/api/v1/standard/matches/{identity}/team-statistics"),
+        ("GET", "/api/v1/standard/matches/{identity}/player-statistics"),
+        ("GET", "/api/v1/standard/matches/{identity}/report"),
+        ("GET", "/api/v1/standard/matches/{identity}/report-v2"),
+        ("GET", "/api/v1/standard/matches/{identity}/preview"),
+        ("GET", "/api/v1/standard/matches/{identity}/data-profile"),
+        ("GET", "/api/v1/standard/competitions"),
+        ("GET", "/api/v1/standard/competitions/{identity}/players"),
+        ("GET", "/api/v1/standard/competitions/{identity}/standings"),
+        ("GET", "/api/v1/standard/competitions/{identity}/team-stats"),
+        ("GET", "/api/v1/standard/competitions/{identity}/player-quadrant"),
         ("GET", "/api/v1/model/metrics"),
         ("GET", "/api/v1/leagues/{league_id}/standings"),
         ("GET", "/api/v1/leagues/{league_id}/fixtures"),
@@ -74,6 +85,7 @@ PUBLIC_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # 纯历史聚合,不含模型输出/赔率方法论,不随身份变化。
         ("GET", "/api/v1/matches/{match_id}/data-profile"),
         ("GET", "/api/v1/media/team-crests/{provider}/{provider_team_id}.png"),
+        ("GET", "/api/v1/media/team-crests/{digest}.png"),
         # 每日公推(board='daily_public',2026-09 新增):完全公开、匿名可见,
         # 响应不随身份变化——与 /api/v1/products 同一性质。带 Cookie 的请求
         # 仍由上方规则 1 强制 no-store,不会污染共享缓存。注意:

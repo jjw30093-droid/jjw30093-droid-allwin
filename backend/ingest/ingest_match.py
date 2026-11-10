@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db import get_connection
 from fotmob_client import FotMobClient
+from ingest.player_dimensions import fill_lineup_players, identity
 from schema import (
     DIM_MATCH_COLUMNS,
     DIM_PLAYER_COLUMNS,
@@ -186,12 +187,19 @@ def ingest_match(match_id: int, league_id: int = None, date: str = None) -> None
         _upsert_match_details(conn, dim)
 
         for p in player_stats:
+            pair = identity(p)
+            if pair is None:
+                continue
             _upsert(
                 conn,
                 "dim_player",
                 DIM_PLAYER_COLUMNS,
-                {"Player_ID": p.get("Player_ID"), "Player_Name": p.get("player_name")},
+                {"Player_ID": pair[0], "Player_Name": pair[1]},
             )
+
+        # Bench/lineup players may have no statistics row. Preserve source
+        # identity without creating fake appearances or overwriting known names.
+        lineup_dimensions = fill_lineup_players(conn, lineup_rows)
 
         # fact_* — 按 match 粒度先清后插
         conn.execute("DELETE FROM fact_shotmap WHERE Match_ID = ?", (match_id,))
@@ -245,7 +253,7 @@ def ingest_match(match_id: int, league_id: int = None, date: str = None) -> None
         conn.close()
 
     print(f"match_id={match_id} 落库完成: "
-          f"dim_match=1, dim_player={len(player_stats)}, "
+          f"dim_match=1, stats_players={len(player_stats)}, lineup_dimensions={lineup_dimensions}, "
           f"fact_shotmap={len(shots)}, "
           f"fact_player_match_stats={len(player_stats)}, "
           f"fact_team_match_stats={len(team_stats)}, "

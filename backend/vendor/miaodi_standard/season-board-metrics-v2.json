@@ -1,0 +1,16 @@
+{
+  "definition_version": "miaodi-season-board-metrics.v2",
+  "scope": "Season-board observations whose explicit per-90 source key conflicts with a recognized title denominator.",
+  "unchanged_observation_version": "miaodi-season-board-metrics.v1",
+  "entity_scopes": ["team", "player"],
+  "aggregation_values": ["season_total", "per_match", "per_90_minutes", "mean", "unverified"],
+  "conflict_policy": {
+    "aggregation": "unverified",
+    "unit": "unverified unless the base percent/rating/currency definition is independently retained",
+    "quality_issue": "conflicting_aggregation_evidence",
+    "value_policy": "preserve the finite source value; do not round, divide or recompute"
+  },
+  "missing_evidence_policy": "Do not infer a season total from a familiar metric name or infer a denominator from the absence of per-match wording.",
+  "collection_policy": "Retain the source board title, format, decimal hint and category in private raw metadata; missing source metadata remains null.",
+  "history_policy": "No historical source rewrite or fabricated metadata backfill. Existing non-conflicting observations retain definition v1."
+}

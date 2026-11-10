@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { fetchLeagueNameZh } from "@/lib/api";
 import { leagueSectionMetadata } from "@/lib/league-metadata";
 import {
-  leagueSectionPath,
+  standardPlayerSeasonPath,
   serverGetOptional,
   type PlayerQuadrantResponse,
   type PlayersResponse,
@@ -39,7 +39,7 @@ export default async function PlayersPage({
   let data: PlayersResponse | null;
   try {
     data = await serverGetOptional<PlayersResponse>(
-      leagueSectionPath("players", id, { season: seasonParam })
+      await standardPlayerSeasonPath("players", id, { season: seasonParam })
     );
   } catch {
     return (
@@ -66,7 +66,7 @@ export default async function PlayersPage({
   if (data) {
     try {
       quadrantData = await serverGetOptional<PlayerQuadrantResponse>(
-        leagueSectionPath("player-quadrant", id, { season: seasonParam }),
+        await standardPlayerSeasonPath("player-quadrant", data.competition_id, { season: seasonParam }),
       );
     } catch {
       quadrantData = null;

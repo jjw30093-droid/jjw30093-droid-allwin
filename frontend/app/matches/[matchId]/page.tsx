@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   leagueSectionPath,
+  standardCompetitionSectionPath,
   serverGetOptional,
   type MatchDetailResponse,
   type MatchListResponse,
@@ -15,7 +16,7 @@ import {
 } from "@/components/matches/MatchDetailBody";
 import { MemberMatchDetail } from "@/components/matches/MemberMatchDetail";
 import { LEAGUE_ZH } from "@/components/matches/zh";
-import { relatedMatchesQuery } from "@/lib/match-links";
+import { parseMatchIdentity, relatedMatchesQuery } from "@/lib/match-links";
 import styles from "./match-detail.module.css";
 
 /**
@@ -35,8 +36,10 @@ export async function generateMetadata({
   params: Promise<{ matchId: string }>;
 }): Promise<Metadata> {
   const { matchId } = await params;
+  const identity = parseMatchIdentity(matchId);
+  if (!identity) return { title: "比赛详情" };
   const detail = await serverGetOptional<MatchDetailResponse>(
-    `/api/v1/matches/${matchId}`,
+    `/api/v1/matches/${identity}`,
     { revalidate: 300 },
   ).catch(() => null);
   if (!detail) return { title: "比赛详情" };
@@ -55,14 +58,14 @@ export default async function MatchDetailPage({
   params: Promise<{ matchId: string }>;
 }) {
   const { matchId } = await params;
-  const idNum = Number(matchId);
-  if (!Number.isInteger(idNum) || idNum <= 0) notFound();
+  const identity = parseMatchIdentity(matchId);
+  if (!identity) notFound();
 
 
   let detail: MatchDetailResponse | null = null;
   let loadError = false;
   try {
-    detail = await serverGetOptional<MatchDetailResponse>(`/api/v1/matches/${idNum}`, {
+    detail = await serverGetOptional<MatchDetailResponse>(`/api/v1/matches/${identity}`, {
       revalidate: 120,
     });
   } catch {
@@ -84,26 +87,27 @@ export default async function MatchDetailPage({
     // 交给客户端带 cookie 重试后三分:会员数据 / 升级引导 / 真实不存在。
     return (
       <main className={styles.page}>
-        <MemberMatchDetail matchId={idNum} />
+        <MemberMatchDetail matchId={identity} />
       </main>
     );
   }
 
   const m = detail.match;
+  const idNum = m.match_id; // 收藏/浏览历史在兼容期仍使用原有存储键。
   const [analysis, report, preview, related, leagueTeamStatsRes] = await Promise.all([
     // revalidate: 120(2026-08-19 性能修复)——此前没有 revalidate,落到
     // cache:"no-store",每次都真回源(占该端点耗时的大头,详见
     // backend/queries/teams.py::team_display_for 的修复说明),而它只喂
     // 折叠起来的「数据来源与说明」区块,与 detail/preview 同档刷新完全够用。
-    serverGetOptional<AnalysisBundle>(`/api/v1/matches/${idNum}/analysis`, {
+    serverGetOptional<AnalysisBundle>(`/api/v1/matches/${identity}/analysis`, {
       revalidate: 120,
     }).catch(() => null),
-    serverGetOptional<MatchReportResponse>(`/api/v1/matches/${idNum}/report`, {
-      revalidate: 300, // 完赛事实不再变化,可安心 ISR;未完赛响应为 available=false
-    }).catch(() => null),
-    serverGetOptional<MatchPreviewResponse>(`/api/v1/matches/${idNum}/preview`, {
+    m.canonical_match_id ? serverGetOptional<MatchReportResponse>(`/api/v1/standard/matches/${m.canonical_match_id}/report-v2`, {
+      revalidate: 300,
+    }).catch(() => null) : Promise.resolve(null),
+    m.canonical_match_id ? serverGetOptional<MatchPreviewResponse>(`/api/v1/standard/matches/${m.canonical_match_id}/preview`, {
       revalidate: 120, // 两队历史聚合随赛程推进变化,与 detail 同档刷新
-    }).catch(() => null),
+    }).catch(() => null) : Promise.resolve(null),
     // 只用于算"上一场/下一场"两个 match_id(见下方 relatedIndex),query 串
     // 收口到 lib/match-links.ts::relatedMatchesQuery——与 MemberMatchDetail.tsx
     // 的客户端兜底路径共用同一个函数,不允许出现第二套拼接逻辑。
@@ -115,10 +119,9 @@ export default async function MatchDetailPage({
     // (backend/queries/league_stats.py::team_season_stats,整赛季口径,不是
     // 近 N 场滚动)——与球队数据页用同一个 leagueSectionPath,同一份数据,
     // 不是又长出第二套"球队风格"聚合。
-    serverGetOptional<TeamStatsResponse>(
-      leagueSectionPath("team-stats", String(m.league_id), { season: m.season }),
-      { revalidate: 120 },
-    ).catch(() => null),
+    standardCompetitionSectionPath("team-stats", String(m.league_id), { season: m.season })
+      .then((path) => serverGetOptional<TeamStatsResponse>(path, { revalidate: 120 }))
+      .catch(() => null),
   ]);
   const leagueTeamStats = leagueTeamStatsRes?.rows ?? null;
 

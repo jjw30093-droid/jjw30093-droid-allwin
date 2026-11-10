@@ -57,8 +57,8 @@ export function positionLabel(value: number | null | undefined): string {
 }
 
 /** 选中态与排名的身份键,与 teamMetrics.ts::teamKey 同一模式。 */
-export function playerKey(p: { player_id?: string | null; name: string }): string {
-  return p.player_id ? `id:${p.player_id}` : `name:${p.name}`;
+export function playerKey(p: { player_id?: string | null; record_id?: string; name: string }): string {
+  return p.player_id ? `id:${p.player_id}` : p.record_id ? `record:${p.record_id}` : `name:${p.name}`;
 }
 
 const num = (v: unknown): number | null =>

@@ -28,7 +28,8 @@ export interface VerticalPitchPlayer {
   /** React key(赛后 player_id: string / 赛前 id: number,统一转 string 传入)。 */
   key: string;
   /** 头像 id(FotMob player id,PlayerAvatar 用它拼 CDN URL)。 */
-  avatarId: string | number;
+  avatarId: string | number | null;
+  avatarUrl?: string | null;
   name: string;
   shirtNumber?: string | null;
   /** verticalLayout.x/y,缺失(null)的球员不画。 */
@@ -124,6 +125,7 @@ function Dots({ side, isHome }: { side: VerticalPitchSide; isHome: boolean }) {
             <span className={styles.avatarRing}>
               <PlayerAvatar
                 playerId={p.avatarId}
+                avatarUrl={p.avatarUrl}
                 playerName={p.name}
                 shirtNumber={p.shirtNumber}
                 size={40}

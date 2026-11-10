@@ -28,6 +28,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { buildMatchHref } from "@/lib/match-links";
 import { clientFetch, type GetJson, type MatchListResponse } from "@/lib/api-v1";
 import {
   fiveLeagueBreak,
@@ -343,7 +344,7 @@ function FeaturedMatchCard({ card }: { card: HomeMatchCard }) {
       </div>
 
       <Link
-        href={`/matches/${match.match_id}`}
+        href={buildMatchHref(match)}
         className={styles.pairCta}
         aria-label={`查看${match.home.name}对${match.away.name}完整分析`}
       >
@@ -366,7 +367,7 @@ function SecondaryMatchCard({ card }: { card: HomeMatchCard }) {
   const kickoffLabel = match.kickoff_at_utc ? formatBeijingZh(match.kickoff_at_utc) : null;
   return (
     <Link
-      href={`/matches/${match.match_id}`}
+      href={buildMatchHref(match)}
       className={styles.secondaryCard}
       aria-label={`查看${match.home.name}对${match.away.name}完整分析`}
     >

@@ -14,7 +14,7 @@ import styles from "./LeaderboardCard.module.css";
  * 这里重复——渲染时直接取 LeaderboardRow.name 传给对应组件。
  */
 export type LeaderboardAvatar =
-  | { kind: "player"; playerId: string | number; shirtNumber?: string | null }
+  | { kind: "player"; playerId: string | number | null; avatarUrl?: string | null; shirtNumber?: string | null }
   | { kind: "team"; crestUrl?: string | null };
 
 export interface LeaderboardRow {
@@ -42,6 +42,7 @@ function RowAvatar({ avatar, name }: { avatar: LeaderboardAvatar; name: string }
     return (
       <PlayerAvatar
         playerId={avatar.playerId}
+        avatarUrl={avatar.avatarUrl}
         playerName={name}
         shirtNumber={avatar.shirtNumber}
         size={28}

@@ -73,6 +73,8 @@ Downloader = Callable[[int, str, float, int, RequestBudget], bytes]
 _manifest_lock = threading.Lock()
 _manifest_cache_key: tuple[str, int, int, int] | None = None
 _manifest_cache_value: dict | None = None
+_asset_manifest: dict | None = None
+_asset_index: dict[str, tuple[tuple[str, int], ...]] = {}
 
 
 def media_root() -> Path:
@@ -277,10 +279,12 @@ def _load_manifest(root: Path | None = None) -> dict:
 
 
 def clear_manifest_cache() -> None:
-    global _manifest_cache_key, _manifest_cache_value
+    global _manifest_cache_key, _manifest_cache_value, _asset_manifest, _asset_index
     with _manifest_lock:
         _manifest_cache_key = None
         _manifest_cache_value = None
+        _asset_manifest = None
+        _asset_index = {}
 
 
 def _manifest_entry(
@@ -346,6 +350,42 @@ def read_team_crest(
     return CrestBytes(raw, sha, info.width, info.height)
 
 
+def read_team_crest_asset(digest: str, *, root: Path | None = None) -> CrestBytes | None:
+    """Resolve a content address through the private manifest, never a file path.
+
+    Index once per manifest snapshot, not once per image request. Identical PNGs
+    can belong to multiple source teams; the content address represents the
+    image bytes, not an assertion that those teams are the same football entity.
+    """
+    global _asset_manifest, _asset_index
+    if len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+        return None
+    manifest = _load_manifest(root)
+    with _manifest_lock:
+        if _asset_manifest is not manifest:
+            index: dict[str, list[tuple[str, int]]] = {}
+            for entry in manifest.get('entries', {}).values():
+                if not isinstance(entry, dict):
+                    continue
+                sha = entry.get('sha256')
+                if not isinstance(sha, str) or len(sha) != 64 or any(c not in '0123456789abcdef' for c in sha):
+                    continue
+                try:
+                    identity = _validate_identity(entry.get('provider'), entry.get('provider_team_id'))
+                except TeamCrestError:
+                    continue
+                index.setdefault(sha, []).append(identity)
+            _asset_index = {sha: tuple(references) for sha, references in index.items()}
+            _asset_manifest = manifest
+        references = _asset_index.get(digest, ())
+    for provider, team_id in references:
+        crest = read_team_crest(provider, team_id, root=root)
+        # The manifest/file may have been replaced since the index snapshot.
+        if crest is not None and crest.sha256 == digest:
+            return crest
+    return None
+
+
 def resolve_team_crest_url(
     provider: str,
     provider_team_id: int | None,
@@ -357,10 +397,7 @@ def resolve_team_crest_url(
     crest = read_team_crest(provider, provider_team_id, root=root)
     if crest is None:
         return None
-    return (
-        f"/api/v1/media/team-crests/{provider}/{provider_team_id}.png"
-        f"?v={crest.sha256[:12]}"
-    )
+    return f"/api/v1/media/team-crests/{crest.sha256}.png"
 
 
 def _ensure_cache_directories(root: Path, provider: str) -> None:

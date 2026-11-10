@@ -5,7 +5,7 @@ import {getMe} from '@/lib/api-v1';
 import {TeamBadge} from '@/components/teams/TeamBadge';
 import {Pitch,MomentumChart,Matrix,XgRace,PlayerValueChart} from './visualization-charts';
 import {MatchTimeline} from './visualization-timeline';
-import {inTimeRange,matchTime,type TimeRange} from './visualization-time';
+import {axisPosition,inTimeRange,matchTime,type TimeRange} from './visualization-time';
 import {eventLabel,filterEvents,formatValue,getVisualization,initialFilters,kinds,loadBundle,shotOutcomes,shotResult,views,type ShotOutcome,type Bundle,type Catalog,type Event,type Filters,type View} from './visualization-data';
 import s from '@/app/studio/visualization/visualization.module.css';
 
@@ -195,7 +195,7 @@ export function VisualizationWorkspace(){
   const [catalog,setCatalog]=useState<Catalog|null>(null),[catalogError,setCatalogError]=useState(''),[searching,setSearching]=useState(true);
   const [competitions, setCompetitions] = useState(() => new Map<string, string>(fixtureCompetitions));
   const [query,setQuery]=useState({date:'',competition:'',q:''}),[request,setRequest]=useState({...query,offset:0});
-  const [matchId,setMatchId]=useState(''),[bundle,setBundle]=useState<Bundle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[reload,setReload]=useState(0);
+  const [matchId,setMatchId]=useState(()=>typeof window==='undefined'?'':new URLSearchParams(window.location.search).get('match')??''),[bundle,setBundle]=useState<Bundle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[reload,setReload]=useState(0);
   const [view,setView]=useState<View>('chalkboard'),[filters,setFilters]=useState<Filters>(initialFilters),[selected,setSelected]=useState('');
   const [outcomes, setOutcomes] = useState<ShotOutcome[]>(allShotOutcomes);
   const [showOwnGoals, setShowOwnGoals] = useState(false);
@@ -222,7 +222,13 @@ export function VisualizationWorkspace(){
   },[request]);
   useEffect(()=>{
     if(!matchId)return;const controller=new AbortController();queueMicrotask(()=>{if(!controller.signal.aborted){setLoading(true);setBundle(null);setError('');setSelected('');setPair('');setPasser('');setReceiver('');setRange(null);setFilters(initialFilters);setOutcomes(allShotOutcomes);setShowOwnGoals(false);setHeatRegion(null);setBox(false);setEventLimit(eventPageSize);}});
-    loadBundle(matchId,controller.signal).then(result=>{if(!controller.signal.aborted){setBundle(result);setPassSide(result.match.home_id);}}).catch(e=>{if(!controller.signal.aborted)setError(e.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    loadBundle(matchId,controller.signal).then(result=>{if(!controller.signal.aborted){setBundle(result);setPassSide(result.match.home_id);
+      const params=new URLSearchParams(window.location.search);
+      if(params.get('match')===result.match.id){const event=result.events.find(e=>e.id===params.get('event'));
+        if(event){const position=axisPosition(matchTime(result),event);setSelected(event.id);setView('chalkboard');if(position!==null)setRange([Math.max(0,position-15),position+15]);}
+        const player=params.get('player');if(player&&result.players.some(p=>p.id===player))setFilters({...initialFilters,players:[player]});
+      }
+    }}).catch(e=>{if(!controller.signal.aborted)setError(e.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return()=>controller.abort();
   },[matchId,reload]);
   const change=<K extends keyof Filters>(key:K,value:Filters[K])=>{setFilters(f=>({...f,[key]:value}));setEventLimit(eventPageSize);};
@@ -276,7 +282,7 @@ export function VisualizationWorkspace(){
     document.getElementById(`studio-tab-${id}`)?.focus();
   };
   return <main className={s.page}>
-    <header className={s.header}><div><p className={s.muted}>CC · 比赛研究</p><h1>比赛可视化</h1></div><Link href="/studio">返回工作台</Link></header>
+    <header className={s.header}><div><p className={s.muted}>CC · 比赛研究</p><h1>比赛可视化</h1></div><Link href="/studio/prematch">赛前分析</Link><Link href="/studio">返回工作台</Link></header>
     <details className={s.catalog} open={!matchId||!!catalogError}><summary>选择比赛</summary><form className={s.search} onSubmit={e=>{e.preventDefault();setRequest({...query,offset:0});}}>
       <label>比赛日期<input type="date" value={query.date} onChange={e=>setQuery({...query,date:e.target.value})}/></label>
       <label>赛事<select value={query.competition} onChange={e=>setQuery({...query,competition:e.target.value})}><option value="">全部已入库赛事</option>{[...competitions].map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>

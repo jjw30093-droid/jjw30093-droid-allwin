@@ -10,11 +10,11 @@
 
 import type { components } from "@/lib/api-types";
 
-export type MetricProfile = components["schemas"]["MatchProfileMetricDTO"];
-export type GroupProfile = components["schemas"]["MatchProfileGroupDTO"];
-export type Highlight = components["schemas"]["MatchProfileHighlightDTO"];
-export type DataProfile = components["schemas"]["MatchDataProfileDTO"];
-export type PeerTeam = components["schemas"]["MatchProfilePeerDTO"];
+export type MetricProfile = components["schemas"]["StandardMatchProfileMetricDTO"];
+export type GroupProfile = components["schemas"]["StandardMatchProfileGroupDTO"];
+export type Highlight = components["schemas"]["StandardMatchProfileHighlightDTO"];
+export type DataProfile = components["schemas"]["StandardMatchDataProfileDTO"];
+export type PeerTeam = components["schemas"]["PreviewPeer"];
 
 /** 后端 `comparison_mode` 的两种取值。
  *

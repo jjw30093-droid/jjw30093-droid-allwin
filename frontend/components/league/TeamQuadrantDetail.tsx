@@ -14,7 +14,7 @@
  */
 
 import { TeamBadge } from "@/components/teams/TeamBadge";
-import type { TeamSeasonStatRow } from "@/lib/api-v1";
+import type { TeamMetricRow as TeamSeasonStatRow } from "@/lib/api-v1";
 import {
   formatFraction,
   formatMetric,
