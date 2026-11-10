@@ -28,3 +28,11 @@
 浏览器登录管理员实际打开CC报告后发现两项交付问题：shared .env的ALLOWED_ORIGINS仅含VIP，覆盖了原systemd四域白名单；已保留既有配置备份并恢复既有CC/VIP四域，管理员鉴权与CSRF不变。之后真实浏览器POST导出200。生成后window.open被Chrome拦截；改用现有downloadServerExport带cookie下载Blob，下载失败显式提示，补PDF/JSON及下载错误回归。
 
 Cloudflare两站10个相关HTML入口已定向purge成功，不删除旧hash资源。后续下载修正版本需重新构建、发布、浏览器实际下载验收。
+
+
+下载修正验证：Vitest定向3项通过，ESLint通过，带next-env.d.ts的定向TypeScript检查通过。额外执行的全仓npx tsc --noEmit暴露已有测试fixture与当前API类型不一致（AccessTab/RecoTab导出、标准身份与旧数字ID等），未修改这些无关测试或降低检查规则；Next生产类型检查沿用框架标准诊断范围。本次变更没有业务类型错误。原本单独定向配置未加载next-env导致CSS模块类型不可见，补入既有声明后通过；未改项目tsconfig。
+
+第一轮release所有发布门禁通过；非发布门禁的旧备份压缩停留在20261106备份的只读完整性验证，为避免占用后续修正版发布I/O，核对三库原文件及metadata仍完整后停止该压缩任务，原备份与最新发布备份均保留。没有终止或跳过发布前备份及其校验。
+
+
+下载修正版npm ci期间，2GB主机内存/磁盘压力使部分API及文件请求超时，另有既有标准预览查询触发SQL deadline；未将这些504误判为报告数字问题。恢复API后healthz=200/0.004821s；继续降低候选构建线程优先级，并须在最终版本检查报告导出完整GET200。该阶段不是已验证下载成功声明。
