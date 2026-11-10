@@ -36,3 +36,16 @@ Cloudflare两站10个相关HTML入口已定向purge成功，不删除旧hash资�
 
 
 下载修正版npm ci期间，2GB主机内存/磁盘压力使部分API及文件请求超时，另有既有标准预览查询触发SQL deadline；未将这些504误判为报告数字问题。恢复API后healthz=200/0.004821s；继续降低候选构建线程优先级，并须在最终版本检查报告导出完整GET200。该阶段不是已验证下载成功声明。
+
+
+## Final production acceptance
+
+Runtime: website ceeda0b3b9fa; isolated CC analyst API2479244. The second production build, TypeScript pass,24 generated pages, browser/public-URL/static-asset gates, strict three-database backup20261110T042212Z, migration status, candidate/live healthz and readyz, business smoke and public-site checks passed. Targeted Cloudflare HTML purges succeeded for both domains.
+
+Chrome, using the existing real administrator session, opened the Sunderland-Chelsea report with release=ceeda0b3b9fa. Clicking Export PDF produced cc-report-prematch-6c22ce98-6712-4bc0-b828-5efe86608030-v1.pdf,1,053KB, with the browser download status Complete. This verifies actual authenticated HTTP generation and download, rather than dependency overrides or a fabricated login. The earlier incognito check showed only the administrator-login requirement; the anonymous source endpoint returned401/private,no-store.
+
+Automatic jobs:20 succeeded,0 failed. Saved draft IDs: prematch6c22ce98-6712-4bc0-b828-5efe86608030; linked postmatch d61400b8-1a6d-4b18-92d0-da87b0107032; second-match postmatch f6e2043b-fdd2-4a41-a882-dd3412c7c282. Official xA coverage24/25 and22/26 players;73/74 player-match xA component records. Saved per-action xT counts1184/1641 and sums2.6882120909746905/1.7219959696748512 reconcile.
+
+The optional old-backup compression was stopped during read-only verification after confirming all three original backup files and metadata remained intact. Both mandatory release backup sets remain complete; no pre-migration integrity check was skipped. Nine local database/sidecar sizes and mtimes match the protected baseline. No full database was downloaded, no model was trained, and the original CC prediction runtime was not switched.
+
+A future fixture's actual predicted-XI to confirmed-XI to final-whistle chronology still requires a future real match; it has not been represented as completed. Historical prematch reports remain explicitly reconstructed and pending human review. The repository-wide legacy fixture type errors are documented above; only the scoped check and production TypeScript build are claimed to pass.
