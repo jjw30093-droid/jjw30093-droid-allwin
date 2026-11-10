@@ -21,4 +21,10 @@
 
 审查证据：/tmp/cc-final-independent-sql.py及其result.json、/tmp/cc-release-reviewed-packet.json、/tmp/cc-final-resource-profile-isolated.json、/tmp/report-release-gate/*manifest.json。修正PDF主文43页/含附录153页；受影响转换与基准页渲染核对。
 
-当前发布状态：候选准备中；本节不是已部署声明。
+生产首轮发布 e9c0becec296 已切换，迁移0024、三库完整备份与健康/业务冒烟通过。CC独立只读分析服务2479244已运行；原预测服务未切换。自动工作流20个实际任务成功，无失败。
+
+线上按真实业务方法生成并冻结桑德兰—切尔西赛前/赛后、森林—曼城赛后报告；射门53/57、9/10、11/12与审查样本一致，赛后分别xG2.381788537/0.657988288与1.055496333/1.758843705。PDF/JSON均成功，赛前PDF152页、赛后122页，无空页或替代字符，首/6/15页已渲染核对。报告均待人工审核；历史赛前明确重建。
+
+浏览器登录管理员实际打开CC报告后发现两项交付问题：shared .env的ALLOWED_ORIGINS仅含VIP，覆盖了原systemd四域白名单；已保留既有配置备份并恢复既有CC/VIP四域，管理员鉴权与CSRF不变。之后真实浏览器POST导出200。生成后window.open被Chrome拦截；改用现有downloadServerExport带cookie下载Blob，下载失败显式提示，补PDF/JSON及下载错误回归。
+
+Cloudflare两站10个相关HTML入口已定向purge成功，不删除旧hash资源。后续下载修正版本需重新构建、发布、浏览器实际下载验收。
