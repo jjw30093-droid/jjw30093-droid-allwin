@@ -99,3 +99,16 @@ Preview: http://127.0.0.1:3087/studio/reports?report=7cc099e7-28cc-4122-bfc7-700
 Evidence projections: /tmp/cc-stat-{post,pre}-20261111.json. PDFs: /tmp/cc-stat-man-villa-20261111.pdf and /tmp/cc-stat-sun-che-pre-20261111.pdf. These small projections are not database copies.
 
 Final validation: source47 passed; website24 passed (one existing Starlette deprecation warning); frontend6 passed; scoped TypeScript and ESLint passed. Reader PDFs26/28 pages, no blank pages, all pages rendered; changed count pages visually checked.11 protected local database/sidecar sizes and mtimes unchanged. Source audits used mode=ro. Follow-up remains in preview, no production activation.
+
+
+## Production release accepted - 2026-11-11 (supersedes preview-only status)
+
+- Git commits: website a9a426037236; source 56c3f11. Both pushed before deployment. Website current=/opt/allwin/releases/a9a426037236; CC analyst current=/home/ubuntu/opta-data/analyst_api/releases/56c3f11. Collector runtime/cadence unchanged.
+- Normal release script completed exit0, full next build and TypeScript passed,24/24 static pages generated, bundle/public-URL/candidate/live/business gates passed. All three business databases backed up with integrity_check=ok (backup set20261110T171911Z). No new schema migration. Backup checks were slow; temporary per-process I/O priority and read-only cache warming accelerated them, with no integrity gate skipped.
+- Cloudflare targeted purge succeeded for CC and VIP Studio paths. CC Nginx18300/18800 tunnels point to the deployed website/API; loopback HTML200, anonymous report API401 and private/no-store. Public curl from CC host receives a Cloudflare managed403 challenge; actual authenticated Chrome page and export were verified, no WAF bypass or permission changes.
+- Actual authenticated admin UI enqueued job8c36a635-31c1-43c7-bd16-95af049539e6. Normal production worker processed it successfully using workflowv8. New draft9d273eab-4801-4ae5-a401-4a48c7ab2d9b is pending review, previous draftad9a198f-a9e7-44ad-92d9-eac6f827ec0d retained. Regular analyst worker restarted and active.
+- Production snapshot checks: Maguire totalCross=0,zero_omitted/played; Alysson interception=2,reported/played; de Ligt totalPass=null,not_played. Actual XI11+11, reconstructed historical samples5+5, ready_for_review. Real page shows zero counts, unused players and snapshot-unlinked MA32 score labels separately.
+- Reader export8b962a63-c42d-42ef-a909-82e821e238db created by actual browser UI, status succeeded; Chrome download completed293KB. Production reader26 pages,299615 bytes, no blank pages. Normalized extracted text verifies zero-restoration note, unused-player labels and unlinked-does-not-mean-CC-source-absent explanation. Rendered changed pages5/6 inspected: zero counts and Alysson2 interceptions reconcile, no clipping observed.
+- PDF SHA256caa956520d69170950647609a98c00f2a8bdaf8f6d6cf456434f33fb20273e8c. Browser file: output/pdf/cc-man-villa-production-stat-20261111.pdf in chat visualization workspace. Download screenshot:/tmp/cc-stat-production-download-20261111.png.
+
+Production URL:https://miaomiaodi.cc/studio/reports?report=9d273eab-4801-4ae5-a401-4a48c7ab2d9b#report-roles
