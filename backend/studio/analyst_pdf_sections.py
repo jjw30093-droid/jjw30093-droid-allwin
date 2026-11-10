@@ -26,8 +26,8 @@ def official_rate(team,numerator,denominator):
 
 
 def player_count(team,player,key):
-    # Roles provide explicit zeros. Sparse provider fields remain unknown when
-    # absent, rather than interpreting an omitted stat as observed zero.
+    # Source projection resolves registered sparse zeros. Exports never invent
+    # new zeros from absent fields, including old immutable snapshots.
     rolekeys={'assists':'assists','goals':'goals','key_passes':'key_passes','tackles':'official_total_tackles','interceptions':'official_interceptions'}
     if key in rolekeys:
         values=[p.get(rolekeys[key]) for m in team.get('analyst_detail',{}).get('matches',[]) for p in m.get('roles',[]) if p.get('player_id')==player['id']]
@@ -230,12 +230,30 @@ def append_sections(value,story,p,table,card,grid,page,small_pitch,font,palette,
             for t,xs in zip(teams,allrows):cards.append(card(t['name']+' · '+label+'前4名',chart(t,[x[0]['name'] for x in xs],[x[1] for x in xs],maximum,'累计次数；两队同尺度'),p(player_scope(key)+'。'+('整场进球不可与选区射门直接计算转化率。' if key=='goals' else ''),'small'),p('；'.join(x[0]['name']+'：'+str(x[2])+'场有记录' for x in xs),'small')))
         grid(cards)
 
+    from .analyst_stats import metric_cell
     for start in range(0,max(len(t['players']) for t in teams),14):
         page('全部球员 · 近期出场与价值贡献 '+str(start+1)+'–'+str(start+14));cards=[]
         for t in teams:
             xs=sorted(t['players'],key=lambda x:-(x.get('minutes') or 0))[start:start+14]
-            cards.append(card(t['name'],table(['球员','分钟','xG','xA','xT'],[[x['name'],x['minutes'],x.get('xg'),x.get('xa'),x.get('model_xt')] for x in xs],[90,35,35,35,35]),p('xG/xT按所选事件；xA为有值比赛的整场总值，缺项不填零。每90分钟指标及数据来源见完整附录。','small')))
+            cards.append(card(t['name'],table(['球员','分钟','xG','xA','xT'],[[x['name'],x['minutes'],metric_cell(x,'xg'),metric_cell(x,'xa'),metric_cell(x,'model_xt')] for x in xs],[90,35,35,35,35]),p('xG/xT按所选事件；xA为有值比赛的整场总值。“未出场”指所选比赛未上场；“选区无样本”指所选时段无分钟；“未关联”指本快照未读到数值，不代表CC原始数据不存在。','small')))
         grid(cards)
+
+    from .analyst_stats import official_stat
+    active_by_team=[[x for x in t['players'] if any(m.get('participation')=='played' for m in x.get('official_by_match',[])) or x.get('minutes',0)>0] for t in teams]
+    for metrics in [[('totalPass','传球'),('totalAttAssist','射门助攻'),('totalCross','传中')],
+                    [('aerialWon','争顶胜'),('totalTackle','抢断'),('interception','拦截')]]:
+        for start in range(0,max(map(len,active_by_team),default=0),12):
+            page('球员职责 · '+'、'.join(label for _,label in metrics));cards=[]
+            for t,active in zip(teams,active_by_team):
+                def cell(player,key):
+                    receipt=official_stat(player,key)
+                    if receipt['value'] is None:return '；'.join(receipt['reasons'])
+                    return f'{receipt["value"]:g}'+(f' / {receipt["coverage"]}场' if receipt['missing'] else '')
+                cards.append(card(t['name'],table(['球员']+[label for _,label in metrics],
+                    [[x['name']]+[cell(x,k) for k,_ in metrics] for x in active[start:start+12]],[86,48,48,48]),
+                    p('整场次数。完整原始计数列表省略的零值已还原为0；来源异常不补零。覆盖不足时单列有值场次。','small'),
+                    p('所选时段无出场分钟：'+('、'.join(x['name'] for x in t['players'] if x not in active) or '无')+'。未出场不等于统计为0。','small') if start==0 else p('接上一组球员。','small')))
+            grid(cards)
 
     page('xA分项 · 运动战与定位球创造');cards=[]
     xa=[grouped_xa(t.get('analyst_detail',{}).get('matches',[])) for t in teams]

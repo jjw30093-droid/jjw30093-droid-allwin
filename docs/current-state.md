@@ -7969,3 +7969,8 @@ Build blocker resolved with pinned official Oswald/Noto Sans SC WOFF2 subsets, O
 ## 2026-11-11 — Analyst quality and PDF release accepted in production
 
 Website `59ea209b033e`, analyst API `da76530`, collector runtime `67397b8` (Git pin `1574257`) activated and verified. Corrected 131 derived penalty flags /126 matches; all 2,521 current-season matches passed bounded quality checks afterwards, EPL100 matches/172,356 events reconciled. Manchester United–Villa actual XI11/11 each including Alysson, reconstructed regional samples5+5, Palace corner mean4.20. Production builds passed; Cloudflare purged. Three real-match reader PDFs inspected (25/23/24pages), authenticated reader/evidence browser downloads completed, 440px mobile lineup/regions verified. New reports pending review, existing reviewed snapshots retained. Final scope and limitations: `docs/audits/cc-standard-quality-20261110.md` production acceptance entry.
+
+
+## 2026-11-11 - Report missing-stat follow-up (preview)
+
+Ten-item raw Opta sample found nine omitted count zeros and one unused substitute; source projection restores registered count zeros with per-match provenance, repairs interception consumer keys, and distinguishes unused players from selected-window absence. Page and PDF use the same saved values. Real pre/post previews regenerated. This follow-up is local, not deployed. Evidence and scope: docs/audits/cc-stat-availability-20261111.md.

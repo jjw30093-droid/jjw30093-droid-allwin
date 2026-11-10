@@ -65,7 +65,7 @@ def compact_report(value, font, pitch, palette):
     def findings(topic,tid):return [x for x in r.get('tactical_analysis',{}).get('findings',[]) if x.get('topic')==topic and x.get('rule',{}).get('team_id')==tid]
     def summary(topic,t):
         xs=findings(topic,t['id']);return p(xs[0]['text'],'small') if xs else Spacer(1,0)
-    def sources_note():return p('完整事件、来源及审计材料见独立证据附录；本报告缺失数据不计为零。','small')
+    def sources_note():return p('完整事件、来源及审计材料见独立证据附录。完整Opta计数列表省略的零值已还原为0；未出场及来源缺失不补零。','small')
 
     page(('赛前' if r['phase']=='prematch' else '赛后')+'分析 · 关键判断')
     story.extend([p('资料截止：'+reader_time(r['cutoff_at'])+' · '+reader_text(r['analysis_mode']),'small'),p('比赛数据：CC Opta；阵容与伤停：VIP。以下判断适用于本报告的比赛样本、比分及人数筛选。','small')])
@@ -209,7 +209,7 @@ def consolidate_reader(story,p,page_break,report):
     groups=[
         ('关键判断',('分析 · 关键判断',)),
         ('比赛背景与近期表现',('近期状态 ·','联赛背景 ·')),
-        ('首发变化、阵型与球员贡献',('阵容 ·','阵型与换人 ·','全部球员 ·')),
+        ('首发变化、阵型与球员贡献',('阵容 ·','阵型与换人 ·','全部球员 ·','球员职责 ·')),
         ('机会创造与终结',('两队总览 ·','终结 ·','xA分项 ·','射门细分 ·')),
         ('区域对位',('区域对位 ·',)),
         ('出球、推进与进攻路线',('战术过程 ·','传球结构 ·','传中 ·','直塞 ·','门球 ·')),

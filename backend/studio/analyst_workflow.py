@@ -11,7 +11,7 @@ from . import research
 from .prematch import read_report, lineup_context, analyst_source_base
 from .predictions import _NoRedirect
 
-VERSION = 'analyst-workflow.v7'
+VERSION = 'analyst-workflow.v8'
 
 
 def source_read(path):

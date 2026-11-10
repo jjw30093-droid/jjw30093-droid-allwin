@@ -223,7 +223,7 @@ def _append_analysis_sections(r, story, text, table, new, pitch, font, palette, 
             text('逐次明细与完整后续射门引用保留于同版 JSON；门球在出球统计中单列。','small')
 
         new(t['name']+' · 角色、压迫与联赛背景')
-        fields=[('possessionPercentage','控球率 %'),('totalLongBalls','长传尝试'),('accurateLongBalls','长传成功'),('totalCross','传中尝试'),('accurateCross','传中成功'),('aerialWon','争顶成功'),('aerialLost','争顶失败'),('touchesInOppBox','对方禁区触球'),('totalAttAssist','射门助攻'),('totalTackle','抢断'),('interceptionWon','拦截成功'),('ballRecovery','夺回球权'),('saves','扑救'),('totalClearance','解围')]
+        fields=[('possessionPercentage','控球率 %'),('totalLongBalls','长传尝试'),('accurateLongBalls','长传成功'),('totalCross','传中尝试'),('accurateCross','传中成功'),('aerialWon','争顶成功'),('aerialLost','争顶失败'),('touchesInOppBox','对方禁区触球'),('totalAttAssist','射门助攻'),('totalTackle','抢断'),('interception','拦截'),('ballRecovery','夺回球权'),('saves','扑救'),('totalClearance','解围')]
         metrics={x['key']:x for x in t.get('official_metrics',[])}
         table(['官方整场指标','每场平均','比赛覆盖'],[[label,metrics[key].get('mean'),metrics[key].get('coverage')] for key,label in fields if key in metrics],[295,100,100])
         press=[('official_ppda','PPDA'),('high_regains_proxy','前场抢回'),('counterpress_regains_within_5s_proxy','丢球后5秒内抢回'),('losses_followed_by_opponent_shot_within_15s_proxy','丢球后15秒内被射门')]
