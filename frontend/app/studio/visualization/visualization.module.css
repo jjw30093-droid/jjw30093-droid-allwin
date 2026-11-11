@@ -199,3 +199,7 @@
 .shotMissKey, .shotGoalKey, .shotOwnGoalKey { width: 12px; height: 12px; margin-left: 8px; border: 1.5px solid #596675; }
 .shotGoalKey, .shotOwnGoalKey { background: #596675; }
 .shotOwnGoalKey::after { content: '+'; color: #fff; font-size: 9px; line-height: 9px; display: block; text-align: center; }
+
+.chalkboardActions { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.chalkboardActions fieldset { min-width: 0; border: 1px solid var(--studio-line, #d5dee7); border-radius: 4px; padding: 6px 10px; }
+.chalkboardActions label { display: flex; align-items: center; gap: 6px; padding-block: 3px; }

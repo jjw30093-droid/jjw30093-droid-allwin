@@ -2,7 +2,7 @@ import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/reac
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {VisualizationGate,VisualizationWorkspace} from '@/components/studio/visualization-workspace';
 import {getMe} from '@/lib/api-v1';
-import {getVisualization,loadBundle,type Bundle,type Event,type Match} from '@/components/studio/visualization-data';
+import {filterEvents,initialFilters,getVisualization,loadBundle,type Bundle,type Event,type Match} from '@/components/studio/visualization-data';
 
 vi.mock('@/lib/api-v1',()=>({getMe:vi.fn()}));
 vi.mock('@/components/studio/visualization-charts',()=>({Pitch:({events}:{events:Event[]})=> <div>球场图 · {events.length}</div>,MomentumChart:({time,onRange}:{time:{phases:{offset:number}[]};onRange:(range:[number,number])=>void})=> <button onClick={()=>onRange([time.phases[1].offset+15*60,time.phases[1].offset+27*60])}>模拟拖选 60–72</button>,XgRace:()=> <div>xG 曲线图</div>,Matrix:()=> <div>传球矩阵图</div>}));
@@ -46,7 +46,7 @@ it('omits an empty date and distinguishes missing PV from a failed request',asyn
 const matchEvent=(id:string,period:number,minute:number,player:string,kind='pass'):Event=>({id,period,minute,second:0,clock:`${minute}:00`,elapsed:minute*60,team_id:'h',player_id:player,player_name:player,kind,label:kind==='shot'?'射门':'传球',success:true,x:50,y:50,end_x:65,end_y:50,key_pass:false,assist:false,xg:kind==='shot'?0.23:null,xgot:null,goal:false,own_goal:false,penalty:false,pv_value:null,pv_added:null});
 
 it('shares a Momentum selection with event views, and opens an incident by its event ID',async()=>{
- const shot=matchEvent('shot',2,63,'区间射门球员','shot');
+ const shot={...matchEvent('shot',2,63,'区间射门球员','shot'),shot_outcome:'blocked' as const};
  const before=matchEvent('before',1,47,'补时球员');
  const after=matchEvent('after',2,73,'区间外球员');
  const marker={...matchEvent('card',1,46,'黄牌球员'),kind:'card',label:'黄牌'};
@@ -55,9 +55,10 @@ it('shares a Momentum selection with event views, and opens an incident by its e
  vi.mocked(loadBundle).mockResolvedValue({...data,events:[before,shot,after],markers:[marker,substitution],capabilities:{...data.capabilities,momentum:true}});
  render(<VisualizationWorkspace/>);
  await screen.findByText('球场图 · 0');
- fireEvent.change(screen.getByLabelText('球场动作'),{target:{value:'shot'}});
+ fireEvent.click(screen.getByText('球场动作'));
+ fireEvent.click(screen.getByLabelText('射门被封堵'));
  expect(screen.getByText('球场图 · 1')).toBeTruthy();
- fireEvent.change(screen.getByLabelText('球场动作'),{target:{value:''}});
+ fireEvent.click(screen.getByRole('button',{name:'清除动作筛选'}));
  fireEvent.click(screen.getByRole('tab',{name:/比赛势头/}));
  fireEvent.click(screen.getByRole('button',{name:'模拟拖选 60–72'}));
  expect(screen.getByRole('region',{name:'所选时段统计'}).textContent).toContain('0.23');
@@ -111,4 +112,36 @@ it('opens a missed penalty on the timeline and reports filtered xG coverage and 
  expect(summary.textContent).toContain('0.23 · 1/1');
  fireEvent.click(screen.getByRole('button', {name:'62:00 点球未进'}));
  expect(screen.getByRole('complementary', {name:'事件详情'}).textContent).toContain('射失球员');
+});
+
+it('keeps restart crosses, open-play crosses and ordinary passes distinct', () => {
+ const events = [
+  {...matchEvent('corner-cross',1,11,'甲','pass'),cross_phase:'restart'},
+  {...matchEvent('open-cross',1,12,'甲','pass'),cross_phase:'open_play',success:false},
+  matchEvent('ordinary-pass',1,13,'甲','pass'),
+ ] satisfies Event[];
+ const selected = (kind: string) => filterEvents(events,{...initialFilters,kind},'chalkboard').map(event=>event.id);
+ expect(selected('cross:restart:won')).toEqual(['corner-cross']);
+ expect(selected('cross:open_play:lost')).toEqual(['open-cross']);
+ expect(selected('pass:won')).toEqual(['ordinary-pass']);
+});
+
+it('combines Opta filters without plotting details-only attempts or counting them as tackles', async () => {
+ const data=bundle('甲');
+ const events:Event[]=[
+   {...matchEvent('tackle',2,60,'抢断球员','tackle'),event_type_id:7},
+   {...matchEvent('attempt',2,61,'尝试球员','type_83'),event_type_id:83,details_only:true},
+   {...matchEvent('pass',2,62,'传球球员'),event_type_id:1,ordinary_pass:true},
+ ];
+ vi.mocked(loadBundle).mockResolvedValue({...data,events});
+ render(<VisualizationWorkspace/>);
+ await screen.findByText('球场图 · 0');
+ fireEvent.click(screen.getByText('球场动作'));
+ fireEvent.click(screen.getByLabelText('抢断成功'));
+ fireEvent.click(screen.getByLabelText('成功传球'));
+ expect(screen.getByText('球场图 · 2')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'清除动作筛选'}));
+ fireEvent.click(screen.getByLabelText('尝试抢断'));
+ expect(screen.getByText('球场图 · 0')).toBeTruthy();
+ expect(screen.getByText('事件明细 · 1')).toBeTruthy();
 });

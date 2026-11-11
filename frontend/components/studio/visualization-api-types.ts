@@ -178,6 +178,11 @@ export interface components {
             goal: boolean;
             /** Own Goal */
             own_goal: boolean;
+            event_type_id?: number | null;
+            details_only?: boolean;
+            ordinary_pass?: boolean | null;
+            chalkboard_offside?: { player_id: string; player_name: string | null; x: number; y: number } | null;
+            cross_phase?: ("restart" | "open_play") | null;
             /** Shot Outcome */
             shot_outcome?: ("goal" | "on_target" | "off_target" | "blocked") | null;
             /** Penalty */

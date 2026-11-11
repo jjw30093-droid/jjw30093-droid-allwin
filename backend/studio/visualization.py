@@ -43,6 +43,12 @@ class Player(Model):
     minutes: float | None
     starter: bool
 
+class ChalkboardOffside(Model):
+    player_id: str
+    player_name: str | None
+    x: float=Field(ge=0,le=100)
+    y: float=Field(ge=0,le=100)
+
 class Event(Model):
     id: str
     team_id: str | None
@@ -66,6 +72,11 @@ class Event(Model):
     xgot: float | None
     goal: bool
     own_goal: bool
+    event_type_id: int | None = None
+    details_only: bool = False
+    ordinary_pass: bool | None = None
+    chalkboard_offside: ChalkboardOffside | None = None
+    cross_phase: Literal['restart', 'open_play'] | None = None
     shot_outcome: Literal['goal', 'on_target', 'off_target', 'blocked'] | None = None
     penalty: bool | None
     pv_value: float | None
