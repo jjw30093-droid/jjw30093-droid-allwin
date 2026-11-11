@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import build_opener, ProxyHandler
 from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict
+from .prematch import analyst_source_base
 from .predictions import _NoRedirect
 
 class VisualizationError(RuntimeError):
@@ -156,8 +157,8 @@ class Bundle(Model):
     notes: list[str]=Field(max_length=20)
 
 def read(path,params,model):
-    url='http://127.0.0.1:18768/v1/visualization/'+path+'?'+urlencode(params)
     try:
+        url=analyst_source_base()+'/v1/visualization/'+path+'?'+urlencode(params)
         opener=build_opener(ProxyHandler({}),_NoRedirect())
         with opener.open(url,timeout=10) as response:
             if response.status!=200 or response.headers.get_content_type()!='application/json':raise ValueError('bad_response')

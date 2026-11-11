@@ -62,7 +62,7 @@ function matchesChalkboardAction(e: Event, action: string) {
 }
 
 export function chalkboardPlotEvent(event: Event, actions: string, officialOnly: boolean): Event | null {
-  if (event.details_only) return null;
+  if (event.details_only || event.kind === 'unknown') return null;
   if (officialOnly && !actions && !chalkboardGroups.some(([, options]) => options.some(([id]) => matchesChalkboardAction(event, id)))) return null;
   if (event.event_type_id !== 2 || actions && !actions.split(',').includes('pass:offside')) return event;
   return event.chalkboard_offside ? {

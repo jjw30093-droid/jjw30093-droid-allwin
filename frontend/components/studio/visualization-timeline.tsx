@@ -66,6 +66,46 @@ export function MomentumBrush({ time, range, onRange, children }: {
   </div>;
 }
 
+function readClock(time: MatchTime, phaseId: FormDataEntryValue | null, value: FormDataEntryValue | null) {
+  const phase = time.phases.find(item => String(item.id) === phaseId);
+  const clock = typeof value === 'string' && /^(\d{1,3})(?:\+(\d{1,2}))?(?::([0-5]\d))?$/.exec(value.trim());
+  if (!phase || !clock || (clock[2] && Number(clock[1]) !== phase.end)) return null;
+  const seconds = (Number(clock[1]) + Number(clock[2] ?? 0) - phase.start) * 60 + Number(clock[3] ?? 0);
+  return seconds >= 0 && seconds <= phase.duration ? phase.offset + seconds : null;
+}
+
+export function MatchTimeFields({ time, range, onRange }: {
+  time: MatchTime; range: TimeRange | null; onRange: (range: TimeRange | null) => void;
+}) {
+  const [error, setError] = useState('');
+  const [start, end] = range ?? [0, time.end];
+  return <form className={s.timeFields} aria-label="输入比赛时间" onSubmit={event => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const from = readClock(time, fields.get('start-phase'), fields.get('start-clock'));
+    const to = readClock(time, fields.get('end-phase'), fields.get('end-clock'));
+    if (from === null || to === null || from > to) {
+      setError('请输入该半场内的时间，且结束时间须晚于或等于起始时间。');
+      return;
+    }
+    setError('');
+    onRange([from, to]);
+  }}>
+    {([['start', '起始', start], ['end', '结束', end]] as const).map(([name, label, position]) => {
+      const phase = [...time.phases].reverse().find(item => item.offset <= position) ?? time.phases[0];
+      return <fieldset key={name} className={s.timeFieldsEndpoint}><legend>{label}时间</legend>
+        <select name={`${name}-phase`} aria-label={`${label}半场`} defaultValue={phase.id}>
+          {time.phases.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+        <input name={`${name}-clock`} aria-label={`${label}比赛时间`} defaultValue={formatMatchTime(time, position, true).split(' ').at(-1)} size={7} maxLength={9} required />
+      </fieldset>;
+    })}
+    <button type="submit">应用时间</button>
+    {range && <button type="button" onClick={() => { setError(''); onRange(null); }}>清除时间筛选</button>}
+    {error && <p className={s.error} role="alert">{error}</p>}
+  </form>;
+}
+
 export function MatchTimeline({ time, range, markers, homeId, awayId, selected, onRange, onEvent }: {
   time: MatchTime; range: TimeRange | null; markers: Event[]; homeId: string; awayId: string;
   selected?: string;

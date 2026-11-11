@@ -4,7 +4,7 @@ import {useEffect,useMemo,useRef,useState,type KeyboardEvent} from 'react';
 import {getMe} from '@/lib/api-v1';
 import {TeamBadge} from '@/components/teams/TeamBadge';
 import {Pitch,MomentumChart,Matrix,XgRace,PlayerValueChart} from './visualization-charts';
-import {MatchTimeline} from './visualization-timeline';
+import {MatchTimeFields,MatchTimeline} from './visualization-timeline';
 import {axisPosition,inTimeRange,matchTime,type TimeRange} from './visualization-time';
 import {chalkboardExtra,chalkboardGroups,chalkboardPlotEvent,eventLabel,filterEvents,formatValue,getVisualization,initialFilters,kinds,loadBundle,shotOutcomes,shotResult,views,type ShotOutcome,type Bundle,type Catalog,type Event,type Filters,type View} from './visualization-data';
 import s from '@/app/studio/visualization/visualization.module.css';
@@ -270,7 +270,8 @@ export function VisualizationWorkspace(){
   const markerEvents = [...new Map([...keyShots, ...(bundle?.markers ?? [])].map(event => [event.id, event])).values()];
   const hasPitchSelection = Boolean(range || filters.team || filters.players.length || filters.kind || filters.result ||
     view === 'pro' && (filters.special || filters.pv || filters.region));
-  const detailsOnlyCount = tactical ? events.filter(event => event.details_only).length : 0;
+  const unknownCount = bundle?.events.filter(event => event.kind === 'unknown').length ?? 0;
+  const detailsOnlyCount = tactical ? events.filter(event => event.details_only || event.kind === 'unknown').length : 0;
   const pitchEvents = view === 'heatmap' ? heatMode === 'density' ? heatEvents : events :
     tactical ? events.flatMap(event => {
       if (!hasPitchSelection && event.id !== selected) return [];
@@ -320,7 +321,7 @@ export function VisualizationWorkspace(){
       <nav className={s.tabs} aria-label="可视化视图" role="tablist">{views.map(([id,name,en],index)=><button key={id} id={`studio-tab-${id}`} role="tab" tabIndex={view===id?0:-1} aria-selected={view===id} aria-controls="studio-view" onClick={()=>selectView(id)} onKeyDown={event=>tabKey(event,index)}>{name}{' '}<small>{en}</small></button>)}</nav>
       <div className={s.layout}>
         <details className={s.filters}><summary>阵容与事件筛选</summary><div className={s.controls}>
-          {view!=='passes'&&view!=='heatmap'&&<label>球队<select value={filters.team} onChange={e=>selectTeam(e.target.value)}><option value="">双方</option><option value={bundle.match.home_id}>{bundle.match.home_name}</option><option value={bundle.match.away_id}>{bundle.match.away_name}</option></select></label>}
+          {!tactical&&view!=='passes'&&view!=='heatmap'&&<label>球队<select value={filters.team} onChange={e=>selectTeam(e.target.value)}><option value="">双方</option><option value={bundle.match.home_id}>{bundle.match.home_name}</option><option value={bundle.match.away_id}>{bundle.match.away_name}</option></select></label>}
           {view!=='passes'&&<div><p className={s.muted}>{view==='players'?'球员（选一至两名对比）':'球员（可多选）'}</p><div className={s.players}>{players.map(p=><label key={p.id} data-side={side(bundle,p.team_id)}><input type="checkbox" checked={filters.players.includes(p.id)} disabled={view==='players'&&filters.players.length>=2&&!filters.players.includes(p.id)} onChange={e=>selectPlayer(p.id,e.target.checked)}/><span>{p.number??'—'} {p.name}{p.minutes===0?'（未上场）':''}</span></label>)}</div></div>}
           {!tactical && view !== 'xg' && view !== 'passes' && <label>事件类型<select value={filters.kind} onChange={e=>change('kind',e.target.value)}><option value="">全部动作</option>{Object.entries(kinds).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>}
           {view !== 'passes' && !shotMode && !actionHasResult && <label>动作结果<select value={filters.result} onChange={e=>change('result',e.target.value)}><option value="">全部</option><option value="success">成功</option><option value="failure">未成功</option></select></label>}
@@ -359,11 +360,19 @@ export function VisualizationWorkspace(){
                 </div>
                 <p className={s.definition}>{heatMode==='density'?'颜色深浅表示已记录球上动作的密度。点击热区查看该格的事件。':'每个点是一条带起点坐标的球上动作。点击查看事件。'}</p>
               </>}
-              {tactical&&<><details className={s.panel}><summary>球场动作{selectedActions.length ? ` · ${selectedActions.length} 项` : ''}</summary>
+              {tactical&&<>
+                <MatchTimeFields key={range?.join('-') ?? 'full'} time={time} range={range} onRange={applyRange}/>
+                <div className={s.toolbar}>
+                  <label>球队<select value={filters.team} onChange={event=>selectTeam(event.target.value)}><option value="">双方</option><option value={bundle.match.home_id}>{bundle.match.home_name}</option><option value={bundle.match.away_id}>{bundle.match.away_name}</option></select></label>
+                  <button type="button" disabled={!players.length || players.every(player=>filters.players.includes(player.id))} onClick={()=>change('players',players.map(player=>player.id))}>全选球员</button>
+                  <button type="button" disabled={!filters.players.length} onClick={()=>change('players',[])}>清除球员选择</button>
+                  <span className={s.muted} aria-live="polite">{filters.players.length ? `已选 ${filters.players.length} 名球员` : '全部球员'}</span>
+                </div>
+                <details className={s.panel}><summary>球场动作{selectedActions.length ? ` · ${selectedActions.length} 项` : ''}</summary>
                 <div className={s.toolbar}><button type="button" onClick={()=>change('kind','')}>清除动作筛选</button></div>
                 <div className={s.chalkboardActions}>
                   {[...chalkboardGroups, chalkboardExtra].map(([group, options])=><fieldset key={group}><legend>{group}</legend>
-                    {options.map(([id,label])=><label key={id}><input type="checkbox" checked={selectedActions.includes(id)} onChange={()=>toggleAction(id)}/>{label}</label>)}
+                    {options.map(([id,label])=>id==='unknown' && unknownCount===0 ? null : <label key={id}><input type="checkbox" checked={selectedActions.includes(id)} onChange={()=>{toggleAction(id);if(id==='unknown' && !selectedActions.includes(id) && eventList.current) eventList.current.open=true;}}/>{id==='unknown' ? `${label}（${unknownCount} 条，仅明细）` : label}</label>)}
                   </fieldset>)}
                 </div>
               </details><p className={s.definition}>{shotMode ? '主队向右进攻，客队向左进攻。点击标记查看射门明细。' : <>箭头为传球方向，虚线为未成功传球；圆点为动作起点。主队向右进攻，客队向左进攻。缺少终点只显示起点。{view==='pro'?'可框选起点区域、比较两名球员，使用进攻三区和禁区几何筛选。':''}</>}</p>{!hasPitchSelection&&!active&&<p className={s.definition}>选择动作、球队、球员或比赛时段，在球场查看对应事件。</p>}</>}
@@ -393,7 +402,7 @@ export function VisualizationWorkspace(){
             </button></li>)}</ul>
             {events.length>eventLimit&&<button onClick={()=>setEventLimit(n=>n+eventPageSize)}>显示更多事件</button>}
           </details>
-          <details className={s.panel}><summary>数据说明</summary>{bundle.notes.map(n=><p key={n} className={s.definition}>{n}</p>)}<p className={s.definition}>未解析动作 {bundle.events.filter(e=>e.kind==='unknown').length} 条。尝试抢断可在「其他比赛记录」筛选。定位球传中筛选按记录中的角球／任意球标记。数据来自已保存比赛记录，刷新页面不会触发上游采集。</p></details>
+          <details className={s.panel}><summary>数据说明</summary>{bundle.notes.map(n=><p key={n} className={s.definition}>{n}</p>)}<p className={s.definition}>未解析动作 {unknownCount} 条。尝试抢断可在「其他比赛记录」筛选。定位球传中筛选按记录中的角球／任意球标记。数据来自已保存比赛记录，刷新页面不会触发上游采集。</p></details>
         </div>
         <aside className={s.detail} data-active={!!active} aria-label="事件详情">{active&&<button onClick={()=>setSelected('')}>关闭详情</button>}<EventDetails event={active}/></aside>
       </div>

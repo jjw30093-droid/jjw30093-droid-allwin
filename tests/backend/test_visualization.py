@@ -46,7 +46,8 @@ def test_failure_is_private(monkeypatch,status):
     assert r.status_code==status and r.headers['cache-control']=='private, no-store'
     assert '127.0.0.1' not in r.text
 
-def test_transport_fixed_target_and_bounded_body(monkeypatch):
+def test_transport_uses_configured_analyst_tunnel_and_bounded_body(monkeypatch):
+    monkeypatch.setenv('STUDIO_ANALYST_SOURCE_BASE', 'http://127.0.0.1:18769')
     class Headers:
         def get_content_type(self):return 'application/json'
     class Response:
@@ -58,7 +59,7 @@ def test_transport_fixed_target_and_bounded_body(monkeypatch):
             return json.dumps(dict(schema_version='match-visualization.v1',matches=[],offset=0,limit=20,has_more=False)).encode()
     class Opener:
         def open(self,url,timeout):
-            assert url=='http://127.0.0.1:18768/v1/visualization/matches?limit=20'
+            assert url=='http://127.0.0.1:18769/v1/visualization/matches?limit=20'
             assert timeout==10
             return Response()
     monkeypatch.setattr(source,'build_opener',lambda *a:Opener())

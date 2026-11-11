@@ -145,3 +145,29 @@ it('combines Opta filters without plotting details-only attempts or counting the
  expect(screen.getByText('球场图 · 0')).toBeTruthy();
  expect(screen.getByText('事件明细 · 1')).toBeTruthy();
 });
+
+
+it('filters the pitch by entered clock and all players while keeping unknown actions in the list', async () => {
+ const data = bundle('甲');
+ const players = ['甲', '乙'].map(id => ({id, name:id, number:1, team_id:'h', starter:true, minutes:90}));
+ const events = [
+   {...matchEvent('inside',2,61,'甲'),second:30,clock:'61:30'},
+   matchEvent('outside',2,61,'乙'),
+   {...matchEvent('unknown',2,62,'乙','unknown'),label:'未解析动作',event_type_id:999},
+ ];
+ vi.mocked(loadBundle).mockResolvedValue({...data,players,events,event_total:events.length});
+ render(<VisualizationWorkspace/>);
+ await screen.findByText('球场图 · 0');
+ fireEvent.click(screen.getByRole('button',{name:'全选球员'}));
+ expect(screen.getByText('已选 2 名球员')).toBeTruthy();
+ expect(screen.getByText('球场图 · 2')).toBeTruthy();
+ fireEvent.change(screen.getByLabelText('起始半场'),{target:{value:'2'}});
+ fireEvent.change(screen.getByLabelText('起始比赛时间'),{target:{value:'61:15'}});
+ fireEvent.change(screen.getByLabelText('结束比赛时间'),{target:{value:'62:00'}});
+ fireEvent.click(screen.getByRole('button',{name:'应用时间'}));
+ expect(screen.getByText('球场图 · 1')).toBeTruthy();
+ fireEvent.click(screen.getByText('球场动作'));
+ fireEvent.click(screen.getByLabelText('未解析动作（1 条，仅明细）'));
+ expect(screen.getByText('球场图 · 0')).toBeTruthy();
+ expect(screen.getByText('事件明细 · 1').closest('details')?.open).toBe(true);
+});
