@@ -7974,3 +7974,9 @@ Website `59ea209b033e`, analyst API `da76530`, collector runtime `67397b8` (Git 
 ## 2026-11-11 - Report missing-stat follow-up (preview)
 
 Ten-item raw Opta sample found nine omitted count zeros and one unused substitute; source projection restores registered count zeros with per-match provenance, repairs interception consumer keys, and distinguishes unused players from selected-window absence. Page and PDF use the same saved values. Real pre/post previews regenerated. This follow-up is local, not deployed. Evidence and scope: docs/audits/cc-stat-availability-20261111.md.
+
+## 2026-11-12 · 六页赛前威胁报告
+
+Studio 的赛前阅读版在默认近五场联赛、11对11选区的两队本方及对手 MA32 全部通过关联检查时使用新版。攻防区域同尺度，主数值与动作次数分层，场线避让标签。xT 按既有模型和同一选区排序，绘制全部已选路线（最多五条）并逐条列出数据。缺 PV 覆盖、历史旧快照和其他筛选继续使用既有阅读版。独立证据版和审核机制沿用原接口。
+
+CC 候选从现有 PV 归档读取，未新增数据库结构。用真实曼联–维拉响应对照获准预览，双方本方 PV 动作 3,021 / 2,655，承受 PV 动作 2,813 / 3,319，三类 15 区值与路线前五全部对账。曼联第4、5条分别为左路到左肋 0.041、左肋到中路 0.036 正xT/90。归档覆盖仍以实际已采样本为准。

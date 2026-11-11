@@ -326,6 +326,12 @@ def render(value, path, *, compact=True, profile="reader"):
     if profile=="evidence":
         from .analyst_pdf_evidence import render_evidence
         return render_evidence(value,path)
+    if value['report'].get('phase') == 'prematch':
+        from .analyst_threat_reader import reader_data
+        data = reader_data(value['report'])
+        if data is not None:
+            from .analyst_pdf_threat_reader import render_threat_reader
+            return render_threat_reader(data, path, register_font(), value.get('editorial_notes', ''))
     from reportlab.pdfbase import pdfmetrics
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
