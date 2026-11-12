@@ -93,7 +93,7 @@ def paired_pv_matches(team):
     ]
 
 
-def reader_data(report):
+def reader_matches(report):
     teams = report.get('teams', [])
     filters = report.get('filters', {})
     if len(teams) != 2:
@@ -103,11 +103,16 @@ def reader_data(report):
         return None
     if any(filters.get(key) for key in ('since', 'opponent', 'pair_a', 'pair_b')):
         return None
+    matches = [paired_pv_matches(team) for team in teams]
+    return matches if all(matches) else None
+
+
+def reader_data(report):
+    matches_by_team = reader_matches(report)
+    if matches_by_team is None:
+        return None
     comparable = []
-    for team in teams:
-        matches = paired_pv_matches(team)
-        if not matches:
-            return None
+    for team, matches in zip(report['teams'], matches_by_team):
         covered_ids = {match['match_id'] for match in matches}
         pv = team['pv_analysis']
         selected = dict(pv.get('selected', {}), minutes=sum(match['minutes'] for match in matches))

@@ -80,6 +80,7 @@ def test_admin_only_csrf_export_and_stale_review(app,fresh_ip,monkeypatch):
     r=report();r['hypotheses']=f.findings(r);did=f.save(c,uid,r)
     base='/api/v1/studio/reports/'+did
     assert client.get(base).status_code==200
+    assert client.get(base).json()['threat_reader_available'] is False
     assert client.get(base).headers['cache-control']=='private, no-store'
     def render(value, path, *, profile):
         assert value['id']==did and profile=='reader'
@@ -92,6 +93,7 @@ def test_admin_only_csrf_export_and_stale_review(app,fresh_ip,monkeypatch):
     assert preview.headers['content-type']=='application/pdf'
     assert preview.headers['content-disposition'].startswith('inline;')
     assert preview.headers['cache-control']=='private, no-store'
+    assert client.get(base+'/reader.pdf?view=threat').status_code==404
     assert c.execute('SELECT count(*) FROM export_jobs WHERE draft_id=?',(did,)).fetchone()[0]==0
     assert client.post(base+'/review',json={'expected_revision':1,'status':'reviewed'}).status_code==403
     assert client.post(base+'/review',json={'expected_revision':1,'status':'reviewed'},headers=_csrf(client)).status_code==200

@@ -11312,7 +11312,9 @@ export interface operations {
     };
     read_pdf_api_v1_studio_reports__draft_id__reader_pdf_get: {
         parameters: {
-            query?: never;
+            query?: {
+                view?: "reader" | "threat";
+            };
             header?: never;
             path: {
                 draft_id: string;

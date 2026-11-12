@@ -11,7 +11,7 @@ vi.mock('@/components/studio/prematch-depth',()=>({AnalystDepth:()=>null}));
 vi.mock('@/components/studio/report-analysis-sections',()=>({ReportAnalysisSections:()=>null,XaValue:()=>null}));
 vi.mock('@/components/studio/report-tactical-sections',()=>({ReportTacticalSections:()=>null,SnapshotDifferences:()=>null,confirmedGoalkeeperShots:()=>({available:false,shots:[],unclassified:0})}));
 const team=(id:string)=>({id,name:id,minutes:0,samples:[],chains:[],players:[],attack:{shots:0,xg:null,known_xg:0},defence:{shots:0,xg:null},methods:[],states:[],restarts:[],progression:{completed:0,third_entries:0,box_entries:0},passes:0,completed_passes:0});
-const detail={id:'saved-report',revision:3,status:'draft',judgments:{},editorial_notes:'',previous_draft_id:null,prematch_draft_id:null,
+const detail={threat_reader_available:true,id:'saved-report',revision:3,status:'draft',judgments:{},editorial_notes:'',previous_draft_id:null,prematch_draft_id:null,
  report:{phase:'prematch',analysis_mode:'reconstructed',revision:'source',cutoff_at:'2026-11-08T14:00:00Z',match:{id:'match',home_id:'home',away_id:'away',home_name:'Home',away_name:'Away',kickoff_at:'2026-11-08T14:00:00Z'},teams:[team('home'),team('away')],hypotheses:[],lineup:{},lineup_changes:{teams:[],note:''},checks:[],quality:{status:'incomplete',warnings:[]},notes:[],references:[]}};
 beforeEach(()=>{
  vi.clearAllMocks();window.history.replaceState({},'','/?report=saved-report');
@@ -27,21 +27,21 @@ beforeEach(()=>{
 });
 afterEach(()=>cleanup());
 describe('analyst report downloads',()=>{
- it('opens a linked prematch draft in the reader and keeps the review workspace accessible',async()=>{
+ it('opens the complete report and only loads the threat section when expanded',async()=>{
   render(<ReportWorkflow/>);
-  const preview=await screen.findByTitle('赛前报告阅读版');
-  expect(preview.getAttribute('src')).toBe('/api/v1/studio/reports/saved-report/reader.pdf?revision=3#toolbar=0&navpanes=0&view=FitH');
-  expect(screen.queryByRole('heading',{name:'比赛分析报告'})).toBeNull();
-  fireEvent.click(screen.getByRole('button',{name:'报告列表与审核'}));
-  expect(screen.getByRole('heading',{name:'比赛分析报告'})).toBeTruthy();
-  fireEvent.click(screen.getByRole('button',{name:'返回赛前阅读版'}));
-  expect(screen.getByTitle('赛前报告阅读版')).toBeTruthy();
+  await screen.findByRole('heading',{name:'完整赛前报告'});
+  expect(screen.getByRole('heading',{name:'阵容变化与角色'})).toBeTruthy();
+  expect(screen.getByRole('heading',{name:'射门与机会链条'})).toBeTruthy();
+  expect(screen.getByRole('heading',{name:'人工分析与审核'})).toBeTruthy();
+  expect(screen.getByRole('link',{name:'打开完整报告 PDF'}).getAttribute('href')).toBe('/api/v1/studio/reports/saved-report/reader.pdf');
+  expect(screen.queryByTitle('PV / xT 威胁专题')).toBeNull();
+  const section=screen.getByText('展开六页威胁图表').parentElement as HTMLDetailsElement;
+  section.open=true;
+  fireEvent(section,new Event('toggle'));
+  expect((await screen.findByTitle('PV / xT 威胁专题')).getAttribute('src')).toContain('/reader.pdf?view=threat&revision=3');
  });
- it.each([['导出阅读版 PDF','pdf','reader'],['导出独立证据附录','pdf','evidence'],['导出证据 JSON','json','reader']])('downloads %s after asynchronous generation without a popup',async(label,kind,profile)=>{
+ it.each([['导出完整报告 PDF','pdf','reader'],['导出独立证据附录','pdf','evidence'],['导出证据 JSON','json','reader']])('downloads %s after asynchronous generation without a popup',async(label,kind,profile)=>{
   const popup=vi.spyOn(window,'open');render(<ReportWorkflow/>);
-  if(profile==='evidence'||kind==='json'){
-   fireEvent.click(await screen.findByRole('button',{name:'报告列表与审核'}));
-  }
   fireEvent.click(await screen.findByRole('button',{name:label}));
   await waitFor(()=>expect(downloadServerExport).toHaveBeenCalledWith('/api/v1/studio/exports/file/download',`cc-report-prematch-${kind==='json'?'evidence':profile}-saved-report-v3.${kind}`));
   expect(clientFetch).toHaveBeenCalledWith(expect.stringContaining('/export'),expect.objectContaining({body:expect.objectContaining({kind,pdf_profile:profile})}));
@@ -49,7 +49,7 @@ describe('analyst report downloads',()=>{
  });
  it('shows a failed file transfer instead of silently reporting success',async()=>{
   vi.mocked(downloadServerExport).mockRejectedValue(new Error('导出下载失败(HTTP 403)'));render(<ReportWorkflow/>);
-  fireEvent.click(await screen.findByRole('button',{name:'导出阅读版 PDF'}));
+  fireEvent.click(await screen.findByRole('button',{name:'导出完整报告 PDF'}));
   expect(await screen.findByRole('alert')).toHaveProperty('textContent','Error: 导出下载失败(HTTP 403)');
  });
 });

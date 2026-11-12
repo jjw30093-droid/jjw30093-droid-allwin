@@ -322,16 +322,20 @@ def register_font():
 
 
 def render(value, path, *, compact=True, profile="reader"):
-    if profile not in ("reader","evidence"):raise ValueError("invalid_pdf_profile")
+    if profile not in ("reader","evidence","threat"):raise ValueError("invalid_pdf_profile")
     if profile=="evidence":
         from .analyst_pdf_evidence import render_evidence
         return render_evidence(value,path)
-    if value['report'].get('phase') == 'prematch':
+    r = value['report']
+    threat_data = None
+    if r.get('phase') == 'prematch':
         from .analyst_threat_reader import reader_data
-        data = reader_data(value['report'])
-        if data is not None:
-            from .analyst_pdf_threat_reader import render_threat_reader
-            return render_threat_reader(data, path, register_font(), value.get('editorial_notes', ''))
+        threat_data = reader_data(r)
+    if profile == 'threat':
+        if threat_data is None:
+            raise ValueError('本报告暂无可展示的 PV/xT 威胁专题')
+        from .analyst_pdf_threat_reader import render_threat_reader
+        return render_threat_reader(threat_data, path, register_font())
     from reportlab.pdfbase import pdfmetrics
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
@@ -340,7 +344,7 @@ def render(value, path, *, compact=True, profile="reader"):
     font = register_font()
     styles={k:ParagraphStyle(k,fontName=font,fontSize=size,leading=size*1.55,spaceAfter=10,textColor=colors.HexColor('#263445'),wordWrap='CJK') for k,size in [('title',23),('heading',16),('body',10),('small',8)]}
     styles['heading'].keepWithNext=True
-    r=value['report']; story=[]; palette=['#b42338','#7037a7']
+    story=[]; palette=['#b42338','#7037a7']
     def p(text,style='body',verbatim=False):return Paragraph(escape(str(text) if verbatim else reader_text(text)).replace('\n','<br/>'),styles[style])
     general_notes=set()
     def text(text,style='body',verbatim=False):
@@ -563,6 +567,15 @@ def render(value, path, *, compact=True, profile="reader"):
                 self.canv.bookmarkPage(key);self.canv.addOutlineEntry(title,key,level=0,closed=False)
     if compact:
         from .analyst_pdf_layout import compact_report
-        appendix=next(i for i,item in enumerate(story) if getattr(item,'_bookmark',(None,''))[1].startswith('证据附录 ·'))
         story=compact_report(value,font,pitch,palette)
-    BookmarkedDoc(str(path),pagesize=(595,842),rightMargin=50,leftMargin=50,topMargin=38,bottomMargin=42,title=value['title']).build(story,onFirstPage=footer,onLaterPages=footer)
+    from reportlab.pdfgen.canvas import Canvas
+
+    class FullReportCanvas(Canvas):
+        def save(self):
+            if threat_data is not None:
+                from .analyst_pdf_threat_reader import ThreatReader, draw_threat_reader
+                draw_threat_reader(ThreatReader(threat_data, self, font))
+            super().save()
+
+    BookmarkedDoc(str(path),pagesize=(595,842),rightMargin=50,leftMargin=50,topMargin=38,bottomMargin=42,title=value['title']).build(
+        story,onFirstPage=footer,onLaterPages=footer,canvasmaker=FullReportCanvas)

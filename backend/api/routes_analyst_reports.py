@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .deps import require_admin, require_csrf, platform_ro, platform_rw, NO_STORE
 from .schemas import error_responses
 from backend.studio import analyst_workflow as flow, research
+from backend.studio.analyst_threat_reader import reader_matches
 from backend.db.connections import tx
 from backend.db.paths import data_dir
 from backend.db.util import new_uuid, utc_now_iso
@@ -113,9 +114,15 @@ def read_owned(conn,ctx,did):
     except ValueError:raise HTTPException(409,'报告证据校验失败') from None
 
 
+def report_detail(conn, ctx, draft_id):
+    value = read_owned(conn, ctx, draft_id)
+    report = value['report']
+    return dict(value, threat_reader_available=report.get('phase') == 'prematch' and reader_matches(report) is not None)
+
+
 @router.get('/{draft_id}')
 def detail(draft_id:UUID,ctx=Depends(require_admin),conn=Depends(platform_ro)):
-    return read_owned(conn,ctx,draft_id)
+    return report_detail(conn,ctx,draft_id)
 
 
 @router.get('/{draft_id}/reader.pdf', response_class=Response,
@@ -123,13 +130,17 @@ def detail(draft_id:UUID,ctx=Depends(require_admin),conn=Depends(platform_ro)):
                 200: {'content': {'application/pdf': {'schema': {'type': 'string', 'format': 'binary'}}}},
                 **error_responses(401, 403, 404, 409, 422, 503),
             })
-def read_pdf(draft_id: UUID, ctx=Depends(require_admin), conn=Depends(platform_ro)):
+def read_pdf(draft_id: UUID, view: Literal['reader', 'threat'] = 'reader',
+             ctx=Depends(require_admin), conn=Depends(platform_ro)):
     value = read_owned(conn, ctx, draft_id)
-    if value['report'].get('phase') != 'prematch':
+    report = value['report']
+    if report.get('phase') != 'prematch':
         raise HTTPException(404, '赛前报告不存在')
+    if view == 'threat' and reader_matches(report) is None:
+        raise HTTPException(404, '本报告暂无可展示的 PV/xT 威胁专题')
     with TemporaryDirectory(prefix='analyst-reader-') as folder:
         target = Path(folder) / 'report.pdf'
-        render_report_pdf(value, target, profile='reader')
+        render_report_pdf(value, target, profile=view)
         pdf = target.read_bytes()
     return Response(pdf, media_type='application/pdf', headers={
         'Cache-Control': NO_STORE,
@@ -164,7 +175,7 @@ def edit(draft_id:UUID,body:Edit,ctx=Depends(require_admin),conn=Depends(platfor
     if set(body.judgments)-{h['id'] for h in value['report']['hypotheses']}:raise HTTPException(422,'判断编号不属于本报告')
     try:research.change(conn,str(draft_id),ctx.user_id,body.expected_revision,overrides={'editorial_notes':body.editorial_notes,'judgments':{k:v.model_dump() for k,v in body.judgments.items()}})
     except ValueError as e:raise HTTPException(409,str(e)) from None
-    return read_owned(conn,ctx,draft_id)
+    return report_detail(conn,ctx,draft_id)
 
 
 @router.post('/{draft_id}/review',dependencies=[Depends(require_csrf)])
@@ -172,7 +183,7 @@ def review(draft_id:UUID,body:Review,ctx=Depends(require_admin),conn=Depends(pla
     read_owned(conn,ctx,draft_id)
     try:research.change(conn,str(draft_id),ctx.user_id,body.expected_revision,status=body.status)
     except ValueError as e:raise HTTPException(409,str(e)) from None
-    return read_owned(conn,ctx,draft_id)
+    return report_detail(conn,ctx,draft_id)
 
 
 def render_report_pdf(value, target, *, profile):

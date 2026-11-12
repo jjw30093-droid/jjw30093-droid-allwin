@@ -61,7 +61,7 @@ def xy(x,y,w,h,p):return (x+p[0]*w/100,y+p[1]*h/100)
 
 
 class ThreatReader:
-    def __init__(self, data, path, font):
+    def __init__(self, data, pdf_canvas, font):
         self.teams = data['teams']
         names_zh = {
             'Manchester City': '曼城', 'Fulham': '富勒姆',
@@ -75,9 +75,7 @@ class ThreatReader:
         self.font = font
         self.value_font = register_value_font()
         self.page = 0
-        self.canvas = canvas.Canvas(str(path), pagesize=(W, H), pageCompression=1)
-        self.canvas.setTitle(self.match_name + ' · 赛前基本面')
-        self.canvas.setAuthor('喵弟量化研究所')
+        self.canvas = pdf_canvas
 
     def tx(self, x,y,s,size=9,color=INK,align='left',latin=False,bold=False):
         self.canvas.setFillColor(HexColor(color));self.canvas.setFont((self.value_font if bold else 'Helvetica') if latin else self.font,size)
@@ -101,7 +99,7 @@ class ThreatReader:
         self.tx(M,808,'喵弟量化研究所',10,INK)
         self.canvas.setStrokeColor(HexColor(RULE));self.canvas.setLineWidth(.6);self.canvas.line(M+87,799,M+87,821)
         self.tx(M+96,814,'PREMATCH REPORT',7.0,MUTED,latin=True)
-        chapter = CHAPTERS[self.page-1] if self.page <= len(CHAPTERS) else '分析师补充'
+        chapter = CHAPTERS[self.page-1]
         self.tx(M+96,802,chapter,8.2,INK)
         self.tx(W-M,814,self.match_name,9,INK,'right')
         self.tx(W-M,802,self.kickoff.strftime('%Y.%m.%d  %H:%M')+' 北京时间',7.2,MUTED,'right')
@@ -114,9 +112,9 @@ class ThreatReader:
             coverage = '，'.join(f"{name} {team['matches']}/{team['requested']}场"
                                  for name, team in zip(self.team_names, self.teams))
             self.tx(M,17,'PV覆盖：'+coverage+'。按各队有评分的样本分钟计算。',7.2,MUTED)
-        page_label = f'{self.page:02d} / 06' if self.page <= len(CHAPTERS) else f'{self.page:02d}'
+        page_label = f'{self.page:02d} / 06'
         self.tx(W-M,30,page_label,8,INK,'right',latin=True)
-        self.canvas.bookmarkPage(f'page{self.page}');self.canvas.addOutlineEntry(title,f'page{self.page}',0)
+        self.canvas.bookmarkPage(f'threat-{self.page}');self.canvas.addOutlineEntry(title,f'threat-{self.page}',0)
 
     def team_head(self, i,y,subtitle=None):
         x=col(i);self.tx(x,y,self.team_names[i],12,C[i])
@@ -486,40 +484,20 @@ class ThreatReader:
         self.para(M,116,W-2*M,'指标：制造威胁为正PV之和，进攻损耗为负PV之和，两者相加得到威胁净值。xG看射门质量，xT看推进带来的位置价值；均不等于本场进球概率。未结合盘口和赔率，不能直接判断投注价值。',8.0,MUTED,12)
         self.para(M,79,W-2*M,'范围：PV为赛后补采，xT训练截止尚未核实，仅作历史样本分析。压力、无球跑动和独立带球数据不完整；判断比赛还需结合首发、对手强弱与赛程。',7.5,MUTED,11)
         self.finish()
-    def editorial_notes(self, notes):
-        width = W - 2*M
-        style = ParagraphStyle('editorial', fontName=self.font, fontSize=10, leading=15, wordWrap='CJK')
-        pending = [Paragraph(escape(notes).replace('\n', '<br/>'), style)]
-        while pending:
-            self.begin('分析师补充', '保存的人工修订')
-            y = 715
-            while pending:
-                paragraph = pending.pop(0)
-                _, height = paragraph.wrap(width, y - 55)
-                if height <= y - 55:
-                    paragraph.drawOn(self.canvas, M, y - height)
-                    y -= height
-                    continue
-                pieces = paragraph.split(width, y - 55)
-                if not pieces:
-                    pending.insert(0, paragraph)
-                    break
-                _, height = pieces[0].wrap(width, y - 55)
-                pieces[0].drawOn(self.canvas, M, y - height)
-                pending[:0] = pieces[1:]
-                break
-            self.finish()
 
 
-def render_threat_reader(data, path, font, notes=''):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    book = ThreatReader(data, path, font)
+def draw_threat_reader(book):
     book.page_attack()
     book.page_defence()
     book.page_players()
     book.page_risk()
     book.page_possessions()
     book.page_chains()
-    if notes:
-        book.editorial_notes(notes)
-    book.canvas.save()
+def render_threat_reader(data, path, font):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    pdf_canvas = canvas.Canvas(str(path), pagesize=(W, H), pageCompression=1)
+    book = ThreatReader(data, pdf_canvas, font)
+    pdf_canvas.setTitle(book.match_name + ' · PV/xT 威胁专题')
+    pdf_canvas.setAuthor('喵弟量化研究所')
+    draw_threat_reader(book)
+    pdf_canvas.save()

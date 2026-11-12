@@ -2654,6 +2654,20 @@
        "format": "uuid",
        "title": "Draft Id"
       }
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "reader",
+        "threat"
+       ],
+       "type": "string",
+       "default": "reader",
+       "title": "View"
+      }
      }
     ],
     "responses": {
