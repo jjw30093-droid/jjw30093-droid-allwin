@@ -512,6 +512,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/studio/reports/{draft_id}/reader.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Pdf */
+        get: operations["read_pdf_api_v1_studio_reports__draft_id__reader_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/studio/reports/{draft_id}/history": {
         parameters: {
             query?: never;
@@ -2935,6 +2952,17 @@ export interface components {
             /** Has More */
             has_more: boolean;
         };
+        /** ChalkboardOffside */
+        ChalkboardOffside: {
+            /** Player Id */
+            player_id: string;
+            /** Player Name */
+            player_name: string | null;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** Coverage */
         Coverage: {
             /** Expected */
@@ -3053,6 +3081,18 @@ export interface components {
             goal: boolean;
             /** Own Goal */
             own_goal: boolean;
+            /** Event Type Id */
+            event_type_id?: number | null;
+            /**
+             * Details Only
+             * @default false
+             */
+            details_only: boolean;
+            /** Ordinary Pass */
+            ordinary_pass?: boolean | null;
+            chalkboard_offside?: components["schemas"]["ChalkboardOffside"] | null;
+            /** Cross Phase */
+            cross_phase?: ("restart" | "open_play") | null;
             /** Shot Outcome */
             shot_outcome?: ("goal" | "on_target" | "off_target" | "blocked") | null;
             /** Penalty */
@@ -11266,6 +11306,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_pdf_api_v1_studio_reports__draft_id__reader_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDTO"];
                 };
             };
         };

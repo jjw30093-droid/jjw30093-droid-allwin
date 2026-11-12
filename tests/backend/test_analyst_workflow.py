@@ -81,6 +81,18 @@ def test_admin_only_csrf_export_and_stale_review(app,fresh_ip,monkeypatch):
     base='/api/v1/studio/reports/'+did
     assert client.get(base).status_code==200
     assert client.get(base).headers['cache-control']=='private, no-store'
+    def render(value, path, *, profile):
+        assert value['id']==did and profile=='reader'
+        path.write_bytes(b'%PDF-1.4')
+    monkeypatch.setattr('backend.studio.analyst_pdf.render', render)
+    assert TestClient(app).get(base+'/reader.pdf').status_code==401
+    preview=client.get(base+'/reader.pdf')
+    assert preview.status_code==200
+    assert preview.content==b'%PDF-1.4'
+    assert preview.headers['content-type']=='application/pdf'
+    assert preview.headers['content-disposition'].startswith('inline;')
+    assert preview.headers['cache-control']=='private, no-store'
+    assert c.execute('SELECT count(*) FROM export_jobs WHERE draft_id=?',(did,)).fetchone()[0]==0
     assert client.post(base+'/review',json={'expected_revision':1,'status':'reviewed'}).status_code==403
     assert client.post(base+'/review',json={'expected_revision':1,'status':'reviewed'},headers=_csrf(client)).status_code==200
     assert client.post(base+'/edit',json={'expected_revision':1,'editorial_notes':'stale'},headers=_csrf(client)).status_code==409
@@ -90,6 +102,7 @@ def test_admin_only_csrf_export_and_stale_review(app,fresh_ip,monkeypatch):
     assert client.get(url).json()['review']['state']=='reviewed'
     c.execute("UPDATE users SET role='analyst' WHERE id=?",(uid,))
     assert client.get(base).status_code==403
+    assert client.get(base+'/reader.pdf').status_code==403
     assert client.get(url).status_code==403
     assert client.get('/api/v1/studio/research/drafts').json()['drafts']==[]
     c.close()

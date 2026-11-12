@@ -27,8 +27,21 @@ beforeEach(()=>{
 });
 afterEach(()=>cleanup());
 describe('analyst report downloads',()=>{
+ it('opens a linked prematch draft in the reader and keeps the review workspace accessible',async()=>{
+  render(<ReportWorkflow/>);
+  const preview=await screen.findByTitle('赛前报告阅读版');
+  expect(preview.getAttribute('src')).toBe('/api/v1/studio/reports/saved-report/reader.pdf?revision=3#toolbar=0&navpanes=0&view=FitH');
+  expect(screen.queryByRole('heading',{name:'比赛分析报告'})).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'报告列表与审核'}));
+  expect(screen.getByRole('heading',{name:'比赛分析报告'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'返回赛前阅读版'}));
+  expect(screen.getByTitle('赛前报告阅读版')).toBeTruthy();
+ });
  it.each([['导出阅读版 PDF','pdf','reader'],['导出独立证据附录','pdf','evidence'],['导出证据 JSON','json','reader']])('downloads %s after asynchronous generation without a popup',async(label,kind,profile)=>{
   const popup=vi.spyOn(window,'open');render(<ReportWorkflow/>);
+  if(profile==='evidence'||kind==='json'){
+   fireEvent.click(await screen.findByRole('button',{name:'报告列表与审核'}));
+  }
   fireEvent.click(await screen.findByRole('button',{name:label}));
   await waitFor(()=>expect(downloadServerExport).toHaveBeenCalledWith('/api/v1/studio/exports/file/download',`cc-report-prematch-${kind==='json'?'evidence':profile}-saved-report-v3.${kind}`));
   expect(clientFetch).toHaveBeenCalledWith(expect.stringContaining('/export'),expect.objectContaining({body:expect.objectContaining({kind,pdf_profile:profile})}));

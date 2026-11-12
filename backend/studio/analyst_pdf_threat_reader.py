@@ -63,7 +63,12 @@ def xy(x,y,w,h,p):return (x+p[0]*w/100,y+p[1]*h/100)
 class ThreatReader:
     def __init__(self, data, path, font):
         self.teams = data['teams']
-        names_zh = {'Manchester United': '曼联', 'Aston Villa': '阿斯顿维拉'}
+        names_zh = {
+            'Manchester City': '曼城', 'Fulham': '富勒姆',
+            'Liverpool': '利物浦', 'Manchester United': '曼联',
+            'Chelsea': '切尔西', 'Leeds United': '利兹联',
+            'Aston Villa': '阿斯顿维拉', 'Sunderland': '桑德兰',
+        }
         self.team_names = [names_zh.get(team['name'], team['name']) for team in self.teams]
         self.match_name = ' vs '.join(self.team_names)
         self.kickoff = datetime.fromisoformat(data['match']['kickoff_at'].replace('Z', '+00:00')).astimezone(ZoneInfo('Asia/Shanghai'))
@@ -105,6 +110,10 @@ class ThreatReader:
         self.para(M,749,W-2*M,subtitle,8.7,MUTED,12.2)
         self.line(M,45,W-2*M)
         self.tx(M,30,'近5场联赛 · 11人对11人 · 全部主客场 · 历史样本回看',7.2,MUTED)
+        if any(team['matches'] < team['requested'] for team in self.teams):
+            coverage = '，'.join(f"{name} {team['matches']}/{team['requested']}场"
+                                 for name, team in zip(self.team_names, self.teams))
+            self.tx(M,17,'PV覆盖：'+coverage+'。按各队有评分的样本分钟计算。',7.2,MUTED)
         page_label = f'{self.page:02d} / 06' if self.page <= len(CHAPTERS) else f'{self.page:02d}'
         self.tx(W-M,30,page_label,8,INK,'right',latin=True)
         self.canvas.bookmarkPage(f'page{self.page}');self.canvas.addOutlineEntry(title,f'page{self.page}',0)
@@ -238,6 +247,7 @@ class ThreatReader:
                 if math.dist(a,p)>1:
                     self.canvas.saveState();self.canvas.setStrokeColor(HexColor(C[i]));self.canvas.setLineWidth(.5);self.canvas.line(*a,*p);self.canvas.restoreState()
                 self.dot(*p,str(j+1),C[i],5);label_positions.append(p)
+            self.tx(px,py+ph+6,f"xT覆盖 {t['xt']['matches']}/{t['requested']}场",6.8,MUTED)
             self.tx(px+pw,py+ph+6,'进攻 →',6.8,MUTED,'right')
             for j,r in enumerate(routes):
                 yy=152-j*12;self.tx(x,yy,f'{j+1}  '+r['label'],7.6);self.tx(x+CW,yy,f"{r['per90']:.3f}  ·  {r['count']}次",7.5,C[i],'right')
@@ -471,7 +481,8 @@ class ThreatReader:
                 self.tx(x+CW,yy,sign(e['pv'])+' / '+sign(e['xt']),7.3,INK,'right',True);self.line(x,yy-9,CW)
         self.section(M,178,'这些数据能说明什么',W-2*M)
         minutes = '，'.join(f"{name}{team['minutes']:.1f}分钟" for name, team in zip(self.team_names, self.teams))
-        self.para(M,153,W-2*M,'样本范围：目标比赛前最近5场联赛，包含主客场和各类比分状态，仅统计上下半场的11人对11人片段。'+minutes+'。日期和开赛时间均按北京时间显示。',8.0,MUTED,12)
+        scope = '样本范围：目标比赛前最近5场联赛，统计11人对11人片段。PV采用双方评分均通过校验的比赛，'+minutes+'。xT覆盖场次按路线图列示。'
+        self.para(M,153,W-2*M,scope,8.0,MUTED,12)
         self.para(M,116,W-2*M,'指标：制造威胁为正PV之和，进攻损耗为负PV之和，两者相加得到威胁净值。xG看射门质量，xT看推进带来的位置价值；均不等于本场进球概率。未结合盘口和赔率，不能直接判断投注价值。',8.0,MUTED,12)
         self.para(M,79,W-2*M,'范围：PV为赛后补采，xT训练截止尚未核实，仅作历史样本分析。压力、无球跑动和独立带球数据不完整；判断比赛还需结合首发、对手强弱与赛程。',7.5,MUTED,11)
         self.finish()

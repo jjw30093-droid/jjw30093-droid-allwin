@@ -2,12 +2,14 @@
 import json
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 from uuid import UUID
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .deps import require_admin, require_csrf, platform_ro, platform_rw, NO_STORE
+from .schemas import error_responses
 from backend.studio import analyst_workflow as flow, research
 from backend.db.connections import tx
 from backend.db.paths import data_dir
@@ -116,6 +118,25 @@ def detail(draft_id:UUID,ctx=Depends(require_admin),conn=Depends(platform_ro)):
     return read_owned(conn,ctx,draft_id)
 
 
+@router.get('/{draft_id}/reader.pdf', response_class=Response,
+            responses={
+                200: {'content': {'application/pdf': {'schema': {'type': 'string', 'format': 'binary'}}}},
+                **error_responses(401, 403, 404, 409, 422, 503),
+            })
+def read_pdf(draft_id: UUID, ctx=Depends(require_admin), conn=Depends(platform_ro)):
+    value = read_owned(conn, ctx, draft_id)
+    if value['report'].get('phase') != 'prematch':
+        raise HTTPException(404, '赛前报告不存在')
+    with TemporaryDirectory(prefix='analyst-reader-') as folder:
+        target = Path(folder) / 'report.pdf'
+        render_report_pdf(value, target, profile='reader')
+        pdf = target.read_bytes()
+    return Response(pdf, media_type='application/pdf', headers={
+        'Cache-Control': NO_STORE,
+        'Content-Disposition': 'inline; filename="prematch-report.pdf"',
+    })
+
+
 @router.get('/{draft_id}/history')
 def history(draft_id:UUID,ctx=Depends(require_admin),conn=Depends(platform_ro)):
     read_owned(conn,ctx,draft_id)
@@ -154,6 +175,16 @@ def review(draft_id:UUID,body:Review,ctx=Depends(require_admin),conn=Depends(pla
     return read_owned(conn,ctx,draft_id)
 
 
+def render_report_pdf(value, target, *, profile):
+    from backend.studio.analyst_pdf import render
+    try:
+        render(value, target, profile=profile)
+    except ImportError:
+        raise HTTPException(503, 'PDF 运行依赖尚未安装') from None
+    except ValueError:
+        raise HTTPException(503, 'PDF 中文字体未配置或报告内容无效') from None
+
+
 @router.post('/{draft_id}/export',dependencies=[Depends(require_csrf)])
 def export(draft_id:UUID,body:Export,ctx=Depends(require_admin),conn=Depends(platform_rw)):
     value=read_owned(conn,ctx,draft_id)
@@ -161,11 +192,7 @@ def export(draft_id:UUID,body:Export,ctx=Depends(require_admin),conn=Depends(pla
     job=new_uuid();folder=data_dir()/'exports';folder.mkdir(parents=True,exist_ok=True)
     target=folder/(job+'.'+body.kind)
     if body.kind=='json':target.write_bytes(research.canonical(value))
-    else:
-        from backend.studio.analyst_pdf import render
-        try:render(value,target,profile=body.pdf_profile)
-        except ImportError:raise HTTPException(503,'PDF 运行依赖尚未安装') from None
-        except ValueError:raise HTTPException(503,'PDF 中文字体未配置或报告内容无效') from None
+    else:render_report_pdf(value,target,profile=body.pdf_profile)
     with tx(conn):
         conn.execute("INSERT INTO export_jobs(id,user_id,draft_id,kind,status,file_path,meta_json,created_at,finished_at) VALUES (?,?,?,?,'succeeded',?,?,?,?)",
             (job,ctx.user_id,str(draft_id),body.kind,str(target),json.dumps({'profile':flow.VERSION,'pdf_profile':body.pdf_profile,'revision':value['revision'],'review':value['review']}),utc_now_iso(),utc_now_iso()))

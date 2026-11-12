@@ -49,3 +49,29 @@ def test_legacy_snapshot_without_opponent_pv_keeps_existing_reader():
                     quality={'source_actions': 1}, threat_context={'possessions': []}) for i in range(5)]
     team = dict(samples=[{'id': m['match_id']} for m in matches], pv_analysis={'matches': matches})
     assert reader_data(dict(teams=[team, team], filters=dict(window='5', eleven='1', state='all', venue='all'))) is None
+
+
+
+def test_reader_uses_same_covered_minutes_for_own_and_opponent_pv():
+    def team(tid, missing_opponent=False):
+        matches = []
+        for i in range(5):
+            mid = f'{tid}{i}'
+            quality = {'source_actions': 1}
+            event = dict(match_id=mid, event_id='1', x=25, y=25, zone=1,
+                         pv_added=.1, event_type=1, success=1)
+            matches.append(dict(match_id=mid, minutes=90, status='available', quality=quality,
+                                events=[event], threat_context={'possessions': [], 'conceded_routes': []},
+                                against={} if i == 4 and missing_opponent else {'events': [event], 'quality': quality}))
+        return dict(id=tid, name=tid, players=[], samples=[{'id': m['match_id']} for m in matches],
+                    pv_analysis={'matches': matches, 'covered_matches': 5})
+
+    a, b = team('A'), team('B', True)
+    filters = dict(window='5', eleven='1', state='all', venue='all')
+    result = reader_data(dict(match={}, teams=[a,b], filters=filters))
+    home, away = result['teams']
+    assert (home['matches'], away['matches'], away['requested']) == (5,4,5)
+    assert (home['minutes'], away['minutes']) == (450,360)
+    assert sum(away['attack_grid']['counts']) == away['against_count'] == 4
+    assert away['against_per90']['positive'] == pytest.approx(.1)
+    assert len(b['pv_analysis']['matches']) == 5

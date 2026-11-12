@@ -79,34 +79,45 @@ def player_rows(team, block, events):
     return result
 
 
-def fully_covered(team):
+def paired_pv_matches(team):
     matches = team.get('pv_analysis', {}).get('matches', [])
     samples = team.get('samples', [])
-    if len(matches) != 5 or {m['match_id'] for m in matches} != {m['id'] for m in samples}:
-        return False
-    for match in matches:
-        against = match.get('against') or {}
-        if (not valid_pv(match) or not valid_pv(dict(against, status='available'))
-                or not number(match.get('minutes')) or match['minutes'] <= 0
-                or not match.get('threat_context')):
-            return False
-    return True
+    if len(matches) != 5 or len(samples) != 5 or {m['match_id'] for m in matches} != {m['id'] for m in samples}:
+        return []
+    return [
+        match for match in matches
+        if valid_pv(match)
+        and valid_pv(dict(match.get('against') or {}, status='available'))
+        and number(match.get('minutes')) and match['minutes'] > 0
+        and match.get('threat_context')
+    ]
 
 
 def reader_data(report):
     teams = report.get('teams', [])
     filters = report.get('filters', {})
-    if len(teams) != 2 or not all(fully_covered(team) for team in teams):
+    if len(teams) != 2:
         return None
-    # The six-page reader compares the same five-match, 11v11 scope on each side.
     if any(str(filters.get(key)) != value for key, value in
            {'window': '5', 'eleven': '1', 'state': 'all', 'venue': 'all'}.items()):
         return None
     if any(filters.get(key) for key in ('since', 'opponent', 'pair_a', 'pair_b')):
         return None
-    projection = project(report)
+    comparable = []
+    for team in teams:
+        matches = paired_pv_matches(team)
+        if not matches:
+            return None
+        covered_ids = {match['match_id'] for match in matches}
+        pv = team['pv_analysis']
+        selected = dict(pv.get('selected', {}), minutes=sum(match['minutes'] for match in matches))
+        comparable.append(dict(
+            team, pv_analysis=dict(pv, matches=matches, selected=selected, covered_matches=len(matches)),
+            chains=[chain for chain in team.get('chains', []) if chain.get('match_id') in covered_ids],
+        ))
+    projection = project(dict(report, teams=comparable))
     result = []
-    for team, block in zip(teams, projection['teams']):
+    for team, block in zip(comparable, projection['teams']):
         matches = team['pv_analysis']['matches']
         minutes = block['minutes']
         events = [event for match in matches for event in match['events']]

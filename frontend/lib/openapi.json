@@ -2637,6 +2637,100 @@
     }
    }
   },
+  "/api/v1/studio/reports/{draft_id}/reader.pdf": {
+   "get": {
+    "tags": [
+     "analyst-reports"
+    ],
+    "summary": "Read Pdf",
+    "operationId": "read_pdf_api_v1_studio_reports__draft_id__reader_pdf_get",
+    "parameters": [
+     {
+      "name": "draft_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "uuid",
+       "title": "Draft Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/pdf": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unauthorized"
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Forbidden"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Conflict"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Unprocessable Content"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ApiErrorDTO"
+        }
+       }
+      },
+      "description": "Service Unavailable"
+     }
+    }
+   }
+  },
   "/api/v1/studio/reports/{draft_id}/history": {
    "get": {
     "tags": [
@@ -13236,6 +13330,46 @@
     ],
     "title": "Catalog"
    },
+   "ChalkboardOffside": {
+    "properties": {
+     "player_id": {
+      "type": "string",
+      "title": "Player Id"
+     },
+     "player_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Player Name"
+     },
+     "x": {
+      "type": "number",
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "title": "X"
+     },
+     "y": {
+      "type": "number",
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "title": "Y"
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+     "player_id",
+     "player_name",
+     "x",
+     "y"
+    ],
+    "title": "ChalkboardOffside"
+   },
    "Coverage": {
     "properties": {
      "expected": {
@@ -13598,6 +13732,58 @@
      "own_goal": {
       "type": "boolean",
       "title": "Own Goal"
+     },
+     "event_type_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Event Type Id"
+     },
+     "details_only": {
+      "type": "boolean",
+      "title": "Details Only",
+      "default": false
+     },
+     "ordinary_pass": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ordinary Pass"
+     },
+     "chalkboard_offside": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ChalkboardOffside"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "cross_phase": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "restart",
+         "open_play"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cross Phase"
      },
      "shot_outcome": {
       "anyOf": [
